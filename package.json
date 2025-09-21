@@ -1,0 +1,40 @@
+{
+  "name": "mcp-zebrunner",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "MCP server (stdio) for Zebrunner TCM Public API (read-only)",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "dev:legacy": "tsx watch src/index.ts",
+    "dev:enhanced": "tsx watch src/index-enhanced.ts",
+    "dev:working": "tsx watch src/index-working-enhanced.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "start:legacy": "node dist/index.js",
+    "start:enhanced": "node dist/index-enhanced.js",
+    "start:working": "node dist/index-working-enhanced.js",
+    "smoke": "tsx src/smoke.ts",
+    "test": "tsx tests/test-runner.ts",
+    "test:unit": "tsx tests/test-runner.ts unit",
+    "test:integration": "tsx tests/test-runner.ts integration",
+    "test:e2e": "tsx tests/test-runner.ts e2e",
+    "test:watch": "tsx tests/test-runner.ts -- --watch",
+    "test:health": "tsx tests/test-runner.ts -- --health",
+    "test:verbose": "tsx tests/test-runner.ts -- --verbose",
+    "test:legacy": "DEBUG=true tsx src/index.ts",
+    "test:enhanced": "DEBUG=true tsx src/index-enhanced.ts",
+    "test:working": "DEBUG=true tsx src/index-working-enhanced.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "axios": "^1.7.3",
+    "dotenv": "^16.4.5",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.17.0",
+    "typescript": "^5.6.3"
+  }
+}
