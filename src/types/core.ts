@@ -77,6 +77,7 @@ export const ZebrunnerTestCaseSchema = z.object({
     title: z.string().optional(),
     name: z.string().optional()
   }).optional(),
+  featureSuiteId: z.number().optional(), // The immediate parent suite (feature suite)
   rootSuiteId: z.number().optional(),
   relativePosition: z.number().optional(),
   createdAt: z.string().optional(),

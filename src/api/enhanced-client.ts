@@ -455,7 +455,11 @@ export class EnhancedZebrunnerClient {
     });
   }
 
-  async getTestCaseByKey(projectKey: string, key: string): Promise<ZebrunnerTestCase> {
+  async getTestCaseByKey(
+    projectKey: string, 
+    key: string, 
+    options: { includeSuiteHierarchy?: boolean } = {}
+  ): Promise<ZebrunnerTestCase> {
     if (!projectKey) {
       throw new ZebrunnerApiError('Project key is required');
     }
@@ -469,8 +473,144 @@ export class EnhancedZebrunnerClient {
       });
       
       const data = response.data?.data || response.data;
-      return ZebrunnerTestCaseSchema.parse(data);
+      let testCase = ZebrunnerTestCaseSchema.parse(data);
+
+      // Enhance with suite hierarchy information if requested
+      if (options.includeSuiteHierarchy) {
+        testCase = await this.enhanceWithSuiteHierarchy(testCase, projectKey);
+      }
+
+      return testCase;
     });
+  }
+
+  /**
+   * Enhance test case with suite hierarchy information
+   */
+  private async enhanceWithSuiteHierarchy(
+    testCase: ZebrunnerTestCase, 
+    projectKey: string
+  ): Promise<ZebrunnerTestCase> {
+    try {
+      // featureSuiteId should be testSuite.id (the immediate parent suite)
+      // According to the API response structure, testSuite.id is the featureSuiteId
+      const featureSuiteId = testCase.testSuite?.id;
+      
+      if (!featureSuiteId) {
+        return {
+          ...testCase,
+          featureSuiteId: undefined,
+          rootSuiteId: undefined
+        };
+      }
+
+      // Find root suite by traversing up the hierarchy
+      const rootSuiteId = await this.findRootSuiteId(projectKey, featureSuiteId);
+
+      return {
+        ...testCase,
+        featureSuiteId,
+        rootSuiteId: rootSuiteId || undefined
+      };
+    } catch (error) {
+      // If hierarchy resolution fails, return original test case with available info
+      console.warn(`Failed to resolve suite hierarchy for ${testCase.key}:`, error);
+      return {
+        ...testCase,
+        featureSuiteId: testCase.testSuite?.id || undefined,
+        rootSuiteId: undefined
+      };
+    }
+  }
+
+  /**
+   * Get suite hierarchy path with names
+   */
+  async getSuiteHierarchyPath(projectKey: string, suiteId: number): Promise<Array<{id: number, name: string}>> {
+    try {
+      const path: Array<{id: number, name: string}> = [];
+      let currentSuiteId = suiteId;
+      let visitedSuites = new Set<number>(); // Prevent infinite loops
+      const maxDepth = 20; // Safety limit
+      let depth = 0;
+
+      while (depth < maxDepth && !visitedSuites.has(currentSuiteId)) {
+        visitedSuites.add(currentSuiteId);
+
+        // Get suite details
+        const suiteResponse = await this.http.get(`/test-suites/${currentSuiteId}`, {
+          params: { projectKey }
+        });
+
+        const suite = suiteResponse.data?.data || suiteResponse.data;
+        
+        if (!suite) {
+          break;
+        }
+
+        // Add current suite to path
+        path.unshift({
+          id: currentSuiteId,
+          name: suite.name || suite.title || `Suite ${currentSuiteId}`
+        });
+
+        // If this suite has no parent, we've reached the root
+        if (!suite.parentSuiteId) {
+          break;
+        }
+
+        // Move up to parent
+        currentSuiteId = suite.parentSuiteId;
+        depth++;
+      }
+
+      return path;
+    } catch (error) {
+      console.warn(`Error getting suite hierarchy path for suite ${suiteId}:`, error);
+      return [{id: suiteId, name: `Suite ${suiteId}`}];
+    }
+  }
+
+  /**
+   * Find root suite ID by traversing up the hierarchy
+   */
+  private async findRootSuiteId(projectKey: string, suiteId: number): Promise<number | null> {
+    try {
+      let currentSuiteId = suiteId;
+      let visitedSuites = new Set<number>(); // Prevent infinite loops
+      const maxDepth = 20; // Safety limit
+      let depth = 0;
+
+      while (depth < maxDepth && !visitedSuites.has(currentSuiteId)) {
+        visitedSuites.add(currentSuiteId);
+
+        // Get suite details
+        const suiteResponse = await this.http.get(`/test-suites/${currentSuiteId}`, {
+          params: { projectKey }
+        });
+
+        const suite = suiteResponse.data?.data || suiteResponse.data;
+        
+        if (!suite) {
+          break;
+        }
+
+        // If this suite has no parent, it's the root
+        if (!suite.parentSuiteId) {
+          return currentSuiteId;
+        }
+
+        // Move up to parent
+        currentSuiteId = suite.parentSuiteId;
+        depth++;
+      }
+
+      // If we hit max depth or loop, return the starting suite as fallback
+      return suiteId;
+    } catch (error) {
+      console.warn(`Error finding root suite for suite ${suiteId}:`, error);
+      return null;
+    }
   }
 
   async getTestCases(

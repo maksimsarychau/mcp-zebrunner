@@ -35,7 +35,7 @@ const testConfigs: Record<string, TestConfig> = {
   integration: {
     name: 'Integration Tests',
     pattern: 'tests/integration/**/*.test.ts',
-    description: 'Tests with real API calls to Zebrunner',
+    description: 'Tests with real API calls to Zebrunner (includes suite hierarchy tests)',
     requiresBuild: false,
     requiresEnv: true
   },

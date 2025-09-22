@@ -13,6 +13,7 @@
     "test:unit": "tsx tests/test-runner.ts unit",
     "test:integration": "tsx tests/test-runner.ts integration",
     "test:e2e": "tsx tests/test-runner.ts e2e",
+    "test:hierarchy": "node --test tests/integration/suite-hierarchy.test.ts",
     "test:watch": "tsx tests/test-runner.ts -- --watch",
     "test:health": "tsx tests/test-runner.ts -- --health",
     "test:verbose": "tsx tests/test-runner.ts -- --verbose",

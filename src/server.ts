@@ -7,6 +7,8 @@ import { z } from "zod";
 import { EnhancedZebrunnerClient } from "./api/enhanced-client.js";
 import { FormatProcessor } from "./utils/formatter.js";
 import { HierarchyProcessor } from "./utils/hierarchy.js";
+import { RulesParser } from "./utils/rules-parser.js";
+import { TestGenerator } from "./utils/test-generator.js";
 import { ZebrunnerConfig } from "./types/api.js";
 import { 
   ZebrunnerTestCase, 
@@ -36,6 +38,7 @@ const DEBUG_MODE = process.env.DEBUG === 'true';
 const EXPERIMENTAL_FEATURES = process.env.EXPERIMENTAL_FEATURES === 'true';
 const MAX_PAGE_SIZE = parseInt(process.env.MAX_PAGE_SIZE || '100', 10);
 const DEFAULT_PAGE_SIZE = parseInt(process.env.DEFAULT_PAGE_SIZE || '10', 10);
+const ENABLE_RULES_ENGINE = process.env.ENABLE_RULES_ENGINE === 'true';
 
 if (!ZEBRUNNER_URL || !ZEBRUNNER_LOGIN || !ZEBRUNNER_TOKEN) {
   console.error("❌ Missing required environment variables:");
@@ -115,14 +118,57 @@ function validateApiResponse(data: unknown, expectedType: string): boolean {
 }
 
 /** Enhanced markdown rendering with debug info */
-function renderTestCaseMarkdown(testCase: ZebrunnerTestCase, includeDebugInfo: boolean = false): string {
+async function renderTestCaseMarkdown(
+  testCase: ZebrunnerTestCase, 
+  includeDebugInfo: boolean = false,
+  includeSuiteHierarchy: boolean = false,
+  projectKey?: string
+): Promise<string> {
   let markdown = FormatProcessor.formatTestCaseMarkdown(testCase);
+  
+  // Add suite hierarchy information if available
+  if (includeSuiteHierarchy && (testCase.featureSuiteId || testCase.rootSuiteId)) {
+    markdown += `\n## 📁 Suite Hierarchy\n\n`;
+    
+    if (testCase.rootSuiteId) {
+      markdown += `- **Root Suite ID**: ${testCase.rootSuiteId}\n`;
+    }
+    
+    if (testCase.featureSuiteId) {
+      markdown += `- **Feature Suite ID**: ${testCase.featureSuiteId}\n`;
+    }
+    
+    if (testCase.testSuite?.id) {
+      markdown += `- **Test Suite ID**: ${testCase.testSuite.id}\n`;
+      if (testCase.testSuite.name || testCase.testSuite.title) {
+        markdown += `- **Test Suite Name**: ${testCase.testSuite.name || testCase.testSuite.title}\n`;
+      }
+    }
+    
+    // Try to get hierarchy path with names if client is available
+    if (projectKey && testCase.featureSuiteId) {
+      try {
+        const hierarchyPath = await client.getSuiteHierarchyPath(projectKey, testCase.featureSuiteId);
+        if (hierarchyPath.length > 0) {
+          const pathString = hierarchyPath.map(suite => `${suite.name} (${suite.id})`).join(' → ');
+          markdown += `- **Hierarchy Path**: ${pathString} → Test Case\n`;
+        }
+      } catch (error) {
+        // Ignore errors in hierarchy path resolution
+      }
+    }
+  }
   
   if (includeDebugInfo && DEBUG_MODE) {
     markdown += `\n\n---\n## Debug Information\n\n`;
     markdown += `- **Retrieved At**: ${new Date().toISOString()}\n`;
     markdown += `- **API Response Size**: ${JSON.stringify(testCase).length} characters\n`;
     markdown += `- **Custom Fields Count**: ${testCase.customField ? Object.keys(testCase.customField).length : 0}\n`;
+    if (includeSuiteHierarchy) {
+      markdown += `- **Suite Hierarchy Included**: Yes\n`;
+      markdown += `- **Feature Suite ID**: ${testCase.featureSuiteId || 'Not available'}\n`;
+      markdown += `- **Root Suite ID**: ${testCase.rootSuiteId || 'Not available'}\n`;
+    }
   }
   
   return markdown;
@@ -135,6 +181,16 @@ async function performCoverageAnalysis(
   analysisScope: string, 
   includeRecommendations: boolean
 ): Promise<any> {
+  // Get rules configuration (only if rules engine is enabled)
+  let rulesParser: RulesParser | null = null;
+  let rules: any = null;
+  let detectedFramework: any = null;
+  
+  if (ENABLE_RULES_ENGINE) {
+    rulesParser = RulesParser.getInstance();
+    rules = await rulesParser.getRules();
+    detectedFramework = await rulesParser.detectFramework(implementationContext);
+  }
   const analysis = {
     testCase: {
       key: testCase.key,
@@ -164,10 +220,24 @@ async function performCoverageAnalysis(
     }
   };
 
-  // Analyze each test step
+  // Analyze each test step (with or without rules context)
   if (testCase.steps && testCase.steps.length > 0) {
     analysis.coverage.stepsCoverage = testCase.steps.map((step: any, index: number) => {
-      const stepAnalysis = analyzeStepCoverage(step, implementationContext);
+      const stepAnalysis = ENABLE_RULES_ENGINE 
+        ? analyzeStepCoverage(step, implementationContext, rules, detectedFramework)
+        : analyzeStepCoverage(step, implementationContext);
+      
+      // Determine step characteristics for rules validation
+      const isUI = stepAnalysis.action.toLowerCase().includes('tap') || 
+                   stepAnalysis.action.toLowerCase().includes('click') ||
+                   stepAnalysis.action.toLowerCase().includes('screen');
+      const isAPI = stepAnalysis.action.toLowerCase().includes('api') ||
+                    stepAnalysis.action.toLowerCase().includes('request') ||
+                    stepAnalysis.action.toLowerCase().includes('response');
+      const isCritical = stepAnalysis.action.toLowerCase().includes('login') ||
+                         stepAnalysis.action.toLowerCase().includes('payment') ||
+                         stepAnalysis.action.toLowerCase().includes('critical');
+
       return {
         stepNumber: index + 1,
         action: step.action,
@@ -175,7 +245,11 @@ async function performCoverageAnalysis(
         coverage: stepAnalysis.coverage,
         implementationMatches: stepAnalysis.matches,
         missingElements: stepAnalysis.missing,
-        confidence: stepAnalysis.confidence
+        confidence: stepAnalysis.confidence,
+        isUI,
+        isAPI,
+        isCritical,
+        rulesViolations: stepAnalysis.rulesViolations || []
       };
     });
   }
@@ -185,9 +259,25 @@ async function performCoverageAnalysis(
   const coveredSteps = analysis.coverage.stepsCoverage.filter((step: any) => step.coverage > 0.5).length;
   analysis.coverage.overallScore = totalSteps > 0 ? Math.round((coveredSteps / totalSteps) * 100) : 0;
 
-  // Generate recommendations if requested
+  // Validate coverage against rules (only if rules engine is enabled)
+  if (ENABLE_RULES_ENGINE && rulesParser) {
+    const stepCoverages = analysis.coverage.stepsCoverage.map((step: any) => ({
+      step: step.stepNumber,
+      coverage: step.coverage * 100,
+      isUI: step.isUI,
+      isAPI: step.isAPI,
+      isCritical: step.isCritical
+    }));
+
+    const rulesValidation = await rulesParser.validateCoverage(stepCoverages, analysis.coverage.overallScore);
+    (analysis as any).rulesValidation = rulesValidation;
+  }
+
+  // Generate recommendations (enhanced with rules context if available)
   if (includeRecommendations) {
-    analysis.recommendations = generateCoverageRecommendations(analysis);
+    analysis.recommendations = ENABLE_RULES_ENGINE
+      ? generateCoverageRecommendations(analysis, rules, detectedFramework)
+      : generateCoverageRecommendations(analysis);
   }
 
   return analysis;
@@ -227,7 +317,7 @@ function extractImplementationElements(context: string): any {
 }
 
 /** Analyze coverage for a specific test step */
-function analyzeStepCoverage(step: any, implementationContext: string): any {
+function analyzeStepCoverage(step: any, implementationContext: string, rules?: any, detectedFramework?: any): any {
   const action = step.action || '';
   const expectedResult = step.expectedResult || '';
   
@@ -285,7 +375,7 @@ function extractKeywords(text: string): string[] {
 }
 
 /** Generate coverage improvement recommendations */
-function generateCoverageRecommendations(analysis: any): string[] {
+function generateCoverageRecommendations(analysis: any, rules?: any, detectedFramework?: any): string[] {
   const recommendations = [];
   const coverageScore = analysis.coverage.overallScore;
 
@@ -357,7 +447,7 @@ function generateCodeComments(analysis: any): string {
 async function main() {
   const server = new McpServer(
     { 
-      name: "zebrunner-unified", 
+      name: "mcp-zebrunner", 
       version: "3.0.0",
       description: "Unified Zebrunner MCP Server with comprehensive features and improved error handling"
     },
@@ -435,7 +525,8 @@ async function main() {
       project_key: z.string().min(1).optional().describe("Project key (e.g., MFPAND) - auto-detected from case_key if not provided"),
       case_key: z.string().min(1).describe("Test case key (e.g., MFPAND-29, MFPIOS-2)"),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
-      include_debug: z.boolean().default(false).describe("Include debug information in markdown")
+      include_debug: z.boolean().default(false).describe("Include debug information in markdown"),
+      include_suite_hierarchy: z.boolean().default(false).describe("Include featureSuiteId and rootSuiteId with suite hierarchy path")
     },
     async (args) => {
       // Auto-detect project key if not provided
@@ -451,19 +542,19 @@ async function main() {
         };
       }
       
-      const { project_key, case_key, format, include_debug } = resolvedArgs;
+      const { project_key, case_key, format, include_debug, include_suite_hierarchy } = resolvedArgs;
       
       try {
-        debugLog("Getting test case by key", { project_key, case_key, format });
+        debugLog("Getting test case by key", { project_key, case_key, format, include_suite_hierarchy });
         
-        const testCase = await client.getTestCaseByKey(project_key, case_key);
+        const testCase = await client.getTestCaseByKey(project_key, case_key, { includeSuiteHierarchy: include_suite_hierarchy });
         
         if (!testCase) {
           throw new Error(`Test case ${case_key} not found`);
         }
 
         if (format === 'markdown') {
-          const markdown = renderTestCaseMarkdown(testCase, include_debug);
+          const markdown = await renderTestCaseMarkdown(testCase, include_debug, include_suite_hierarchy, project_key);
           return {
             content: [{
               type: "text" as const,
@@ -909,18 +1000,19 @@ async function main() {
       analysis_scope: z.enum(['steps', 'assertions', 'data', 'full']).default('full').describe("Scope of analysis: steps, assertions, data coverage, or full analysis"),
       output_format: z.enum(['chat', 'markdown', 'code_comments', 'all']).default('chat').describe("Output format: chat response, markdown file, code comments, or all formats"),
       include_recommendations: z.boolean().default(true).describe("Include improvement recommendations"),
+      include_suite_hierarchy: z.boolean().default(false).describe("Include featureSuiteId and rootSuiteId in analysis"),
       file_path: z.string().optional().describe("File path for adding code comments or saving markdown (optional)")
     },
     async (args) => {
       try {
         // Auto-detect project key if not provided
         const resolvedArgs = FormatProcessor.resolveProjectKey(args);
-        const { project_key, case_key, implementation_context, analysis_scope, output_format, include_recommendations, file_path } = resolvedArgs;
+        const { project_key, case_key, implementation_context, analysis_scope, output_format, include_recommendations, include_suite_hierarchy, file_path } = resolvedArgs;
         
-        debugLog("Analyzing test coverage", { project_key, case_key, analysis_scope, output_format });
+        debugLog("Analyzing test coverage", { project_key, case_key, analysis_scope, output_format, include_suite_hierarchy });
         
         // Get the detailed test case
-        const testCase = await client.getTestCaseByKey(project_key, case_key);
+        const testCase = await client.getTestCaseByKey(project_key, case_key, { includeSuiteHierarchy: include_suite_hierarchy });
         
         if (!testCase) {
           throw new Error(`Test case ${case_key} not found in project ${project_key}`);
@@ -945,6 +1037,352 @@ async function main() {
           content: [{
             type: "text" as const,
             text: `❌ Error analyzing test coverage for ${args.case_key}: ${error.message}`
+          }]
+        };
+      }
+    }
+  );
+
+  // ========== NEW ENHANCED TOOLS ==========
+
+  server.tool(
+    "generate_draft_test_by_key",
+    "🧪 Generate draft test code from Zebrunner test case with intelligent framework detection",
+    {
+      project_key: z.string().min(1).optional().describe("Project key (auto-detected from case_key if not provided)"),
+      case_key: z.string().min(1).describe("Test case key (e.g., MFPAND-6)"),
+      implementation_context: z.string().min(10).describe("Implementation context (existing code, file paths, or framework hints)"),
+      target_framework: z.enum(['auto', 'java-carina', 'javascript-jest', 'python-pytest']).default('auto').describe("Target test framework (auto-detected if 'auto')"),
+      output_format: z.enum(['code', 'markdown', 'comments', 'all']).default('code').describe("Output format for generated test"),
+      include_setup_teardown: z.boolean().default(true).describe("Include setup and teardown code"),
+      include_assertions_templates: z.boolean().default(true).describe("Include assertion templates"),
+      generate_page_objects: z.boolean().default(false).describe("Generate page object classes"),
+      include_data_providers: z.boolean().default(false).describe("Include data provider templates"),
+      include_suite_hierarchy: z.boolean().default(false).describe("Include featureSuiteId and rootSuiteId information"),
+      file_path: z.string().optional().describe("File path for saving generated code (optional)")
+    },
+    async (args) => {
+      try {
+        // Auto-detect project key if not provided
+        const resolvedArgs = FormatProcessor.resolveProjectKey(args);
+        const { 
+          project_key, 
+          case_key, 
+          implementation_context, 
+          target_framework, 
+          output_format, 
+          include_setup_teardown,
+          include_assertions_templates,
+          generate_page_objects,
+          include_data_providers,
+          include_suite_hierarchy,
+          file_path 
+        } = resolvedArgs;
+        
+        debugLog("Generating draft test", { project_key, case_key, target_framework, output_format, include_suite_hierarchy });
+        
+        // Get the detailed test case
+        const testCase = await client.getTestCaseByKey(project_key, case_key, { includeSuiteHierarchy: include_suite_hierarchy });
+        
+        if (!testCase) {
+          throw new Error(`Test case ${case_key} not found in project ${project_key}`);
+        }
+
+        // Check if rules engine is enabled
+        if (!ENABLE_RULES_ENGINE) {
+          return {
+            content: [{
+              type: "text" as const,
+              text: `⚠️ Draft test generation requires the enhanced rules engine.\n\nTo enable this feature:\n1. Set ENABLE_RULES_ENGINE=true in your .env file\n2. Optionally create a rules file: mcp-zebrunner-rules.md\n3. Restart the MCP server\n\nFor backward compatibility, this feature is disabled by default.`
+            }]
+          };
+        }
+
+        // Initialize test generator
+        const testGenerator = new TestGenerator();
+        
+        // Generate test with options
+        const generatedTest = await testGenerator.generateTest(testCase, implementation_context, {
+          framework: target_framework === 'auto' ? undefined : target_framework,
+          outputFormat: output_format,
+          includeSetupTeardown: include_setup_teardown,
+          includeAssertionTemplates: include_assertions_templates,
+          generatePageObjects: generate_page_objects,
+          includeDataProviders: include_data_providers
+        });
+
+        // Format response based on output format
+        let responseText = '';
+        
+        if (output_format === 'code' || output_format === 'all') {
+          responseText += `# 🧪 Generated Test Code\n\n`;
+          responseText += `**Framework Detected**: ${generatedTest.framework}\n`;
+          responseText += `**Quality Score**: ${generatedTest.qualityScore}%\n\n`;
+          
+          if (generatedTest.imports.length > 0) {
+            responseText += `## Imports\n\`\`\`${generatedTest.framework.includes('java') ? 'java' : 'javascript'}\n`;
+            responseText += generatedTest.imports.join('\n') + '\n\`\`\`\n\n';
+          }
+          
+          responseText += `## Test Code\n\`\`\`${generatedTest.framework.includes('java') ? 'java' : 'javascript'}\n`;
+          responseText += generatedTest.testCode + '\n\`\`\`\n\n';
+          
+          if (generatedTest.setupCode) {
+            responseText += `## Setup Code\n\`\`\`${generatedTest.framework.includes('java') ? 'java' : 'javascript'}\n`;
+            responseText += generatedTest.setupCode + '\n\`\`\`\n\n';
+          }
+          
+          if (generatedTest.pageObjectCode) {
+            responseText += `## Page Object\n\`\`\`${generatedTest.framework.includes('java') ? 'java' : 'javascript'}\n`;
+            responseText += generatedTest.pageObjectCode + '\n\`\`\`\n\n';
+          }
+          
+          if (generatedTest.dataProviderCode) {
+            responseText += `## Data Provider\n\`\`\`${generatedTest.framework.includes('java') ? 'java' : 'javascript'}\n`;
+            responseText += generatedTest.dataProviderCode + '\n\`\`\`\n\n';
+          }
+        }
+        
+        if (output_format === 'markdown' || output_format === 'all') {
+          responseText += `## 📋 Test Case Information\n`;
+          responseText += `- **Key**: ${testCase.key}\n`;
+          responseText += `- **Title**: ${testCase.title}\n`;
+          responseText += `- **Priority**: ${testCase.priority?.name || 'Not set'}\n`;
+          responseText += `- **Automation State**: ${testCase.automationState?.name || 'Not set'}\n\n`;
+          
+          if (testCase.steps && testCase.steps.length > 0) {
+            responseText += `## 🔄 Test Steps\n`;
+            testCase.steps.forEach((step: any, index: number) => {
+              responseText += `### Step ${index + 1}\n`;
+              responseText += `**Action**: ${step.action}\n`;
+              responseText += `**Expected**: ${step.expectedResult}\n\n`;
+            });
+          }
+        }
+        
+        if (generatedTest.recommendations.length > 0) {
+          responseText += `## 💡 Recommendations\n`;
+          generatedTest.recommendations.forEach(rec => {
+            responseText += `- ${rec}\n`;
+          });
+          responseText += '\n';
+        }
+        
+        // Add rules information if available
+        try {
+          const rulesParser = RulesParser.getInstance();
+          const rulesPath = rulesParser.getRulesFilePath();
+          responseText += `## ⚙️ Configuration\n`;
+          responseText += `- **Rules File**: ${rulesPath}\n`;
+          responseText += `- **Framework**: ${generatedTest.framework}\n`;
+          responseText += `- **Quality Score**: ${generatedTest.qualityScore}%\n\n`;
+        } catch (error) {
+          // Ignore rules file errors
+        }
+        
+        responseText += `---\n`;
+        responseText += `*Generated by MCP Zebrunner Server with enhanced rules engine*`;
+
+        return {
+          content: [{
+            type: "text" as const,
+            text: responseText
+          }]
+        };
+        
+      } catch (error: any) {
+        debugLog("Error generating draft test", { error: error.message, args });
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error generating draft test for ${args.case_key}: ${error.message}\n\nTip: Ensure the test case exists and your implementation context provides enough information for framework detection.`
+          }]
+        };
+      }
+    }
+  );
+
+  server.tool(
+    "get_enhanced_test_coverage_with_rules",
+    "🔍 Enhanced test coverage analysis with configurable rules validation and quality scoring",
+    {
+      project_key: z.string().min(1).optional().describe("Project key (auto-detected from case_key if not provided)"),
+      case_key: z.string().min(1).describe("Test case key (e.g., MFPAND-6)"),
+      implementation_context: z.string().min(10).describe("Actual implementation details (code snippets, file paths, or implementation description)"),
+      analysis_scope: z.enum(['steps', 'assertions', 'data', 'full']).default('full').describe("Scope of analysis: steps, assertions, data coverage, or full analysis"),
+      output_format: z.enum(['chat', 'markdown', 'detailed', 'all']).default('detailed').describe("Output format: chat response, markdown file, detailed analysis, or all formats"),
+      include_recommendations: z.boolean().default(true).describe("Include improvement recommendations"),
+      validate_against_rules: z.boolean().default(true).describe("Validate coverage against configured rules"),
+      show_framework_detection: z.boolean().default(true).describe("Show detected framework and patterns"),
+      include_suite_hierarchy: z.boolean().default(false).describe("Include featureSuiteId and rootSuiteId in analysis"),
+      file_path: z.string().optional().describe("File path for adding code comments or saving markdown (optional)")
+    },
+    async (args) => {
+      try {
+        // Auto-detect project key if not provided
+        const resolvedArgs = FormatProcessor.resolveProjectKey(args);
+        const { 
+          project_key, 
+          case_key, 
+          implementation_context, 
+          analysis_scope, 
+          output_format, 
+          include_recommendations,
+          validate_against_rules,
+          show_framework_detection,
+          include_suite_hierarchy,
+          file_path 
+        } = resolvedArgs;
+        
+        debugLog("Enhanced coverage analysis", { project_key, case_key, analysis_scope, validate_against_rules, include_suite_hierarchy });
+        
+        // Get the detailed test case
+        const testCase = await client.getTestCaseByKey(project_key, case_key, { includeSuiteHierarchy: include_suite_hierarchy });
+        
+        if (!testCase) {
+          throw new Error(`Test case ${case_key} not found in project ${project_key}`);
+        }
+
+        // Perform enhanced coverage analysis
+        const analysisResult = await performCoverageAnalysis(testCase, implementation_context, analysis_scope, include_recommendations);
+        
+        // Format enhanced output
+        let responseText = `# 🔍 Enhanced Test Coverage Analysis: ${case_key}\n\n`;
+        
+        // Test case information
+        responseText += `## 📋 Test Case Details\n`;
+        responseText += `- **Key**: ${testCase.key}\n`;
+        responseText += `- **Title**: ${testCase.title}\n`;
+        responseText += `- **Priority**: ${testCase.priority?.name || 'Not set'}\n`;
+        responseText += `- **Automation State**: ${testCase.automationState?.name || 'Not set'}\n\n`;
+        
+        // Framework detection (only if rules engine is enabled)
+        if (show_framework_detection && ENABLE_RULES_ENGINE) {
+          try {
+            const rulesParser = RulesParser.getInstance();
+            const detectedFramework = await rulesParser.detectFramework(implementation_context);
+            responseText += `## 🔧 Framework Detection\n`;
+            if (detectedFramework) {
+              responseText += `- **Detected Framework**: ${detectedFramework.name}\n`;
+              responseText += `- **Keywords Found**: ${detectedFramework.keywords.join(', ')}\n`;
+              responseText += `- **File Patterns**: ${detectedFramework.filePatterns.join(', ')}\n`;
+            } else {
+              responseText += `- **Framework**: Not detected (using default patterns)\n`;
+            }
+            responseText += '\n';
+          } catch (error) {
+            // Ignore framework detection errors
+          }
+        } else if (show_framework_detection && !ENABLE_RULES_ENGINE) {
+          responseText += `## 🔧 Framework Detection\n`;
+          responseText += `- **Status**: Disabled (ENABLE_RULES_ENGINE=false)\n`;
+          responseText += `- **Note**: Enable rules engine for framework detection\n\n`;
+        }
+        
+        // Coverage summary
+        responseText += `## 📊 Coverage Summary\n`;
+        responseText += `- **Overall Score**: ${analysisResult.coverage.overallScore}%\n`;
+        responseText += `- **Total Steps**: ${analysisResult.coverage.stepsCoverage.length}\n`;
+        responseText += `- **Covered Steps**: ${analysisResult.coverage.stepsCoverage.filter((s: any) => s.coverage > 0.5).length}\n`;
+        
+        // Rules validation (only if rules engine is enabled)
+        if (validate_against_rules && ENABLE_RULES_ENGINE && analysisResult.rulesValidation) {
+          responseText += `- **Rules Validation**: ${analysisResult.rulesValidation.passed ? '✅ Passed' : '❌ Failed'}\n`;
+          if (analysisResult.rulesValidation.violations.length > 0) {
+            responseText += `- **Violations**: ${analysisResult.rulesValidation.violations.length}\n`;
+          }
+        } else if (validate_against_rules && !ENABLE_RULES_ENGINE) {
+          responseText += `- **Rules Validation**: Disabled (ENABLE_RULES_ENGINE=false)\n`;
+        }
+        responseText += '\n';
+        
+        // Step-by-step analysis
+        responseText += `## 🔄 Step Analysis\n`;
+        analysisResult.coverage.stepsCoverage.forEach((step: any) => {
+          const icon = step.coverage > 0.8 ? '✅' : step.coverage > 0.5 ? '⚠️' : '❌';
+          responseText += `### ${icon} Step ${step.stepNumber} (${Math.round(step.coverage * 100)}%)\n`;
+          responseText += `**Action**: ${step.action}\n`;
+          responseText += `**Expected**: ${step.expectedResult}\n`;
+          
+          if (step.implementationMatches.length > 0) {
+            responseText += `**Matches**: ${step.implementationMatches.join(', ')}\n`;
+          }
+          
+          if (step.missingElements.length > 0) {
+            responseText += `**Missing**: ${step.missingElements.join(', ')}\n`;
+          }
+          
+          if (step.rulesViolations && step.rulesViolations.length > 0) {
+            responseText += `**Rules Violations**: ${step.rulesViolations.join(', ')}\n`;
+          }
+          
+          responseText += '\n';
+        });
+        
+        // Rules validation details
+        if (validate_against_rules && analysisResult.rulesValidation) {
+          responseText += `## ⚖️ Rules Validation\n`;
+          responseText += `**Status**: ${analysisResult.rulesValidation.passed ? '✅ Passed' : '❌ Failed'}\n\n`;
+          
+          if (analysisResult.rulesValidation.violations.length > 0) {
+            responseText += `### ❌ Violations\n`;
+            analysisResult.rulesValidation.violations.forEach((violation: string) => {
+              responseText += `- ${violation}\n`;
+            });
+            responseText += '\n';
+          }
+          
+          if (analysisResult.rulesValidation.recommendations.length > 0) {
+            responseText += `### 💡 Rules Recommendations\n`;
+            analysisResult.rulesValidation.recommendations.forEach((rec: string) => {
+              responseText += `- ${rec}\n`;
+            });
+            responseText += '\n';
+          }
+        }
+        
+        // General recommendations
+        if (include_recommendations && analysisResult.recommendations.length > 0) {
+          responseText += `## 💡 Improvement Recommendations\n`;
+          analysisResult.recommendations.forEach((rec: string) => {
+            responseText += `- ${rec}\n`;
+          });
+          responseText += '\n';
+        }
+        
+        // Configuration info
+        responseText += `## ⚙️ Configuration\n`;
+        responseText += `- **Rules Engine**: ${ENABLE_RULES_ENGINE ? 'Enabled' : 'Disabled'}\n`;
+        responseText += `- **Analysis Scope**: ${analysis_scope}\n`;
+        responseText += `- **Rules Validation**: ${validate_against_rules ? 'Enabled' : 'Disabled'}\n`;
+        
+        if (ENABLE_RULES_ENGINE) {
+          try {
+            const rulesParser = RulesParser.getInstance();
+            const rulesPath = rulesParser.getRulesFilePath();
+            responseText += `- **Rules File**: ${rulesPath}\n`;
+          } catch (error) {
+            responseText += `- **Rules File**: Error loading rules file\n`;
+          }
+        }
+        responseText += '\n';
+        
+        responseText += `---\n`;
+        responseText += `*Enhanced analysis powered by configurable rules engine*`;
+
+        return {
+          content: [{
+            type: "text" as const,
+            text: responseText
+          }]
+        };
+        
+      } catch (error: any) {
+        debugLog("Error in enhanced coverage analysis", { error: error.message, args });
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error in enhanced coverage analysis for ${args.case_key}: ${error.message}`
           }]
         };
       }
