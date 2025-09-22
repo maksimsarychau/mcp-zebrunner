@@ -159,15 +159,34 @@ export class HierarchyProcessor {
    */
   static flattenSuiteTree(rootSuites: ZebrunnerTestSuite[]): ZebrunnerTestSuite[] {
     const flattened: ZebrunnerTestSuite[] = [];
+    const visited = new Set<number>(); // Prevent infinite loops from circular references
 
     const traverse = (suite: ZebrunnerTestSuite) => {
-      flattened.push(suite);
-      if (suite.children) {
-        suite.children.forEach((child: any) => traverse(child));
+      if (visited.has(suite.id)) {
+        console.warn(`⚠️  Circular reference detected in suite hierarchy: ${suite.id}`);
+        return;
       }
+
+      visited.add(suite.id);
+      flattened.push(suite);
+
+      if (suite.children && Array.isArray(suite.children)) {
+        suite.children.forEach((child: ZebrunnerTestSuite) => {
+          if (child && typeof child.id === 'number') {
+            traverse(child);
+          }
+        });
+      }
+
+      visited.delete(suite.id); // Allow revisiting in different branches
     };
 
-    rootSuites.forEach(suite => traverse(suite));
+    rootSuites.forEach(suite => {
+      if (suite && typeof suite.id === 'number') {
+        traverse(suite);
+      }
+    });
+
     return flattened;
   }
 
@@ -175,17 +194,37 @@ export class HierarchyProcessor {
    * Get all descendants of a suite
    */
   static getSuiteDescendants(
-    parentSuiteId: number, 
+    parentSuiteId: number,
     suites: ZebrunnerTestSuite[]
   ): ZebrunnerTestSuite[] {
+    if (!Number.isInteger(parentSuiteId) || parentSuiteId <= 0) {
+      throw new Error('Parent suite ID must be a positive integer');
+    }
+
     const descendants: ZebrunnerTestSuite[] = [];
-    const children = suites.filter(suite => suite.parentSuiteId === parentSuiteId);
+    const visited = new Set<number>(); // Prevent infinite recursion
 
-    children.forEach((child: any) => {
-      descendants.push(child);
-      descendants.push(...this.getSuiteDescendants(child.id, suites));
-    });
+    const collectDescendants = (currentParentId: number) => {
+      if (visited.has(currentParentId)) {
+        return; // Avoid circular references
+      }
 
+      visited.add(currentParentId);
+      const children = suites.filter((suite: ZebrunnerTestSuite) =>
+        suite && suite.parentSuiteId === currentParentId
+      );
+
+      children.forEach((child: ZebrunnerTestSuite) => {
+        if (child && typeof child.id === 'number') {
+          descendants.push(child);
+          collectDescendants(child.id);
+        }
+      });
+
+      visited.delete(currentParentId);
+    };
+
+    collectDescendants(parentSuiteId);
     return descendants;
   }
 

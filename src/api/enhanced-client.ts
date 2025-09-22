@@ -115,31 +115,83 @@ export class EnhancedZebrunnerClient {
 
   private validateRequestParams(url: string, params: any): void {
     // Validate project key format
-    if (params.projectKey && !/^[A-Z][A-Z0-9]*$/.test(params.projectKey)) {
-      throw new ZebrunnerApiError(
-        `Invalid project key format: '${params.projectKey}'. Expected format: uppercase letters and numbers (e.g., MFPAND)`
-      );
+    if (params.projectKey) {
+      if (typeof params.projectKey !== 'string' || params.projectKey.trim() === '') {
+        throw new ZebrunnerApiError('Project key must be a non-empty string');
+      }
+      if (!/^[A-Z][A-Z0-9]*$/.test(params.projectKey)) {
+        throw new ZebrunnerApiError(
+          `Invalid project key format: '${params.projectKey}'. Expected format: uppercase letters and numbers (e.g., MFPAND)`
+        );
+      }
+    }
+
+    // Validate numeric IDs
+    if (params.projectId !== undefined) {
+      if (!Number.isInteger(params.projectId) || params.projectId <= 0) {
+        throw new ZebrunnerApiError('Project ID must be a positive integer');
+      }
+    }
+
+    if (params.suiteId !== undefined) {
+      if (!Number.isInteger(params.suiteId) || params.suiteId <= 0) {
+        throw new ZebrunnerApiError('Suite ID must be a positive integer');
+      }
+    }
+
+    if (params.rootSuiteId !== undefined) {
+      if (!Number.isInteger(params.rootSuiteId) || params.rootSuiteId <= 0) {
+        throw new ZebrunnerApiError('Root Suite ID must be a positive integer');
+      }
     }
 
     // Validate pagination parameters
-    if (params.page !== undefined && params.page < 0) {
-      throw new ZebrunnerApiError('Page number must be non-negative');
+    if (params.page !== undefined) {
+      if (!Number.isInteger(params.page) || params.page < 0) {
+        throw new ZebrunnerApiError('Page number must be a non-negative integer');
+      }
     }
 
-    if (params.size !== undefined && (params.size <= 0 || params.size > this.config.maxPageSize!)) {
-      throw new ZebrunnerApiError(`Page size must be between 1 and ${this.config.maxPageSize}`);
+    if (params.size !== undefined) {
+      if (!Number.isInteger(params.size) || params.size <= 0 || params.size > this.config.maxPageSize!) {
+        throw new ZebrunnerApiError(`Page size must be an integer between 1 and ${this.config.maxPageSize}`);
+      }
     }
 
-    // Validate test case key format
+    // Validate search query
+    if (params.query !== undefined) {
+      if (typeof params.query !== 'string' || params.query.trim() === '') {
+        throw new ZebrunnerApiError('Search query must be a non-empty string');
+      }
+      if (params.query.length > 1000) {
+        throw new ZebrunnerApiError('Search query too long (max 1000 characters)');
+      }
+    }
+
+    // Validate test case key format and consistency
     if (url.includes('/key:') && params.projectKey) {
       const keyMatch = url.match(/\/key:([^?]+)/);
       if (keyMatch) {
         const caseKey = keyMatch[1];
+        if (typeof caseKey !== 'string' || !/^[A-Z][A-Z0-9]*-\d+$/.test(caseKey)) {
+          throw new ZebrunnerApiError(`Invalid test case key format: '${caseKey}'. Expected format: PROJECT_KEY-NUMBER`);
+        }
         if (!caseKey.startsWith(params.projectKey + '-')) {
           console.warn(`⚠️  Test case key '${caseKey}' doesn't match project key '${params.projectKey}'`);
         }
       }
     }
+
+    // Validate date parameters if present
+    const dateFields = ['startedAfter', 'startedBefore', 'createdAfter', 'createdBefore', 'modifiedAfter', 'modifiedBefore'];
+    dateFields.forEach(field => {
+      if (params[field] !== undefined) {
+        const dateValue = new Date(params[field]);
+        if (isNaN(dateValue.getTime())) {
+          throw new ZebrunnerApiError(`Invalid date format for ${field}: ${params[field]}`);
+        }
+      }
+    });
   }
 
   private extractEndpointKey(url: string): string {
@@ -229,30 +281,63 @@ export class EnhancedZebrunnerClient {
    */
   async testConnection(): Promise<{ success: boolean; message: string; details?: any }> {
     try {
-      // Try a simple endpoint that should always work
-      const response = await this.http.get('/test-suites', {
-        params: { projectKey: 'TEST', size: 1 }
+      // First try a minimal request that should work regardless of project access
+      const response = await this.http.get('/', {
+        timeout: 10000
       });
-      
+
       return {
         success: true,
         message: 'Connection successful',
         details: {
           status: response.status,
           baseUrl: this.config.baseUrl,
-          responseTime: response.headers['x-response-time'] || 'unknown'
+          responseTime: response.headers['x-response-time'] || 'unknown',
+          timestamp: new Date().toISOString()
         }
       };
     } catch (error: any) {
-      return {
-        success: false,
-        message: `Connection failed: ${error.message}`,
-        details: {
-          status: error.response?.status,
-          baseUrl: this.config.baseUrl,
-          error: error.response?.data
+      // If root endpoint fails, try with a known project pattern (more permissive)
+      try {
+        const fallbackResponse = await this.http.get('/test-suites', {
+          params: { projectKey: 'INVALID', size: 1 },
+          timeout: 5000
+        });
+
+        return {
+          success: true,
+          message: 'Connection successful (via fallback)',
+          details: {
+            status: fallbackResponse.status,
+            baseUrl: this.config.baseUrl,
+            method: 'fallback'
+          }
+        };
+      } catch (fallbackError: any) {
+        // Even 400/404 responses indicate the server is reachable
+        if (fallbackError.response?.status === 400 || fallbackError.response?.status === 404) {
+          return {
+            success: true,
+            message: 'Connection successful (server reachable)',
+            details: {
+              status: fallbackError.response.status,
+              baseUrl: this.config.baseUrl,
+              note: 'Server is reachable but requires valid project parameters'
+            }
+          };
         }
-      };
+
+        return {
+          success: false,
+          message: `Connection failed: ${error.message}`,
+          details: {
+            status: error.response?.status,
+            baseUrl: this.config.baseUrl,
+            error: error.response?.data,
+            fallbackStatus: fallbackError.response?.status
+          }
+        };
+      }
     }
   }
 
@@ -272,6 +357,7 @@ export class EnhancedZebrunnerClient {
         projectId: options.projectId,
         page: options.page,
         size: options.size || this.config.defaultPageSize,
+        maxPageSize: this.config.maxPageSize,
         parentSuiteId: options.parentSuiteId
       };
 
@@ -294,31 +380,65 @@ export class EnhancedZebrunnerClient {
     });
   }
 
-  async getAllTestSuites(projectKey: string, options: Omit<TestSuiteSearchParams, 'page' | 'size'> = {}): Promise<ZebrunnerTestSuite[]> {
+  async getAllTestSuites(
+    projectKey: string,
+    options: Omit<TestSuiteSearchParams, 'page' | 'size'> & {
+      maxResults?: number;
+      onProgress?: (currentCount: number, page: number) => void;
+    } = {}
+  ): Promise<ZebrunnerTestSuite[]> {
+    const { maxResults = 10000, onProgress, ...searchOptions } = options;
     const allItems: ZebrunnerTestSuite[] = [];
     let page = 0;
     let hasMore = true;
+    const maxPages = Math.ceil(maxResults / (this.config.maxPageSize || 200));
 
-    while (hasMore) {
-      const response = await this.getTestSuites(projectKey, { 
-        ...options, 
-        page, 
-        size: this.config.maxPageSize 
+    while (hasMore && page < maxPages) {
+      const response = await this.getTestSuites(projectKey, {
+        ...searchOptions,
+        page,
+        size: this.config.maxPageSize
       });
-      
-      allItems.push(...response.items);
-      
-      hasMore = response._meta?.hasNext || 
+
+      // Limit items to maxResults
+      const remainingSlots = maxResults - allItems.length;
+      const itemsToAdd = response.items.slice(0, remainingSlots);
+      allItems.push(...itemsToAdd);
+
+      // Call progress callback if provided
+      if (onProgress) {
+        onProgress(allItems.length, page + 1);
+      }
+
+      // Check if we should continue
+      hasMore = response._meta?.hasNext ||
                 (response.items.length === this.config.maxPageSize && response.items.length > 0);
       page++;
-      
-      // Safety break to prevent infinite loops
-      if (page > 100) {
+
+      // Stop if we've reached maxResults
+      if (allItems.length >= maxResults) {
         if (this.config.debug) {
-          console.warn('⚠️  Stopped pagination after 100 pages to prevent infinite loop');
+          console.log(`🔍 Reached maximum result limit (${maxResults}), stopping pagination`);
         }
         break;
       }
+
+      // Enhanced safety break with better logging
+      if (page > 100) {
+        if (this.config.debug) {
+          console.warn(`⚠️  Stopped pagination after 100 pages (${allItems.length} items collected) to prevent infinite loop`);
+        }
+        break;
+      }
+
+      // Add small delay to be respectful to API
+      if (page > 0 && page % 10 === 0) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    }
+
+    if (this.config.debug) {
+      console.log(`🔍 Collected ${allItems.length} test suites across ${page} pages`);
     }
 
     return allItems;
@@ -366,6 +486,7 @@ export class EnhancedZebrunnerClient {
         projectKey,
         page: options.page,
         size: options.size || this.config.defaultPageSize,
+        maxPageSize: this.config.maxPageSize,
         suiteId: options.suiteId,
         rootSuiteId: options.rootSuiteId,
         status: options.status,
@@ -407,7 +528,8 @@ export class EnhancedZebrunnerClient {
       
       // Client-side pagination (since API ignores page/size parameters)
       const page = options.page || 0;
-      const size = options.size || this.config.defaultPageSize || 50;
+      const requestedSize = options.size || this.config.defaultPageSize || 50;
+      const size = Math.min(requestedSize, this.config.maxPageSize || 200);
       const startIndex = page * size;
       const endIndex = startIndex + size;
       const paginatedItems = filteredItems.slice(startIndex, endIndex);
