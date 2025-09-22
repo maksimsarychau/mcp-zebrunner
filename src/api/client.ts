@@ -134,17 +134,20 @@ export class ZebrunnerApiClient {
     options: TestCaseSearchParams = {}
   ): Promise<PagedResponse<ZebrunnerShortTestCase>> {
     return this.retryRequest(async () => {
-      const params = {
+      const params: any = {
         projectKey,
-        page: options.page,
-        size: Math.min(options.size || this.config.defaultPageSize || 50, this.config.maxPageSize || 200),
-        maxPageSize: this.config.maxPageSize,
+        maxPageSize: Math.min(options.size || this.config.defaultPageSize || 50, 100), // Limit to 100 as per API requirements
         suiteId: options.suiteId,
         rootSuiteId: options.rootSuiteId,
         status: options.status,
         priority: options.priority,
         automationState: options.automationState
       };
+
+      // Use token-based pagination instead of page-based
+      if (options.pageToken) {
+        params.pageToken = options.pageToken; // Use 'pageToken' not 'nextPageToken' as per API spec
+      }
 
       const response = await this.http.get('/test-cases', { params });
       const data = response.data;
@@ -206,13 +209,16 @@ export class ZebrunnerApiClient {
     options: TestSuiteSearchParams = {}
   ): Promise<PagedResponse<ZebrunnerTestSuite>> {
     return this.retryRequest(async () => {
-      const params = {
+      const params: any = {
         projectKey,
-        page: options.page,
-        size: options.size || this.config.defaultPageSize,
-        maxPageSize: this.config.maxPageSize,
+        maxPageSize: Math.min(options.size || this.config.defaultPageSize || 50, 100), // Limit to 100 as per API requirements
         parentSuiteId: options.parentSuiteId
       };
+
+      // Use token-based pagination instead of page-based
+      if (options.pageToken) {
+        params.pageToken = options.pageToken; // Use 'pageToken' not 'nextPageToken' as per API spec
+      }
 
       const response = await this.http.get('/test-suites', { params });
       const data = response.data;
@@ -232,15 +238,34 @@ export class ZebrunnerApiClient {
 
   async getAllTestSuites(projectKey: string, options: Omit<TestSuiteSearchParams, 'page' | 'size'> = {}): Promise<ZebrunnerTestSuite[]> {
     const allItems: ZebrunnerTestSuite[] = [];
-    let page = 0;
+    let nextPageToken: string | undefined = undefined;
     let hasMore = true;
+    let pageCount = 0;
 
-    while (hasMore) {
-      const response = await this.getTestSuites(projectKey, { ...options, page, size: this.config.maxPageSize });
+    while (hasMore && pageCount < 1000) { // Safety limit to prevent infinite loops
+      const response = await this.getTestSuites(projectKey, { 
+        ...options, 
+        pageToken: nextPageToken,
+        size: 100 // Use maximum allowed page size
+      });
+      
       allItems.push(...response.items);
       
-      hasMore = response._meta?.hasNext || false;
-      page++;
+      // Check for next page token in metadata
+      nextPageToken = response._meta?.nextPageToken;
+      hasMore = !!nextPageToken; // Stop only when nextPageToken is null, regardless of items length
+      pageCount++;
+
+      if (this.config.debug) {
+        console.log(`📄 Fetched page ${pageCount}: ${response.items.length} suites (total: ${allItems.length})`);
+        if (nextPageToken) {
+          console.log(`🔗 Next page token: ${nextPageToken.substring(0, 20)}...`);
+        }
+      }
+    }
+
+    if (pageCount >= 1000) {
+      console.warn('⚠️  Stopped pagination after 1000 pages to prevent infinite loop');
     }
 
     return allItems;
