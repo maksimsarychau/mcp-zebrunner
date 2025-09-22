@@ -791,7 +791,7 @@ async function main() {
       project_key: z.string().min(1).describe("Project key"),
       root_suite_id: z.number().int().positive().optional().describe("Start from specific root suite"),
       max_depth: z.number().int().positive().max(10).default(5).describe("Maximum tree depth"),
-      format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format")
+      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format")
     },
     async (args) => {
       const { project_key, root_suite_id, max_depth, format } = args;

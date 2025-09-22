@@ -36,7 +36,13 @@ export class HierarchyProcessor {
     suites.forEach(suite => {
       const suiteWithChildren = suiteMap.get(suite.id)!;
       
-      if (suite.parentSuiteId && suiteMap.has(suite.parentSuiteId)) {
+      // Handle self-referencing suites (treat them as root suites)
+      if (suite.parentSuiteId === suite.id) {
+        console.error(`⚠️  Self-referencing suite detected: ${suite.id} (${suite.title || suite.name})`);
+        // Set parentSuiteId to null for self-referencing suites
+        suiteWithChildren.parentSuiteId = null;
+        rootSuites.push(suiteWithChildren);
+      } else if (suite.parentSuiteId && suiteMap.has(suite.parentSuiteId)) {
         const parent = suiteMap.get(suite.parentSuiteId)!;
         parent.children = parent.children || [];
         parent.children.push(suiteWithChildren);
