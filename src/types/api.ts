@@ -144,12 +144,32 @@ export class ZebrunnerApiError extends Error {
     super(message);
     this.name = 'ZebrunnerApiError';
   }
+
+  toJSON() {
+    return {
+      name: this.name,
+      message: this.message,
+      statusCode: this.statusCode,
+      response: this.response,
+      endpoint: this.endpoint
+    };
+  }
 }
 
 export class ZebrunnerAuthError extends ZebrunnerApiError {
   constructor(message: string = 'Authentication failed') {
     super(message, 401);
     this.name = 'ZebrunnerAuthError';
+  }
+
+  toJSON() {
+    return {
+      name: this.name,
+      message: this.message,
+      statusCode: this.statusCode,
+      response: this.response,
+      endpoint: this.endpoint
+    };
   }
 }
 
@@ -158,11 +178,31 @@ export class ZebrunnerNotFoundError extends ZebrunnerApiError {
     super(`${resource} not found: ${identifier}`, 404);
     this.name = 'ZebrunnerNotFoundError';
   }
+
+  toJSON() {
+    return {
+      name: this.name,
+      message: this.message,
+      statusCode: this.statusCode,
+      response: this.response,
+      endpoint: this.endpoint
+    };
+  }
 }
 
 export class ZebrunnerRateLimitError extends ZebrunnerApiError {
   constructor(retryAfter?: number) {
-    super(`Rate limit exceeded${retryAfter ? `, retry after ${retryAfter}s` : ''}`, 429);
+    super(`Rate limit exceeded${retryAfter !== undefined ? `, retry after ${retryAfter}s` : ''}`, 429);
     this.name = 'ZebrunnerRateLimitError';
+  }
+
+  toJSON() {
+    return {
+      name: this.name,
+      message: this.message,
+      statusCode: this.statusCode,
+      response: this.response,
+      endpoint: this.endpoint
+    };
   }
 }

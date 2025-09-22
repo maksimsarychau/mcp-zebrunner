@@ -228,13 +228,13 @@ export class RulesParser {
       if (fs.existsSync(this.rulesFilePath)) {
         const content = fs.readFileSync(this.rulesFilePath, 'utf-8');
         this.cachedRules = await this.parseMarkdownRules(content);
-        console.log(`📋 Loaded rules from: ${this.rulesFilePath}`);
+        console.error(`📋 Loaded rules from: ${this.rulesFilePath}`);
       } else {
-        console.log(`📋 Rules file not found at: ${this.rulesFilePath}, using defaults`);
+        console.error(`📋 Rules file not found at: ${this.rulesFilePath}, using defaults`);
         this.cachedRules = DEFAULT_RULES;
       }
     } catch (error) {
-      console.warn(`⚠️ Error loading rules file: ${(error as Error).message}, using defaults`);
+      console.error(`⚠️ Error loading rules file: ${(error as Error).message}, using defaults`);
       this.cachedRules = DEFAULT_RULES;
     }
 
@@ -318,7 +318,7 @@ export class RulesParser {
       }
 
     } catch (error) {
-      console.warn(`⚠️ Error parsing rules content: ${(error as Error).message}`);
+      console.error(`⚠️ Error parsing rules content: ${(error as Error).message}`);
     }
 
     return rules;

@@ -75,9 +75,9 @@ export class EnhancedZebrunnerClient {
     this.http.interceptors.request.use(
       (config) => {
         if (this.config.debug) {
-          console.log(`🔍 [API] ${config.method?.toUpperCase()} ${config.url}`);
+          console.error(`🔍 [API] ${config.method?.toUpperCase()} ${config.url}`);
           if (config.params && Object.keys(config.params).length > 0) {
-            console.log(`🔍 [API] Params:`, config.params);
+            console.error(`🔍 [API] Params:`, config.params);
           }
         }
         
@@ -93,7 +93,7 @@ export class EnhancedZebrunnerClient {
     this.http.interceptors.response.use(
       (response) => {
         if (this.config.debug) {
-          console.log(`✅ [API] ${response.status} ${response.statusText} - ${response.config.url}`);
+          console.error(`✅ [API] ${response.status} ${response.statusText} - ${response.config.url}`);
         }
         
         // Mark endpoint as healthy
@@ -121,9 +121,9 @@ export class EnhancedZebrunnerClient {
         throw new ZebrunnerApiError('Project key must be a non-empty string');
       }
       if (!/^[A-Z][A-Z0-9]*$/.test(params.projectKey)) {
-        throw new ZebrunnerApiError(
-          `Invalid project key format: '${params.projectKey}'. Expected format: uppercase letters and numbers (e.g., MFPAND)`
-        );
+      throw new ZebrunnerApiError(
+        `Invalid project key format: '${params.projectKey}'. Expected format: uppercase letters and numbers (e.g., MFPAND)`
+      );
       }
     }
 
@@ -178,7 +178,7 @@ export class EnhancedZebrunnerClient {
           throw new ZebrunnerApiError(`Invalid test case key format: '${caseKey}'. Expected format: PROJECT_KEY-NUMBER`);
         }
         if (!caseKey.startsWith(params.projectKey + '-')) {
-          console.warn(`⚠️  Test case key '${caseKey}' doesn't match project key '${params.projectKey}'`);
+          console.error(`⚠️  Test case key '${caseKey}' doesn't match project key '${params.projectKey}'`);
         }
       }
     }
@@ -255,7 +255,7 @@ export class EnhancedZebrunnerClient {
         
         const delay = this.config.retryDelay! * Math.pow(2, i);
         if (this.config.debug) {
-          console.log(`🔄 [API] Retrying in ${delay}ms (attempt ${i + 1}/${attempts})`);
+          console.error(`🔄 [API] Retrying in ${delay}ms (attempt ${i + 1}/${attempts})`);
         }
         await new Promise(resolve => setTimeout(resolve, delay));
       }
@@ -286,7 +286,7 @@ export class EnhancedZebrunnerClient {
       const response = await this.http.get('/', {
         timeout: 10000
       });
-
+      
       return {
         success: true,
         message: 'Connection successful',
@@ -328,16 +328,16 @@ export class EnhancedZebrunnerClient {
           };
         }
 
-        return {
-          success: false,
-          message: `Connection failed: ${error.message}`,
-          details: {
-            status: error.response?.status,
-            baseUrl: this.config.baseUrl,
+      return {
+        success: false,
+        message: `Connection failed: ${error.message}`,
+        details: {
+          status: error.response?.status,
+          baseUrl: this.config.baseUrl,
             error: error.response?.data,
             fallbackStatus: fallbackError.response?.status
-          }
-        };
+        }
+      };
       }
     }
   }
@@ -397,7 +397,7 @@ export class EnhancedZebrunnerClient {
     let pageCount = 0;
 
     while (hasMore && allItems.length < maxResults) {
-      const response = await this.getTestSuites(projectKey, {
+      const response = await this.getTestSuites(projectKey, { 
         ...searchOptions,
         pageToken: nextPageToken,
         size: 100 // Use maximum allowed page size
@@ -423,20 +423,20 @@ export class EnhancedZebrunnerClient {
         await new Promise(resolve => setTimeout(resolve, 100));
       }
 
-      if (this.config.debug) {
-        console.log(`📄 Fetched page ${pageCount}: ${response.items.length} suites (total: ${allItems.length})`);
+        if (this.config.debug) {
+        console.error(`📄 Fetched page ${pageCount}: ${response.items.length} suites (total: ${allItems.length})`);
         if (nextPageToken) {
-          console.log(`🔗 Next page token: ${nextPageToken.substring(0, 20)}...`);
+          console.error(`🔗 Next page token: ${nextPageToken.substring(0, 20)}...`);
         }
       }
     }
 
     if (pageCount >= 1000) {
-      console.warn('⚠️  Stopped pagination after 1000 pages to prevent infinite loop');
+      console.error('⚠️  Stopped pagination after 1000 pages to prevent infinite loop');
     }
 
     if (this.config.debug) {
-      console.log(`🔍 Collected ${allItems.length} test suites across ${pageCount} pages`);
+      console.error(`🔍 Collected ${allItems.length} test suites across ${pageCount} pages`);
     }
 
     return allItems;
@@ -507,7 +507,7 @@ export class EnhancedZebrunnerClient {
 
       // Handle orphaned test cases (suite doesn't exist)
       if (rootSuiteId === null) {
-        console.warn(`⚠️  Test case ${testCase.key} references orphaned suite ${featureSuiteId}`);
+        console.error(`⚠️  Test case ${testCase.key} references orphaned suite ${featureSuiteId}`);
         return {
           ...testCase,
           featureSuiteId: undefined, // Clear feature suite ID for orphaned suites
@@ -522,7 +522,7 @@ export class EnhancedZebrunnerClient {
       };
     } catch (error) {
       // If hierarchy resolution fails, return original test case with available info
-      console.warn(`Failed to resolve suite hierarchy for ${testCase.key}:`, error);
+      console.error(`Failed to resolve suite hierarchy for ${testCase.key}:`, error);
       return {
         ...testCase,
         featureSuiteId: testCase.testSuite?.id || undefined,
@@ -563,7 +563,7 @@ export class EnhancedZebrunnerClient {
       return path;
 
     } catch (error) {
-      console.warn(`Error getting suite hierarchy path for suite ${suiteId}:`, error);
+      console.error(`Error getting suite hierarchy path for suite ${suiteId}:`, error);
       return [{id: suiteId, name: `Suite ${suiteId}`}];
     }
   }
@@ -601,15 +601,15 @@ export class EnhancedZebrunnerClient {
       pageCount++;
 
       if (this.config.debug) {
-        console.log(`📄 [Cache] Fetched page ${pageCount}: ${result.items.length} suites (total: ${allSuites.length})`);
+        console.error(`📄 [Cache] Fetched page ${pageCount}: ${result.items.length} suites (total: ${allSuites.length})`);
         if (nextPageToken) {
-          console.log(`🔗 [Cache] Next page token: ${nextPageToken.substring(0, 20)}...`);
+          console.error(`🔗 [Cache] Next page token: ${nextPageToken.substring(0, 20)}...`);
         }
       }
     }
 
     if (pageCount >= 1000) {
-      console.warn('⚠️  [Cache] Stopped pagination after 1000 pages to prevent infinite loop');
+      console.error('⚠️  [Cache] Stopped pagination after 1000 pages to prevent infinite loop');
     }
 
     // Cache the results
@@ -632,8 +632,8 @@ export class EnhancedZebrunnerClient {
       // Check if the suite actually exists in the project
       const suiteExists = allSuites.some(s => s.id === suiteId);
       if (!suiteExists) {
-        console.warn(`⚠️  Orphaned test case: Suite ${suiteId} referenced by test case but not found in project ${projectKey}`);
-        console.warn(`   This usually means the suite has been deleted or moved.`);
+        console.error(`⚠️  Orphaned test case: Suite ${suiteId} referenced by test case but not found in project ${projectKey}`);
+        console.error(`   This usually means the suite has been deleted or moved.`);
         return null; // Return null for orphaned suites instead of the suite ID itself
       }
 
@@ -644,7 +644,7 @@ export class EnhancedZebrunnerClient {
       return rootId;
 
     } catch (error) {
-      console.warn(`Error finding root suite for suite ${suiteId}:`, error);
+      console.error(`Error finding root suite for suite ${suiteId}:`, error);
       return null;
     }
   }
@@ -694,12 +694,12 @@ export class EnhancedZebrunnerClient {
       pageCount++;
 
       if (this.config.debug) {
-        console.log(`📄 [TestCases] Fetched page ${pageCount}: ${response.items.length} test cases (total: ${allItems.length})`);
+        console.error(`📄 [TestCases] Fetched page ${pageCount}: ${response.items.length} test cases (total: ${allItems.length})`);
       }
     }
 
     if (pageCount >= 1000) {
-      console.warn('⚠️  [TestCases] Stopped pagination after 1000 pages to prevent infinite loop');
+      console.error('⚠️  [TestCases] Stopped pagination after 1000 pages to prevent infinite loop');
     }
 
     return allItems;
@@ -718,17 +718,17 @@ export class EnhancedZebrunnerClient {
     suiteId: number, 
     basedOnRootSuites: boolean = false
   ): Promise<ZebrunnerShortTestCase[]> {
-    console.log(`🔍 Getting all test cases for suite ${suiteId} (basedOnRootSuites: ${basedOnRootSuites})...`);
+    console.error(`🔍 Getting all test cases for suite ${suiteId} (basedOnRootSuites: ${basedOnRootSuites})...`);
     
     const startTime = Date.now();
     
     // Step 1: Get all test cases for the project
     const allTestCases = await this.getAllTCMTestCasesByProject(projectKey);
-    console.log(`   📊 Found ${allTestCases.length} total test cases in project`);
+    console.error(`   📊 Found ${allTestCases.length} total test cases in project`);
     
     // Step 2: Get all suites for the project
     const allSuites = await this.getAllSuitesWithCache(projectKey);
-    console.log(`   📊 Found ${allSuites.length} total suites in project`);
+    console.error(`   📊 Found ${allSuites.length} total suites in project`);
     
     // Step 3: Process hierarchy - set root parents to suites (Java: TCMTestSuites.setRootParentsToSuites)
     const { HierarchyProcessor } = await import("../utils/hierarchy.js");
@@ -768,7 +768,7 @@ export class EnhancedZebrunnerClient {
     }
     
     const endTime = Date.now();
-    console.log(`   ✅ Added ${returnList.length} test cases (${endTime - startTime}ms)`);
+    console.error(`   ✅ Added ${returnList.length} test cases (${endTime - startTime}ms)`);
     
     return returnList;
   }
@@ -820,8 +820,7 @@ export class EnhancedZebrunnerClient {
       // Client-side suite filtering (since API ignores suiteId parameter)
       if (options.suiteId) {
         // Always fetch ALL test cases when filtering by suiteId to ensure we don't miss any
-        console.log(`🔄 Fetching all test cases for suite filtering (suite ${options.suiteId})...`);
-          const allTestCases = await this.getAllTCMTestCasesByProject(projectKey);
+        const allTestCases = await this.getAllTCMTestCasesByProject(projectKey);
         items = allTestCases;
         
         filteredItems = items.filter(item => 
@@ -829,7 +828,7 @@ export class EnhancedZebrunnerClient {
         );
         
         if (this.config.debug) {
-          console.log(`🔍 Client-side filtering: ${items.length} → ${filteredItems.length} items for suite ${options.suiteId}`);
+          console.error(`🔍 Client-side filtering: ${items.length} → ${filteredItems.length} items for suite ${options.suiteId}`);
         }
       }
       
@@ -842,7 +841,7 @@ export class EnhancedZebrunnerClient {
       const paginatedItems = filteredItems.slice(startIndex, endIndex);
       
       if (this.config.debug && (options.page !== undefined || options.size !== undefined)) {
-        console.log(`🔍 Client-side pagination: page ${page}, size ${size}, showing ${startIndex}-${endIndex} of ${filteredItems.length} items`);
+        console.error(`🔍 Client-side pagination: page ${page}, size ${size}, showing ${startIndex}-${endIndex} of ${filteredItems.length} items`);
       }
       
       // Update metadata to reflect actual pagination

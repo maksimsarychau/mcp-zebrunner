@@ -73,7 +73,7 @@ export class HierarchyProcessor {
       }
 
       const suite = suiteMap.get(suiteId);
-      if (!suite || !suite.parentSuiteId) {
+      if (!suite || !suite.parentSuiteId || !suiteMap.has(suite.parentSuiteId)) {
         rootSuiteMap.set(suiteId, suiteId);
         return suiteId;
       }
@@ -95,8 +95,8 @@ export class HierarchyProcessor {
    * Generate full path for a suite (e.g., "Root > Parent > Child")
    */
   static generateSuitePath(
-    suiteId: number, 
-    suites: ZebrunnerTestSuite[], 
+    suiteId: number,
+    suites: ZebrunnerTestSuite[],
     separator: string = " > "
   ): string {
     const suiteMap = new Map<number, ZebrunnerTestSuite>();
@@ -104,17 +104,24 @@ export class HierarchyProcessor {
       suiteMap.set(suite.id, suite);
     });
 
-    const buildPath = (id: number): string[] => {
+    const buildPath = (id: number, visited: Set<number> = new Set()): string[] => {
       const suite = suiteMap.get(id);
-      if (!suite) return [];
+      if (!suite) return [`Unknown Suite (${id})`];
+
+      // Circular reference detection
+      if (visited.has(id)) {
+        return [`Suite ${id} (circular)`];
+      }
 
       const name = suite.title || suite.name || `Suite ${suite.id}`;
-      
+
       if (!suite.parentSuiteId) {
         return [name];
       }
 
-      return [...buildPath(suite.parentSuiteId), name];
+      visited.add(id);
+      const parentPath = buildPath(suite.parentSuiteId, visited);
+      return [...parentPath, name];
     };
 
     return buildPath(suiteId).join(separator);
@@ -131,18 +138,25 @@ export class HierarchyProcessor {
       suiteMap.set(suite.id, suite);
     });
 
-    const calculateLevel = (suiteId: number): number => {
+    const calculateLevel = (suiteId: number, visited: Set<number> = new Set()): number => {
       if (levelMap.has(suiteId)) {
         return levelMap.get(suiteId)!;
       }
 
+      // Circular reference detection
+      if (visited.has(suiteId)) {
+        levelMap.set(suiteId, 0); // Treat circular references as root level
+        return 0;
+      }
+
       const suite = suiteMap.get(suiteId);
-      if (!suite || !suite.parentSuiteId) {
+      if (!suite || !suite.parentSuiteId || !suiteMap.has(suite.parentSuiteId)) {
         levelMap.set(suiteId, 0);
         return 0;
       }
 
-      const level = calculateLevel(suite.parentSuiteId) + 1;
+      visited.add(suiteId);
+      const level = calculateLevel(suite.parentSuiteId, visited) + 1;
       levelMap.set(suiteId, level);
       return level;
     };
@@ -164,7 +178,7 @@ export class HierarchyProcessor {
 
     const traverse = (suite: ZebrunnerTestSuite) => {
       if (visited.has(suite.id)) {
-        console.warn(`⚠️  Circular reference detected in suite hierarchy: ${suite.id}`);
+        console.error(`⚠️  Circular reference detected in suite hierarchy: ${suite.id}`);
         return;
       }
 
@@ -233,7 +247,7 @@ export class HierarchyProcessor {
    * Get path from root to specific suite
    */
   static getSuiteAncestors(
-    suiteId: number, 
+    suiteId: number,
     suites: ZebrunnerTestSuite[]
   ): ZebrunnerTestSuite[] {
     const suiteMap = new Map<number, ZebrunnerTestSuite>();
@@ -242,9 +256,18 @@ export class HierarchyProcessor {
     });
 
     const ancestors: ZebrunnerTestSuite[] = [];
+    const visited = new Set<number>(); // Prevent infinite loops
     let currentSuite = suiteMap.get(suiteId);
 
-    while (currentSuite) {
+    // Skip the suite itself, start with its parent
+    if (currentSuite && currentSuite.parentSuiteId) {
+      currentSuite = suiteMap.get(currentSuite.parentSuiteId);
+    } else {
+      currentSuite = undefined;
+    }
+
+    while (currentSuite && !visited.has(currentSuite.id)) {
+      visited.add(currentSuite.id);
       ancestors.unshift(currentSuite);
       currentSuite = currentSuite.parentSuiteId ? suiteMap.get(currentSuite.parentSuiteId) : undefined;
     }
@@ -424,7 +447,7 @@ export class HierarchyProcessor {
       processedSuites.push(enhancedSuite);
     }
 
-    console.log(`Updated tree in suites: ${processedSuites.length}`);
+    console.error(`Updated tree in suites: ${processedSuites.length}`);
     return processedSuites;
   }
 }
