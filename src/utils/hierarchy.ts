@@ -178,7 +178,7 @@ export class HierarchyProcessor {
 
     const traverse = (suite: ZebrunnerTestSuite) => {
       if (visited.has(suite.id)) {
-        console.warn(`⚠️  Circular reference detected in suite hierarchy: ${suite.id}`);
+        console.error(`⚠️  Circular reference detected in suite hierarchy: ${suite.id}`);
         return;
       }
 
@@ -447,7 +447,7 @@ export class HierarchyProcessor {
       processedSuites.push(enhancedSuite);
     }
 
-    console.log(`Updated tree in suites: ${processedSuites.length}`);
+    console.error(`Updated tree in suites: ${processedSuites.length}`);
     return processedSuites;
   }
 }

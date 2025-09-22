@@ -64,14 +64,14 @@ const config: ZebrunnerConfig = {
 
 const client = new EnhancedZebrunnerClient(config);
 
-/** Debug logging utility with safe serialization */
+/** Debug logging utility with safe serialization - uses stderr to avoid MCP protocol interference */
 function debugLog(message: string, data?: unknown) {
   if (DEBUG_MODE) {
     try {
       const serializedData = data ? JSON.stringify(data, null, 2) : '';
-      console.log(`🔍 [DEBUG] ${message}`, serializedData);
+      console.error(`🔍 [DEBUG] ${message}`, serializedData);
     } catch (error) {
-      console.log(`🔍 [DEBUG] ${message}`, '[Data serialization failed]', error instanceof Error ? error.message : 'Unknown error');
+      console.error(`🔍 [DEBUG] ${message}`, '[Data serialization failed]', error instanceof Error ? error.message : 'Unknown error');
     }
   }
 }
@@ -1478,7 +1478,7 @@ async function main() {
 
           // Safety check to prevent infinite loops
           if (page > 100) {
-            console.warn(`⚠️ Stopped pagination after 100 pages for project ${project_key}`);
+            console.error(`⚠️ Stopped pagination after 100 pages for project ${project_key}`);
             break;
           }
         }
@@ -1489,7 +1489,7 @@ async function main() {
           processedSuites = HierarchyProcessor.setRootParentsToSuites(allSuites);
         }
 
-        console.log(`Found ${processedSuites.length} suites.`);
+        console.error(`Found ${processedSuites.length} suites.`);
 
         const formattedResult = FormatProcessor.format(processedSuites, format as any);
         
@@ -1545,7 +1545,7 @@ async function main() {
         // Filter to root suites only
         const rootSuites = HierarchyProcessor.getRootSuites(allSuites);
 
-        console.log(`Found ${rootSuites.length} root suites out of ${allSuites.length} total suites.`);
+        console.error(`Found ${rootSuites.length} root suites out of ${allSuites.length} total suites.`);
 
         const formattedResult = FormatProcessor.format(rootSuites, format as any);
         
@@ -1613,13 +1613,13 @@ async function main() {
           const processedSuites = HierarchyProcessor.setRootParentsToSuites(allSuites);
           const enhancedSuite = processedSuites.find(s => s.id === suite_id) || suite;
 
-          console.log(`Found suite by id ${suite_id} with title: ${enhancedSuite.name || enhancedSuite.title}`);
-          console.log(`Item ID: ${enhancedSuite.id}`);
-          console.log(`Parent Suite ID: ${enhancedSuite.parentSuiteId}`);
-          console.log(`Root Suite ID: ${enhancedSuite.rootSuiteId}`);
-          console.log(`Relative Position: ${enhancedSuite.relativePosition}`);
-          console.log(`Title: ${enhancedSuite.name || enhancedSuite.title}`);
-          console.log(`Description: ${enhancedSuite.description || ''}`);
+          console.error(`Found suite by id ${suite_id} with title: ${enhancedSuite.name || enhancedSuite.title}`);
+          console.error(`Item ID: ${enhancedSuite.id}`);
+          console.error(`Parent Suite ID: ${enhancedSuite.parentSuiteId}`);
+          console.error(`Root Suite ID: ${enhancedSuite.rootSuiteId}`);
+          console.error(`Relative Position: ${enhancedSuite.relativePosition}`);
+          console.error(`Title: ${enhancedSuite.name || enhancedSuite.title}`);
+          console.error(`Description: ${enhancedSuite.description || ''}`);
 
           const formattedResult = FormatProcessor.format(enhancedSuite, format as any);
           
@@ -1630,7 +1630,7 @@ async function main() {
             }]
           };
         } else {
-          console.log(`Suite id ${suite_id} was not found`);
+          console.error(`Suite id ${suite_id} was not found`);
           return {
             content: [{
               type: "text" as const,
@@ -1683,7 +1683,7 @@ async function main() {
           page++;
         }
 
-        console.log(`Found ${allTestCases.length} testcases.`);
+        console.error(`Found ${allTestCases.length} testcases.`);
 
         const formattedResult = FormatProcessor.format(allTestCases, format as any);
         
@@ -1765,7 +1765,7 @@ async function main() {
           return testCase;
         });
 
-        console.log(`Added ${enrichedTestCases.length} test cases with root suite IDs.`);
+        console.error(`Added ${enrichedTestCases.length} test cases with root suite IDs.`);
 
         const formattedResult = FormatProcessor.format(enrichedTestCases, format as any);
         
@@ -1832,7 +1832,7 @@ async function main() {
           hierarchyPath: HierarchyProcessor.generateSuitePath(suite_id, allSuites)
         };
 
-        console.log(`Suite ${suite_id} has root suite ID: ${rootId}`);
+        console.error(`Suite ${suite_id} has root suite ID: ${rootId}`);
 
         const formattedResult = FormatProcessor.format(result, format as any);
         
@@ -1861,12 +1861,41 @@ async function main() {
   await server.connect(transport);
   
   if (DEBUG_MODE) {
-    console.log("✅ Zebrunner Unified MCP Server started successfully");
-    console.log(`🔍 Debug mode: ${DEBUG_MODE}`);
-    console.log(`🧪 Experimental features: ${EXPERIMENTAL_FEATURES}`);
-    console.log(`🌐 Zebrunner URL: ${ZEBRUNNER_URL}`);
+    console.error("✅ Zebrunner Unified MCP Server started successfully");
+    console.error(`🔍 Debug mode: ${DEBUG_MODE}`);
+    console.error(`🧪 Experimental features: ${EXPERIMENTAL_FEATURES}`);
+    console.error(`🌐 Zebrunner URL: ${ZEBRUNNER_URL}`);
   }
 }
+
+// Enhanced error handling and process management
+process.on('uncaughtException', (error) => {
+  console.error('❌ Uncaught Exception:', error.message);
+  if (DEBUG_MODE) {
+    console.error('Stack trace:', error.stack);
+  }
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+  process.exit(1);
+});
+
+process.on('SIGINT', () => {
+  console.error('🛑 Received SIGINT, shutting down gracefully...');
+  process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+  console.error('🛑 Received SIGTERM, shutting down gracefully...');
+  process.exit(0);
+});
+
+// Handle EPIPE errors gracefully by ignoring SIGPIPE
+process.on('SIGPIPE', () => {
+  console.error('⚠️  SIGPIPE received, client disconnected');
+});
 
 // Error handling for server startup
 main().catch((error) => {

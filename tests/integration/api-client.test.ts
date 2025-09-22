@@ -3,6 +3,7 @@ import { strict as assert } from 'node:assert';
 import { EnhancedZebrunnerClient } from '../../src/api/enhanced-client.js';
 import { ZebrunnerConfig } from '../../src/types/api.js';
 import { testConfig } from '../fixtures/api-responses.js';
+import 'dotenv/config';
 
 /**
  * Integration tests for EnhancedZebrunnerClient

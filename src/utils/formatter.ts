@@ -359,7 +359,7 @@ export class FormatProcessor {
     if (!resolvedProjectKey && args.case_key) {
       try {
         resolvedProjectKey = this.extractProjectKeyFromTestCaseKey(args.case_key);
-        console.log(`🔍 Auto-detected project key "${resolvedProjectKey}" from test case key "${args.case_key}"`);
+        console.error(`🔍 Auto-detected project key "${resolvedProjectKey}" from test case key "${args.case_key}"`);
       } catch (error) {
         throw new Error(`Cannot auto-detect project key from case_key "${args.case_key}": ${(error as Error).message}`);
       }

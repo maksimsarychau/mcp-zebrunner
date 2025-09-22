@@ -62,9 +62,9 @@ export class ZebrunnerApiClient {
     this.http.interceptors.request.use(
       (config) => {
         if (this.config.debug) {
-          console.log(`[Zebrunner API] ${config.method?.toUpperCase()} ${config.url}`);
+          console.error(`[Zebrunner API] ${config.method?.toUpperCase()} ${config.url}`);
           if (config.params) {
-            console.log(`[Zebrunner API] Params:`, config.params);
+            console.error(`[Zebrunner API] Params:`, config.params);
           }
         }
         return config;
@@ -76,7 +76,7 @@ export class ZebrunnerApiClient {
     this.http.interceptors.response.use(
       (response) => {
         if (this.config.debug) {
-          console.log(`[Zebrunner API] Response: ${response.status} ${response.statusText}`);
+          console.error(`[Zebrunner API] Response: ${response.status} ${response.statusText}`);
         }
         return response;
       },
@@ -257,15 +257,15 @@ export class ZebrunnerApiClient {
       pageCount++;
 
       if (this.config.debug) {
-        console.log(`📄 Fetched page ${pageCount}: ${response.items.length} suites (total: ${allItems.length})`);
+        console.error(`📄 Fetched page ${pageCount}: ${response.items.length} suites (total: ${allItems.length})`);
         if (nextPageToken) {
-          console.log(`🔗 Next page token: ${nextPageToken.substring(0, 20)}...`);
+          console.error(`🔗 Next page token: ${nextPageToken.substring(0, 20)}...`);
         }
       }
     }
 
     if (pageCount >= 1000) {
-      console.warn('⚠️  Stopped pagination after 1000 pages to prevent infinite loop');
+      console.error('⚠️  Stopped pagination after 1000 pages to prevent infinite loop');
     }
 
     return allItems;
