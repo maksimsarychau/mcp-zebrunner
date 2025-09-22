@@ -51,6 +51,12 @@ export const ZebrunnerTestSuiteSchema: z.ZodType<any> = z.object({
   description: z.string().nullable().optional(),
   parentSuiteId: z.number().nullable().optional(),
   rootSuiteId: z.number().nullable().optional(),
+  // Enhanced hierarchy properties from Java methodology
+  parentSuiteName: z.string().optional(),
+  rootSuiteName: z.string().optional(),
+  treeNames: z.string().optional(), // Complete path like "Root > Parent > Suite"
+  level: z.number().optional(), // Hierarchy depth level
+  path: z.string().optional(), // Alternative path representation
   relativePosition: z.number().optional(),
   projectId: z.number().optional(),
   projectKey: z.string().optional(),
@@ -60,9 +66,7 @@ export const ZebrunnerTestSuiteSchema: z.ZodType<any> = z.object({
   lastModifiedAt: z.string().optional(),
   lastModifiedBy: ZebrunnerUserSchema.optional(),
   // Hierarchy information
-  children: z.array(z.lazy(() => ZebrunnerTestSuiteSchema)).optional(),
-  path: z.string().optional(), // Full path from root
-  level: z.number().optional() // Depth in hierarchy
+  children: z.array(z.lazy(() => ZebrunnerTestSuiteSchema)).optional()
 });
 
 // Full test case with all metadata
@@ -77,6 +81,7 @@ export const ZebrunnerTestCaseSchema = z.object({
     title: z.string().optional(),
     name: z.string().optional()
   }).optional(),
+  featureSuiteId: z.number().optional(), // The immediate parent suite (feature suite)
   rootSuiteId: z.number().optional(),
   relativePosition: z.number().optional(),
   createdAt: z.string().optional(),

@@ -39,6 +39,7 @@ import {
 export class EnhancedZebrunnerClient {
   private http: AxiosInstance;
   private config: ZebrunnerConfig;
+  private suitesCache: Map<string, { suites: ZebrunnerTestSuite[], timestamp: number }> = new Map();
   private endpointHealth: Map<string, boolean> = new Map();
   private lastHealthCheck: Date | null = null;
 
@@ -352,14 +353,16 @@ export class EnhancedZebrunnerClient {
     }
 
     return this.retryRequest(async () => {
-      const params = {
+      const params: any = {
         projectKey,
-        projectId: options.projectId,
-        page: options.page,
-        size: options.size || this.config.defaultPageSize,
-        maxPageSize: this.config.maxPageSize,
+        maxPageSize: Math.min(options.size || this.config.defaultPageSize || 50, 100), // Limit to 100 as per API requirements
         parentSuiteId: options.parentSuiteId
       };
+
+      // Use token-based pagination instead of page-based
+      if (options.pageToken) {
+        params.pageToken = options.pageToken; // Use 'pageToken' not 'nextPageToken' as per API spec
+      }
 
       const response = await this.http.get('/test-suites', { params });
       const data = response.data;
@@ -389,15 +392,15 @@ export class EnhancedZebrunnerClient {
   ): Promise<ZebrunnerTestSuite[]> {
     const { maxResults = 10000, onProgress, ...searchOptions } = options;
     const allItems: ZebrunnerTestSuite[] = [];
-    let page = 0;
+    let nextPageToken: string | undefined = undefined;
     let hasMore = true;
-    const maxPages = Math.ceil(maxResults / (this.config.maxPageSize || 200));
+    let pageCount = 0;
 
-    while (hasMore && page < maxPages) {
+    while (hasMore && allItems.length < maxResults) {
       const response = await this.getTestSuites(projectKey, {
         ...searchOptions,
-        page,
-        size: this.config.maxPageSize
+        pageToken: nextPageToken,
+        size: 100 // Use maximum allowed page size
       });
 
       // Limit items to maxResults
@@ -407,38 +410,33 @@ export class EnhancedZebrunnerClient {
 
       // Call progress callback if provided
       if (onProgress) {
-        onProgress(allItems.length, page + 1);
+        onProgress(allItems.length, pageCount + 1);
       }
 
-      // Check if we should continue
-      hasMore = response._meta?.hasNext ||
-                (response.items.length === this.config.maxPageSize && response.items.length > 0);
-      page++;
-
-      // Stop if we've reached maxResults
-      if (allItems.length >= maxResults) {
-        if (this.config.debug) {
-          console.log(`🔍 Reached maximum result limit (${maxResults}), stopping pagination`);
-        }
-        break;
-      }
-
-      // Enhanced safety break with better logging
-      if (page > 100) {
-        if (this.config.debug) {
-          console.warn(`⚠️  Stopped pagination after 100 pages (${allItems.length} items collected) to prevent infinite loop`);
-        }
-        break;
-      }
+      // Check for next page token in metadata
+      nextPageToken = response._meta?.nextPageToken;
+      hasMore = !!nextPageToken; // Stop only when nextPageToken is null, regardless of items length
+      pageCount++;
 
       // Add small delay to be respectful to API
-      if (page > 0 && page % 10 === 0) {
+      if (pageCount > 0 && pageCount % 10 === 0) {
         await new Promise(resolve => setTimeout(resolve, 100));
+      }
+
+      if (this.config.debug) {
+        console.log(`📄 Fetched page ${pageCount}: ${response.items.length} suites (total: ${allItems.length})`);
+        if (nextPageToken) {
+          console.log(`🔗 Next page token: ${nextPageToken.substring(0, 20)}...`);
+        }
       }
     }
 
+    if (pageCount >= 1000) {
+      console.warn('⚠️  Stopped pagination after 1000 pages to prevent infinite loop');
+    }
+
     if (this.config.debug) {
-      console.log(`🔍 Collected ${allItems.length} test suites across ${page} pages`);
+      console.log(`🔍 Collected ${allItems.length} test suites across ${pageCount} pages`);
     }
 
     return allItems;
@@ -455,7 +453,11 @@ export class EnhancedZebrunnerClient {
     });
   }
 
-  async getTestCaseByKey(projectKey: string, key: string): Promise<ZebrunnerTestCase> {
+  async getTestCaseByKey(
+    projectKey: string, 
+    key: string, 
+    options: { includeSuiteHierarchy?: boolean } = {}
+  ): Promise<ZebrunnerTestCase> {
     if (!projectKey) {
       throw new ZebrunnerApiError('Project key is required');
     }
@@ -469,8 +471,306 @@ export class EnhancedZebrunnerClient {
       });
       
       const data = response.data?.data || response.data;
-      return ZebrunnerTestCaseSchema.parse(data);
+      let testCase = ZebrunnerTestCaseSchema.parse(data);
+
+      // Enhance with suite hierarchy information if requested
+      if (options.includeSuiteHierarchy) {
+        testCase = await this.enhanceWithSuiteHierarchy(testCase, projectKey);
+      }
+
+      return testCase;
     });
+  }
+
+  /**
+   * Enhance test case with suite hierarchy information
+   */
+  private async enhanceWithSuiteHierarchy(
+    testCase: ZebrunnerTestCase, 
+    projectKey: string
+  ): Promise<ZebrunnerTestCase> {
+    try {
+      // featureSuiteId should be testSuite.id (the immediate parent suite)
+      // According to the API response structure, testSuite.id is the featureSuiteId
+      const featureSuiteId = testCase.testSuite?.id;
+      
+      if (!featureSuiteId) {
+        return {
+          ...testCase,
+          featureSuiteId: undefined,
+          rootSuiteId: undefined
+        };
+      }
+
+      // Find root suite by traversing up the hierarchy
+      const rootSuiteId = await this.findRootSuiteId(projectKey, featureSuiteId);
+
+      // Handle orphaned test cases (suite doesn't exist)
+      if (rootSuiteId === null) {
+        console.warn(`⚠️  Test case ${testCase.key} references orphaned suite ${featureSuiteId}`);
+        return {
+          ...testCase,
+          featureSuiteId: undefined, // Clear feature suite ID for orphaned suites
+          rootSuiteId: undefined
+        };
+      }
+
+      return {
+        ...testCase,
+        featureSuiteId,
+        rootSuiteId
+      };
+    } catch (error) {
+      // If hierarchy resolution fails, return original test case with available info
+      console.warn(`Failed to resolve suite hierarchy for ${testCase.key}:`, error);
+      return {
+        ...testCase,
+        featureSuiteId: testCase.testSuite?.id || undefined,
+        rootSuiteId: undefined
+      };
+    }
+  }
+
+  /**
+   * Get suite hierarchy path with comprehensive approach (Java methodology)
+   */
+  async getSuiteHierarchyPath(projectKey: string, suiteId: number): Promise<Array<{id: number, name: string}>> {
+    try {
+      // Use cached comprehensive approach
+      const allSuites = await this.getAllSuitesWithCache(projectKey);
+
+      // Use Java methodology to build hierarchy path
+      const path: Array<{id: number, name: string}> = [];
+
+      // Traverse up the hierarchy
+      let currentSuiteId = suiteId;
+      const visited = new Set<number>();
+
+      while (currentSuiteId && !visited.has(currentSuiteId)) {
+        visited.add(currentSuiteId);
+        
+        const suite = allSuites.find(s => s.id === currentSuiteId);
+        if (!suite) break;
+
+        path.unshift({
+          id: suite.id,
+          name: suite.name || suite.title || `Suite ${suite.id}`
+        });
+
+        currentSuiteId = suite.parentSuiteId || 0;
+      }
+
+      return path;
+
+    } catch (error) {
+      console.warn(`Error getting suite hierarchy path for suite ${suiteId}:`, error);
+      return [{id: suiteId, name: `Suite ${suiteId}`}];
+    }
+  }
+
+  /**
+   * Get all suites for a project with caching (5-minute cache)
+   */
+  private async getAllSuitesWithCache(projectKey: string): Promise<ZebrunnerTestSuite[]> {
+    const cacheKey = `suites_${projectKey}`;
+    const cached = this.suitesCache.get(cacheKey);
+    const cacheTimeout = 5 * 60 * 1000; // 5 minutes
+
+    // Return cached data if still valid
+    if (cached && (Date.now() - cached.timestamp) < cacheTimeout) {
+      return cached.suites;
+    }
+
+    // Fetch all suites with token-based pagination
+    let allSuites: ZebrunnerTestSuite[] = [];
+    let nextPageToken: string | undefined = undefined;
+    let hasMore = true;
+    let pageCount = 0;
+
+    while (hasMore && pageCount < 1000) { // Safety limit to prevent infinite loops
+      const result = await this.getTestSuites(projectKey, {
+        pageToken: nextPageToken,
+        size: 100 // Use maximum allowed page size
+      });
+
+      allSuites.push(...result.items);
+      
+      // Check for next page token in metadata
+      nextPageToken = result._meta?.nextPageToken;
+      hasMore = !!nextPageToken; // Stop only when nextPageToken is null, regardless of items length
+      pageCount++;
+
+      if (this.config.debug) {
+        console.log(`📄 [Cache] Fetched page ${pageCount}: ${result.items.length} suites (total: ${allSuites.length})`);
+        if (nextPageToken) {
+          console.log(`🔗 [Cache] Next page token: ${nextPageToken.substring(0, 20)}...`);
+        }
+      }
+    }
+
+    if (pageCount >= 1000) {
+      console.warn('⚠️  [Cache] Stopped pagination after 1000 pages to prevent infinite loop');
+    }
+
+    // Cache the results
+    this.suitesCache.set(cacheKey, {
+      suites: allSuites,
+      timestamp: Date.now()
+    });
+
+    return allSuites;
+  }
+
+  /**
+   * Find root suite ID by traversing up the hierarchy
+   */
+  private async findRootSuiteId(projectKey: string, suiteId: number): Promise<number | null> {
+    try {
+      // Use cached comprehensive approach
+      const allSuites = await this.getAllSuitesWithCache(projectKey);
+
+      // Check if the suite actually exists in the project
+      const suiteExists = allSuites.some(s => s.id === suiteId);
+      if (!suiteExists) {
+        console.warn(`⚠️  Orphaned test case: Suite ${suiteId} referenced by test case but not found in project ${projectKey}`);
+        console.warn(`   This usually means the suite has been deleted or moved.`);
+        return null; // Return null for orphaned suites instead of the suite ID itself
+      }
+
+      // Use Java methodology to find root ID
+      const { HierarchyProcessor } = await import("../utils/hierarchy.js");
+      const rootId = HierarchyProcessor.getRootId(allSuites, suiteId);
+      
+      return rootId;
+
+    } catch (error) {
+      console.warn(`Error finding root suite for suite ${suiteId}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Get all TCM test cases for a project using pagination (Java implementation approach)
+   * This method fetches ALL test cases from the project using proper token-based pagination
+   */
+  async getAllTCMTestCasesByProject(projectKey: string): Promise<ZebrunnerShortTestCase[]> {
+    const allItems: ZebrunnerShortTestCase[] = [];
+    let nextPageToken: string | undefined = undefined;
+    let hasMore = true;
+    let pageCount = 0;
+
+    while (hasMore && pageCount < 1000) { // Safety limit
+      // Direct API call to avoid circular dependency with getTestCases
+      const params: any = {
+        projectKey,
+        maxPageSize: 100 // Use maximum allowed page size
+      };
+
+      if (nextPageToken) {
+        params.pageToken = nextPageToken;
+      }
+
+      const response = await this.retryRequest(async () => {
+        const apiResponse = await this.http.get('/test-cases', { params });
+        const data = apiResponse.data;
+        
+        if (Array.isArray(data)) {
+          return { items: data.map(item => ZebrunnerShortTestCaseSchema.parse(item)) };
+        } else if (data.items) {
+          return {
+            items: data.items.map((item: any) => ZebrunnerShortTestCaseSchema.parse(item)),
+            _meta: data._meta
+          };
+        }
+        
+        return { items: [] };
+      });
+      
+      allItems.push(...response.items);
+      
+      // Check for next page token in metadata
+      nextPageToken = response._meta?.nextPageToken;
+      hasMore = !!nextPageToken; // Stop only when nextPageToken is null
+      pageCount++;
+
+      if (this.config.debug) {
+        console.log(`📄 [TestCases] Fetched page ${pageCount}: ${response.items.length} test cases (total: ${allItems.length})`);
+      }
+    }
+
+    if (pageCount >= 1000) {
+      console.warn('⚠️  [TestCases] Stopped pagination after 1000 pages to prevent infinite loop');
+    }
+
+    return allItems;
+  }
+
+  /**
+   * Get all TCM test cases for a specific suite ID (Java implementation approach)
+   * 
+   * @param projectKey the project key to search in
+   * @param suiteId the suite ID to filter by
+   * @param basedOnRootSuites if true, filters by root suite ID; if false, filters by direct suite ID
+   * @returns list of test cases matching the suite criteria
+   */
+  async getAllTCMTestCasesBySuiteId(
+    projectKey: string, 
+    suiteId: number, 
+    basedOnRootSuites: boolean = false
+  ): Promise<ZebrunnerShortTestCase[]> {
+    console.log(`🔍 Getting all test cases for suite ${suiteId} (basedOnRootSuites: ${basedOnRootSuites})...`);
+    
+    const startTime = Date.now();
+    
+    // Step 1: Get all test cases for the project
+    const allTestCases = await this.getAllTCMTestCasesByProject(projectKey);
+    console.log(`   📊 Found ${allTestCases.length} total test cases in project`);
+    
+    // Step 2: Get all suites for the project
+    const allSuites = await this.getAllSuitesWithCache(projectKey);
+    console.log(`   📊 Found ${allSuites.length} total suites in project`);
+    
+    // Step 3: Process hierarchy - set root parents to suites (Java: TCMTestSuites.setRootParentsToSuites)
+    const { HierarchyProcessor } = await import("../utils/hierarchy.js");
+    const processedSuites = HierarchyProcessor.setRootParentsToSuites(allSuites);
+    
+    // Step 4: Filter test cases by suite criteria
+    const returnList: ZebrunnerShortTestCase[] = [];
+    
+    for (const tc of allTestCases) {
+      const foundSuiteId = tc.testSuite?.id;
+      if (!foundSuiteId) continue;
+      
+      // Enhance test case with full suite information (Java: TCMTestSuites.getTCMTestSuiteById)
+      const fullSuite = HierarchyProcessor.getTCMTestSuiteById(processedSuites, foundSuiteId);
+      if (fullSuite) {
+        // Set root suite ID (Java: getRootIdBySuiteId)
+        const rootId = HierarchyProcessor.getRootIdBySuiteId(processedSuites, foundSuiteId);
+        
+        // Create enhanced test case with hierarchy info
+        const enhancedTC = {
+          ...tc,
+          testSuite: { ...tc.testSuite, ...fullSuite },
+          rootSuiteId: rootId
+        };
+        
+        // Filter based on criteria
+        if (basedOnRootSuites) {
+          if (rootId === suiteId) {
+            returnList.push(enhancedTC);
+          }
+        } else {
+          if (foundSuiteId === suiteId) {
+            returnList.push(enhancedTC);
+          }
+        }
+      }
+    }
+    
+    const endTime = Date.now();
+    console.log(`   ✅ Added ${returnList.length} test cases (${endTime - startTime}ms)`);
+    
+    return returnList;
   }
 
   async getTestCases(
@@ -482,17 +782,20 @@ export class EnhancedZebrunnerClient {
     }
 
     return this.retryRequest(async () => {
-      const params = {
+      const params: any = {
         projectKey,
-        page: options.page,
-        size: options.size || this.config.defaultPageSize,
-        maxPageSize: this.config.maxPageSize,
+        maxPageSize: Math.min(options.size || this.config.defaultPageSize || 50, 100), // Limit to 100 as per API requirements
         suiteId: options.suiteId,
         rootSuiteId: options.rootSuiteId,
         status: options.status,
         priority: options.priority,
         automationState: options.automationState
       };
+
+      // Use token-based pagination instead of page-based
+      if (options.pageToken) {
+        params.pageToken = options.pageToken; // Use 'pageToken' not 'nextPageToken' as per API spec
+      }
 
       const response = await this.http.get('/test-cases', { params });
       const data = response.data;
@@ -511,14 +814,18 @@ export class EnhancedZebrunnerClient {
       }
 
       // WORKAROUND: Since Zebrunner API doesn't respect pagination/filtering parameters,
-      // we'll implement client-side filtering and pagination
+      // we need to fetch ALL test cases first, then do client-side filtering
       let filteredItems = items;
       
       // Client-side suite filtering (since API ignores suiteId parameter)
       if (options.suiteId) {
+        // Always fetch ALL test cases when filtering by suiteId to ensure we don't miss any
+        console.log(`🔄 Fetching all test cases for suite filtering (suite ${options.suiteId})...`);
+          const allTestCases = await this.getAllTCMTestCasesByProject(projectKey);
+        items = allTestCases;
+        
         filteredItems = items.filter(item => 
-          item.testSuite?.id === options.suiteId || 
-          item.suiteId === options.suiteId
+          item.testSuite?.id === options.suiteId
         );
         
         if (this.config.debug) {
@@ -686,4 +993,5 @@ export class EnhancedZebrunnerClient {
       return data.map((item: any) => ZebrunnerTestResultResponseSchema.parse(item));
     });
   }
+
 }
