@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import "dotenv/config";
-import { EnhancedZebrunnerClient } from './dist/api/enhanced-client.js';
+import { EnhancedZebrunnerClient } from '../../dist/api/enhanced-client.js';
 
 async function testOrphanedFix() {
   const config = {
