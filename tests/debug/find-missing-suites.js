@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import "dotenv/config";
-import { EnhancedZebrunnerClient } from './dist/api/enhanced-client.js';
+import { EnhancedZebrunnerClient } from '../../dist/api/enhanced-client.js';
 
 async function findMissingSuites() {
   const config = {
@@ -99,7 +99,7 @@ async function findMissingSuites() {
       // If we found some suites, test the hierarchy
       console.log('');
       console.log('🌳 Testing hierarchy with found suites...');
-      const { HierarchyProcessor } = await import('./dist/utils/hierarchy.js');
+      const { HierarchyProcessor } = await import('../../dist/utils/hierarchy.js');
       
       // Find suite 736 (the feature suite)
       const suite736 = foundSuites.get(736);

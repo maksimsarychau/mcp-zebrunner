@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 import "dotenv/config";
-import { EnhancedZebrunnerClient } from './dist/api/enhanced-client.js';
-import { HierarchyProcessor } from './dist/utils/hierarchy.js';
+import { EnhancedZebrunnerClient } from '../../dist/api/enhanced-client.js';
+import { HierarchyProcessor } from '../../dist/utils/hierarchy.js';
 
 async function debugMFPAND917() {
   const config = {
