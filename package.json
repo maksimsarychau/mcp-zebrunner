@@ -6,14 +6,8 @@
   "description": "MCP server (stdio) for Zebrunner TCM Public API (read-only)",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "dev:legacy": "tsx watch src/index.ts",
-    "dev:enhanced": "tsx watch src/index-enhanced.ts",
-    "dev:working": "tsx watch src/index-working-enhanced.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
-    "start:legacy": "node dist/index.js",
-    "start:enhanced": "node dist/index-enhanced.js",
-    "start:working": "node dist/index-working-enhanced.js",
     "smoke": "tsx src/smoke.ts",
     "test": "tsx tests/test-runner.ts",
     "test:unit": "tsx tests/test-runner.ts unit",
@@ -22,9 +16,9 @@
     "test:watch": "tsx tests/test-runner.ts -- --watch",
     "test:health": "tsx tests/test-runner.ts -- --health",
     "test:verbose": "tsx tests/test-runner.ts -- --verbose",
-    "test:legacy": "DEBUG=true tsx src/index.ts",
-    "test:enhanced": "DEBUG=true tsx src/index-enhanced.ts",
-    "test:working": "DEBUG=true tsx src/index-working-enhanced.ts"
+    "lint": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "dev:debug": "DEBUG=true tsx watch src/server.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",

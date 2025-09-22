@@ -49,8 +49,8 @@ export const ZebrunnerTestSuiteSchema: z.ZodType<any> = z.object({
   title: z.string().optional(),
   name: z.string().optional(), // Some APIs use name instead of title
   description: z.string().nullable().optional(),
-  parentSuiteId: z.number().optional(),
-  rootSuiteId: z.number().optional(),
+  parentSuiteId: z.number().nullable().optional(),
+  rootSuiteId: z.number().nullable().optional(),
   relativePosition: z.number().optional(),
   projectId: z.number().optional(),
   projectKey: z.string().optional(),

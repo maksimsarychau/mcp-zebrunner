@@ -137,7 +137,8 @@ export class ZebrunnerApiClient {
       const params = {
         projectKey,
         page: options.page,
-        size: options.size || this.config.defaultPageSize,
+        size: Math.min(options.size || this.config.defaultPageSize || 50, this.config.maxPageSize || 200),
+        maxPageSize: this.config.maxPageSize,
         suiteId: options.suiteId,
         rootSuiteId: options.rootSuiteId,
         status: options.status,
@@ -209,6 +210,7 @@ export class ZebrunnerApiClient {
         projectKey,
         page: options.page,
         size: options.size || this.config.defaultPageSize,
+        maxPageSize: this.config.maxPageSize,
         parentSuiteId: options.parentSuiteId
       };
 
@@ -258,7 +260,8 @@ export class ZebrunnerApiClient {
       const params = {
         projectKey,
         page: options.page,
-        size: options.size || this.config.defaultPageSize,
+        size: Math.min(options.size || this.config.defaultPageSize || 50, this.config.maxPageSize || 200),
+        maxPageSize: this.config.maxPageSize,
         status: options.status,
         milestone: options.milestone,
         build: options.build,

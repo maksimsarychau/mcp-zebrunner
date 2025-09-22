@@ -12,6 +12,8 @@ The main **unified server** (`src/server.ts`) provides the most comprehensive an
   - `get_test_case_by_key` - Get detailed test case by key with rich Markdown export (✅ **Verified Working**)
   - `get_test_cases_advanced` - Advanced test case retrieval with filtering and pagination
   - `get_suite_hierarchy` - Hierarchical test suite tree with configurable depth
+  - `get_all_subsuites` - ✨ **NEW** Flat list of all subsuites with pagination (✅ **Tested**)
+  - `get_test_coverage_by_test_case_steps_by_key` - ✨ **NEW** Test coverage analysis with recommendations (✅ **Tested**)
 
 - **Enhanced Framework**:
   - **Advanced API Client** - Retry logic, error handling, comprehensive pagination
@@ -73,6 +75,10 @@ ZEBRUNNER_TOKEN=YOUR_API_TOKEN
 DEBUG=true
 # Optional: Enable experimental features
 EXPERIMENTAL_FEATURES=true
+
+# Optional: Pagination Configuration
+DEFAULT_PAGE_SIZE=10
+MAX_PAGE_SIZE=100
 ```
 
 > **✅ Verified Configuration**: This configuration has been tested and works with the mfp.zebrunner.com instance.
@@ -137,7 +143,9 @@ Add the MCP server to Claude Desktop or Claude Code using the **main unified ser
         "ZEBRUNNER_LOGIN": "your.login@example.com", 
         "ZEBRUNNER_TOKEN": "YOUR_API_TOKEN",
         "DEBUG": "true",
-        "EXPERIMENTAL_FEATURES": "false"
+        "EXPERIMENTAL_FEATURES": "false",
+        "DEFAULT_PAGE_SIZE": "50",
+        "MAX_PAGE_SIZE": "200"
       }
     }
   }
@@ -168,6 +176,8 @@ Once integrated, you can use natural language commands:
 - **"Get test cases for project MFPAND with pagination"** → `get_test_cases_advanced`
 - **"Show me the hierarchy of test suites for project MFPAND"** → `get_suite_hierarchy`
 - **"Get test cases from suite 18708 with steps included"** → Advanced filtering
+- **"Get all subsuites from root suite 18697 with pagination"** → `get_all_subsuites` ✨ **NEW**
+- **"Analyze test coverage for MFPAND-6 against my implementation"** → `get_test_coverage_by_test_case_steps_by_key` ✨ **NEW**
 
 #### Experimental Features (When Enabled)
 - **"Get details for test suite 18708"** → `get_test_suite_experimental`
@@ -189,6 +199,114 @@ The server uses the following Zebrunner API endpoints:
 - `GET /test-cases/search` - Search with filters (experimental)
 
 > **Note**: Endpoint availability varies by Zebrunner instance and user permissions. Core endpoints are confirmed working across instances.
+
+## ✨ New Features
+
+### 📋 Enhanced Subsuite Management
+
+#### `get_all_subsuites`
+Get all subsuites from a root suite as a flat, paginated list - perfect for comprehensive suite analysis.
+
+**Parameters:**
+- `project_key` (string): Project key (e.g., "MFPAND")
+- `root_suite_id` (number): Root suite ID to get all subsuites from
+- `include_root` (boolean): Include the root suite in results (default: true)
+- `format` (enum): Output format - dto, json, string, markdown (default: json)
+- `page` (number): Page number, 0-based (default: 0)
+- `size` (number): Page size, respects MAX_PAGE_SIZE (default: 50)
+
+**Example Usage:**
+```
+Get all subsuites from root suite 18697 with pagination:
+- project_key: "MFPAND"
+- root_suite_id: 18697
+- include_root: true
+- page: 0
+- size: 20
+- format: "markdown"
+```
+
+**Response includes:**
+- Flat list of all subsuites (not hierarchical)
+- Complete pagination metadata (total pages, has next/previous)
+- Root suite information
+- Consistent sorting by suite ID
+
+---
+
+### 🔍 Test Coverage Analysis
+
+#### `get_test_coverage_by_test_case_steps_by_key`
+Comprehensive test coverage analysis tool that compares test case steps against actual implementation code, providing detailed recommendations and multiple output formats.
+
+**Parameters:**
+- `project_key` (string, optional): Auto-detected from case_key if not provided
+- `case_key` (string): Test case key (e.g., "MFPAND-6", "MFPIOS-2")
+- `implementation_context` (string): Actual implementation details (code snippets, file paths, implementation description)
+- `analysis_scope` (enum): Scope of analysis - steps, assertions, data, full (default: full)
+- `output_format` (enum): Output format - chat, markdown, code_comments, all (default: chat)
+- `include_recommendations` (boolean): Include improvement recommendations (default: true)
+- `file_path` (string, optional): File path for adding code comments or saving markdown
+
+**Analysis Features:**
+- **Step-by-Step Coverage**: Analyzes each test case step against implementation
+- **Intelligent Keyword Matching**: Extracts and matches meaningful terms
+- **Coverage Scoring**: Calculates percentage coverage for each step and overall
+- **Implementation Detection**: Identifies methods, assertions, UI elements, API calls
+- **Smart Recommendations**: Generates actionable improvement suggestions
+- **Multiple Output Formats**: Chat response, markdown reports, code comments
+
+**Example Usage in Claude Code:**
+```
+Analyze coverage for test case MFPAND-6:
+- case_key: "MFPAND-6" (project auto-detected as MFPAND)
+- implementation_context: |
+  function testMoreMenu() {
+    const user = loginAsPremiumUser();
+    expect(user.isPremium).toBe(true);
+    
+    const moreButton = findElement('more-menu-button');
+    click(moreButton);
+    
+    const premiumTools = findElement('premium-tools-screen');
+    expect(premiumTools).toBeVisible();
+    
+    assert(findElement('intermittent-fasting').isDisplayed());
+    assert(findElement('recipe-discovery').isDisplayed());
+  }
+- analysis_scope: "full"
+- output_format: "all"
+- include_recommendations: true
+- file_path: "tests/more_menu_test.js"
+```
+
+**Sample Analysis Output:**
+```
+# 🔍 Test Coverage Analysis: MFPAND-6
+
+**Test Case**: Verify "More" menu (Premium) - My Premium Tools, Intermittent Fasting, Recipe Discovery...
+**Overall Score**: 67%
+
+## 📋 Step Analysis
+
+### ⚠️ Step 1 (67%)
+**Action**: 1. Open App. 2. Login as Premium User. 3. Go to the "More" menu...
+**Expected**: The user sees "More" menu screen...
+
+### ✅ Step 2 (80%)
+**Action**: 1. On "More" menu Tap "My Premium Tools"...
+**Expected**: The user sees "My Premium Tools" screen...
+
+## 💡 Recommendations
+🟢 **Good**: Decent coverage. Fine-tune missing elements.
+📋 **Missing Steps**: 3 steps need better coverage.
+```
+
+**Use Cases:**
+- **Code Reviews**: Verify test implementation completeness
+- **Test Planning**: Identify gaps in test coverage
+- **Documentation**: Generate coverage reports and code comments
+- **Quality Assurance**: Ensure test cases match actual implementation
 
 ## Project Structure
 
@@ -351,6 +469,38 @@ Potential additions based on user feedback:
 - **Advanced Filtering** - Status, labels, date ranges for all endpoints
 - **Batch Operations** - Bulk test case operations
 - **Real-time Updates** - WebSocket support for live test execution monitoring
+
+## 🔧 Quick Reference: New Tools
+
+### 📋 Subsuite Management
+```bash
+# Get all subsuites from root suite with pagination
+get_all_subsuites:
+  project_key: "MFPAND"
+  root_suite_id: 18697
+  page: 0
+  size: 50
+  format: "markdown"
+```
+
+### 🔍 Test Coverage Analysis  
+```bash
+# Analyze test case coverage against implementation
+get_test_coverage_by_test_case_steps_by_key:
+  case_key: "MFPAND-6"  # Auto-detects project: MFPAND
+  implementation_context: "Your actual test code here..."
+  analysis_scope: "full"
+  output_format: "all"
+  include_recommendations: true
+  file_path: "tests/my_test.js"
+```
+
+**Coverage Analysis Output:**
+- **Step Coverage**: Individual step analysis with percentage scores
+- **Overall Score**: Comprehensive coverage percentage
+- **Recommendations**: Actionable improvement suggestions
+- **Multiple Formats**: Chat, Markdown, Code Comments
+- **Implementation Detection**: Methods, assertions, UI elements, API calls
 
 ## Contributing
 
