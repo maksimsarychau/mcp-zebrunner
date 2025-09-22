@@ -795,8 +795,8 @@ export class ConfigManager {
   static loadConfig(): ZebrunnerConfiguration {
     return {
       baseUrl: process.env.ZEBRUNNER_BASE_URL || 'https://mfp.zebrunner.com/api/public/v1/',
-      username: process.env.ZEBRUNNER_USERNAME || 'maksim.sarychau@ext.myfitnesspal.com',
-      password: process.env.ZEBRUNNER_PASSWORD || 'dWhA61LFi4fDyT1srtjmzVYSJ6FqN89LQj7f07nNwBdLrPXjkX',
+      username: process.env.ZEBRUNNER_USERNAME || '',
+      password: process.env.ZEBRUNNER_PASSWORD || '',
       defaultPageSize: parseInt(process.env.ZEBRUNNER_PAGE_SIZE || '100'),
       timeout: parseInt(process.env.ZEBRUNNER_TIMEOUT || '30000'),
       enableLogging: process.env.ZEBRUNNER_ENABLE_LOGGING === 'true'
