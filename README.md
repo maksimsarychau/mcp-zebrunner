@@ -145,7 +145,7 @@ Add the MCP server to Claude Desktop or Claude Code using the **main unified ser
 ```json
 {
   "mcpServers": {
-    "zebrunner": {
+    "mcp-zebrunner": {
       "command": "node",
       "args": ["dist/server.js"],
       "cwd": "/path/to/mcp-zebrunner",
@@ -156,7 +156,7 @@ Add the MCP server to Claude Desktop or Claude Code using the **main unified ser
         "DEBUG": "true",
         "EXPERIMENTAL_FEATURES": "false",
         "DEFAULT_PAGE_SIZE": "50",
-        "MAX_PAGE_SIZE": "200"
+        "MAX_PAGE_SIZE": "100"
       }
     }
   }
@@ -166,7 +166,7 @@ Add the MCP server to Claude Desktop or Claude Code using the **main unified ser
 ### Alternative: Command Line Integration
 ```bash
 # Using the main server (recommended)
-claude mcp add zebrunner \
+claude mcp add mcp-zebrunner \
   --env ZEBRUNNER_URL="https://mfp.zebrunner.com/api/public/v1" \
   --env ZEBRUNNER_LOGIN="your.login@example.com" \
   --env ZEBRUNNER_TOKEN="YOUR_API_TOKEN" \
