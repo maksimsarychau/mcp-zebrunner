@@ -448,7 +448,7 @@ async function main() {
   const server = new McpServer(
     { 
       name: "mcp-zebrunner", 
-      version: "3.0.0",
+      version: "3.0.1",
       description: "Unified Zebrunner MCP Server with comprehensive features and improved error handling"
     },
     { 
