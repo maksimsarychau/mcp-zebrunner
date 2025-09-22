@@ -92,11 +92,14 @@ describe('HierarchyProcessor', () => {
 
   describe('calculateRootSuiteIds', () => {
     it('should identify root suite IDs correctly', () => {
-      const rootIds = HierarchyProcessor.calculateRootSuiteIds(sampleSuites);
-      
-      assert.equal(rootIds.size, 2);
-      assert.ok(rootIds.has(1));
-      assert.ok(rootIds.has(4));
+      const rootMapping = HierarchyProcessor.calculateRootSuiteIds(sampleSuites);
+
+      assert.equal(rootMapping.size, 5); // All suites are mapped to their root
+      assert.equal(rootMapping.get(1), 1); // Root suite maps to itself
+      assert.equal(rootMapping.get(2), 1); // Child maps to root
+      assert.equal(rootMapping.get(3), 1); // Child maps to root
+      assert.equal(rootMapping.get(4), 4); // Root suite maps to itself
+      assert.equal(rootMapping.get(5), 1); // Grandchild maps to root
     });
 
     it('should handle suites with no parent', () => {
@@ -105,17 +108,18 @@ describe('HierarchyProcessor', () => {
         { id: 2, parentSuiteId: undefined },
         { id: 3, parentSuiteId: 1 }
       ];
-      
-      const rootIds = HierarchyProcessor.calculateRootSuiteIds(suitesWithNulls);
-      
-      assert.equal(rootIds.size, 2);
-      assert.ok(rootIds.has(1));
-      assert.ok(rootIds.has(2));
+
+      const rootMapping = HierarchyProcessor.calculateRootSuiteIds(suitesWithNulls);
+
+      assert.equal(rootMapping.size, 3);
+      assert.equal(rootMapping.get(1), 1); // Root suite
+      assert.equal(rootMapping.get(2), 2); // Root suite (no parent)
+      assert.equal(rootMapping.get(3), 1); // Child of suite 1
     });
 
-    it('should return empty set for empty input', () => {
-      const rootIds = HierarchyProcessor.calculateRootSuiteIds([]);
-      assert.equal(rootIds.size, 0);
+    it('should return empty map for empty input', () => {
+      const rootMapping = HierarchyProcessor.calculateRootSuiteIds([]);
+      assert.equal(rootMapping.size, 0);
     });
   });
 
@@ -172,11 +176,11 @@ describe('HierarchyProcessor', () => {
         { id: 1, parentSuiteId: null },
         { id: 2, parentSuiteId: 999 } // Parent doesn't exist
       ];
-      
+
       const levels = HierarchyProcessor.calculateSuiteLevels(orphanedSuites);
-      
+
       assert.equal(levels.get(1), 0);
-      assert.equal(levels.get(2), 0); // Treated as root
+      assert.equal(levels.get(2), 0); // Treated as root since parent doesn't exist
     });
 
     it('should return empty map for empty input', () => {

@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
-import { EnhancedZebrunnerClient } from '../../dist/api/enhanced-client.js';
+import { EnhancedZebrunnerClient } from '../../src/api/enhanced-client.js';
 
 /**
  * Integration tests for Suite Hierarchy Enhancement
