@@ -1389,6 +1389,472 @@ async function main() {
     }
   );
 
+  // ========== COMPREHENSIVE JAVA METHODOLOGY TOOLS ==========
+  // Based on Zebrunner_MCP_API.md implementation guide
+
+  server.tool(
+    "get_tcm_test_suites_by_project",
+    "📋 Get TCM test suites by project with pagination (Java methodology)",
+    {
+      project_key: z.string().min(1).describe("Project key (e.g., MFPAND)"),
+      max_page_size: z.number().int().positive().max(1000).default(100).describe("Maximum page size for pagination"),
+      page_token: z.string().optional().describe("Page token for pagination"),
+      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format")
+    },
+    async (args) => {
+      try {
+        const { project_key, max_page_size, page_token, format } = args;
+
+        // Validate page size against configured maximum
+        if (max_page_size > MAX_PAGE_SIZE) {
+          return {
+            content: [{
+              type: "text" as const,
+              text: `❌ Error: Requested page size (${max_page_size}) exceeds configured maximum (${MAX_PAGE_SIZE}). Set MAX_PAGE_SIZE environment variable to increase the limit.`
+            }]
+          };
+        }
+
+        debugLog("Getting TCM test suites", { project_key, max_page_size, page_token });
+
+        // Use existing getTestSuites method with pagination
+        const result = await client.getTestSuites(project_key, {
+          size: max_page_size,
+          page: page_token ? parseInt(page_token, 10) : 0
+        });
+
+        const formattedResult = FormatProcessor.format(result, format as any);
+        
+        return {
+          content: [{
+            type: "text" as const,
+            text: typeof formattedResult === 'string' ? formattedResult : JSON.stringify(formattedResult, null, 2)
+          }]
+        };
+
+      } catch (error: any) {
+        debugLog("Error in get_tcm_test_suites_by_project", { error: error.message, args });
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error getting TCM test suites for ${args.project_key}: ${error.message}`
+          }]
+        };
+      }
+    }
+  );
+
+  server.tool(
+    "get_all_tcm_test_case_suites_by_project",
+    "📋 Get ALL TCM test case suites by project using comprehensive pagination",
+    {
+      project_key: z.string().min(1).describe("Project key (e.g., MFPAND)"),
+      include_hierarchy: z.boolean().default(true).describe("Include hierarchy information (rootSuiteId, parentSuiteName, etc.)"),
+      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format")
+    },
+    async (args) => {
+      try {
+        const { project_key, include_hierarchy, format } = args;
+
+        debugLog("Getting all TCM test case suites", { project_key, include_hierarchy });
+
+        // Get all suites with pagination (use large page size to get all)
+        let allSuites: ZebrunnerTestSuite[] = [];
+        let page = 0;
+        let hasMore = true;
+        const pageSize = MAX_PAGE_SIZE;
+
+        while (hasMore) {
+          const result = await client.getTestSuites(project_key, {
+            size: pageSize,
+            page: page
+          });
+
+          allSuites.push(...result.items);
+          
+          // Check if we have more pages (simple heuristic: if we got less than pageSize, we're done)
+          hasMore = result.items.length === pageSize;
+          page++;
+
+          // Safety check to prevent infinite loops
+          if (page > 100) {
+            console.warn(`⚠️ Stopped pagination after 100 pages for project ${project_key}`);
+            break;
+          }
+        }
+
+        // Apply hierarchy processing if requested
+        let processedSuites = allSuites;
+        if (include_hierarchy) {
+          processedSuites = HierarchyProcessor.setRootParentsToSuites(allSuites);
+        }
+
+        console.log(`Found ${processedSuites.length} suites.`);
+
+        const formattedResult = FormatProcessor.format(processedSuites, format as any);
+        
+        return {
+          content: [{
+            type: "text" as const,
+            text: typeof formattedResult === 'string' ? formattedResult : JSON.stringify(formattedResult, null, 2)
+          }]
+        };
+
+      } catch (error: any) {
+        debugLog("Error in get_all_tcm_test_case_suites_by_project", { error: error.message, args });
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error getting all TCM test case suites for ${args.project_key}: ${error.message}`
+          }]
+        };
+      }
+    }
+  );
+
+  server.tool(
+    "get_root_suites",
+    "🌳 Get root suites (suites with no parent) from project",
+    {
+      project_key: z.string().min(1).describe("Project key (e.g., MFPAND)"),
+      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format")
+    },
+    async (args) => {
+      try {
+        const { project_key, format } = args;
+
+        debugLog("Getting root suites", { project_key });
+
+        // Get all suites first
+        const allSuitesResult = await client.getTestSuites(project_key, { size: MAX_PAGE_SIZE });
+        let allSuites = allSuitesResult.items;
+
+        // Get more pages if needed
+        let page = 1;
+        while (allSuitesResult.items.length === MAX_PAGE_SIZE) {
+          const nextPage = await client.getTestSuites(project_key, { 
+            size: MAX_PAGE_SIZE, 
+            page: page 
+          });
+          if (nextPage.items.length === 0) break;
+          allSuites.push(...nextPage.items);
+          page++;
+          if (page > 50) break; // Safety limit
+        }
+
+        // Filter to root suites only
+        const rootSuites = HierarchyProcessor.getRootSuites(allSuites);
+
+        console.log(`Found ${rootSuites.length} root suites out of ${allSuites.length} total suites.`);
+
+        const formattedResult = FormatProcessor.format(rootSuites, format as any);
+        
+        return {
+          content: [{
+            type: "text" as const,
+            text: typeof formattedResult === 'string' ? formattedResult : JSON.stringify(formattedResult, null, 2)
+          }]
+        };
+
+      } catch (error: any) {
+        debugLog("Error in get_root_suites", { error: error.message, args });
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error getting root suites for ${args.project_key}: ${error.message}`
+          }]
+        };
+      }
+    }
+  );
+
+  server.tool(
+    "get_tcm_suite_by_id",
+    "🔍 Find TCM suite by ID with comprehensive search",
+    {
+      project_key: z.string().min(1).describe("Project key (e.g., MFPAND)"),
+      suite_id: z.number().int().positive().describe("Suite ID to find"),
+      only_root_suites: z.boolean().default(false).describe("Search only in root suites"),
+      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format")
+    },
+    async (args) => {
+      try {
+        const { project_key, suite_id, only_root_suites, format } = args;
+
+        debugLog("Getting TCM suite by ID", { project_key, suite_id, only_root_suites });
+
+        // Get all suites from project
+        const allSuitesResult = await client.getTestSuites(project_key, { size: MAX_PAGE_SIZE });
+        let allSuites = allSuitesResult.items;
+
+        // Get more pages if needed
+        let page = 1;
+        while (allSuitesResult.items.length === MAX_PAGE_SIZE && page < 50) {
+          const nextPage = await client.getTestSuites(project_key, { 
+            size: MAX_PAGE_SIZE, 
+            page: page 
+          });
+          if (nextPage.items.length === 0) break;
+          allSuites.push(...nextPage.items);
+          page++;
+        }
+
+        // Filter to root suites if requested
+        let searchSuites = allSuites;
+        if (only_root_suites) {
+          searchSuites = HierarchyProcessor.getRootSuites(allSuites);
+        }
+
+        // Find the suite
+        const suite = searchSuites.find((s: ZebrunnerTestSuite) => s.id === suite_id);
+
+        if (suite) {
+          // Enhance with hierarchy information
+          const processedSuites = HierarchyProcessor.setRootParentsToSuites(allSuites);
+          const enhancedSuite = processedSuites.find(s => s.id === suite_id) || suite;
+
+          console.log(`Found suite by id ${suite_id} with title: ${enhancedSuite.name || enhancedSuite.title}`);
+          console.log(`Item ID: ${enhancedSuite.id}`);
+          console.log(`Parent Suite ID: ${enhancedSuite.parentSuiteId}`);
+          console.log(`Root Suite ID: ${enhancedSuite.rootSuiteId}`);
+          console.log(`Relative Position: ${enhancedSuite.relativePosition}`);
+          console.log(`Title: ${enhancedSuite.name || enhancedSuite.title}`);
+          console.log(`Description: ${enhancedSuite.description || ''}`);
+
+          const formattedResult = FormatProcessor.format(enhancedSuite, format as any);
+          
+          return {
+            content: [{
+              type: "text" as const,
+              text: typeof formattedResult === 'string' ? formattedResult : JSON.stringify(formattedResult, null, 2)
+            }]
+          };
+        } else {
+          console.log(`Suite id ${suite_id} was not found`);
+          return {
+            content: [{
+              type: "text" as const,
+              text: `❌ Suite ID ${suite_id} not found in project ${project_key}${only_root_suites ? ' (searched root suites only)' : ''}`
+            }]
+          };
+        }
+
+      } catch (error: any) {
+        debugLog("Error in get_tcm_suite_by_id", { error: error.message, args });
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error finding TCM suite ${args.suite_id} in ${args.project_key}: ${error.message}`
+          }]
+        };
+      }
+    }
+  );
+
+  server.tool(
+    "get_all_tcm_test_cases_by_project",
+    "📋 Get ALL TCM test cases by project using comprehensive pagination",
+    {
+      project_key: z.string().min(1).describe("Project key (e.g., MFPAND)"),
+      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format")
+    },
+    async (args) => {
+      try {
+        const { project_key, format } = args;
+
+        debugLog("Getting all TCM test cases", { project_key });
+
+        // Get all test cases with pagination
+        let allTestCases: ZebrunnerTestCase[] = [];
+        let page = 0;
+        let hasMore = true;
+        const pageSize = MAX_PAGE_SIZE;
+
+        while (hasMore && page < 100) { // Safety limit
+          const result = await client.getTestCases(project_key, {
+            size: pageSize,
+            page: page
+          });
+
+          allTestCases.push(...result.items);
+          
+          // Check if we have more pages
+          hasMore = result.items.length === pageSize;
+          page++;
+        }
+
+        console.log(`Found ${allTestCases.length} testcases.`);
+
+        const formattedResult = FormatProcessor.format(allTestCases, format as any);
+        
+        return {
+          content: [{
+            type: "text" as const,
+            text: typeof formattedResult === 'string' ? formattedResult : JSON.stringify(formattedResult, null, 2)
+          }]
+        };
+
+      } catch (error: any) {
+        debugLog("Error in get_all_tcm_test_cases_by_project", { error: error.message, args });
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error getting all TCM test cases for ${args.project_key}: ${error.message}`
+          }]
+        };
+      }
+    }
+  );
+
+  server.tool(
+    "get_all_tcm_test_cases_with_root_suite_id",
+    "🌳 Get ALL TCM test cases enriched with root suite ID information",
+    {
+      project_key: z.string().min(1).describe("Project key (e.g., MFPAND)"),
+      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format")
+    },
+    async (args) => {
+      try {
+        const { project_key, format } = args;
+
+        debugLog("Getting all TCM test cases with root suite ID", { project_key });
+
+        // Get all test cases
+        let allTestCases: ZebrunnerTestCase[] = [];
+        let page = 0;
+        let hasMore = true;
+        const pageSize = MAX_PAGE_SIZE;
+
+        while (hasMore && page < 100) {
+          const result = await client.getTestCases(project_key, {
+            size: pageSize,
+            page: page
+          });
+
+          allTestCases.push(...result.items);
+          hasMore = result.items.length === pageSize;
+          page++;
+        }
+
+        // Get all suites for hierarchy processing
+        let allSuites: ZebrunnerTestSuite[] = [];
+        page = 0;
+        hasMore = true;
+
+        while (hasMore && page < 50) {
+          const result = await client.getTestSuites(project_key, {
+            size: pageSize,
+            page: page
+          });
+
+          allSuites.push(...result.items);
+          hasMore = result.items.length === pageSize;
+          page++;
+        }
+
+        // Process suite hierarchy
+        const processedSuites = HierarchyProcessor.setRootParentsToSuites(allSuites);
+
+        // Enrich test cases with root suite information
+        const enrichedTestCases = allTestCases.map(testCase => {
+          const foundSuiteId = testCase.testSuite?.id;
+          if (foundSuiteId) {
+            const rootId = HierarchyProcessor.getRootIdBySuiteId(processedSuites, foundSuiteId);
+            return { ...testCase, rootSuiteId: rootId };
+          }
+          return testCase;
+        });
+
+        console.log(`Added ${enrichedTestCases.length} test cases with root suite IDs.`);
+
+        const formattedResult = FormatProcessor.format(enrichedTestCases, format as any);
+        
+        return {
+          content: [{
+            type: "text" as const,
+            text: typeof formattedResult === 'string' ? formattedResult : JSON.stringify(formattedResult, null, 2)
+          }]
+        };
+
+      } catch (error: any) {
+        debugLog("Error in get_all_tcm_test_cases_with_root_suite_id", { error: error.message, args });
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error getting TCM test cases with root suite ID for ${args.project_key}: ${error.message}`
+          }]
+        };
+      }
+    }
+  );
+
+  server.tool(
+    "get_root_id_by_suite_id",
+    "🔍 Get root suite ID for a specific suite ID",
+    {
+      project_key: z.string().min(1).describe("Project key (e.g., MFPAND)"),
+      suite_id: z.number().int().positive().describe("Suite ID to find root for"),
+      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format")
+    },
+    async (args) => {
+      try {
+        const { project_key, suite_id, format } = args;
+
+        debugLog("Getting root ID by suite ID", { project_key, suite_id });
+
+        // Get all suites for hierarchy processing
+        let allSuites: ZebrunnerTestSuite[] = [];
+        let page = 0;
+        let hasMore = true;
+        const pageSize = MAX_PAGE_SIZE;
+
+        while (hasMore && page < 50) {
+          const result = await client.getTestSuites(project_key, {
+            size: pageSize,
+            page: page
+          });
+
+          allSuites.push(...result.items);
+          hasMore = result.items.length === pageSize;
+          page++;
+        }
+
+        // Process hierarchy and find root ID
+        const rootId = HierarchyProcessor.getRootId(allSuites, suite_id);
+        const suite = allSuites.find(s => s.id === suite_id);
+        const rootSuite = allSuites.find(s => s.id === rootId);
+
+        const result = {
+          suiteId: suite_id,
+          rootSuiteId: rootId,
+          suiteName: suite?.name || suite?.title || 'Unknown',
+          rootSuiteName: rootSuite?.name || rootSuite?.title || 'Unknown',
+          hierarchyPath: HierarchyProcessor.generateSuitePath(suite_id, allSuites)
+        };
+
+        console.log(`Suite ${suite_id} has root suite ID: ${rootId}`);
+
+        const formattedResult = FormatProcessor.format(result, format as any);
+        
+        return {
+          content: [{
+            type: "text" as const,
+            text: typeof formattedResult === 'string' ? formattedResult : JSON.stringify(formattedResult, null, 2)
+          }]
+        };
+
+      } catch (error: any) {
+        debugLog("Error in get_root_id_by_suite_id", { error: error.message, args });
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error getting root ID for suite ${args.suite_id} in ${args.project_key}: ${error.message}`
+          }]
+        };
+      }
+    }
+  );
+
   // ========== SERVER STARTUP ==========
 
   const transport = new StdioServerTransport();

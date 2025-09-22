@@ -39,6 +39,7 @@ import {
 export class EnhancedZebrunnerClient {
   private http: AxiosInstance;
   private config: ZebrunnerConfig;
+  private suitesCache: Map<string, { suites: ZebrunnerTestSuite[], timestamp: number }> = new Map();
   private endpointHealth: Map<string, boolean> = new Map();
   private lastHealthCheck: Date | null = null;
 
@@ -524,47 +525,36 @@ export class EnhancedZebrunnerClient {
   }
 
   /**
-   * Get suite hierarchy path with names
+   * Get suite hierarchy path with comprehensive approach (Java methodology)
    */
   async getSuiteHierarchyPath(projectKey: string, suiteId: number): Promise<Array<{id: number, name: string}>> {
     try {
+      // Use cached comprehensive approach
+      const allSuites = await this.getAllSuitesWithCache(projectKey);
+
+      // Use Java methodology to build hierarchy path
       const path: Array<{id: number, name: string}> = [];
+
+      // Traverse up the hierarchy
       let currentSuiteId = suiteId;
-      let visitedSuites = new Set<number>(); // Prevent infinite loops
-      const maxDepth = 20; // Safety limit
-      let depth = 0;
+      const visited = new Set<number>();
 
-      while (depth < maxDepth && !visitedSuites.has(currentSuiteId)) {
-        visitedSuites.add(currentSuiteId);
-
-        // Get suite details
-        const suiteResponse = await this.http.get(`/test-suites/${currentSuiteId}`, {
-          params: { projectKey }
-        });
-
-        const suite = suiteResponse.data?.data || suiteResponse.data;
+      while (currentSuiteId && !visited.has(currentSuiteId)) {
+        visited.add(currentSuiteId);
         
-        if (!suite) {
-          break;
-        }
+        const suite = allSuites.find(s => s.id === currentSuiteId);
+        if (!suite) break;
 
-        // Add current suite to path
         path.unshift({
-          id: currentSuiteId,
-          name: suite.name || suite.title || `Suite ${currentSuiteId}`
+          id: suite.id,
+          name: suite.name || suite.title || `Suite ${suite.id}`
         });
 
-        // If this suite has no parent, we've reached the root
-        if (!suite.parentSuiteId) {
-          break;
-        }
-
-        // Move up to parent
-        currentSuiteId = suite.parentSuiteId;
-        depth++;
+        currentSuiteId = suite.parentSuiteId || 0;
       }
 
       return path;
+
     } catch (error) {
       console.warn(`Error getting suite hierarchy path for suite ${suiteId}:`, error);
       return [{id: suiteId, name: `Suite ${suiteId}`}];
@@ -572,41 +562,58 @@ export class EnhancedZebrunnerClient {
   }
 
   /**
+   * Get all suites for a project with caching (5-minute cache)
+   */
+  private async getAllSuitesWithCache(projectKey: string): Promise<ZebrunnerTestSuite[]> {
+    const cacheKey = `suites_${projectKey}`;
+    const cached = this.suitesCache.get(cacheKey);
+    const cacheTimeout = 5 * 60 * 1000; // 5 minutes
+
+    // Return cached data if still valid
+    if (cached && (Date.now() - cached.timestamp) < cacheTimeout) {
+      return cached.suites;
+    }
+
+    // Fetch all suites with pagination
+    let allSuites: ZebrunnerTestSuite[] = [];
+    let page = 0;
+    let hasMore = true;
+    const pageSize = this.config.maxPageSize || 100;
+
+    while (hasMore && page < 50) { // Safety limit
+      const result = await this.getTestSuites(projectKey, {
+        size: pageSize,
+        page: page
+      });
+
+      allSuites.push(...result.items);
+      hasMore = result.items.length === pageSize;
+      page++;
+    }
+
+    // Cache the results
+    this.suitesCache.set(cacheKey, {
+      suites: allSuites,
+      timestamp: Date.now()
+    });
+
+    return allSuites;
+  }
+
+  /**
    * Find root suite ID by traversing up the hierarchy
    */
   private async findRootSuiteId(projectKey: string, suiteId: number): Promise<number | null> {
     try {
-      let currentSuiteId = suiteId;
-      let visitedSuites = new Set<number>(); // Prevent infinite loops
-      const maxDepth = 20; // Safety limit
-      let depth = 0;
+      // Use cached comprehensive approach
+      const allSuites = await this.getAllSuitesWithCache(projectKey);
 
-      while (depth < maxDepth && !visitedSuites.has(currentSuiteId)) {
-        visitedSuites.add(currentSuiteId);
+      // Use Java methodology to find root ID
+      const { HierarchyProcessor } = await import("../utils/hierarchy.js");
+      const rootId = HierarchyProcessor.getRootId(allSuites, suiteId);
+      
+      return rootId;
 
-        // Get suite details
-        const suiteResponse = await this.http.get(`/test-suites/${currentSuiteId}`, {
-          params: { projectKey }
-        });
-
-        const suite = suiteResponse.data?.data || suiteResponse.data;
-        
-        if (!suite) {
-          break;
-        }
-
-        // If this suite has no parent, it's the root
-        if (!suite.parentSuiteId) {
-          return currentSuiteId;
-        }
-
-        // Move up to parent
-        currentSuiteId = suite.parentSuiteId;
-        depth++;
-      }
-
-      // If we hit max depth or loop, return the starting suite as fallback
-      return suiteId;
     } catch (error) {
       console.warn(`Error finding root suite for suite ${suiteId}:`, error);
       return null;
@@ -826,4 +833,5 @@ export class EnhancedZebrunnerClient {
       return data.map((item: any) => ZebrunnerTestResultResponseSchema.parse(item));
     });
   }
+
 }
