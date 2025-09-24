@@ -309,7 +309,7 @@ describe('ZebrunnerReportingClient Integration Tests', () => {
         assert.equal(typeof launch.passed, 'number');
       }
 
-      console.log(launch.toString());
+      console.log(launch.build);
 
       console.log('[+] Authentication and API flow test completed successfully');
     });
