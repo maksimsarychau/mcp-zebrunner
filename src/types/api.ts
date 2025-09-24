@@ -124,6 +124,15 @@ export const GetSuiteHierarchyInputSchema = z.object({
   format: z.enum(['dto', 'json', 'string']).default('json')
 });
 
+export const GetLauncherDetailsInputSchema = z.object({
+  projectKey: z.string().min(1).optional(),
+  projectId: z.number().int().positive().optional(),
+  launchId: z.number().int().positive(),
+  includeLaunchDetails: z.boolean().default(true),
+  includeTestSessions: z.boolean().default(true),
+  format: z.enum(['dto', 'json', 'string']).default('json')
+});
+
 // Type exports for input schemas
 export type GetTestCasesInput = z.infer<typeof GetTestCasesInputSchema>;
 export type GetTestSuitesInput = z.infer<typeof GetTestSuitesInputSchema>;
@@ -132,6 +141,7 @@ export type GetTestResultsInput = z.infer<typeof GetTestResultsInputSchema>;
 export type SearchTestCasesInput = z.infer<typeof SearchTestCasesInputSchema>;
 export type FindTestCaseByKeyInput = z.infer<typeof FindTestCaseByKeyInputSchema>;
 export type GetSuiteHierarchyInput = z.infer<typeof GetSuiteHierarchyInputSchema>;
+export type GetLauncherDetailsInput = z.infer<typeof GetLauncherDetailsInputSchema>;
 
 // Error types
 export class ZebrunnerApiError extends Error {

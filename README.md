@@ -17,6 +17,11 @@ The main **unified server** (`src/server.ts`) provides the most comprehensive an
   - `generate_draft_test_by_key` - ✨ **NEW** Generate test code with framework detection (requires ENABLE_RULES_ENGINE=true)
   - `get_enhanced_test_coverage_with_rules` - ✨ **NEW** Enhanced coverage with configurable rules validation
 
+- **🚀 NEW Reporting API Features** (Uses enhanced authentication with access token → bearer token flow):
+  - `get_launcher_details` - ✨ **NEW** Comprehensive launcher info with test sessions using new authentication (✅ **Tested**)
+  - `get_launcher_summary` - ✨ **NEW** Quick launcher overview with test results summary (✅ **Tested**)
+  - `test_reporting_connection` - ✨ **NEW** Test connection to reporting API with bearer token authentication (✅ **Tested**)
+
 - **Enhanced Framework**:
   - **Advanced API Client** - Retry logic, error handling, comprehensive pagination
   - **Hierarchy Processing** - Suite tree building, path generation, level calculation  

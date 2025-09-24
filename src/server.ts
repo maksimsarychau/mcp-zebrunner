@@ -5,11 +5,14 @@ import { z } from "zod";
 
 // Enhanced imports
 import { EnhancedZebrunnerClient } from "./api/enhanced-client.js";
+import { ZebrunnerReportingClient } from "./api/reporting-client.js";
+import { ZebrunnerReportingToolHandlers } from "./handlers/reporting-tools.js";
 import { FormatProcessor } from "./utils/formatter.js";
 import { HierarchyProcessor } from "./utils/hierarchy.js";
 import { RulesParser } from "./utils/rules-parser.js";
 import { TestGenerator } from "./utils/test-generator.js";
 import { ZebrunnerConfig } from "./types/api.js";
+import { ZebrunnerReportingConfig } from "./types/reporting.js";
 import { 
   ZebrunnerTestCase, 
   ZebrunnerTestSuite, 
@@ -63,6 +66,17 @@ const config: ZebrunnerConfig = {
 };
 
 const client = new EnhancedZebrunnerClient(config);
+
+// Initialize reporting client (new authentication method)
+const reportingConfig: ZebrunnerReportingConfig = {
+  baseUrl: ZEBRUNNER_URL.replace('/api/public/v1', ''),
+  accessToken: ZEBRUNNER_TOKEN,
+  timeout: 30_000,
+  debug: DEBUG_MODE
+};
+
+const reportingClient = new ZebrunnerReportingClient(reportingConfig);
+const reportingHandlers = new ZebrunnerReportingToolHandlers(reportingClient);
 
 /** Debug logging utility with safe serialization - uses stderr to avoid MCP protocol interference */
 function debugLog(message: string, data?: unknown) {
@@ -448,8 +462,8 @@ async function main() {
   const server = new McpServer(
     { 
       name: "mcp-zebrunner", 
-      version: "3.0.1",
-      description: "Unified Zebrunner MCP Server with comprehensive features and improved error handling"
+      version: "3.1.0",
+      description: "Unified Zebrunner MCP Server with comprehensive features, improved error handling, and new Reporting API support"
     },
     { 
       capabilities: {
@@ -458,10 +472,11 @@ async function main() {
     }
   );
 
-  debugLog("🚀 Starting Zebrunner Unified MCP Server", {
+  debugLog("🚀 Starting Zebrunner Unified MCP Server with Reporting API", {
     url: ZEBRUNNER_URL,
     debug: DEBUG_MODE,
-    experimental: EXPERIMENTAL_FEATURES
+    experimental: EXPERIMENTAL_FEATURES,
+    reportingApiEnabled: true
   });
 
   // ========== CORE WORKING FEATURES ==========
@@ -1850,6 +1865,90 @@ async function main() {
             type: "text" as const,
             text: `❌ Error getting root ID for suite ${args.suite_id} in ${args.project_key}: ${error.message}`
           }]
+        };
+      }
+    }
+  );
+
+  // ========== NEW REPORTING API TOOLS ==========
+
+  server.tool(
+    "get_launcher_details",
+    "🚀 Get comprehensive launcher details including test sessions (uses new reporting API with enhanced authentication)",
+    {
+      projectKey: z.string().min(1).optional().describe("Project key (e.g., MFPAND) - alternative to projectId"),
+      projectId: z.number().int().positive().optional().describe("Project ID (e.g., 7) - alternative to projectKey"),
+      launchId: z.number().int().positive().describe("Launch ID (e.g., 118685)"),
+      includeLaunchDetails: z.boolean().default(true).describe("Include detailed launch information"),
+      includeTestSessions: z.boolean().default(true).describe("Include test sessions data"),
+      format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format")
+    },
+    async (args) => {
+      try {
+        debugLog("get_launcher_details called", args);
+        return await reportingHandlers.getLauncherDetails(args);
+      } catch (error: any) {
+        debugLog("Error in get_launcher_details", { error: error.message, args });
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error getting launcher details: ${error.message}`
+          }]
+        };
+      }
+    }
+  );
+
+  server.tool(
+    "get_launcher_summary",
+    "📊 Get quick launcher summary without detailed test sessions (uses new reporting API)",
+    {
+      projectKey: z.string().min(1).optional().describe("Project key (e.g., MFPAND) - alternative to projectId"),
+      projectId: z.number().int().positive().optional().describe("Project ID (e.g., 7) - alternative to projectKey"),
+      launchId: z.number().int().positive().describe("Launch ID (e.g., 118685)"),
+      format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format")
+    },
+    async (args) => {
+      try {
+        debugLog("get_launcher_summary called", args);
+        return await reportingHandlers.getLauncherSummary(args);
+      } catch (error: any) {
+        debugLog("Error in get_launcher_summary", { error: error.message, args });
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error getting launcher summary: ${error.message}`
+          }]
+        };
+      }
+    }
+  );
+
+  server.tool(
+    "test_reporting_connection",
+    "🔌 Test connection to Zebrunner Reporting API with new authentication",
+    {},
+    async () => {
+      try {
+        debugLog("test_reporting_connection called");
+        const result = await reportingClient.testConnection();
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(result, null, 2)
+            }
+          ]
+        };
+      } catch (error: any) {
+        debugLog("Error in test_reporting_connection", { error: error.message });
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `❌ Reporting API Connection failed: ${error.message}`
+            }
+          ]
         };
       }
     }
