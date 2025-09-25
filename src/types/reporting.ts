@@ -93,7 +93,7 @@ export const ProjectResponseSchema = z.object({
   key: z.string(),
   logoUrl: z.string().optional(),
   createdAt: z.string(),
-  leadId: z.number().optional(),
+  leadId: z.number().nullable().optional(),
   publiclyAccessible: z.boolean().optional(),
   deleted: z.boolean()
 });

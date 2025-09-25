@@ -231,7 +231,22 @@ export class ZebrunnerReportingClient {
     
     // Extract the actual project data from the nested response
     const projectData = response.data || response;
-    const project = ProjectResponseSchema.parse(projectData);
+    
+    // Debug: Log the actual data being parsed
+    if (process.env.DEBUG === 'true') {
+      console.error('Project data being parsed:', JSON.stringify(projectData, null, 2));
+    }
+    
+    let project;
+    try {
+      project = ProjectResponseSchema.parse(projectData);
+    } catch (error) {
+      if (process.env.DEBUG === 'true') {
+        console.error('ProjectResponseSchema validation failed:', error);
+        console.error('Raw projectData:', projectData);
+      }
+      throw new ZebrunnerReportingError(`Failed to parse project data for ${projectKey}: ${error instanceof Error ? error.message : error}`);
+    }
     
     // Cache the result
     this.projectCache.set(projectKey, { project, timestamp: Date.now() });

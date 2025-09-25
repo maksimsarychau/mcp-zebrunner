@@ -22,6 +22,10 @@ The main **unified server** (`src/server.ts`) provides the most comprehensive an
   - `get_launcher_summary` - ✨ **NEW** Quick launcher overview with test results summary (✅ **Tested**)
   - `test_reporting_connection` - ✨ **NEW** Test connection to reporting API with bearer token authentication (✅ **Tested**)
 
+- **📊 NEW SQL Widget Tools** (Uses reporting API with SQL widget templates and dynamic project resolution):
+  - `get_platform_results_by_period` - ✨ **NEW** Platform test results by time period (templateId: 8, configurable output) (✅ **Implemented**)
+  - `get_top_bugs` - ✨ **NEW** Top N most frequent defects with HTML parsing and JIRA links (templateId: 4, extracts ticket IDs from HTML) (✅ **Implemented**)
+
 - **Enhanced Framework**:
   - **Advanced API Client** - Retry logic, error handling, comprehensive pagination
   - **Hierarchy Processing** - Suite tree building, path generation, level calculation  
@@ -899,9 +903,110 @@ describe('Verify iOS navigation flow', () => {
 ```
 ```
 
+### 📊 SQL Widget Tools Examples
+
+**Note**: These tools use dynamic project ID resolution - project aliases are mapped to project keys (e.g., "ios" → "MFPIOS") and then resolved to actual project IDs via the reporting API. This ensures compatibility across different Zebrunner instances.
+
+#### 9. Platform Test Results by Period
+```
+Natural language: "Get iOS test results for the last 7 days"
+
+Tool: get_platform_results_by_period
+Parameters:
+- project: "ios"
+- period: "Last 7 Days"
+- platform: "ios"
+- format: "formatted"
+```
+
+**Response (formatted):**
+```json
+{
+  "summary": {
+    "project": "ios",
+    "period": "Last 7 Days",
+    "platform": "ios"
+  },
+  "data": {
+    "items": [
+      {
+        "platform": "iOS",
+        "passed": 145,
+        "failed": 12,
+        "skipped": 3,
+        "total": 160,
+        "passRate": "90.6%"
+      }
+    ]
+  }
+}
+```
+
+#### 10. Top Bugs with JIRA Links (HTML Parsing)
+```
+Natural language: "Show me the top 5 most frequent bugs for iOS in the last 7 days"
+
+Tool: get_top_bugs
+Parameters:
+- project: "ios"
+- period: "Last 7 Days"
+- limit: 5
+- format: "formatted"
+```
+
+**Response (formatted):**
+```
+📊 **Top 5 Most Frequent Bugs** (Last 7 Days)
+
+1. **[POW-5130](https://myfitnesspal.atlassian.net/browse/POW-5130)** - 24 of 225 tests (10.67%)
+   POW-5130
+
+2. **[NANA-531](https://myfitnesspal.atlassian.net/browse/NANA-531)** - 22 of 225 tests (9.78%)
+   NANA-531
+
+3. **TO REVIEW** - 45 of 225 tests (20.0%)
+   TO REVIEW
+```
+
+**Response (raw):**
+```json
+[
+  {
+    "key": "POW-5130",
+    "title": "POW-5130", 
+    "failures": 24,
+    "total": 225,
+    "percentage": 10.67,
+    "failureCount": 24,
+    "link": "https://myfitnesspal.atlassian.net/browse/POW-5130"
+  },
+  {
+    "key": "TO REVIEW",
+    "title": "TO REVIEW",
+    "failures": 45,
+    "total": 225,
+    "percentage": 20.0,
+    "failureCount": 45,
+    "link": null
+  }
+]
+```
+
+#### 11. Web Platform Results with Browser Filter
+```
+Natural language: "Get web test results for the last month filtered by Chrome browser"
+
+Tool: get_platform_results_by_period
+Parameters:
+- project: "web"
+- period: "Month"
+- browser: ["chrome"]
+- format: "raw"
+```
+
 ### 🎯 Real-World Scenarios
 
-#### 9. CI/CD Integration Example
+#### 12. CI/CD Integration Example
 ```bash
 # In your CI/CD pipeline
 export ZEBRUNNER_URL="https://company.zebrunner.com/api/public/v1"

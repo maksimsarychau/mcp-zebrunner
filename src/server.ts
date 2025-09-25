@@ -78,6 +78,28 @@ const reportingConfig: ZebrunnerReportingConfig = {
 const reportingClient = new ZebrunnerReportingClient(reportingConfig);
 const reportingHandlers = new ZebrunnerReportingToolHandlers(reportingClient);
 
+// === Widget mini-config ===
+const WIDGET_BASE_URL = ZEBRUNNER_URL.replace('/api/public/v1', '');
+
+// Project aliases mapping to project keys (dynamically resolved to IDs)
+const PROJECT_ALIASES: Record<string, string> = {
+  web: "MFPWEB", android: "MFPAND", ios: "MFPIOS", api: "MFPAPI"
+};
+
+const PERIODS = ["Last 7 Days","Week","Month"] as const;
+
+const PLATFORM_MAP: Record<string, string[]> = {
+  web: [],        // web often uses BROWSER instead
+  api: ["api"],
+  android: [],
+  ios: ["ios"]
+};
+
+const TEMPLATE = {
+  RESULTS_BY_PLATFORM: 8,
+  TOP_BUGS: 4
+} as const;
+
 /** Debug logging utility with safe serialization - uses stderr to avoid MCP protocol interference */
 function debugLog(message: string, data?: unknown) {
   if (DEBUG_MODE) {
@@ -129,6 +151,66 @@ function validateApiResponse(data: unknown, expectedType: string): boolean {
   }
 
   return true;
+}
+
+// === Generic SQL widget caller ===
+async function callWidgetSql(
+  projectId: number,
+  templateId: number,
+  paramsConfig: any
+): Promise<any> {
+  const bearerToken = await reportingClient.authenticate();
+  const url = `${WIDGET_BASE_URL}/api/reporting/v1/widget-templates/sql?projectId=${projectId}`;
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${bearerToken}`,
+      "Content-Type": "application/json",
+      "Accept": "application/json"
+    },
+    body: JSON.stringify({ templateId, paramsConfig })
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Widget SQL failed: ${res.status} ${res.statusText} — ${text.slice(0, 500)}`);
+  }
+  return res.json();
+}
+
+// === Build paramsConfig for widget requests ===
+function buildParamsConfig(opts: {
+  period: (typeof PERIODS)[number];
+  platform?: string | string[];  // alias ("ios") or explicit array (["ios"])
+  browser?: string[];            // e.g., ["chrome"] for web
+  dashboardName?: string;        // optional override
+  extra?: Partial<Record<string, any>>;
+}) {
+  const { period, platform, browser = [], dashboardName, extra = {} } = opts;
+
+  if (!PERIODS.includes(period as any)) {
+    throw new Error(`Invalid period: ${period}. Allowed: ${PERIODS.join(", ")}`);
+  }
+
+  const resolvedPlatform: string[] =
+    Array.isArray(platform)
+      ? platform
+      : platform
+      ? (PLATFORM_MAP[platform] ?? [])
+      : [];
+
+  return {
+    BROWSER: browser,
+    DEFECT: [], APPLICATION: [], BUILD: [], PRIORITY: [],
+    RUN: [], USER: [], ENV: [], MILESTONE: [],
+    PLATFORM: resolvedPlatform,
+    STATUS: [], LOCALE: [],
+    PERIOD: period,
+    dashboardName: dashboardName ?? "Weekly results",
+    isReact: true,
+    ...extra
+  };
 }
 
 /** Enhanced markdown rendering with debug info */
@@ -1949,6 +2031,257 @@ async function main() {
               text: `❌ Reporting API Connection failed: ${error.message}`
             }
           ]
+        };
+      }
+    }
+  );
+
+  // ========== ZEBRUNNER WIDGET TOOLS ==========
+
+  // === Tool #1: Platform test results by period ===
+  server.tool(
+    "get_platform_results_by_period",
+    "📊 Get test results by platform for a given period (SQL widget, templateId: 8)",
+    {
+      project: z.union([z.enum(["web","android","ios","api"]), z.number()])
+        .default("web")
+        .describe("Project alias (web=MFPWEB, android=MFPAND, ios=MFPIOS, api=MFPAPI) or numeric projectId"),
+      period: z.enum(["Last 7 Days","Week","Month"])
+        .default("Last 7 Days")
+        .describe("Time period"),
+      platform: z.union([z.enum(["web","android","ios","api"]), z.array(z.string())])
+        .optional()
+        .describe("Platform alias or explicit array for paramsConfig.PLATFORM"),
+      browser: z.array(z.string())
+        .default([])
+        .describe("Optional BROWSER filter, e.g., ['chrome'] for web"),
+      templateId: z.number()
+        .default(TEMPLATE.RESULTS_BY_PLATFORM)
+        .describe("Override templateId if needed"),
+      dashboardName: z.string().optional()
+        .describe("Override dashboard title"),
+      format: z.enum(['raw', 'formatted']).default('formatted')
+        .describe("Output format: raw widget response or formatted data")
+    },
+    async (args) => {
+      try {
+        debugLog("get_platform_results_by_period called", args);
+        
+        // Resolve project ID dynamically
+        let projectId: number;
+        if (typeof args.project === "number") {
+          projectId = args.project;
+        } else {
+          const projectKey = PROJECT_ALIASES[args.project] || args.project;
+          projectId = await reportingClient.getProjectId(projectKey);
+        }
+
+        const paramsConfig = buildParamsConfig({
+          period: args.period,
+          platform: args.platform ?? (typeof args.project === 'string' ? args.project : undefined),   // default to project alias
+          browser: args.browser,
+          dashboardName: args.dashboardName
+        });
+
+        const data = await callWidgetSql(projectId, args.templateId, paramsConfig);
+
+        if (DEBUG_MODE) {
+          console.error("get_platform_results_by_period ok", {
+            projectId, templateId: args.templateId, period: args.period
+          });
+        }
+
+        let result;
+        if (args.format === 'raw') {
+          result = data;
+        } else {
+          // Format the data for better readability
+          result = {
+            summary: {
+              project: args.project,
+              period: args.period,
+              platform: args.platform ?? args.project,
+              browser: args.browser.length > 0 ? args.browser : undefined
+            },
+            data: data
+          };
+        }
+
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }]
+        };
+      } catch (error: any) {
+        debugLog("Error in get_platform_results_by_period", { error: error.message, args });
+        return { 
+          content: [{ 
+            type: "text" as const, 
+            text: `❌ Error getting platform results: ${error?.message || error}` 
+          }] 
+        };
+      }
+    }
+  );
+
+  // === Tool #2: Top N most frequent bugs (with optional links) ===
+  server.tool(
+    "get_top_bugs",
+    "🐞 Top N most frequent defects with optional issue links (SQL widget, templateId: 4)",
+    {
+      project: z.union([z.enum(["web","android","ios","api"]), z.number()])
+        .default("web")
+        .describe("Project alias (web=MFPWEB, android=MFPAND, ios=MFPIOS, api=MFPAPI) or numeric projectId"),
+      period: z.enum(["Last 7 Days","Week","Month"])
+        .default("Last 7 Days")
+        .describe("Time period"),
+      limit: z.number().int().positive().max(100)
+        .default(10)
+        .describe("How many bugs to return"),
+      templateId: z.number()
+        .default(TEMPLATE.TOP_BUGS)
+        .describe("Override templateId if needed"),
+      issueUrlPattern: z.string().optional()
+        .describe("e.g., 'https://myfitnesspal.atlassian.net/browse/{key}'"),
+      platform: z.union([z.enum(["web","android","ios","api"]), z.array(z.string())])
+        .optional()
+        .describe("Optional platform filter; defaults to [] for this widget"),
+      format: z.enum(['raw', 'formatted']).default('formatted')
+        .describe("Output format: raw widget response or formatted data")
+    },
+    async (args) => {
+      try {
+        debugLog("get_top_bugs called", args);
+        
+        // Resolve project ID dynamically
+        let projectId: number;
+        if (typeof args.project === "number") {
+          projectId = args.project;
+        } else {
+          const projectKey = PROJECT_ALIASES[args.project] || args.project;
+          projectId = await reportingClient.getProjectId(projectKey);
+        }
+
+        // Keep PLATFORM empty by default as per your examples
+        const paramsConfig = buildParamsConfig({
+          period: args.period,
+          platform: args.platform ?? [],
+          dashboardName: "Bugs repro rate (last 7 days)"
+        });
+
+        const raw = await callWidgetSql(projectId, args.templateId, paramsConfig);
+
+        if (args.format === 'raw') {
+          return {
+            content: [{ type: "text" as const, text: JSON.stringify(raw, null, 2) }]
+          };
+        }
+
+        // Normalize returned rows - widget returns array directly
+        const rows: any[] = Array.isArray(raw) ? raw : [];
+
+        if (rows.length === 0) {
+          const formatValue = args.format as 'raw' | 'formatted';
+          return {
+            content: [{ type: "text" as const, text: formatValue === 'raw' ? JSON.stringify(raw, null, 2) : "No bug data found" }]
+          };
+        }
+
+        // Parse the widget response which contains HTML in DEFECT field
+        const parseDefectHtml = (html: string) => {
+          if (!html) return { key: "N/A", title: "", existingLink: null };
+          
+          // Extract ticket ID from href or text content
+          const hrefMatch = html.match(/href="([^"]*\/browse\/([^"]+))"/);
+          const textMatch = html.match(/>([^<]+)</);
+          
+          if (hrefMatch && hrefMatch[2]) {
+            return {
+              key: hrefMatch[2], // Ticket ID like "POW-5130"
+              title: textMatch ? textMatch[1] : hrefMatch[2],
+              existingLink: hrefMatch[1]
+            };
+          }
+          
+          // Handle "TO REVIEW" case or other non-ticket entries
+          const cleanText = textMatch ? textMatch[1] : html.replace(/<[^>]*>/g, '');
+          return {
+            key: cleanText,
+            title: cleanText,
+            existingLink: null
+          };
+        };
+
+        const parseFailures = (failuresStr: string) => {
+          // Parse "24 of 225" format
+          const match = failuresStr.match(/(\d+)\s+of\s+(\d+)/);
+          if (match) {
+            return {
+              failures: parseInt(match[1]),
+              total: parseInt(match[2]),
+              failureCount: parseInt(match[1])
+            };
+          }
+          return { failures: 0, total: 0, failureCount: 0 };
+        };
+
+        const top = rows
+          .slice()
+          .map(row => {
+            const defectInfo = parseDefectHtml(row.DEFECT || "");
+            const failureInfo = parseFailures(row.FAILURES || "0 of 0");
+            const percentage = parseFloat(row["%"] || "0");
+            
+            // Use existing link from HTML or construct new one
+            let link = defectInfo.existingLink;
+            if (args.issueUrlPattern && defectInfo.key !== "N/A" && !link) {
+              link = args.issueUrlPattern.replace("{key}", defectInfo.key);
+            }
+            
+            return {
+              key: defectInfo.key,
+              title: defectInfo.title,
+              failures: failureInfo.failures,
+              total: failureInfo.total,
+              percentage: percentage,
+              failureCount: failureInfo.failureCount, // For sorting
+              link: link
+            };
+          })
+          .sort((a, b) => b.failureCount - a.failureCount)
+          .slice(0, args.limit);
+
+        if (DEBUG_MODE) {
+          console.error("get_top_bugs ok", {
+            projectId, templateId: args.templateId, period: args.period, returned: top.length
+          });
+        }
+
+        // Return formatted or raw output based on format parameter
+        const formatValue = args.format as 'raw' | 'formatted';
+        if (formatValue === 'raw') {
+          return {
+            content: [{ type: "text" as const, text: JSON.stringify(top, null, 2) }]
+          };
+        }
+
+        // Return formatted output
+        const formatted = `📊 **Top ${top.length} Most Frequent Bugs** (${args.period})\n\n` +
+          top.map((bug, i) => {
+            const rank = i + 1;
+            const linkText = bug.link ? `[${bug.key}](${bug.link})` : bug.key;
+            const failureText = `${bug.failures} of ${bug.total} tests (${bug.percentage}%)`;
+            return `${rank}. **${linkText}** - ${failureText}\n   ${bug.title || bug.key}`;
+          }).join('\n\n');
+
+        return {
+          content: [{ type: "text" as const, text: formatted }]
+        };
+      } catch (error: any) {
+        debugLog("Error in get_top_bugs", { error: error.message, args });
+        return { 
+          content: [{ 
+            type: "text" as const, 
+            text: `❌ Error getting top bugs: ${error?.message || error}` 
+          }] 
         };
       }
     }

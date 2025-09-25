@@ -59,7 +59,7 @@ function renderTestCaseMarkdown(tcRaw: any): string {
 
 async function main() {
   const server = new McpServer(
-    { name: "zebrunner-mcp-enhanced", version: "2.0.0" },
+    { name: "zebrunner-mcp-enhanced-working", version: "2.0.0" },
     { 
       capabilities: {
         tools: {}
@@ -397,4 +397,6 @@ main().catch((e) => {
   console.error("MCP server failed to start:", e);
   process.exit(1);
 });
+
+
 
