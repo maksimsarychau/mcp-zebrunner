@@ -133,6 +133,24 @@ export const GetLauncherDetailsInputSchema = z.object({
   format: z.enum(['dto', 'json', 'string']).default('json')
 });
 
+export const ValidateTestCaseInputSchema = z.object({
+  projectKey: z.string().min(1),
+  caseKey: z.string().min(1),
+  rulesFilePath: z.string().optional(),
+  checkpointsFilePath: z.string().optional(),
+  format: z.enum(['dto', 'json', 'string', 'markdown']).default('json'),
+  improveIfPossible: z.boolean().default(true)
+});
+
+export const ImproveTestCaseInputSchema = z.object({
+  projectKey: z.string().min(1),
+  caseKey: z.string().min(1),
+  rulesFilePath: z.string().optional(),
+  checkpointsFilePath: z.string().optional(),
+  format: z.enum(['dto', 'json', 'string', 'markdown']).default('markdown'),
+  applyHighConfidenceChanges: z.boolean().default(true)
+});
+
 // Type exports for input schemas
 export type GetTestCasesInput = z.infer<typeof GetTestCasesInputSchema>;
 export type GetTestSuitesInput = z.infer<typeof GetTestSuitesInputSchema>;
@@ -142,6 +160,8 @@ export type SearchTestCasesInput = z.infer<typeof SearchTestCasesInputSchema>;
 export type FindTestCaseByKeyInput = z.infer<typeof FindTestCaseByKeyInputSchema>;
 export type GetSuiteHierarchyInput = z.infer<typeof GetSuiteHierarchyInputSchema>;
 export type GetLauncherDetailsInput = z.infer<typeof GetLauncherDetailsInputSchema>;
+export type ValidateTestCaseInput = z.infer<typeof ValidateTestCaseInputSchema>;
+export type ImproveTestCaseInput = z.infer<typeof ImproveTestCaseInputSchema>;
 
 // Error types
 export class ZebrunnerApiError extends Error {

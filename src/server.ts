@@ -2287,6 +2287,78 @@ async function main() {
     }
   );
 
+  // ========== TEST CASE VALIDATION TOOL ==========
+
+  server.tool(
+    "validate_test_case",
+    "🔍 Validate a test case against quality standards and best practices (Dynamic Rules Support + Improvement)",
+    {
+      projectKey: z.string().min(1).describe("Project key (e.g., MFPAND)"),
+      caseKey: z.string().min(1).describe("Test case key (e.g., MFPAND-29)"),
+      rulesFilePath: z.string().optional().describe("Path to custom rules markdown file"),
+      checkpointsFilePath: z.string().optional().describe("Path to custom checkpoints markdown file"),
+      format: z.enum(['dto', 'json', 'string', 'markdown']).default('markdown').describe("Output format"),
+      improveIfPossible: z.boolean().default(true).describe("Attempt to automatically improve the test case")
+    },
+    async (args) => {
+      try {
+        debugLog("validate_test_case called", args);
+        
+        // Import handlers here to avoid circular dependencies
+        const { ZebrunnerToolHandlers } = await import("./handlers/tools.js");
+        // Create a basic client instance for validation since enhanced client has different interface
+        const { ZebrunnerApiClient } = await import("./api/client.js");
+        const basicClient = new ZebrunnerApiClient(config);
+        const toolHandlers = new ZebrunnerToolHandlers(basicClient);
+        
+        return await toolHandlers.validateTestCase(args);
+      } catch (error: any) {
+        debugLog("Error in validate_test_case", { error: error.message, args });
+        return { 
+          content: [{ 
+            type: "text" as const, 
+            text: `❌ Error validating test case: ${error?.message || error}` 
+          }] 
+        };
+      }
+    }
+  );
+
+  server.tool(
+    "improve_test_case",
+    "🔧 Analyze and improve a test case with detailed suggestions and optional automatic fixes",
+    {
+      projectKey: z.string().min(1).describe("Project key (e.g., MFPAND)"),
+      caseKey: z.string().min(1).describe("Test case key (e.g., MFPAND-29)"),
+      rulesFilePath: z.string().optional().describe("Path to custom rules markdown file"),
+      checkpointsFilePath: z.string().optional().describe("Path to custom checkpoints markdown file"),
+      format: z.enum(['dto', 'json', 'string', 'markdown']).default('markdown').describe("Output format"),
+      applyHighConfidenceChanges: z.boolean().default(true).describe("Automatically apply high-confidence improvements")
+    },
+    async (args) => {
+      try {
+        debugLog("improve_test_case called", args);
+        
+        // Import handlers here to avoid circular dependencies
+        const { ZebrunnerToolHandlers } = await import("./handlers/tools.js");
+        // Create a basic client instance for improvement since enhanced client has different interface
+        const { ZebrunnerApiClient } = await import("./api/client.js");
+        const basicClient = new ZebrunnerApiClient(config);
+        const toolHandlers = new ZebrunnerToolHandlers(basicClient);
+        
+        return await toolHandlers.improveTestCase(args);
+      } catch (error: any) {
+        debugLog("Error in improve_test_case", { error: error.message, args });
+        return { 
+          content: [{ 
+            type: "text" as const, 
+            text: `❌ Error improving test case: ${error?.message || error}` 
+          }] 
+        };
+      }
+    }
+  );
+
   // ========== SERVER STARTUP ==========
 
   const transport = new StdioServerTransport();
