@@ -18,7 +18,7 @@ Test cases should be written with the **"Random Person Test"** - imagine stoppin
 ### 3. Documentation Requirements
 For main sections, always include:
 - **Requirements Links**: Confluence pages, Epics, Stories, Tasks
-- **Visualization Links**: Figma designs, mockups, wireframes
+- **Visualization Links if they are available**: Figma designs, mockups, wireframes
 - **Split Information**: Feature split names and treatments
 - **Restrictions**: Device language, app location settings, platform-specific limitations
 - **Review Check**: All referenced links are valid and accessible
