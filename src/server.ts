@@ -1986,8 +1986,8 @@ async function main() {
   // ========== NEW REPORTING API TOOLS ==========
 
   server.tool(
-    "get_launcher_details",
-    "🚀 Get comprehensive launcher details including test sessions (uses new reporting API with enhanced authentication)",
+    "get_launch_details",
+    "🚀 Get comprehensive launch details including test sessions (uses new reporting API with enhanced authentication)",
     {
       projectKey: z.string().min(1).optional().describe("Project key (e.g., MFPAND) - alternative to projectId"),
       projectId: z.number().int().positive().optional().describe("Project ID (e.g., 7) - alternative to projectKey"),
@@ -1998,10 +1998,10 @@ async function main() {
     },
     async (args) => {
       try {
-        debugLog("get_launcher_details called", args);
+        debugLog("get_launch_details called", args);
         return await reportingHandlers.getLauncherDetails(args);
       } catch (error: any) {
-        debugLog("Error in get_launcher_details", { error: error.message, args });
+        debugLog("Error in get_launch_details", { error: error.message, args });
         return {
           content: [{
             type: "text" as const,
@@ -2013,8 +2013,8 @@ async function main() {
   );
 
   server.tool(
-    "get_launcher_summary",
-    "📊 Get quick launcher summary without detailed test sessions (uses new reporting API)",
+    "get_launch_summary",
+    "📊 Get quick launch summary without detailed test sessions (uses new reporting API)",
     {
       projectKey: z.string().min(1).optional().describe("Project key (e.g., MFPAND) - alternative to projectId"),
       projectId: z.number().int().positive().optional().describe("Project ID (e.g., 7) - alternative to projectKey"),
@@ -2023,10 +2023,10 @@ async function main() {
     },
     async (args) => {
       try {
-        debugLog("get_launcher_summary called", args);
+        debugLog("get_launch_summary called", args);
         return await reportingHandlers.getLauncherSummary(args);
       } catch (error: any) {
-        debugLog("Error in get_launcher_summary", { error: error.message, args });
+        debugLog("Error in get_launch_summary", { error: error.message, args });
         return {
           content: [{
             type: "text" as const,
@@ -2074,9 +2074,9 @@ async function main() {
     "get_platform_results_by_period",
     "📊 Get test results by platform for a given period (SQL widget, templateId: 8)",
     {
-      project: z.union([z.enum(["web","android","ios","api"]), z.number()])
+      project: z.union([z.enum(["web","android","ios","api"]), z.string(), z.number()])
         .default("web")
-        .describe("Project alias (web=MFPWEB, android=MFPAND, ios=MFPIOS, api=MFPAPI) or numeric projectId"),
+        .describe("Project alias ('web', 'android', 'ios', 'api'), project key ('MFPAND', 'MCP', etc.), or numeric projectId"),
       period: z.enum(["Last 7 Days","Week","Month"])
         .default("Last 7 Days")
         .describe("Time period"),
@@ -2157,9 +2157,9 @@ async function main() {
     "get_top_bugs",
     "🐞 Top N most frequent defects with optional issue links (SQL widget, templateId: 4)",
     {
-      project: z.union([z.enum(["web","android","ios","api"]), z.number()])
+      project: z.union([z.enum(["web","android","ios","api"]), z.string(), z.number()])
         .default("web")
-        .describe("Project alias (web=MFPWEB, android=MFPAND, ios=MFPIOS, api=MFPAPI) or numeric projectId"),
+        .describe("Project alias ('web', 'android', 'ios', 'api'), project key ('MFPAND', 'MCP', etc.), or numeric projectId"),
       period: z.enum(["Last 7 Days","Week","Month"])
         .default("Last 7 Days")
         .describe("Time period"),
@@ -2320,9 +2320,9 @@ async function main() {
     "get_project_milestones",
     "🎯 Get available milestones for a project with pagination and filtering",
     {
-      project: z.union([z.enum(["web","android","ios","api"]), z.number()])
+      project: z.union([z.enum(["web","android","ios","api"]), z.string(), z.number()])
         .default("web")
-        .describe("Project alias (web=MFPWEB, android=MFPAND, ios=MFPIOS, api=MFPAPI) or numeric projectId"),
+        .describe("Project alias ('web', 'android', 'ios', 'api'), project key ('MFPAND', 'MCP', etc.), or numeric projectId"),
       page: z.number().int().positive()
         .default(1)
         .describe("Page number for pagination (1-based)"),
@@ -2633,6 +2633,531 @@ async function main() {
           content: [{ 
             type: "text" as const, 
             text: `❌ Error improving test case: ${error?.message || error}` 
+          }] 
+        };
+      }
+    }
+  );
+
+  // ========== PUBLIC API TEST RUN TOOLS ==========
+
+  server.tool(
+    "list_test_runs",
+    "🏃 List Test Runs from Public API with advanced filtering",
+    {
+      project: z.union([z.enum(["web","android","ios","api"]), z.string()])
+        .default("web")
+        .describe("Project alias ('web', 'android', 'ios', 'api') or project key ('MFPAND', 'MCP', etc.)"),
+      pageToken: z.string().optional()
+        .describe("Token for pagination (from previous response)"),
+      maxPageSize: z.number().int().positive().max(100)
+        .default(10)
+        .describe("Number of test runs per page (max 100)"),
+      nameFilter: z.string().optional()
+        .describe("Filter by test run name (partial match)"),
+      milestoneFilter: z.union([z.string(), z.number()]).optional()
+        .describe("Filter by milestone ID (use get_project_milestones to find ID) or milestone name (will be converted to ID)"),
+      buildNumberFilter: z.string().optional()
+        .describe("Filter by build number (searches in configurations, title, and description)"),
+      closedFilter: z.boolean().optional()
+        .describe("Filter by closed status (true=closed, false=open)"),
+      sortBy: z.enum(["-createdAt", "createdAt", "-title", "title"])
+        .default("-createdAt")
+        .describe("Sort order: -createdAt (newest first), createdAt (oldest first), -title (Z-A), title (A-Z)"),
+      format: z.enum(['raw', 'formatted']).default('formatted')
+        .describe("Output format: raw API response or formatted data")
+    },
+    async (args) => {
+      try {
+        debugLog("list_test_runs called", args);
+
+        // Resolve project using dynamic resolution (same as Reporting API tools)
+        const { projectId, suggestions } = await resolveProjectId(args.project);
+        
+        // For Public API, we need the project key, not the project ID
+        // First check if it's a known alias, otherwise treat as direct project key
+        const projectKey = typeof args.project === 'string' 
+          ? (PROJECT_ALIASES[args.project] || args.project)
+          : undefined;
+
+        if (!projectKey || projectKey.length === 0) {
+          throw new Error(`Invalid project: ${args.project}. Use aliases like 'android', 'ios', 'web', 'api' or direct project keys like 'MFPAND', 'MFPIOS', 'MCP', etc.`);
+        }
+
+        // Build filter expression using Resource Query Language
+        const filters: string[] = [];
+        
+        if (args.nameFilter) {
+          filters.push(`title ~= '${args.nameFilter.replace(/'/g, "\\'")}'`);
+        }
+        
+        // Handle milestone filtering - need to convert name to ID if necessary
+        if (args.milestoneFilter !== undefined) {
+          let milestoneId: number;
+          
+          if (typeof args.milestoneFilter === 'number') {
+            // Already an ID
+            milestoneId = args.milestoneFilter;
+          } else {
+            // It's a name, need to look up the ID
+            try {
+              const milestonesData = await reportingClient.getMilestones(projectId, {
+                page: 1,
+                pageSize: 100,
+                completed: 'all' // Get all milestones to find the one we need
+              });
+              
+              const milestone = milestonesData.items.find((m: any) => m.name === args.milestoneFilter);
+              if (!milestone) {
+                throw new Error(`Milestone '${args.milestoneFilter}' not found. Use get_project_milestones to see available milestones.`);
+              }
+              milestoneId = milestone.id;
+            } catch (error: any) {
+              throw new Error(`Failed to lookup milestone '${args.milestoneFilter}': ${error.message}`);
+            }
+          }
+          
+          filters.push(`milestone.id = ${milestoneId}`);
+        }
+        
+        if (args.buildNumberFilter) {
+          // Search in configurations.optionName for build numbers (this is where build info is typically stored)
+          // Also search in title and description as fallback
+          filters.push(`(configurations.optionName ~= '${args.buildNumberFilter.replace(/'/g, "\\'")}' OR title ~= '${args.buildNumberFilter.replace(/'/g, "\\'")}' OR description ~= '${args.buildNumberFilter.replace(/'/g, "\\'")}')`);
+        }
+        
+        if (args.closedFilter !== undefined) {
+          filters.push(`closed = ${args.closedFilter}`);
+        }
+
+        const filter = filters.length > 0 ? filters.join(' AND ') : undefined;
+
+        const testRunsData = await client.listPublicTestRuns({
+          projectKey,
+          pageToken: args.pageToken,
+          maxPageSize: args.maxPageSize,
+          filter,
+          sortBy: args.sortBy
+        });
+
+        let result: any;
+        if (args.format === 'raw') {
+          result = testRunsData;
+        } else {
+          // Formatted output
+          const testRuns = testRunsData.items.map((run: any) => ({
+            id: run.id,
+            title: run.title,
+            description: run.description,
+            milestone: run.milestone ? {
+              id: run.milestone.id,
+              name: run.milestone.name,
+              completed: run.milestone.completed,
+              dueDate: run.milestone.dueDate
+            } : null,
+            environment: run.environment ? {
+              key: run.environment.key,
+              name: run.environment.name
+            } : null,
+            configurations: run.configurations.map((config: any) => `${config.group.name}: ${config.option.name}`),
+            requirements: run.requirements.map((req: any) => `${req.source}: ${req.reference}`),
+            closed: run.closed,
+            createdBy: `${run.createdBy.username} (${run.createdBy.email})`,
+            createdAt: run.createdAt,
+            testCasesSummary: run.executionSummaries.map((summary: any) => 
+              `${summary.status.name}: ${summary.testCasesCount}`
+            ).join(', ') || 'No test cases'
+          }));
+
+          result = {
+            summary: {
+              totalTestRuns: testRuns.length,
+              projectKey,
+              filters: {
+                name: args.nameFilter,
+                milestone: args.milestoneFilter,
+                buildNumber: args.buildNumberFilter,
+                closed: args.closedFilter
+              },
+              sorting: args.sortBy,
+              hasNextPage: !!testRunsData._meta?.nextPageToken
+            },
+            testRuns,
+            pagination: testRunsData._meta?.nextPageToken ? {
+              nextPageToken: testRunsData._meta.nextPageToken,
+              usage: "Use this token in the 'pageToken' parameter for the next page"
+            } : null
+          };
+        }
+
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }]
+        };
+      } catch (error: any) {
+        debugLog("Error in list_test_runs", { error: error.message, args });
+        return { 
+          content: [{ 
+            type: "text" as const, 
+            text: `❌ Error listing test runs: ${error?.message || error}` 
+          }] 
+        };
+      }
+    }
+  );
+
+  server.tool(
+    "get_test_run_by_id",
+    "🔍 Get detailed Test Run information by ID from Public API",
+    {
+      id: z.number().int().positive()
+        .describe("Test Run ID"),
+      project: z.union([z.enum(["web","android","ios","api"]), z.string()])
+        .default("web")
+        .describe("Project alias ('web', 'android', 'ios', 'api') or project key ('MFPAND', 'MCP', etc.)"),
+      format: z.enum(['raw', 'formatted']).default('formatted')
+        .describe("Output format: raw API response or formatted data")
+    },
+    async (args) => {
+      try {
+        debugLog("get_test_run_by_id called", args);
+
+        // Resolve project using dynamic resolution (same as Reporting API tools)
+        const { projectId, suggestions } = await resolveProjectId(args.project);
+        
+        // For Public API, we need the project key, not the project ID
+        // First check if it's a known alias, otherwise treat as direct project key
+        const projectKey = typeof args.project === 'string' 
+          ? (PROJECT_ALIASES[args.project] || args.project)
+          : undefined;
+
+        if (!projectKey || projectKey.length === 0) {
+          throw new Error(`Invalid project: ${args.project}. Use aliases like 'android', 'ios', 'web', 'api' or direct project keys like 'MFPAND', 'MFPIOS', 'MCP', etc.`);
+        }
+
+        const testRunData = await client.getPublicTestRunById({
+          id: args.id,
+          projectKey
+        });
+
+        let result: any;
+        if (args.format === 'raw') {
+          result = testRunData;
+        } else {
+          // Formatted output
+          const run = testRunData.data;
+          result = {
+            testRun: {
+              id: run.id,
+              title: run.title,
+              description: run.description,
+              milestone: run.milestone ? {
+                id: run.milestone.id,
+                name: run.milestone.name,
+                completed: run.milestone.completed,
+                description: run.milestone.description,
+                startDate: run.milestone.startDate,
+                dueDate: run.milestone.dueDate
+              } : null,
+              environment: run.environment ? {
+                id: run.environment.id,
+                key: run.environment.key,
+                name: run.environment.name
+              } : null,
+              configurations: run.configurations.map((config: any) => ({
+                group: config.group.name,
+                option: config.option.name,
+                display: `${config.group.name}: ${config.option.name}`
+              })),
+              requirements: run.requirements.map((req: any) => ({
+                source: req.source,
+                reference: req.reference,
+                display: `${req.source}: ${req.reference}`
+              })),
+              status: {
+                closed: run.closed,
+                createdBy: {
+                  id: run.createdBy.id,
+                  username: run.createdBy.username,
+                  email: run.createdBy.email,
+                  display: `${run.createdBy.username} (${run.createdBy.email})`
+                },
+                createdAt: run.createdAt
+              },
+              executionSummary: {
+                totalStatuses: run.executionSummaries.length,
+                details: run.executionSummaries.map((summary: any) => ({
+                  status: summary.status.name,
+                  count: summary.testCasesCount,
+                  color: summary.status.colorHex,
+                  display: `${summary.status.name}: ${summary.testCasesCount} test cases`
+                })),
+                totalTestCases: run.executionSummaries.reduce((sum: any, summary: any) => sum + summary.testCasesCount, 0)
+              }
+            },
+            projectKey,
+            note: "Use 'list_test_run_test_cases' tool to get the test cases for this test run"
+          };
+        }
+
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }]
+        };
+      } catch (error: any) {
+        debugLog("Error in get_test_run_by_id", { error: error.message, args });
+        return { 
+          content: [{ 
+            type: "text" as const, 
+            text: `❌ Error getting test run: ${error?.message || error}` 
+          }] 
+        };
+      }
+    }
+  );
+
+  server.tool(
+    "list_test_run_test_cases",
+    "📝 List all Test Cases in a Test Run from Public API",
+    {
+      testRunId: z.number().int().positive()
+        .describe("Test Run ID"),
+      project: z.union([z.enum(["web","android","ios","api"]), z.string()])
+        .default("web")
+        .describe("Project alias ('web', 'android', 'ios', 'api') or project key ('MFPAND', 'MCP', etc.)"),
+      format: z.enum(['raw', 'formatted']).default('formatted')
+        .describe("Output format: raw API response or formatted data")
+    },
+    async (args) => {
+      try {
+        debugLog("list_test_run_test_cases called", args);
+
+        // Resolve project using dynamic resolution (same as Reporting API tools)
+        const { projectId, suggestions } = await resolveProjectId(args.project);
+        
+        // For Public API, we need the project key, not the project ID
+        // First check if it's a known alias, otherwise treat as direct project key
+        const projectKey = typeof args.project === 'string' 
+          ? (PROJECT_ALIASES[args.project] || args.project)
+          : undefined;
+
+        if (!projectKey || projectKey.length === 0) {
+          throw new Error(`Invalid project: ${args.project}. Use aliases like 'android', 'ios', 'web', 'api' or direct project keys like 'MFPAND', 'MFPIOS', 'MCP', etc.`);
+        }
+
+        const testCasesData = await client.listPublicTestRunTestCases({
+          testRunId: args.testRunId,
+          projectKey
+        });
+
+        let result: any;
+        if (args.format === 'raw') {
+          result = testCasesData;
+        } else {
+          // Formatted output
+          const testCases = testCasesData.items.map((item: any) => ({
+            testCase: {
+              id: item.testCase.id,
+              key: item.testCase.key,
+              title: item.testCase.title
+            },
+            assignee: item.assignee ? {
+              id: item.assignee.id,
+              username: item.assignee.username,
+              email: item.assignee.email,
+              display: `${item.assignee.username} (${item.assignee.email})`
+            } : null,
+            result: item.result ? {
+              status: {
+                id: item.result.status.id,
+                name: item.result.status.name,
+                aliases: item.result.status.aliases
+              },
+              details: item.result.details,
+              issue: item.result.issue ? {
+                type: item.result.issue.type,
+                id: item.result.issue.id,
+                display: `${item.result.issue.type}: ${item.result.issue.id}`
+              } : null,
+              executionTime: item.result.executionTimeInMillis ? 
+                `${item.result.executionTimeInMillis}ms` : null,
+              executionType: item.result.executionType,
+              attachments: item.result.attachments.length
+            } : null
+          }));
+
+          // Group by status for summary
+          const statusSummary = testCases.reduce((acc: any, tc: any) => {
+            const status = tc.result?.status.name || 'No Result';
+            acc[status] = (acc[status] || 0) + 1;
+            return acc;
+          }, {} as Record<string, number>);
+
+          result = {
+            summary: {
+              testRunId: args.testRunId,
+              totalTestCases: testCases.length,
+              projectKey,
+              statusBreakdown: statusSummary,
+              withResults: testCases.filter((tc: any) => tc.result).length,
+              withAssignees: testCases.filter((tc: any) => tc.assignee).length
+            },
+            testCases,
+            note: "Test cases are returned without pagination as per Public API specification"
+          };
+        }
+
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }]
+        };
+      } catch (error: any) {
+        debugLog("Error in list_test_run_test_cases", { error: error.message, args });
+        return { 
+          content: [{ 
+            type: "text" as const, 
+            text: `❌ Error listing test run test cases: ${error?.message || error}` 
+          }] 
+        };
+      }
+    }
+  );
+
+  // ========== TEST RUN SETTINGS TOOLS ==========
+
+  server.tool(
+    "get_test_run_result_statuses",
+    "Get list of Result Statuses configured for a project. These statuses are used when assigning results to Test Cases.",
+    {
+      project: z.union([z.enum(["web","android","ios","api"]), z.string()])
+        .describe("Project alias ('web', 'android', 'ios', 'api') or project key ('MFPAND', 'MCP', etc.)"),
+      format: z.enum(["raw", "formatted"]).default("formatted").describe("Output format")
+    },
+    async (args) => {
+      debugLog("get_test_run_result_statuses called", args);
+      
+      try {
+        // Resolve project using dynamic resolution (same as other tools)
+        const { projectId, suggestions } = await resolveProjectId(args.project);
+
+        // For Public API, we need the project key, not the project ID
+        const projectKey = typeof args.project === 'string' && args.project.length > 3
+          ? args.project
+          : PROJECT_ALIASES[args.project as keyof typeof PROJECT_ALIASES];
+
+        if (!projectKey) {
+          throw new Error(`Invalid project: ${args.project}. ${suggestions || 'Use web, android, ios, api, or a valid project key like MFPAND, MFPIOS, etc.'}`);
+        }
+
+        const publicClient = new EnhancedZebrunnerClient(config);
+        const response = await publicClient.listResultStatuses({ projectKey });
+
+        if (args.format === "raw") {
+          return {
+            content: [{ type: "text" as const, text: JSON.stringify(response, null, 2) }]
+          };
+        }
+
+        // Formatted output
+        const statuses = response.items;
+        let result = `📊 **Result Statuses for Project ${projectKey}**\n\n`;
+        
+        if (statuses.length === 0) {
+          result += "No result statuses found.\n";
+        } else {
+          result += `Found ${statuses.length} result status${statuses.length === 1 ? '' : 'es'}:\n\n`;
+          
+          statuses.forEach((status: any) => {
+            result += `**${status.name}** (ID: ${status.id})\n`;
+            if (status.aliases) {
+              result += `  • Aliases: ${status.aliases}\n`;
+            }
+            result += `  • Color: ${status.colorHex}\n`;
+            result += `  • Enabled: ${status.enabled ? '✅' : '❌'}\n`;
+            result += `  • Completed: ${status.isCompleted ? '✅' : '❌'}\n`;
+            result += `  • Success: ${status.isSuccess ? '✅' : '❌'}\n`;
+            result += `  • Failure: ${status.isFailure ? '✅' : '❌'}\n`;
+            result += `  • Assignable: ${status.isAssignable ? '✅' : '❌'}\n\n`;
+          });
+        }
+
+        return {
+          content: [{ type: "text" as const, text: result }]
+        };
+      } catch (error: any) {
+        debugLog("Error in get_test_run_result_statuses", { error: error.message, args });
+        return { 
+          content: [{ 
+            type: "text" as const, 
+            text: `❌ Error getting result statuses: ${error?.message || error}` 
+          }] 
+        };
+      }
+    }
+  );
+
+  server.tool(
+    "get_test_run_configuration_groups",
+    "Get list of Configuration Groups and their Options for a project. These are used to configure Test Runs.",
+    {
+      project: z.union([z.enum(["web","android","ios","api"]), z.string()])
+        .describe("Project alias ('web', 'android', 'ios', 'api') or project key ('MFPAND', 'MCP', etc.)"),
+      format: z.enum(["raw", "formatted"]).default("formatted").describe("Output format")
+    },
+    async (args) => {
+      debugLog("get_test_run_configuration_groups called", args);
+      
+      try {
+        // Resolve project using dynamic resolution (same as other tools)
+        const { projectId, suggestions } = await resolveProjectId(args.project);
+
+        // For Public API, we need the project key, not the project ID
+        const projectKey = typeof args.project === 'string' && args.project.length > 3
+          ? args.project
+          : PROJECT_ALIASES[args.project as keyof typeof PROJECT_ALIASES];
+
+        if (!projectKey) {
+          throw new Error(`Invalid project: ${args.project}. ${suggestions || 'Use web, android, ios, api, or a valid project key like MFPAND, MFPIOS, etc.'}`);
+        }
+
+        const publicClient = new EnhancedZebrunnerClient(config);
+        const response = await publicClient.listConfigurationGroups({ projectKey });
+
+        if (args.format === "raw") {
+          return {
+            content: [{ type: "text" as const, text: JSON.stringify(response, null, 2) }]
+          };
+        }
+
+        // Formatted output
+        const groups = response.items;
+        let result = `⚙️ **Configuration Groups for Project ${projectKey}**\n\n`;
+        
+        if (groups.length === 0) {
+          result += "No configuration groups found.\n";
+        } else {
+          result += `Found ${groups.length} configuration group${groups.length === 1 ? '' : 's'}:\n\n`;
+          
+          groups.forEach((group: any) => {
+            result += `**${group.name}** (ID: ${group.id})\n`;
+            if (group.options && group.options.length > 0) {
+              result += `  Options (${group.options.length}):\n`;
+              group.options.forEach((option: any) => {
+                result += `    • ${option.name} (ID: ${option.id})\n`;
+              });
+            } else {
+              result += `  No options available\n`;
+            }
+            result += `\n`;
+          });
+        }
+
+        return {
+          content: [{ type: "text" as const, text: result }]
+        };
+      } catch (error: any) {
+        debugLog("Error in get_test_run_configuration_groups", { error: error.message, args });
+        return { 
+          content: [{ 
+            type: "text" as const, 
+            text: `❌ Error getting configuration groups: ${error?.message || error}` 
           }] 
         };
       }

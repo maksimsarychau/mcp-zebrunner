@@ -2,7 +2,7 @@
 
 ## Overview
 
-A new MCP tool `get_launcher_details` has been implemented that uses the new Zebrunner Reporting API authentication method (access token → bearer token). This tool provides comprehensive launcher information including test sessions data.
+A new MCP tool `get_launch_details` has been implemented that uses the new Zebrunner Reporting API authentication method (access token → bearer token). This tool provides comprehensive launcher information including test sessions data.
 
 ## Features
 
@@ -31,7 +31,7 @@ A new MCP tool `get_launcher_details` has been implemented that uses the new Zeb
 
 ## Tool Signatures
 
-### `get_launcher_details`
+### `get_launch_details`
 ```typescript
 {
   projectKey?: string,        // "MFPAND" (alternative to projectId)
@@ -58,7 +58,7 @@ A new MCP tool `get_launcher_details` has been implemented that uses the new Zeb
 ### Full Details with Project Key
 ```bash
 # Using the MCP tool
-get_launcher_details({
+get_launch_details({
   projectKey: "MFPAND",
   launchId: 118685,
   includeLaunchDetails: true,
