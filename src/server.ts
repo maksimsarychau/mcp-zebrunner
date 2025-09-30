@@ -2038,6 +2038,239 @@ async function main() {
   );
 
   server.tool(
+    "get_all_launches_for_project",
+    "📋 Get all launches for a project with pagination (uses new reporting API)",
+    {
+      project: z.union([z.enum(["web","android","ios","api"]), z.string(), z.number()]).describe("Project alias (web/android/ios/api), project key (MFPAND), or project ID (7)"),
+      page: z.number().int().positive().default(1).describe("Page number (starts from 1)"),
+      pageSize: z.number().int().positive().max(100).default(20).describe("Number of launches per page (max 100)"),
+      format: z.enum(['raw', 'formatted']).default('formatted').describe("Output format - 'raw' for full API response, 'formatted' for user-friendly display")
+    },
+    async (args) => {
+      try {
+        debugLog("get_all_launches_for_project called", args);
+        
+        // Resolve project ID using the same logic as other tools
+        const { projectId } = await resolveProjectId(args.project);
+        
+        // Get launches using the new API method
+        const launchesData = await reportingClient.getLaunches(projectId, {
+          page: args.page,
+          pageSize: args.pageSize
+        });
+        
+        if (args.format === 'raw') {
+          return {
+            content: [{
+              type: "text" as const,
+              text: JSON.stringify(launchesData, null, 2)
+            }]
+          };
+        }
+        
+        // Formatted output
+        const { items, _meta } = launchesData;
+        
+        if (items.length === 0) {
+          return {
+            content: [{
+              type: "text" as const,
+              text: `📋 No launches found for project ${args.project}\n\nPagination: Page ${args.page} of ${_meta.totalPages} (${_meta.total} total launches)`
+            }]
+          };
+        }
+        
+        let output = `📋 **Launches for Project ${args.project}**\n\n`;
+        output += `**Pagination:** Page ${args.page} of ${_meta.totalPages} (${_meta.total} total launches)\n\n`;
+        
+        items.forEach((launch: any, index: number) => {
+          const number = (args.page - 1) * args.pageSize + index + 1;
+          output += `**${number}. ${launch.name}** (ID: ${launch.id})\n`;
+          output += `   📊 Status: ${launch.status}\n`;
+          
+          if (launch.milestone) {
+            output += `   🎯 Milestone: ${launch.milestone.name}\n`;
+          }
+          
+          if (launch.buildNumber) {
+            output += `   🔨 Build: ${launch.buildNumber}\n`;
+          }
+          
+          if (launch.startedAt) {
+            output += `   ⏰ Started: ${new Date(launch.startedAt).toLocaleString()}\n`;
+          }
+          
+          if (launch.finishedAt) {
+            output += `   ✅ Finished: ${new Date(launch.finishedAt).toLocaleString()}\n`;
+          }
+          
+          if (launch.duration) {
+            const durationMin = Math.round(launch.duration / 60000);
+            output += `   ⏱️ Duration: ${durationMin} minutes\n`;
+          }
+          
+          // Test results summary
+          const total = launch.total || 0;
+          const passed = launch.passed || 0;
+          const failed = launch.failed || 0;
+          const skipped = launch.skipped || 0;
+          
+          if (total > 0) {
+            output += `   📈 Results: ${passed} passed, ${failed} failed, ${skipped} skipped (${total} total)\n`;
+          }
+          
+          output += '\n';
+        });
+        
+        return {
+          content: [{
+            type: "text" as const,
+            text: output.trim()
+          }]
+        };
+        
+      } catch (error: any) {
+        debugLog("Error in get_all_launches_for_project", { error: error.message, args });
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error getting launches: ${error.message}`
+          }]
+        };
+      }
+    }
+  );
+
+  server.tool(
+    "get_all_launches_with_filter",
+    "🔍 Get launches with filtering by milestone, build number, or launch name (uses new reporting API)",
+    {
+      project: z.union([z.enum(["web","android","ios","api"]), z.string(), z.number()]).describe("Project alias (web/android/ios/api), project key (MFPAND), or project ID (7)"),
+      milestone: z.string().optional().describe("Filter by milestone name (e.g., '25.39.0')"),
+      query: z.string().optional().describe("Search query for build number or launch name (e.g., 'myfitnesspal-25.39.0-45915' or 'Performance')"),
+      page: z.number().int().positive().default(1).describe("Page number (starts from 1)"),
+      pageSize: z.number().int().positive().max(100).default(20).describe("Number of launches per page (max 100)"),
+      format: z.enum(['raw', 'formatted']).default('formatted').describe("Output format - 'raw' for full API response, 'formatted' for user-friendly display")
+    },
+    async (args) => {
+      try {
+        debugLog("get_all_launches_with_filter called", args);
+        
+        // Validate that at least one filter is provided
+        if (!args.milestone && !args.query) {
+          return {
+            content: [{
+              type: "text" as const,
+              text: `❌ Please provide at least one filter: milestone or query parameter`
+            }]
+          };
+        }
+        
+        // Resolve project ID using the same logic as other tools
+        const { projectId } = await resolveProjectId(args.project);
+        
+        // Get launches using the new API method with filters
+        const launchesData = await reportingClient.getLaunches(projectId, {
+          page: args.page,
+          pageSize: args.pageSize,
+          milestone: args.milestone,
+          query: args.query
+        });
+        
+        if (args.format === 'raw') {
+          return {
+            content: [{
+              type: "text" as const,
+              text: JSON.stringify(launchesData, null, 2)
+            }]
+          };
+        }
+        
+        // Formatted output
+        const { items, _meta } = launchesData;
+        
+        // Build filter description
+        let filterDesc = '';
+        if (args.milestone && args.query) {
+          filterDesc = `milestone "${args.milestone}" and query "${args.query}"`;
+        } else if (args.milestone) {
+          filterDesc = `milestone "${args.milestone}"`;
+        } else if (args.query) {
+          filterDesc = `query "${args.query}"`;
+        }
+        
+        if (items.length === 0) {
+          return {
+            content: [{
+              type: "text" as const,
+              text: `🔍 No launches found for project ${args.project} with ${filterDesc}\n\nPagination: Page ${args.page} of ${_meta.totalPages} (${_meta.total} total launches)`
+            }]
+          };
+        }
+        
+        let output = `🔍 **Filtered Launches for Project ${args.project}**\n\n`;
+        output += `**Filter:** ${filterDesc}\n`;
+        output += `**Pagination:** Page ${args.page} of ${_meta.totalPages} (${_meta.total} total launches)\n\n`;
+        
+        items.forEach((launch: any, index: number) => {
+          const number = (args.page - 1) * args.pageSize + index + 1;
+          output += `**${number}. ${launch.name}** (ID: ${launch.id})\n`;
+          output += `   📊 Status: ${launch.status}\n`;
+          
+          if (launch.milestone) {
+            output += `   🎯 Milestone: ${launch.milestone.name}\n`;
+          }
+          
+          if (launch.buildNumber) {
+            output += `   🔨 Build: ${launch.buildNumber}\n`;
+          }
+          
+          if (launch.startedAt) {
+            output += `   ⏰ Started: ${new Date(launch.startedAt).toLocaleString()}\n`;
+          }
+          
+          if (launch.finishedAt) {
+            output += `   ✅ Finished: ${new Date(launch.finishedAt).toLocaleString()}\n`;
+          }
+          
+          if (launch.duration) {
+            const durationMin = Math.round(launch.duration / 60000);
+            output += `   ⏱️ Duration: ${durationMin} minutes\n`;
+          }
+          
+          // Test results summary
+          const total = launch.total || 0;
+          const passed = launch.passed || 0;
+          const failed = launch.failed || 0;
+          const skipped = launch.skipped || 0;
+          
+          if (total > 0) {
+            output += `   📈 Results: ${passed} passed, ${failed} failed, ${skipped} skipped (${total} total)\n`;
+          }
+          
+          output += '\n';
+        });
+        
+        return {
+          content: [{
+            type: "text" as const,
+            text: output.trim()
+          }]
+        };
+        
+      } catch (error: any) {
+        debugLog("Error in get_all_launches_with_filter", { error: error.message, args });
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error getting filtered launches: ${error.message}`
+          }]
+        };
+      }
+    }
+  );
+
+  server.tool(
     "test_reporting_connection",
     "🔌 Test connection to Zebrunner Reporting API with new authentication",
     {},

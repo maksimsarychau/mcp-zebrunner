@@ -193,6 +193,49 @@ export const ProjectsLimitResponseSchema = z.object({
 
 export type ProjectsLimitResponse = z.infer<typeof ProjectsLimitResponseSchema>;
 
+// Launch list item response schema (for launches listing API)
+export const LaunchListItemSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  status: z.string(),
+  milestone: z.object({
+    id: z.number(),
+    name: z.string(),
+    completed: z.boolean().optional(),
+    description: z.string().nullable().optional(),
+    startDate: z.string().nullable().optional(),
+    dueDate: z.string().nullable().optional()
+  }).nullable().optional(),
+  startedAt: z.number().optional(), // timestamp
+  finishedAt: z.number().nullable().optional(), // timestamp
+  duration: z.number().nullable().optional(),
+  passed: z.number().optional(),
+  failed: z.number().optional(),
+  skipped: z.number().optional(),
+  aborted: z.number().optional(),
+  queued: z.number().optional(),
+  total: z.number().optional(),
+  projectId: z.number(),
+  userId: z.number().optional(),
+  buildNumber: z.string().nullable().optional(),
+  jobUrl: z.string().nullable().optional(),
+  upstream: z.boolean().optional(),
+  reviewed: z.boolean().optional()
+});
+
+export type LaunchListItem = z.infer<typeof LaunchListItemSchema>;
+
+// Paginated launches response
+export const LaunchesResponseSchema = z.object({
+  items: z.array(LaunchListItemSchema),
+  _meta: z.object({
+    total: z.number(),
+    totalPages: z.number()
+  })
+});
+
+export type LaunchesResponse = z.infer<typeof LaunchesResponseSchema>;
+
 // Error types for reporting API
 export class ZebrunnerReportingError extends Error {
   constructor(
