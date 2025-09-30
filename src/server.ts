@@ -1074,6 +1074,66 @@ async function main() {
       }
     );
 
+    server.tool(
+      "search_test_cases_experimental",
+      "🧪 [EXPERIMENTAL] Search test cases with advanced filters",
+      {
+        project_key: z.string().min(1).describe("Project key"),
+        query: z.string().min(1).describe("Search query"),
+        suite_id: z.number().int().positive().optional().describe("Filter by suite ID"),
+        status: z.string().optional().describe("Filter by status"),
+        priority: z.string().optional().describe("Filter by priority"),
+        format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format"),
+        page: z.number().int().nonnegative().default(0).describe("Page number"),
+        size: z.number().int().positive().max(1000).default(50).describe("Page size (configurable via MAX_PAGE_SIZE env var)")
+      },
+      async (args) => {
+        const { project_key, query, suite_id, status, priority, format, page, size } = args;
+        
+        // Runtime validation for configured MAX_PAGE_SIZE
+        if (size > MAX_PAGE_SIZE) {
+          return {
+            content: [{
+              type: "text" as const,
+              text: `❌ Error: Requested page size (${size}) exceeds configured maximum (${MAX_PAGE_SIZE}). Set MAX_PAGE_SIZE environment variable to increase the limit.`
+            }]
+          };
+        }
+        
+        try {
+          debugLog("Searching test cases experimentally", args);
+          
+          const searchParams = {
+            page,
+            size,
+            suiteId: suite_id,
+            status,
+            priority
+          };
+
+          const response = await client.searchTestCases(project_key, query, searchParams);
+          const formattedData = FormatProcessor.format(response, format);
+          
+          return {
+            content: [{
+              type: "text" as const,
+              text: typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2)
+            }]
+          };
+        } catch (error: any) {
+          const errorMsg = handleExperimentalError(error, 'search_test_cases');
+          debugLog("Experimental feature failed", { feature: 'search_test_cases', error: error.message });
+          
+          return {
+            content: [{
+              type: "text" as const,
+              text: errorMsg
+            }]
+          };
+        }
+      }
+    );
+
   }
 
   server.tool(
