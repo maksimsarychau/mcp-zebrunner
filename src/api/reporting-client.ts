@@ -15,6 +15,8 @@ import {
   AvailableProjectsResponseSchema,
   ProjectsLimitResponse,
   ProjectsLimitResponseSchema,
+  LaunchesResponse,
+  LaunchesResponseSchema,
   ZebrunnerReportingError,
   ZebrunnerReportingAuthError,
   ZebrunnerReportingNotFoundError
@@ -385,6 +387,44 @@ export class ZebrunnerReportingClient {
    */
   clearProjectCache(): void {
     this.projectCache.clear();
+  }
+
+  /**
+   * Get launches for a project
+   */
+  async getLaunches(
+    projectId: number,
+    options: {
+      page?: number;
+      pageSize?: number;
+      milestone?: string;
+      query?: string;
+    } = {}
+  ): Promise<LaunchesResponse> {
+    const { page = 1, pageSize = 20, milestone, query } = options;
+    
+    let url = `/api/reporting/v1/launches?projectId=${projectId}&page=${page}&pageSize=${pageSize}`;
+    
+    // Add milestone filter if provided
+    if (milestone) {
+      url += `&milestone=${encodeURIComponent(milestone)}`;
+    }
+    
+    // Add query filter if provided
+    if (query) {
+      url += `&query=${encodeURIComponent(query)}`;
+    }
+    
+    const response = await this.makeAuthenticatedRequest<any>('GET', url);
+    
+    // Handle different response structures
+    const launchesData = response.data || response;
+    
+    try {
+      return LaunchesResponseSchema.parse(launchesData);
+    } catch (error) {
+      throw new ZebrunnerReportingError(`Failed to parse launches data: ${error instanceof Error ? error.message : error}`);
+    }
   }
 
   /**
