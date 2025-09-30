@@ -13,7 +13,7 @@
 
 import "dotenv/config";
 import { spawn } from 'child_process';
-import { existsSync } from 'fs';
+import { existsSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 
 interface TestConfig {
@@ -59,6 +59,38 @@ class TestRunner {
   private verbose: boolean = false;
   private watch: boolean = false;
   private coverage: boolean = false;
+
+  /**
+   * Expand glob patterns to actual file paths
+   */
+  private expandGlobPattern(pattern: string): string[] {
+    const files: string[] = [];
+    
+    // Handle patterns like 'tests/unit/**/*.test.ts'
+    if (pattern.includes('**/*.test.ts')) {
+      const baseDir = pattern.replace('/**/*.test.ts', '');
+      if (existsSync(baseDir)) {
+        const findTestFiles = (dir: string): void => {
+          const items = readdirSync(dir);
+          for (const item of items) {
+            const fullPath = join(dir, item);
+            const stat = statSync(fullPath);
+            if (stat.isDirectory()) {
+              findTestFiles(fullPath);
+            } else if (item.endsWith('.test.ts')) {
+              files.push(fullPath);
+            }
+          }
+        };
+        findTestFiles(baseDir);
+      }
+    } else {
+      // For non-glob patterns, just return as-is
+      files.push(pattern);
+    }
+    
+    return files;
+  }
 
   constructor() {
     this.parseArgs();
@@ -115,11 +147,20 @@ class TestRunner {
 
   private async runNodeTest(pattern: string): Promise<boolean> {
     return new Promise((resolve) => {
+      // Expand glob patterns to actual file paths
+      const testFiles = this.expandGlobPattern(pattern);
+      
+      if (testFiles.length === 0) {
+        this.log(`No test files found for pattern: ${pattern}`, 'error');
+        resolve(false);
+        return;
+      }
+
       const args = [
         '--test',
         '--test-reporter=spec',
         '--import=tsx',
-        pattern
+        ...testFiles  // Spread the individual file paths
       ];
 
       if (this.watch) {
