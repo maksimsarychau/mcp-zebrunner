@@ -65,8 +65,8 @@ ZEBRUNNER_LOGIN=your.email@company.com
 # Your Zebrunner API token (get this from your Zebrunner profile)
 ZEBRUNNER_TOKEN=your_api_token_here
 
-# Optional: Enable debug logging
-DEBUG=true
+# Optional: Enable debug logging (default: false)
+DEBUG=false
 ```
 
 #### How to get your Zebrunner API token:
@@ -91,26 +91,45 @@ If you see "✅ Health check completed", you're ready to go!
 
 ### Method 1: Use with Claude Desktop/Code (Recommended)
 
-Add this configuration to your Claude Desktop or Claude Code settings:
+Add this configuration to your Claude Desktop or Claude Code settings. **Important:** You must use the full absolute path to your project folder.
 
 ```json
 {
   "mcpServers": {
-    "zebrunner": {
+    "mcp-zebrunner": {
       "command": "node",
-      "args": ["/full/path/to/mcp-zebrunner/dist/server.js"],
+      "args": ["/full/absolute/path/to/mcp-zebrunner/dist/server.js"],
       "env": {
         "ZEBRUNNER_URL": "https://your-company.zebrunner.com/api/public/v1",
         "ZEBRUNNER_LOGIN": "your.email@company.com",
         "ZEBRUNNER_TOKEN": "your_api_token_here",
-        "DEBUG": "true"
+        "DEBUG": "false",
+        "DEFAULT_PAGE_SIZE": "100",
+        "MAX_PAGE_SIZE": "100"
       }
     }
   }
 }
 ```
 
-**Important:** Replace `/full/path/to/mcp-zebrunner/` with the actual path to your project folder.
+**Example paths:**
+- **Windows:** `C:\\Users\\YourName\\Projects\\mcp-zebrunner\\dist\\server.js`
+- **macOS/Linux:** `/Users/YourName/Projects/mcp-zebrunner/dist/server.js`
+
+### Alternative: Command Line Integration (Claude Code)
+
+You can also add the server using the command line:
+
+```bash
+claude mcp add mcp-zebrunner \
+  --env ZEBRUNNER_URL="https://your-company.zebrunner.com/api/public/v1" \
+  --env ZEBRUNNER_LOGIN="your.email@company.com" \
+  --env ZEBRUNNER_TOKEN="your_api_token_here" \
+  --env DEBUG="false" \
+  -- node /full/absolute/path/to/mcp-zebrunner/dist/server.js
+```
+
+**Important:** Replace `/full/absolute/path/to/mcp-zebrunner/` with the actual full path to your project folder.
 
 ### Method 2: Run as standalone server
 
@@ -255,16 +274,16 @@ ZEBRUNNER_LOGIN=your.email@company.com
 ZEBRUNNER_TOKEN=your_api_token
 
 # Optional - Basic Settings
-DEBUG=true                          # Enable detailed logging
-DEFAULT_PAGE_SIZE=50               # Default items per page
-MAX_PAGE_SIZE=100                  # Maximum items per page
+DEBUG=false                        # Enable detailed logging (default: false)
+DEFAULT_PAGE_SIZE=100             # Default items per page (optional)
+MAX_PAGE_SIZE=100                 # Maximum items per page (optional)
 
 # Optional - Advanced Features
-ENABLE_RULES_ENGINE=true           # Enable test validation rules
-MCP_RULES_FILE=custom-rules.md     # Custom validation rules file
-MIN_COVERAGE_THRESHOLD=70          # Minimum coverage percentage
-REQUIRE_UI_VALIDATION=true         # Require UI validation in tests
-REQUIRE_API_VALIDATION=true        # Require API validation in tests
+ENABLE_RULES_ENGINE=true          # Enable test validation rules (optional)
+MCP_RULES_FILE=custom-rules.md    # Custom validation rules file (optional)
+MIN_COVERAGE_THRESHOLD=70         # Minimum coverage percentage (optional)
+REQUIRE_UI_VALIDATION=true        # Require UI validation in tests (optional)
+REQUIRE_API_VALIDATION=true       # Require API validation in tests (optional)
 ```
 
 ### Custom Validation Rules
