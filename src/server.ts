@@ -2,6 +2,7 @@ import "dotenv/config";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import { ConfigManager } from "./config/manager.js";
 
 // Enhanced imports
 import { EnhancedZebrunnerClient } from "./api/enhanced-client.js";
@@ -33,23 +34,25 @@ import {
  * - Hierarchy processing and pagination
  */
 
-/** Environment configuration with validation */
-const ZEBRUNNER_URL = process.env.ZEBRUNNER_URL?.replace(/\/+$/, "");
-const ZEBRUNNER_LOGIN = process.env.ZEBRUNNER_LOGIN;
-const ZEBRUNNER_TOKEN = process.env.ZEBRUNNER_TOKEN;
-const DEBUG_MODE = process.env.DEBUG === 'true';
-const EXPERIMENTAL_FEATURES = process.env.EXPERIMENTAL_FEATURES === 'true';
-const MAX_PAGE_SIZE = parseInt(process.env.MAX_PAGE_SIZE || '100', 10);
-const DEFAULT_PAGE_SIZE = parseInt(process.env.DEFAULT_PAGE_SIZE || '10', 10);
-const ENABLE_RULES_ENGINE = process.env.ENABLE_RULES_ENGINE === 'true';
+/** Initialize configuration manager with auto-detection and defaults */
+const configManager = ConfigManager.getInstance();
+const appConfig = configManager.getConfig();
 
-if (!ZEBRUNNER_URL || !ZEBRUNNER_LOGIN || !ZEBRUNNER_TOKEN) {
-  console.error("❌ Missing required environment variables:");
-  console.error("   - ZEBRUNNER_URL");
-  console.error("   - ZEBRUNNER_LOGIN");
-  console.error("   - ZEBRUNNER_TOKEN");
-  console.error("\n💡 Copy .env.example to .env and configure your Zebrunner credentials");
-  process.exit(1);
+// Extract configuration values with auto-detection and defaults
+const ZEBRUNNER_URL = appConfig.baseUrl?.replace(/\/+$/, "");
+const ZEBRUNNER_LOGIN = appConfig.login;
+const ZEBRUNNER_TOKEN = appConfig.authToken;
+const DEBUG_MODE = appConfig.debug;
+const EXPERIMENTAL_FEATURES = appConfig.experimentalFeatures;
+const MAX_PAGE_SIZE = appConfig.maxPageSize;
+const DEFAULT_PAGE_SIZE = appConfig.defaultPageSize;
+const ENABLE_RULES_ENGINE = configManager.isRulesEngineEnabled();
+
+// Print configuration summary and warnings
+configManager.printConfigSummary();
+const configWarnings = configManager.getWarnings();
+if (configWarnings.length > 0) {
+  configWarnings.forEach(warning => console.error(warning));
 }
 
 /** Enhanced API client configuration */
@@ -277,16 +280,22 @@ async function performCoverageAnalysis(
   analysisScope: string, 
   includeRecommendations: boolean
 ): Promise<any> {
-  // Get rules configuration (only if rules engine is enabled)
-  let rulesParser: RulesParser | null = null;
-  let rules: any = null;
-  let detectedFramework: any = null;
-  
-  if (ENABLE_RULES_ENGINE) {
-    rulesParser = RulesParser.getInstance();
-    rules = await rulesParser.getRules();
-    detectedFramework = await rulesParser.detectFramework(implementationContext);
-  }
+  try {
+    // Get rules configuration (only if rules engine is enabled)
+    let rulesParser: RulesParser | null = null;
+    let rules: any = null;
+    let detectedFramework: any = null;
+    
+    if (ENABLE_RULES_ENGINE) {
+      try {
+        rulesParser = RulesParser.getInstance();
+        rules = await rulesParser.getRules();
+        detectedFramework = await rulesParser.detectFramework(implementationContext);
+      } catch (rulesError: any) {
+        debugLog("Rules engine error (continuing without rules)", { error: rulesError.message });
+        // Continue without rules engine
+      }
+    }
   const analysis = {
     testCase: {
       key: testCase.key,
@@ -371,12 +380,51 @@ async function performCoverageAnalysis(
 
   // Generate recommendations (enhanced with rules context if available)
   if (includeRecommendations) {
-    analysis.recommendations = ENABLE_RULES_ENGINE
-      ? generateCoverageRecommendations(analysis, rules, detectedFramework)
-      : generateCoverageRecommendations(analysis);
+    try {
+      analysis.recommendations = ENABLE_RULES_ENGINE
+        ? generateCoverageRecommendations(analysis, rules, detectedFramework)
+        : generateCoverageRecommendations(analysis);
+    } catch (recError: any) {
+      debugLog("Error generating recommendations", { error: recError.message });
+      analysis.recommendations = ["Error generating recommendations: " + recError.message];
+    }
   }
 
   return analysis;
+  
+  } catch (error: any) {
+    debugLog("Error in performCoverageAnalysis", { error: error.message, stack: error.stack });
+    // Return a minimal analysis object to prevent complete failure
+    return {
+      testCase: {
+        key: testCase?.key || 'Unknown',
+        title: testCase?.title || 'Unknown',
+        description: testCase?.description || '',
+        steps: testCase?.steps || [],
+        priority: testCase?.priority?.name || 'Unknown',
+        automationState: testCase?.automationState?.name || 'Unknown'
+      },
+      implementation: {
+        context: implementationContext,
+        detectedElements: { methods: [], classes: [], variables: [], assertions: [], testData: [], uiElements: [], apiCalls: [] }
+      },
+      coverage: {
+        stepsCoverage: [],
+        assertionsCoverage: [],
+        dataCoverage: [],
+        overallScore: 0
+      },
+      recommendations: [`Error in coverage analysis: ${error.message}`],
+      analysis: {
+        scope: analysisScope,
+        timestamp: new Date().toISOString(),
+        missingElements: [],
+        coveredElements: [],
+        partiallyMissing: []
+      },
+      error: error.message
+    };
+  }
 }
 
 /** Extract implementation elements from context */
@@ -1475,11 +1523,33 @@ async function main() {
         };
         
       } catch (error: any) {
-        debugLog("Error in enhanced coverage analysis", { error: error.message, args });
+        debugLog("Error in enhanced coverage analysis", { 
+          error: error.message, 
+          stack: error.stack?.split('\n').slice(0, 5).join('\n'),
+          args: {
+            project_key: args.project_key,
+            case_key: args.case_key,
+            analysis_scope: args.analysis_scope
+          }
+        });
+        
+        let errorDetails = `❌ Error in enhanced coverage analysis for ${args.case_key}: ${error.message}`;
+        
+        // Add specific troubleshooting information
+        if (error.message.includes('not found')) {
+          errorDetails += `\n\n🔍 **Troubleshooting:**\n- Verify the test case key "${args.case_key}" exists in project "${args.project_key || 'auto-detected'}"\n- Check your Zebrunner API credentials and permissions`;
+        } else if (error.message.includes('timeout') || error.message.includes('ENOTFOUND')) {
+          errorDetails += `\n\n🔍 **Troubleshooting:**\n- Check your network connection to Zebrunner\n- Verify ZEBRUNNER_URL environment variable is correct`;
+        } else if (error.message.includes('rules') || error.message.includes('RulesParser')) {
+          errorDetails += `\n\n🔍 **Troubleshooting:**\n- Rules engine error detected\n- Set ENABLE_RULES_ENGINE=false to disable rules validation\n- Check if rules configuration files are accessible`;
+        }
+        
+        errorDetails += `\n\n**Configuration:**\n- Rules Engine: ${process.env.ENABLE_RULES_ENGINE || 'undefined'}\n- Debug Mode: ${process.env.DEBUG || 'false'}`;
+        
         return {
           content: [{
             type: "text" as const,
-            text: `❌ Error in enhanced coverage analysis for ${args.case_key}: ${error.message}`
+            text: errorDetails
           }]
         };
       }
