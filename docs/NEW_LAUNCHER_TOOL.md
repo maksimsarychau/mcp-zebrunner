@@ -13,7 +13,7 @@ A new MCP tool `get_launch_details` has been implemented that uses the new Zebru
 - Completely separate from existing TCM Public API authentication
 
 ### 📊 **Flexible Tool Parameters**
-- **Project Resolution**: Accept either `projectKey` (e.g., "MFPAND") or `projectId` (e.g., 7)
+- **Project Resolution**: Accept either `projectKey` (e.g., "PROJ") or `projectId` (e.g., 7)
 - **Configurable Output**: Choose what to include:
   - `includeLaunchDetails`: Launch information (default: true)
   - `includeTestSessions`: Test sessions data (default: true)
@@ -34,7 +34,7 @@ A new MCP tool `get_launch_details` has been implemented that uses the new Zebru
 ### `get_launch_details`
 ```typescript
 {
-  projectKey?: string,        // "MFPAND" (alternative to projectId)
+  projectKey?: string,        // "PROJ" (alternative to projectId)
   projectId?: number,         // 7 (alternative to projectKey)
   launchId: number,          // 118685
   includeLaunchDetails?: boolean,  // default: true
@@ -43,10 +43,10 @@ A new MCP tool `get_launch_details` has been implemented that uses the new Zebru
 }
 ```
 
-### `get_launcher_summary`
+### `get_launch_summary`
 ```typescript
 {
-  projectKey?: string,        // "MFPAND" (alternative to projectId)
+  projectKey?: string,        // "PROJ" (alternative to projectId)
   projectId?: number,         // 7 (alternative to projectKey)
   launchId: number,          // 118685
   format?: 'json' | 'dto' | 'string'  // default: 'json'
@@ -59,7 +59,7 @@ A new MCP tool `get_launch_details` has been implemented that uses the new Zebru
 ```bash
 # Using the MCP tool
 get_launch_details({
-  projectKey: "MFPAND",
+  projectKey: "PROJ",
   launchId: 118685,
   includeLaunchDetails: true,
   includeTestSessions: true,
@@ -69,7 +69,7 @@ get_launch_details({
 
 ### Quick Summary with Project ID
 ```bash
-get_launcher_summary({
+get_launch_summary({
   projectId: 7,
   launchId: 118685,
   format: "json"
@@ -85,8 +85,8 @@ get_launcher_summary({
   "projectId": 7,
   "project": {
     "id": 7,
-    "name": "MFP Android",
-    "key": "MFPAND",
+    "name": "Mobile App Testing",
+    "key": "PROJ",
     "createdAt": "2023-09-11T17:43:13.337691Z"
   },
   "launch": {
@@ -98,7 +98,7 @@ get_launcher_summary({
     "framework": "testng",
     "environment": "PRODUCTION",
     "platform": "Android",
-    "build": "myfitnesspal-develop-45891-qaRelease.apk",
+    "build": "mobile-app-develop-45891-qaRelease.apk",
     "passed": 21,
     "failed": 3,
     "skipped": 0

@@ -13,11 +13,11 @@ The Suite Hierarchy enhancement adds `featureSuiteId` and `rootSuiteId` fields t
 ### 🔧 New Parameter
 - **`include_suite_hierarchy: boolean`**: Optional parameter to enable hierarchy resolution
 
-## Test Case: MFPAND-6013
+## Test Case: PROJ-6013
 
 ### Known Values (for testing)
 - **Test Case ID**: 81891
-- **Key**: MFPAND-6013
+- **Key**: PROJ-6013
 - **Feature Suite ID**: 18667 (from API response `testSuite.id`)
 - **Root Suite ID**: 18659 (resolved by hierarchy traversal)
 
@@ -26,7 +26,7 @@ The Suite Hierarchy enhancement adds `featureSuiteId` and `rootSuiteId` fields t
 {
   "data": {
     "id": 81891,
-    "key": "MFPAND-6013",
+    "key": "PROJ-6013",
     "testSuite": {
       "id": 18667  // This becomes featureSuiteId
     },
@@ -39,7 +39,7 @@ The Suite Hierarchy enhancement adds `featureSuiteId` and `rootSuiteId` fields t
 ```json
 {
   "id": 81891,
-  "key": "MFPAND-6013",
+  "key": "PROJ-6013",
   "testSuite": {
     "id": 18667
   },
@@ -53,13 +53,13 @@ The Suite Hierarchy enhancement adds `featureSuiteId` and `rootSuiteId` fields t
 
 ### Basic Usage (Backward Compatible)
 ```typescript
-const testCase = await client.getTestCaseByKey('MFPAND', 'MFPAND-6013');
+const testCase = await client.getTestCaseByKey('PROJ', 'PROJ-6013');
 // featureSuiteId and rootSuiteId will be undefined
 ```
 
 ### With Suite Hierarchy
 ```typescript
-const testCase = await client.getTestCaseByKey('MFPAND', 'MFPAND-6013', { 
+const testCase = await client.getTestCaseByKey('PROJ', 'PROJ-6013', { 
   includeSuiteHierarchy: true 
 });
 // featureSuiteId: 18667, rootSuiteId: 18659
@@ -71,19 +71,19 @@ All MCP tools now support the `include_suite_hierarchy` parameter:
 ```bash
 # Get test case with hierarchy
 get_test_case_by_key:
-  case_key: "MFPAND-6013"
+  case_key: "PROJ-6013"
   format: "markdown"
   include_suite_hierarchy: true
 
 # Coverage analysis with hierarchy
 get_test_coverage_by_test_case_steps_by_key:
-  case_key: "MFPAND-6013"
+  case_key: "PROJ-6013"
   implementation_context: "your test code"
   include_suite_hierarchy: true
 
 # Draft test generation with hierarchy
 generate_draft_test_by_key:
-  case_key: "MFPAND-6013"
+  case_key: "PROJ-6013"
   implementation_context: "framework hints"
   include_suite_hierarchy: true
 ```
@@ -92,7 +92,7 @@ generate_draft_test_by_key:
 
 ### Get Complete Hierarchy Path
 ```typescript
-const hierarchyPath = await client.getSuiteHierarchyPath('MFPAND', 18667);
+const hierarchyPath = await client.getSuiteHierarchyPath('PROJ', 18667);
 // Returns: [{id: 18659, name: "Root Suite"}, {id: 18667, name: "Feature Suite"}]
 ```
 

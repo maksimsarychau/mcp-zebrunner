@@ -27,19 +27,19 @@ We have successfully enhanced the test case validation tool with automation stat
 ### Enhanced Validation with Improvement
 ```bash
 # Basic validation with automation status
-validate_test_case --projectKey="MFPAND" --caseKey="MFPAND-29"
+validate_test_case --projectKey="PROJ" --caseKey="PROJ-29"
 
 # Validation with automatic improvement attempt
-validate_test_case --projectKey="MFPAND" --caseKey="MFPAND-29" --improveIfPossible=true --format="markdown"
+validate_test_case --projectKey="PROJ" --caseKey="PROJ-29" --improveIfPossible=true --format="markdown"
 ```
 
 ### Dedicated Improvement Tool
 ```bash
 # Analyze and improve with high-confidence changes applied
-improve_test_case --projectKey="MFPAND" --caseKey="MFPAND-29"
+improve_test_case --projectKey="PROJ" --caseKey="PROJ-29"
 
 # Analyze only without applying changes
-improve_test_case --projectKey="MFPAND" --caseKey="MFPAND-29" --applyHighConfidenceChanges=false
+improve_test_case --projectKey="PROJ" --caseKey="PROJ-29" --applyHighConfidenceChanges=false
 ```
 
 ## 🎯 Improvement Categories
@@ -65,7 +65,7 @@ improve_test_case --projectKey="MFPAND" --caseKey="MFPAND-29" --applyHighConfide
 ```markdown
 # Test Case Validation Report
 
-**Test Case:** MFPAND-29 - User login validation [Manual]
+**Test Case:** PROJ-29 - User login validation [Manual]
 **Rules Used:** Test Case Validation Rules v1.0.0
 **Summary:** [Manual] Overall Score: 85% (GOOD) | 1 major issue | Manual: Ready | Automation: Ready
 
