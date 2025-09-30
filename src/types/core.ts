@@ -203,3 +203,153 @@ export type PagedResponse<T> = {
   items: T[];
   _meta?: Meta;
 };
+
+// === Public API Test Run Schemas ===
+
+// Test Run Configuration
+export const PublicTestRunConfigurationSchema = z.object({
+  group: z.object({
+    id: z.number(),
+    name: z.string()
+  }),
+  option: z.object({
+    id: z.number(),
+    name: z.string()
+  })
+});
+
+// Test Run Environment
+export const PublicTestRunEnvironmentSchema = z.object({
+  id: z.number(),
+  key: z.string(),
+  name: z.string()
+});
+
+// Test Run Milestone
+export const PublicTestRunMilestoneSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  completed: z.boolean(),
+  description: z.string().nullable().optional(),
+  startDate: z.string().nullable().optional(),
+  dueDate: z.string().nullable().optional()
+});
+
+// Test Run Requirement
+export const PublicTestRunRequirementSchema = z.object({
+  source: z.enum(["JIRA", "AZURE_DEVOPS"]),
+  reference: z.string()
+});
+
+// Test Run Execution Summary
+export const PublicTestRunExecutionSummarySchema = z.object({
+  status: z.object({
+    id: z.number(),
+    name: z.string(),
+    colorHex: z.string()
+  }),
+  testCasesCount: z.number()
+});
+
+// Public API Test Run Resource
+export const PublicTestRunResourceSchema = z.object({
+  id: z.number(),
+  title: z.string(),
+  description: z.string().nullable().optional(),
+  milestone: PublicTestRunMilestoneSchema.nullable().optional(),
+  environment: PublicTestRunEnvironmentSchema.nullable().optional(),
+  configurations: z.array(PublicTestRunConfigurationSchema).default([]),
+  requirements: z.array(PublicTestRunRequirementSchema).default([]),
+  closed: z.boolean(),
+  createdBy: ZebrunnerUserSchema,
+  createdAt: z.string(),
+  executionSummaries: z.array(PublicTestRunExecutionSummarySchema).default([])
+});
+
+// Test Run Test Case Resource
+export const PublicTestRunTestCaseResourceSchema = z.object({
+  testCase: z.object({
+    id: z.number(),
+    key: z.string(),
+    title: z.string()
+  }),
+  assignee: ZebrunnerUserSchema.nullable().optional(),
+  result: z.object({
+    status: z.object({
+      id: z.number(),
+      name: z.string(),
+      aliases: z.string().nullable().optional()
+    }),
+    details: z.string().nullable().optional(),
+    issue: z.object({
+      type: z.enum(["JIRA", "GITHUB"]),
+      id: z.string()
+    }).nullable().optional(),
+    executionTimeInMillis: z.number().nullable().optional(),
+    executionType: z.enum(["MANUAL", "AUTOMATED"]).optional(),
+    attachments: z.array(z.object({
+      fileUuid: z.string()
+    })).default([])
+  }).nullable().optional()
+});
+
+// Paginated responses for Public API
+export const PublicTestRunsResponseSchema = z.object({
+  items: z.array(PublicTestRunResourceSchema),
+  _meta: z.object({
+    nextPageToken: z.string().optional()
+  }).optional()
+});
+
+export const PublicTestRunResponseSchema = z.object({
+  data: PublicTestRunResourceSchema
+});
+
+export const PublicTestRunTestCasesResponseSchema = z.object({
+  items: z.array(PublicTestRunTestCaseResourceSchema)
+});
+
+// Test Run Settings schemas
+export const ResultStatusResourceSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  aliases: z.string().nullable().optional(),
+  colorHex: z.string(),
+  enabled: z.boolean(),
+  isCompleted: z.boolean(),
+  isSuccess: z.boolean(),
+  isFailure: z.boolean(),
+  isAssignable: z.boolean()
+});
+
+export const ConfigurationGroupOptionSchema = z.object({
+  id: z.number(),
+  name: z.string()
+});
+
+export const ConfigurationGroupResourceSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  options: z.array(ConfigurationGroupOptionSchema)
+});
+
+export const ResultStatusesResponseSchema = z.object({
+  items: z.array(ResultStatusResourceSchema)
+});
+
+export const ConfigurationGroupsResponseSchema = z.object({
+  items: z.array(ConfigurationGroupResourceSchema)
+});
+
+// Type exports for Public API
+export type PublicTestRunResource = z.infer<typeof PublicTestRunResourceSchema>;
+export type PublicTestRunTestCaseResource = z.infer<typeof PublicTestRunTestCaseResourceSchema>;
+export type PublicTestRunsResponse = z.infer<typeof PublicTestRunsResponseSchema>;
+export type PublicTestRunResponse = z.infer<typeof PublicTestRunResponseSchema>;
+export type PublicTestRunTestCasesResponse = z.infer<typeof PublicTestRunTestCasesResponseSchema>;
+
+// Type exports for Test Run Settings
+export type ResultStatusResource = z.infer<typeof ResultStatusResourceSchema>;
+export type ConfigurationGroupResource = z.infer<typeof ConfigurationGroupResourceSchema>;
+export type ResultStatusesResponse = z.infer<typeof ResultStatusesResponseSchema>;
+export type ConfigurationGroupsResponse = z.infer<typeof ConfigurationGroupsResponseSchema>;

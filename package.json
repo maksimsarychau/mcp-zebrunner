@@ -1,9 +1,9 @@
 {
   "name": "mcp-zebrunner",
-  "version": "3.4.28",
+  "version": "3.5.36",
   "private": true,
   "type": "module",
-  "description": "MCP server (stdio) for Zebrunner TCM Public API (read-only)",
+  "description": "MCP server (stdio) for Zebrunner TCM API (read-only)",
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "dev:with-reporting": "tsx watch src/server-with-reporting.ts",

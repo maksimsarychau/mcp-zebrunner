@@ -994,4 +994,113 @@ export class EnhancedZebrunnerClient {
     });
   }
 
+  // === Public API Test Run Methods ===
+
+  /**
+   * List Test Runs using Public API with filtering support
+   */
+  async listPublicTestRuns(options: {
+    projectKey: string;
+    pageToken?: string;
+    maxPageSize?: number;
+    filter?: string;
+    sortBy?: string;
+  }) {
+    const { PublicTestRunsResponseSchema } = await import("../types/core.js");
+    
+    return this.retryRequest(async () => {
+      const params: Record<string, any> = {
+        projectKey: options.projectKey,
+        maxPageSize: options.maxPageSize || 10
+      };
+
+      if (options.pageToken) {
+        params.pageToken = options.pageToken;
+      }
+      if (options.filter) {
+        params.filter = options.filter;
+      }
+      if (options.sortBy) {
+        params.sortBy = options.sortBy;
+      }
+
+      const response = await this.http.get("/test-runs", { params });
+      return PublicTestRunsResponseSchema.parse(response.data);
+    });
+  }
+
+  /**
+   * Get Test Run by ID using Public API
+   */
+  async getPublicTestRunById(options: {
+    id: number;
+    projectKey: string;
+  }) {
+    const { PublicTestRunResponseSchema } = await import("../types/core.js");
+    
+    return this.retryRequest(async () => {
+      const params = {
+        projectKey: options.projectKey
+      };
+
+      const response = await this.http.get(`/test-runs/${options.id}`, { params });
+      return PublicTestRunResponseSchema.parse(response.data);
+    });
+  }
+
+  /**
+   * List all Test Cases of a Test Run using Public API
+   */
+  async listPublicTestRunTestCases(options: {
+    testRunId: number;
+    projectKey: string;
+  }) {
+    const { PublicTestRunTestCasesResponseSchema } = await import("../types/core.js");
+    
+    return this.retryRequest(async () => {
+      const params = {
+        projectKey: options.projectKey
+      };
+
+      const response = await this.http.get(`/test-runs/${options.testRunId}/test-cases`, { params });
+      return PublicTestRunTestCasesResponseSchema.parse(response.data);
+    });
+  }
+
+  /**
+   * List Result Statuses using Public API
+   */
+  async listResultStatuses(options: {
+    projectKey: string;
+  }) {
+    const { ResultStatusesResponseSchema } = await import("../types/core.js");
+    
+    return this.retryRequest(async () => {
+      const params = {
+        projectKey: options.projectKey
+      };
+
+      const response = await this.http.get("/test-run-settings/result-statuses", { params });
+      return ResultStatusesResponseSchema.parse(response.data);
+    });
+  }
+
+  /**
+   * List Configuration Groups using Public API
+   */
+  async listConfigurationGroups(options: {
+    projectKey: string;
+  }) {
+    const { ConfigurationGroupsResponseSchema } = await import("../types/core.js");
+    
+    return this.retryRequest(async () => {
+      const params = {
+        projectKey: options.projectKey
+      };
+
+      const response = await this.http.get("/test-run-settings/configuration-groups", { params });
+      return ConfigurationGroupsResponseSchema.parse(response.data);
+    });
+  }
+
 }
