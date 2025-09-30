@@ -46,30 +46,21 @@ describe('Manual E2E Tests - Zebrunner MCP Server', () => {
         reject(new Error('Server startup timeout after 15 seconds'));
       }, 15000);
 
-      serverProcess.stdout?.on('data', (data) => {
+      // Listen to both stdout and stderr for startup message
+      const handleOutput = (data: Buffer) => {
         const output = data.toString();
         console.log('Server output:', output.trim());
 
-        if (output.includes('Zebrunner Unified MCP Server started successfully') ||
-            output.includes('MCP Server started') ||
-            output.includes('server started')) {
+        if (output.includes('Zebrunner Unified MCP Server started successfully')) {
           serverReady = true;
           clearTimeout(timeout);
           console.log('✅ Server started successfully');
           resolve();
         }
-      });
+      };
 
-      serverProcess.stderr?.on('data', (data) => {
-        const error = data.toString();
-        console.error('Server stderr:', error.trim());
-
-        // If we get credential errors, fail fast
-        if (error.includes('Missing required environment variables')) {
-          clearTimeout(timeout);
-          reject(new Error('Missing credentials: ' + error));
-        }
-      });
+      serverProcess.stdout?.on('data', handleOutput);
+      serverProcess.stderr?.on('data', handleOutput);
 
       serverProcess.on('error', (error) => {
         clearTimeout(timeout);

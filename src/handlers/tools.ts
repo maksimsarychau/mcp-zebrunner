@@ -7,7 +7,6 @@ import {
   GetTestSuitesInputSchema,
   GetTestRunsInputSchema,
   GetTestResultsInputSchema,
-  SearchTestCasesInputSchema,
   FindTestCaseByKeyInputSchema,
   GetSuiteHierarchyInputSchema,
   ValidateTestCaseInputSchema,
@@ -268,44 +267,6 @@ export class ZebrunnerToolHandlers {
     }
   }
 
-  /**
-   * Search test cases tool
-   */
-  async searchTestCases(input: z.infer<typeof SearchTestCasesInputSchema>) {
-    const { projectKey, query, suiteId, status, priority, automationState, format, page, size } = input;
-    
-    try {
-      const searchParams = {
-        page,
-        size,
-        suiteId,
-        status,
-        priority,
-        automationState
-      };
-
-      const response = await this.client.searchTestCases(projectKey, query, searchParams);
-      const formattedData = FormatProcessor.format(response, format);
-      
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2)
-          }
-        ]
-      };
-    } catch (error: any) {
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `Error searching test cases: ${error.message}`
-          }
-        ]
-      };
-    }
-  }
 
   /**
    * Find test case by key tool

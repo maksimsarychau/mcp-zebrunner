@@ -2,6 +2,7 @@ import "dotenv/config";
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
 import { EnhancedZebrunnerClient } from '../../src/api/enhanced-client.js';
+import { requireCredentials } from '../helpers/credentials.js';
 
 /**
  * Integration tests for Suite Hierarchy Enhancement
@@ -33,21 +34,14 @@ describe('Suite Hierarchy Integration Tests', () => {
   const EXPECTED_ROOT_SUITE_ID = 18659;
 
   before(async () => {
-    // Verify environment variables are set
-    const requiredEnvVars = ['ZEBRUNNER_URL', 'ZEBRUNNER_LOGIN', 'ZEBRUNNER_TOKEN'];
-    const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
-    
-    if (missingVars.length > 0) {
-      console.log(`⚠️  Skipping integration tests - missing environment variables: ${missingVars.join(', ')}`);
-      console.log('   Create a .env file with valid Zebrunner credentials to run these tests.');
-      return; // Skip setup, tests will be skipped
-    }
+    // Require valid credentials for integration tests
+    const credentials = requireCredentials('Suite Hierarchy Integration Tests');
 
     // Initialize client
     const config = {
-      baseUrl: process.env.ZEBRUNNER_URL!,
-      username: process.env.ZEBRUNNER_LOGIN!,
-      token: process.env.ZEBRUNNER_TOKEN!,
+      baseUrl: credentials.baseUrl,
+      username: credentials.login,
+      token: credentials.token,
       defaultPageSize: 10,
       maxPageSize: 100
     };

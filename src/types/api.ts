@@ -98,17 +98,6 @@ export const GetTestResultsInputSchema = z.object({
   format: z.enum(['dto', 'json', 'string']).default('json')
 });
 
-export const SearchTestCasesInputSchema = z.object({
-  projectKey: z.string().min(1),
-  query: z.string().min(1),
-  suiteId: z.number().int().positive().optional(),
-  status: z.string().optional(),
-  priority: z.string().optional(),
-  automationState: z.string().optional(),
-  format: z.enum(['dto', 'json', 'string']).default('json'),
-  page: z.number().int().nonnegative().optional(),
-  size: z.number().int().positive().max(200).optional()
-});
 
 export const FindTestCaseByKeyInputSchema = z.object({
   projectKey: z.string().min(1),
@@ -156,7 +145,6 @@ export type GetTestCasesInput = z.infer<typeof GetTestCasesInputSchema>;
 export type GetTestSuitesInput = z.infer<typeof GetTestSuitesInputSchema>;
 export type GetTestRunsInput = z.infer<typeof GetTestRunsInputSchema>;
 export type GetTestResultsInput = z.infer<typeof GetTestResultsInputSchema>;
-export type SearchTestCasesInput = z.infer<typeof SearchTestCasesInputSchema>;
 export type FindTestCaseByKeyInput = z.infer<typeof FindTestCaseByKeyInputSchema>;
 export type GetSuiteHierarchyInput = z.infer<typeof GetSuiteHierarchyInputSchema>;
 export type GetLauncherDetailsInput = z.infer<typeof GetLauncherDetailsInputSchema>;
