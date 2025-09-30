@@ -9,6 +9,12 @@ import {
   ProjectResponseSchema,
   TestSessionsResponse,
   TestSessionsResponseSchema,
+  MilestonesResponse,
+  MilestonesResponseSchema,
+  AvailableProjectsResponse,
+  AvailableProjectsResponseSchema,
+  ProjectsLimitResponse,
+  ProjectsLimitResponseSchema,
   ZebrunnerReportingError,
   ZebrunnerReportingAuthError,
   ZebrunnerReportingNotFoundError
@@ -273,6 +279,105 @@ export class ZebrunnerReportingClient {
     const sessionsData = response.data || response;
     
     return TestSessionsResponseSchema.parse(sessionsData);
+  }
+
+  /**
+   * Get milestones for a project
+   */
+  async getMilestones(
+    projectId: number, 
+    options: {
+      page?: number;
+      pageSize?: number;
+      completed?: boolean | 'all';
+    } = {}
+  ): Promise<MilestonesResponse> {
+    const { page = 1, pageSize = 10, completed = false } = options;
+    
+    let url = `/api/reporting/v1/milestones?projectId=${projectId}&page=${page}&pageSize=${pageSize}`;
+    
+    // Add completed filter if not 'all'
+    if (completed !== 'all') {
+      url += `&completed=${completed}`;
+    }
+    
+    const response = await this.makeAuthenticatedRequest<any>('GET', url);
+    
+    // Handle different response structures
+    const milestonesData = response.data || response;
+    
+    try {
+      return MilestonesResponseSchema.parse(milestonesData);
+    } catch (error) {
+      throw new ZebrunnerReportingError(`Failed to parse milestones data: ${error instanceof Error ? error.message : error}`);
+    }
+  }
+
+  /**
+   * Get available projects with optional filtering
+   */
+  async getAvailableProjects(
+    options: {
+      starred?: boolean;
+      publiclyAccessible?: boolean;
+      extraFields?: string[];
+    } = {}
+  ): Promise<AvailableProjectsResponse> {
+    const { starred, publiclyAccessible, extraFields = ['starred'] } = options;
+    
+    let url = `/api/projects/v1/projects`;
+    const params = new URLSearchParams();
+    
+    // Add extraFields parameter
+    if (extraFields.length > 0) {
+      params.append('extraFields', extraFields.join(','));
+    }
+    
+    if (params.toString()) {
+      url += `?${params.toString()}`;
+    }
+    
+    const response = await this.makeAuthenticatedRequest<any>('GET', url);
+    
+    // Handle different response structures
+    const projectsData = response.data || response;
+    
+    try {
+      const parsedData = AvailableProjectsResponseSchema.parse(projectsData);
+      
+      // Apply client-side filtering
+      let filteredItems = parsedData.items.filter(project => !project.deleted); // Always exclude deleted
+      
+      if (starred !== undefined) {
+        filteredItems = filteredItems.filter(project => project.starred === starred);
+      }
+      
+      if (publiclyAccessible !== undefined) {
+        filteredItems = filteredItems.filter(project => project.publiclyAccessible === publiclyAccessible);
+      }
+      
+      return {
+        items: filteredItems
+      };
+    } catch (error) {
+      throw new ZebrunnerReportingError(`Failed to parse projects data: ${error instanceof Error ? error.message : error}`);
+    }
+  }
+
+  /**
+   * Get projects pagination info
+   */
+  async getProjectsLimit(): Promise<ProjectsLimitResponse> {
+    const url = `/api/projects/v1/projects-limit`;
+    const response = await this.makeAuthenticatedRequest<any>('GET', url);
+    
+    const limitData = response.data || response;
+    
+    try {
+      return ProjectsLimitResponseSchema.parse(limitData);
+    } catch (error) {
+      throw new ZebrunnerReportingError(`Failed to parse projects limit data: ${error instanceof Error ? error.message : error}`);
+    }
   }
 
   /**
