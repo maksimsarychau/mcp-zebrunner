@@ -53,8 +53,8 @@ The validation tool is registered as `validate_test_case` in the MCP server with
 
 ```typescript
 {
-  projectKey: string,           // Required: Project key (e.g., "MFPAND")
-  caseKey: string,             // Required: Test case key (e.g., "MFPAND-29")
+  projectKey: string,           // Required: Project key (e.g., "PROJ")
+  caseKey: string,             // Required: Test case key (e.g., "PROJ-29")
   rulesFilePath?: string,      // Optional: Path to custom rules file
   checkpointsFilePath?: string, // Optional: Path to custom checkpoints file
   format?: 'dto' | 'json' | 'string' | 'markdown' // Optional: Output format
@@ -90,15 +90,15 @@ Each rule includes:
 ### Basic Validation
 ```bash
 # Validate a test case using default rules
-validate_test_case --projectKey="MFPAND" --caseKey="MFPAND-29"
+validate_test_case --projectKey="PROJ" --caseKey="PROJ-29"
 ```
 
 ### Custom Rules
 ```bash
 # Validate using project-specific rules
 validate_test_case \
-  --projectKey="MFPAND" \
-  --caseKey="MFPAND-29" \
+  --projectKey="PROJ" \
+  --caseKey="PROJ-29" \
   --rulesFilePath="./custom-rules.md" \
   --checkpointsFilePath="./custom-checkpoints.md"
 ```
@@ -106,10 +106,10 @@ validate_test_case \
 ### Different Output Formats
 ```bash
 # Get markdown report
-validate_test_case --projectKey="MFPAND" --caseKey="MFPAND-29" --format="markdown"
+validate_test_case --projectKey="PROJ" --caseKey="PROJ-29" --format="markdown"
 
 # Get JSON data
-validate_test_case --projectKey="MFPAND" --caseKey="MFPAND-29" --format="json"
+validate_test_case --projectKey="PROJ" --caseKey="PROJ-29" --format="json"
 ```
 
 ## Sample Output
@@ -118,7 +118,7 @@ validate_test_case --projectKey="MFPAND" --caseKey="MFPAND-29" --format="json"
 ```markdown
 # Test Case Validation Report
 
-**Test Case:** MFPAND-29 - User login with valid credentials
+**Test Case:** PROJ-29 - User login with valid credentials
 **Rules Used:** Test Case Validation Rules v1.0.0
 **Summary:** Overall Score: 85% (GOOD) | Manual: Ready | Automation: Ready
 
