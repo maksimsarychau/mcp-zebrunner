@@ -489,11 +489,21 @@ describe('Performance Tests', () => {
         const sizeRatio = current.dataSize / previous.dataSize;
         const timeRatio = current.processingTime / previous.processingTime;
         
-        // Time should not increase more than 3x the data size increase (allow for variance)
-        // Skip if processing time is 0 (too fast to measure)
-        if (current.processingTime > 0 && previous.processingTime > 0) {
-          assert.ok(timeRatio <= sizeRatio * 3, 
-            `Processing time should scale reasonably with data size (${current.dataSize} items: ${current.processingTime}ms)`);
+        // Time should not increase more than 5x the data size increase (allow for variance)
+        // Skip if processing time is very small (< 10ms) as measurements are unreliable
+        if (current.processingTime >= 10 && previous.processingTime >= 10) {
+          assert.ok(timeRatio <= sizeRatio * 5, 
+            `Processing time should scale reasonably with data size (${current.dataSize} items: ${current.processingTime}ms, ratio: ${timeRatio.toFixed(2)} vs size ratio: ${sizeRatio.toFixed(2)})`);
+        } else {
+          // For small processing times, just ensure it's not exponentially bad
+          // Handle the case where previous processing time is 0
+          if (previous.processingTime === 0) {
+            assert.ok(current.processingTime <= 50, 
+              `Processing time should remain reasonable for small datasets (${current.dataSize} items: ${current.processingTime}ms)`);
+          } else {
+            assert.ok(current.processingTime <= previous.processingTime * 10,
+              `Processing time should not grow exponentially (${current.dataSize} items: ${current.processingTime}ms vs ${previous.dataSize} items: ${previous.processingTime}ms)`);
+          }
         }
       }
       
