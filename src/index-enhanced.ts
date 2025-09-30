@@ -12,7 +12,6 @@ import {
   GetTestSuitesInputSchema,
   GetTestRunsInputSchema,
   GetTestResultsInputSchema,
-  SearchTestCasesInputSchema,
   FindTestCaseByKeyInputSchema,
   GetSuiteHierarchyInputSchema
 } from "./types/api.js";
@@ -114,22 +113,6 @@ async function main() {
     async (args) => toolHandlers.findTestCaseByKey(args)
   );
 
-  server.tool(
-    "search_test_cases",
-    "Search test cases with advanced filtering options",
-    {
-      projectKey: z.string().min(1),
-      query: z.string().min(1),
-      suiteId: z.number().int().positive().optional(),
-      status: z.string().optional(),
-      priority: z.string().optional(),
-      automationState: z.string().optional(),
-      format: z.enum(['dto', 'json', 'string']).default('json'),
-      page: z.number().int().nonnegative().optional(),
-      size: z.number().int().positive().max(200).optional()
-    },
-    async (args) => toolHandlers.searchTestCases(args)
-  );
 
   // Test Suites Tools
   server.tool(

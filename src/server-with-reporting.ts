@@ -14,7 +14,6 @@ import {
   GetTestSuitesInputSchema,
   GetTestRunsInputSchema,
   GetTestResultsInputSchema,
-  SearchTestCasesInputSchema,
   FindTestCaseByKeyInputSchema,
   GetSuiteHierarchyInputSchema,
   GetLauncherDetailsInputSchema

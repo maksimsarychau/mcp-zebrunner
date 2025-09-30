@@ -282,8 +282,9 @@ export class EnhancedZebrunnerClient {
    */
   async testConnection(): Promise<{ success: boolean; message: string; details?: any }> {
     try {
-      // First try a minimal request that should work regardless of project access
-      const response = await this.http.get('/', {
+      // Try a minimal request to test-suites endpoint which should work with valid auth
+      const response = await this.http.get('/test-suites', {
+        params: { projectKey: 'MFPAND', size: 1 }, // Use a known project
         timeout: 10000
       });
       
