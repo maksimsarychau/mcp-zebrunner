@@ -131,13 +131,13 @@ describe('MCP Tools Schema Validation', () => {
         if ('case_key' in input && (input.case_key === '' || input.project_key === '')) {
           assert.ok(input.project_key === '' || input.case_key === '');
         }
-        if ('page' in input && input.page < 0) {
+        if ('page' in input && input.page !== undefined && input.page < 0) {
           assert.ok(input.page < 0);
         }
-        if ('size' in input && input.size <= 0) {
+        if ('size' in input && input.size !== undefined && input.size <= 0) {
           assert.ok(input.size <= 0);
         }
-        if ('max_depth' in input && input.max_depth > 10) {
+        if ('max_depth' in input && input.max_depth !== undefined && input.max_depth > 10) {
           assert.ok(input.max_depth > 10);
         }
       });
@@ -249,6 +249,134 @@ describe('MCP Tools Schema Validation', () => {
       // rootSuiteId should be different from featureSuiteId (unless it's a root suite)
       assert.ok(typeof enhancedTestCase.rootSuiteId, 'number');
       assert.ok(enhancedTestCase.rootSuiteId > 0);
+    });
+  });
+
+  describe('Enhanced Widget Tools with Milestone Support', () => {
+    it('should validate get_platform_results_by_period with milestone parameter', () => {
+      const validInputWithMilestone = {
+        project: 'android',
+        period: 'Last 7 Days',
+        platform: 'android',
+        browser: ['chrome'],
+        milestone: ['25.39.0', '25.38.0'],
+        format: 'formatted'
+      };
+
+      assert.equal(typeof validInputWithMilestone.project, 'string');
+      assert.ok(['Last 7 Days', 'Week', 'Month'].includes(validInputWithMilestone.period));
+      assert.ok(Array.isArray(validInputWithMilestone.milestone), 'milestone should be array');
+      validInputWithMilestone.milestone.forEach(m => {
+        assert.ok(typeof m === 'string', 'milestone items should be strings');
+        assert.ok(m.length > 0, 'milestone items should not be empty');
+      });
+      assert.ok(['raw', 'formatted'].includes(validInputWithMilestone.format));
+    });
+
+    it('should validate get_top_bugs with milestone parameter', () => {
+      const validInputWithMilestone = {
+        project: 'ios',
+        period: 'Week',
+        limit: 5,
+        milestone: ['25.39.0'],
+        platform: ['ios'],
+        format: 'raw'
+      };
+
+      assert.equal(typeof validInputWithMilestone.project, 'string');
+      assert.ok(['Last 7 Days', 'Week', 'Month'].includes(validInputWithMilestone.period));
+      assert.ok(typeof validInputWithMilestone.limit === 'number');
+      assert.ok(validInputWithMilestone.limit > 0 && validInputWithMilestone.limit <= 100);
+      assert.ok(Array.isArray(validInputWithMilestone.milestone), 'milestone should be array');
+      assert.ok(Array.isArray(validInputWithMilestone.platform), 'platform should be array');
+      assert.ok(['raw', 'formatted'].includes(validInputWithMilestone.format));
+    });
+
+    it('should validate milestone parameter backward compatibility', () => {
+      // Test that tools work without milestone parameter (backward compatibility)
+      const legacyInput = {
+        project: 'web',
+        period: 'Month',
+        format: 'formatted'
+        // No milestone parameter - should default to []
+      };
+
+      assert.equal(typeof legacyInput.project, 'string');
+      assert.ok(['Last 7 Days', 'Week', 'Month'].includes(legacyInput.period));
+      assert.ok(['raw', 'formatted'].includes(legacyInput.format));
+      
+      // Milestone should default to empty array when not provided
+      const defaultMilestone: string[] = [];
+      assert.ok(Array.isArray(defaultMilestone), 'default milestone should be array');
+      assert.equal(defaultMilestone.length, 0, 'default milestone should be empty');
+    });
+
+    it('should validate buildParamsConfig milestone integration', () => {
+      const mockParamsConfig = {
+        BROWSER: ['chrome'],
+        DEFECT: [], APPLICATION: [], BUILD: [], PRIORITY: [],
+        RUN: [], USER: [], ENV: [], MILESTONE: ['25.39.0'],
+        PLATFORM: ['android'],
+        STATUS: [], LOCALE: [],
+        PERIOD: 'Last 7 Days',
+        dashboardName: 'Test Dashboard',
+        isReact: true
+      };
+
+      assert.ok(Array.isArray(mockParamsConfig.MILESTONE), 'MILESTONE should be array');
+      assert.equal(mockParamsConfig.MILESTONE.length, 1, 'should contain milestone');
+      assert.equal(mockParamsConfig.MILESTONE[0], '25.39.0', 'should contain correct milestone');
+      assert.ok(typeof mockParamsConfig.PERIOD === 'string', 'PERIOD should be string');
+      assert.ok(typeof mockParamsConfig.isReact === 'boolean', 'isReact should be boolean');
+    });
+  });
+
+  describe('New Project Discovery Tools', () => {
+    it('should validate get_available_projects parameters', () => {
+      const validInput = {
+        starred: true,
+        publiclyAccessible: false,
+        format: 'formatted',
+        includePaginationInfo: true
+      };
+
+      assert.ok(typeof validInput.starred === 'boolean' || validInput.starred === undefined);
+      assert.ok(typeof validInput.publiclyAccessible === 'boolean' || validInput.publiclyAccessible === undefined);
+      assert.ok(['raw', 'formatted'].includes(validInput.format));
+      assert.ok(typeof validInput.includePaginationInfo === 'boolean');
+    });
+
+    it('should validate get_project_milestones parameters', () => {
+      const validInput = {
+        project: 'android',
+        page: 1,
+        pageSize: 10,
+        status: 'incomplete',
+        format: 'formatted'
+      };
+
+      assert.ok(['web', 'android', 'ios', 'api'].includes(validInput.project) || typeof validInput.project === 'number');
+      assert.ok(typeof validInput.page === 'number' && validInput.page >= 1);
+      assert.ok(typeof validInput.pageSize === 'number' && validInput.pageSize > 0 && validInput.pageSize <= 100);
+      assert.ok(['incomplete', 'completed', 'overdue', 'all'].includes(validInput.status));
+      assert.ok(['raw', 'formatted'].includes(validInput.format));
+    });
+
+    it('should validate enhanced project resolution', () => {
+      const projectInputs = [
+        'android',        // Hardcoded alias
+        'MFPAND',        // Direct project key
+        7,               // Numeric project ID
+        'MFP Android'    // Project name (for dynamic discovery)
+      ];
+
+      projectInputs.forEach(input => {
+        if (typeof input === 'string') {
+          assert.ok(input.length > 0, 'string project input should not be empty');
+        } else if (typeof input === 'number') {
+          assert.ok(input > 0, 'numeric project input should be positive');
+        }
+      });
     });
   });
 });

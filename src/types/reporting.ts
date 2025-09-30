@@ -137,6 +137,62 @@ export const TestSessionsResponseSchema = z.object({
 
 export type TestSessionsResponse = z.infer<typeof TestSessionsResponseSchema>;
 
+// Milestone response schema - matches actual API response
+export const MilestoneResponseSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  completed: z.boolean(),
+  description: z.string().nullable().optional(),
+  projectId: z.number(),
+  dueDate: z.string().nullable().optional(), // ISO date string, can be null
+  startDate: z.string().nullable().optional(), // ISO date string, can be null
+});
+
+export type MilestoneResponse = z.infer<typeof MilestoneResponseSchema>;
+
+// Paginated milestones response - matches actual API response structure
+export const MilestonesResponseSchema = z.object({
+  items: z.array(MilestoneResponseSchema),
+  _meta: z.object({
+    total: z.number(),
+    totalPages: z.number()
+  })
+});
+
+export type MilestonesResponse = z.infer<typeof MilestonesResponseSchema>;
+
+// Available projects response schema
+export const AvailableProjectResponseSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  key: z.string(),
+  logoUrl: z.string().optional(),
+  createdAt: z.string().optional(), // ISO date string
+  leadId: z.number().nullable().optional(),
+  starred: z.boolean(),
+  publiclyAccessible: z.boolean(),
+  deleted: z.boolean()
+});
+
+export type AvailableProjectResponse = z.infer<typeof AvailableProjectResponseSchema>;
+
+// Available projects list response
+export const AvailableProjectsResponseSchema = z.object({
+  items: z.array(AvailableProjectResponseSchema)
+});
+
+export type AvailableProjectsResponse = z.infer<typeof AvailableProjectsResponseSchema>;
+
+// Projects limit response (for pagination info)
+export const ProjectsLimitResponseSchema = z.object({
+  data: z.object({
+    limit: z.number(),
+    currentTotal: z.number()
+  })
+});
+
+export type ProjectsLimitResponse = z.infer<typeof ProjectsLimitResponseSchema>;
+
 // Error types for reporting API
 export class ZebrunnerReportingError extends Error {
   constructor(

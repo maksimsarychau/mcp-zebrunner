@@ -140,6 +140,59 @@ function handleExperimentalError(error: unknown, feature: string): string {
   }
 }
 
+/** Enhanced project resolution with dynamic discovery and suggestions */
+async function resolveProjectId(project: string | number): Promise<{ projectId: number; suggestions?: string }> {
+  if (typeof project === "number") {
+    return { projectId: project };
+  }
+
+  // First try hardcoded aliases for backward compatibility
+  const projectKey = PROJECT_ALIASES[project] || project;
+  
+  try {
+    const projectId = await reportingClient.getProjectId(projectKey);
+    return { projectId };
+  } catch (error) {
+    // If not found, try dynamic discovery
+    try {
+      const availableProjects = await reportingClient.getAvailableProjects();
+      
+      // Look for exact match
+      const exactMatch = availableProjects.items.find(p => 
+        p.key.toLowerCase() === project.toLowerCase() || 
+        p.name.toLowerCase() === project.toLowerCase()
+      );
+      
+      if (exactMatch) {
+        return { projectId: exactMatch.id };
+      }
+      
+      // Generate suggestions for similar projects
+      const suggestions = availableProjects.items
+        .filter(p => 
+          p.key.toLowerCase().includes(project.toLowerCase()) ||
+          p.name.toLowerCase().includes(project.toLowerCase())
+        )
+        .slice(0, 5) // Limit to 5 suggestions
+        .map(p => `"${p.key}" (${p.name})`)
+        .join(', ');
+      
+      const allProjects = availableProjects.items
+        .map(p => `"${p.key}" (${p.name})`)
+        .join(', ');
+      
+      const suggestionText = suggestions 
+        ? `\n\n💡 Did you mean: ${suggestions}?\n\n📋 Available projects: ${allProjects}`
+        : `\n\n📋 Available projects: ${allProjects}`;
+      
+      throw new Error(`Project "${project}" not found.${suggestionText}`);
+    } catch (discoveryError) {
+      // If dynamic discovery also fails, throw original error with suggestion to use get_available_projects
+      throw new Error(`Project "${project}" not found. Use get_available_projects tool to see available projects.`);
+    }
+  }
+}
+
 /** Improved API response validation */
 function validateApiResponse(data: unknown, expectedType: string): boolean {
   if (!data) {
@@ -186,10 +239,11 @@ function buildParamsConfig(opts: {
   period: (typeof PERIODS)[number];
   platform?: string | string[];  // alias ("ios") or explicit array (["ios"])
   browser?: string[];            // e.g., ["chrome"] for web
+  milestone?: string[];          // e.g., ["25.39.0"] for milestone filtering
   dashboardName?: string;        // optional override
   extra?: Partial<Record<string, any>>;
 }) {
-  const { period, platform, browser = [], dashboardName, extra = {} } = opts;
+  const { period, platform, browser = [], milestone = [], dashboardName, extra = {} } = opts;
 
   if (!PERIODS.includes(period as any)) {
     throw new Error(`Invalid period: ${period}. Allowed: ${PERIODS.join(", ")}`);
@@ -205,7 +259,7 @@ function buildParamsConfig(opts: {
   return {
     BROWSER: browser,
     DEFECT: [], APPLICATION: [], BUILD: [], PRIORITY: [],
-    RUN: [], USER: [], ENV: [], MILESTONE: [],
+    RUN: [], USER: [], ENV: [], MILESTONE: milestone,
     PLATFORM: resolvedPlatform,
     STATUS: [], LOCALE: [],
     PERIOD: period,
@@ -2032,6 +2086,9 @@ async function main() {
       browser: z.array(z.string())
         .default([])
         .describe("Optional BROWSER filter, e.g., ['chrome'] for web"),
+      milestone: z.array(z.string())
+        .default([])
+        .describe("Optional MILESTONE filter, e.g., ['25.39.0'] for milestone filtering"),
       templateId: z.number()
         .default(TEMPLATE.RESULTS_BY_PLATFORM)
         .describe("Override templateId if needed"),
@@ -2044,19 +2101,14 @@ async function main() {
       try {
         debugLog("get_platform_results_by_period called", args);
         
-        // Resolve project ID dynamically
-        let projectId: number;
-        if (typeof args.project === "number") {
-          projectId = args.project;
-        } else {
-          const projectKey = PROJECT_ALIASES[args.project] || args.project;
-          projectId = await reportingClient.getProjectId(projectKey);
-        }
+        // Resolve project ID with enhanced discovery and suggestions
+        const { projectId } = await resolveProjectId(args.project);
 
         const paramsConfig = buildParamsConfig({
           period: args.period,
           platform: args.platform ?? (typeof args.project === 'string' ? args.project : undefined),   // default to project alias
           browser: args.browser,
+          milestone: args.milestone,
           dashboardName: args.dashboardName
         });
 
@@ -2078,7 +2130,8 @@ async function main() {
               project: args.project,
               period: args.period,
               platform: args.platform ?? args.project,
-              browser: args.browser.length > 0 ? args.browser : undefined
+              browser: args.browser.length > 0 ? args.browser : undefined,
+              milestone: args.milestone.length > 0 ? args.milestone : undefined
             },
             data: data
           };
@@ -2121,6 +2174,9 @@ async function main() {
       platform: z.union([z.enum(["web","android","ios","api"]), z.array(z.string())])
         .optional()
         .describe("Optional platform filter; defaults to [] for this widget"),
+      milestone: z.array(z.string())
+        .default([])
+        .describe("Optional MILESTONE filter, e.g., ['25.39.0'] for milestone filtering"),
       format: z.enum(['raw', 'formatted']).default('formatted')
         .describe("Output format: raw widget response or formatted data")
     },
@@ -2128,19 +2184,14 @@ async function main() {
       try {
         debugLog("get_top_bugs called", args);
         
-        // Resolve project ID dynamically
-        let projectId: number;
-        if (typeof args.project === "number") {
-          projectId = args.project;
-        } else {
-          const projectKey = PROJECT_ALIASES[args.project] || args.project;
-          projectId = await reportingClient.getProjectId(projectKey);
-        }
+        // Resolve project ID with enhanced discovery and suggestions
+        const { projectId } = await resolveProjectId(args.project);
 
         // Keep PLATFORM empty by default as per your examples
         const paramsConfig = buildParamsConfig({
           period: args.period,
           platform: args.platform ?? [],
+          milestone: args.milestone,
           dashboardName: "Bugs repro rate (last 7 days)"
         });
 
@@ -2258,6 +2309,258 @@ async function main() {
           content: [{ 
             type: "text" as const, 
             text: `❌ Error getting top bugs: ${error?.message || error}` 
+          }] 
+        };
+      }
+    }
+  );
+
+  // === Tool #3: Get project milestones ===
+  server.tool(
+    "get_project_milestones",
+    "🎯 Get available milestones for a project with pagination and filtering",
+    {
+      project: z.union([z.enum(["web","android","ios","api"]), z.number()])
+        .default("web")
+        .describe("Project alias (web=MFPWEB, android=MFPAND, ios=MFPIOS, api=MFPAPI) or numeric projectId"),
+      page: z.number().int().positive()
+        .default(1)
+        .describe("Page number for pagination (1-based)"),
+      pageSize: z.number().int().positive().max(100)
+        .default(10)
+        .describe("Number of milestones per page (max 100)"),
+      status: z.enum(["incomplete", "completed", "overdue", "all"])
+        .default("incomplete")
+        .describe("Filter by completion status: incomplete (default, excludes overdue), completed, overdue (incomplete but past due date), or all"),
+      format: z.enum(['raw', 'formatted']).default('formatted')
+        .describe("Output format: raw API response or formatted data")
+    },
+    async (args) => {
+      try {
+        debugLog("get_project_milestones called", args);
+        
+        // Resolve project ID with enhanced discovery and suggestions
+        const { projectId } = await resolveProjectId(args.project);
+
+        // Convert status to API parameter - get raw data first, then filter client-side
+        let completed: boolean | "all";
+        if (args.status === "all") {
+          completed = "all";
+        } else if (args.status === "completed") {
+          completed = true;
+        } else {
+          // For "incomplete" and "overdue", get all incomplete milestones and filter client-side
+          completed = false;
+        }
+
+        const milestonesData = await reportingClient.getMilestones(projectId, {
+          page: args.page,
+          pageSize: args.pageSize,
+          completed
+        });
+
+        // Helper function to check if a milestone is overdue
+        const isOverdue = (milestone: any): boolean => {
+          if (!milestone.dueDate || milestone.completed) {
+            return false; // No due date or already completed = not overdue
+          }
+          
+          // Get current date in user's timezone
+          const now = new Date();
+          const dueDate = new Date(milestone.dueDate);
+          
+          // Compare dates using UTC to avoid timezone issues (ignore time, just check if due date has passed)
+          const nowDateOnly = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+          const dueDateOnly = new Date(Date.UTC(dueDate.getUTCFullYear(), dueDate.getUTCMonth(), dueDate.getUTCDate()));
+          
+          return dueDateOnly < nowDateOnly;
+        };
+
+        // Filter milestones based on status if needed
+        let filteredItems = milestonesData.items;
+        if (args.status === "incomplete") {
+          // Show only incomplete milestones that are NOT overdue
+          filteredItems = milestonesData.items.filter(milestone => 
+            !milestone.completed && !isOverdue(milestone)
+          );
+        } else if (args.status === "overdue") {
+          // Show only overdue milestones (incomplete but past due date)
+          filteredItems = milestonesData.items.filter(milestone => 
+            !milestone.completed && isOverdue(milestone)
+          );
+        }
+
+        // Update the response with filtered items
+        const filteredMilestonesData = {
+          ...milestonesData,
+          items: filteredItems,
+          _meta: {
+            ...milestonesData._meta,
+            total: filteredItems.length // Update total to reflect filtered count
+          }
+        };
+
+        if (DEBUG_MODE) {
+          console.error("get_project_milestones ok", {
+            projectId, 
+            page: args.page, 
+            pageSize: args.pageSize,
+            status: args.status,
+            totalElements: filteredMilestonesData._meta.total,
+            originalTotal: milestonesData._meta.total
+          });
+        }
+
+        let result;
+        if (args.format === 'raw') {
+          result = filteredMilestonesData;
+        } else {
+          // Format the data for better readability
+          const milestones = filteredMilestonesData.items.map(milestone => {
+            const isOverdueFlag = !milestone.completed && milestone.dueDate && 
+              new Date(milestone.dueDate) < new Date();
+            
+            return {
+              name: milestone.name,
+              completed: milestone.completed,
+              overdue: isOverdueFlag,
+              description: milestone.description,
+              startDate: milestone.startDate,
+              dueDate: milestone.dueDate,
+              id: milestone.id
+            };
+          });
+
+          result = {
+            summary: {
+              project: args.project,
+              status: args.status,
+              page: args.page,
+              pageSize: args.pageSize,
+              totalElements: filteredMilestonesData._meta.total,
+              totalPages: Math.ceil(filteredMilestonesData._meta.total / args.pageSize),
+              filteredFrom: milestonesData._meta.total
+            },
+            milestones: milestones
+          };
+        }
+
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }]
+        };
+      } catch (error: any) {
+        debugLog("Error in get_project_milestones", { error: error.message, args });
+        return { 
+          content: [{ 
+            type: "text" as const, 
+            text: `❌ Error getting project milestones: ${error?.message || error}` 
+          }] 
+        };
+      }
+    }
+  );
+
+  // === Tool #4: Get available projects ===
+  server.tool(
+    "get_available_projects",
+    "🏗️ Discover available projects with their keys and IDs for dynamic project selection",
+    {
+      starred: z.boolean().optional()
+        .describe("Filter by starred projects (true=only starred, false=only non-starred, undefined=all)"),
+      publiclyAccessible: z.boolean().optional()
+        .describe("Filter by public accessibility (true=only public, false=only private, undefined=all)"),
+      format: z.enum(['raw', 'formatted']).default('formatted')
+        .describe("Output format: raw API response or formatted data"),
+      includePaginationInfo: z.boolean().default(false)
+        .describe("Include pagination metadata from projects-limit endpoint")
+    },
+    async (args) => {
+      try {
+        debugLog("get_available_projects called", args);
+        
+        // Get projects data
+        const projectsData = await reportingClient.getAvailableProjects({
+          starred: args.starred,
+          publiclyAccessible: args.publiclyAccessible
+        });
+
+        // Optionally get pagination info
+        let paginationInfo = null;
+        if (args.includePaginationInfo) {
+          try {
+            paginationInfo = await reportingClient.getProjectsLimit();
+          } catch (error) {
+            debugLog("Failed to get pagination info", error);
+            // Continue without pagination info if it fails
+          }
+        }
+
+        if (DEBUG_MODE) {
+          console.error("get_available_projects ok", {
+            totalProjects: projectsData.items.length,
+            starred: args.starred,
+            publiclyAccessible: args.publiclyAccessible,
+            paginationInfo: paginationInfo?.data
+          });
+        }
+
+        let result;
+        if (args.format === 'raw') {
+          result = {
+            projects: projectsData,
+            ...(paginationInfo && { pagination: paginationInfo })
+          };
+        } else {
+          // Format the data for better readability
+          const projects = projectsData.items.map(project => ({
+            name: project.name,
+            key: project.key,
+            id: project.id,
+            starred: project.starred,
+            publiclyAccessible: project.publiclyAccessible,
+            logoUrl: project.logoUrl,
+            createdAt: project.createdAt,
+            leadId: project.leadId
+          }));
+
+          // Create helpful mapping for users
+          const keyToIdMapping = projectsData.items.reduce((acc, project) => {
+            acc[project.key] = project.id;
+            return acc;
+          }, {} as Record<string, number>);
+
+          result = {
+            summary: {
+              totalProjects: projectsData.items.length,
+              starred: args.starred,
+              publiclyAccessible: args.publiclyAccessible,
+              ...(paginationInfo && { 
+                systemLimit: paginationInfo.data.limit,
+                systemTotal: paginationInfo.data.currentTotal 
+              })
+            },
+            projects: projects,
+            keyToIdMapping: keyToIdMapping,
+            usage: {
+              note: "Use 'key' field for project parameter in other tools",
+              examples: [
+                "project: \"MFPAND\" (for MFP Android)",
+                "project: \"MFPIOS\" (for MFP iOS)", 
+                "project: \"MFPWEB\" (for MFP Web)"
+              ]
+            }
+          };
+        }
+
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }]
+        };
+      } catch (error: any) {
+        debugLog("Error in get_available_projects", { error: error.message, args });
+        return { 
+          content: [{ 
+            type: "text" as const, 
+            text: `❌ Error getting available projects: ${error?.message || error}` 
           }] 
         };
       }
