@@ -264,17 +264,19 @@ describe('Performance Tests', () => {
       const hierarchyProcessingStart = Date.now();
       
       // Build hierarchy efficiently using Map for O(1) lookups
-      const nodeMap = new Map(hierarchyData.map(node => [node.id, { ...node, children: [] }]));
+      const nodeMap = new Map(hierarchyData.map(node => [node.id, { ...node, children: [] as any[] }]));
       const roots: any[] = [];
       
       hierarchyData.forEach(node => {
         const nodeWithChildren = nodeMap.get(node.id);
-        if (node.parentId === null) {
-          roots.push(nodeWithChildren);
-        } else {
-          const parent = nodeMap.get(node.parentId);
-          if (parent) {
-            parent.children.push(nodeWithChildren);
+        if (nodeWithChildren) {
+          if (node.parentId === null) {
+            roots.push(nodeWithChildren);
+          } else {
+            const parent = nodeMap.get(node.parentId);
+            if (parent) {
+              parent.children.push(nodeWithChildren);
+            }
           }
         }
       });

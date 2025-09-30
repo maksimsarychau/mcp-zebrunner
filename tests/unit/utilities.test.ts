@@ -652,8 +652,8 @@ describe('Utilities Unit Tests', () => {
       const LARGE_DATASET_SIZE = 10000;
       const BATCH_SIZE = 100;
       
-      const processBatches = (data: any[], batchSize: number) => {
-        const batches = [];
+      const processBatches = (data: any[], batchSize: number): any[][] => {
+        const batches: any[][] = [];
         for (let i = 0; i < data.length; i += batchSize) {
           batches.push(data.slice(i, i + batchSize));
         }
