@@ -129,9 +129,6 @@ export class ConfigManager {
       this.config.debug = process.env.DEBUG.toLowerCase() === 'true';
     }
 
-    if (process.env.EXPERIMENTAL_FEATURES !== undefined) {
-      this.config.experimentalFeatures = process.env.EXPERIMENTAL_FEATURES.toLowerCase() === 'true';
-    }
 
     // ENABLE_RULES_ENGINE is handled separately in handleRulesEngineDetection
   }

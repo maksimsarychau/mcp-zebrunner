@@ -16,12 +16,6 @@
   - Detailed error messages with suggestions
   - Connection testing capabilities
 
-### 3. **Experimental Features** ✅
-- Problematic endpoints marked as experimental
-- Graceful error handling with helpful messages
-- Feature toggles via `EXPERIMENTAL_FEATURES=true`
-- Debug information for troubleshooting
-
 ### 4. **Comprehensive Test Suite** ✅
 - **Structure**:
   ```
@@ -69,8 +63,6 @@ npm run dev
 # Start with debug logging
 DEBUG=true npm run dev
 
-# Start with experimental features
-EXPERIMENTAL_FEATURES=true npm run dev
 ```
 
 ### **Production**
@@ -115,7 +107,6 @@ ZEBRUNNER_TOKEN=your-api-token
 
 # Optional
 DEBUG=true                    # Enable debug logging
-EXPERIMENTAL_FEATURES=true    # Enable experimental endpoints
 ```
 
 ### **Server Capabilities**

@@ -43,7 +43,6 @@ const ZEBRUNNER_URL = appConfig.baseUrl?.replace(/\/+$/, "");
 const ZEBRUNNER_LOGIN = appConfig.login;
 const ZEBRUNNER_TOKEN = appConfig.authToken;
 const DEBUG_MODE = appConfig.debug;
-const EXPERIMENTAL_FEATURES = appConfig.experimentalFeatures;
 const MAX_PAGE_SIZE = appConfig.maxPageSize;
 const DEFAULT_PAGE_SIZE = appConfig.defaultPageSize;
 const ENABLE_RULES_ENGINE = configManager.isRulesEngineEnabled();
@@ -605,7 +604,6 @@ async function main() {
   debugLog("🚀 Starting Zebrunner Unified MCP Server with Reporting API", {
     url: ZEBRUNNER_URL,
     debug: DEBUG_MODE,
-    experimental: EXPERIMENTAL_FEATURES,
     reportingApiEnabled: true
   });
 
@@ -618,19 +616,39 @@ async function main() {
       project_key: z.string().min(1).describe("Project key (e.g., MFPAND)"),
       project_id: z.number().int().positive().optional().describe("Project ID (alternative to project_key)"),
       format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format"),
-      include_hierarchy: z.boolean().default(false).describe("Include hierarchy information")
+      include_hierarchy: z.boolean().default(false).describe("Include hierarchy information"),
+      page: z.number().int().nonnegative().default(0).describe("Page number (0-based)"),
+      size: z.number().int().positive().max(1000).default(50).describe("Page size (configurable via MAX_PAGE_SIZE env var)"),
+      page_token: z.string().optional().describe("Page token for pagination")
     },
     async (args) => {
-      const { project_key, project_id, format, include_hierarchy } = args;
+      const { project_key, project_id, format, include_hierarchy, page, size, page_token } = args;
       
       try {
-        debugLog("Listing test suites", { project_key, project_id, format, include_hierarchy });
+        // Runtime validation for configured MAX_PAGE_SIZE
+        if (size > MAX_PAGE_SIZE) {
+          return {
+            content: [{
+              type: "text" as const,
+              text: `❌ Error: Requested page size (${size}) exceeds configured maximum (${MAX_PAGE_SIZE}). Set MAX_PAGE_SIZE environment variable to increase the limit.`
+            }]
+          };
+        }
+
+        debugLog("Listing test suites", { project_key, project_id, format, include_hierarchy, page, size, page_token });
         
         if (!project_key && !project_id) {
           throw new Error('Either project_key or project_id must be provided');
         }
 
-        const suites = await client.getTestSuites(project_key || '', { projectId: project_id });
+        const searchParams = {
+          projectId: project_id,
+          page,
+          size,
+          pageToken: page_token
+        };
+
+        const suites = await client.getTestSuites(project_key || '', searchParams);
         
         if (!validateApiResponse(suites, 'array')) {
           throw new Error('Invalid API response format');
@@ -643,7 +661,19 @@ async function main() {
           processedSuites = HierarchyProcessor.enrichSuitesWithHierarchy(processedSuites);
         }
 
-        const formattedData = FormatProcessor.format(processedSuites, format);
+        // Prepare response with pagination metadata
+        const response = {
+          items: processedSuites,
+          _meta: suites._meta,
+          pagination: {
+            currentPage: page,
+            pageSize: size,
+            hasNextPage: suites._meta?.nextPageToken ? true : false,
+            nextPageToken: suites._meta?.nextPageToken
+          }
+        };
+
+        const formattedData = FormatProcessor.format(response, format);
         
         return {
           content: [{
@@ -998,143 +1028,14 @@ async function main() {
   );
 
   // ========== EXPERIMENTAL FEATURES ==========
-
-  if (EXPERIMENTAL_FEATURES) {
-    server.tool(
-      "get_test_suite_experimental",
-      "🧪 [EXPERIMENTAL] Get individual test suite details",
-      {
-        suite_id: z.number().int().positive().describe("Test suite ID"),
-        format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format")
-      },
-      async (args) => {
-        const { suite_id, format } = args;
-        
-        try {
-          debugLog("Getting experimental test suite", args);
-          
-          const suite = await client.getTestSuite(suite_id);
-          const formattedData = FormatProcessor.format(suite, format);
-          
-          return {
-            content: [{
-              type: "text" as const,
-              text: typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2)
-            }]
-          };
-        } catch (error: any) {
-          const errorMsg = handleExperimentalError(error, 'get_test_suite');
-          debugLog("Experimental feature failed", { feature: 'get_test_suite', error: error.message });
-          
-          return {
-            content: [{
-              type: "text" as const,
-              text: errorMsg
-            }]
-          };
-        }
-      }
-    );
-
-    server.tool(
-      "list_test_cases_by_suite_experimental",
-      "🧪 [EXPERIMENTAL] List test cases for a specific suite",
-      {
-        suite_id: z.number().int().positive().describe("Test suite ID"),
-        format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format")
-      },
-      async (args) => {
-        const { suite_id, format } = args;
-        
-        try {
-          debugLog("Getting experimental test cases by suite", args);
-          
-          // Note: This experimental endpoint may require a valid project key
-          // Using empty string as fallback, but this may cause API errors
-          const testCases = await client.getTestCasesBySuite('', suite_id);
-          const formattedData = FormatProcessor.format(testCases, format);
-          
-          return {
-            content: [{
-              type: "text" as const,
-              text: typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2)
-            }]
-          };
-        } catch (error: any) {
-          const errorMsg = handleExperimentalError(error, 'list_test_cases_by_suite');
-          debugLog("Experimental feature failed", { feature: 'list_test_cases_by_suite', error: error.message });
-          
-          return {
-            content: [{
-              type: "text" as const,
-              text: errorMsg
-            }]
-          };
-        }
-      }
-    );
-
-    server.tool(
-      "search_test_cases_experimental",
-      "🧪 [EXPERIMENTAL] Search test cases with advanced filters",
-      {
-        project_key: z.string().min(1).describe("Project key"),
-        query: z.string().min(1).describe("Search query"),
-        suite_id: z.number().int().positive().optional().describe("Filter by suite ID"),
-        status: z.string().optional().describe("Filter by status"),
-        priority: z.string().optional().describe("Filter by priority"),
-        format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format"),
-        page: z.number().int().nonnegative().default(0).describe("Page number"),
-        size: z.number().int().positive().max(1000).default(50).describe("Page size (configurable via MAX_PAGE_SIZE env var)")
-      },
-      async (args) => {
-        const { project_key, query, suite_id, status, priority, format, page, size } = args;
-        
-        // Runtime validation for configured MAX_PAGE_SIZE
-        if (size > MAX_PAGE_SIZE) {
-          return {
-            content: [{
-              type: "text" as const,
-              text: `❌ Error: Requested page size (${size}) exceeds configured maximum (${MAX_PAGE_SIZE}). Set MAX_PAGE_SIZE environment variable to increase the limit.`
-            }]
-          };
-        }
-        
-        try {
-          debugLog("Searching test cases experimentally", args);
-          
-          const searchParams = {
-            page,
-            size,
-            suiteId: suite_id,
-            status,
-            priority
-          };
-
-          const response = await client.searchTestCases(project_key, query, searchParams);
-          const formattedData = FormatProcessor.format(response, format);
-          
-          return {
-            content: [{
-              type: "text" as const,
-              text: typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2)
-            }]
-          };
-        } catch (error: any) {
-          const errorMsg = handleExperimentalError(error, 'search_test_cases');
-          debugLog("Experimental feature failed", { feature: 'search_test_cases', error: error.message });
-          
-          return {
-            content: [{
-              type: "text" as const,
-              text: errorMsg
-            }]
-          };
-        }
-      }
-    );
-
-  }
+  // Note: Experimental features have been removed as they relied on API endpoints
+  // that are not available or working properly. Use the following alternatives:
+  //
+  // Instead of get_test_suite_experimental -> use get_tcm_suite_by_id
+  // Instead of list_test_cases_by_suite_experimental -> use get_test_cases_advanced with suite_id
+  // Instead of search_test_cases_experimental -> API endpoint not working
+  //
+  // This improves reliability and reduces maintenance overhead.
 
   server.tool(
     "get_test_coverage_by_test_case_steps_by_key",
@@ -1337,11 +1238,53 @@ async function main() {
         };
         
       } catch (error: any) {
-        debugLog("Error generating draft test", { error: error.message, args });
+        debugLog("Error generating draft test", { error: error.message, stack: error.stack, args });
+        
+        let errorMessage = `❌ Error generating draft test for ${args.case_key}`;
+        let troubleshootingTips = '';
+        
+        // Handle specific error types
+        if (error.message?.includes('500') || error.message?.includes('Internal server error')) {
+          errorMessage += ': Internal server error occurred';
+          troubleshootingTips = `
+🔧 **Troubleshooting Steps:**
+1. **Check Implementation Context**: Ensure your implementation_context parameter contains meaningful information (code snippets, file paths, or detailed descriptions)
+2. **Try Different Framework**: Specify a target_framework explicitly instead of 'auto'
+3. **Simplify Request**: Try with minimal parameters first
+4. **Retry**: This may be a temporary server issue - try again in a few moments
+
+💡 **Tips for Better Results:**
+- Provide actual code snippets from your test files
+- Include file paths to existing test implementations  
+- Mention specific testing frameworks you're using
+- Add details about page objects or test data structures`;
+        } else if (error.message?.includes('not found')) {
+          errorMessage += ': Test case not found';
+          troubleshootingTips = `
+🔧 **Troubleshooting Steps:**
+1. **Verify Test Case Key**: Ensure ${args.case_key} exists in project ${args.project_key || 'the specified project'}
+2. **Check Project Key**: Verify the project key is correct
+3. **Case Sensitivity**: Test case keys are case-sensitive`;
+        } else if (error.message?.includes('rules engine')) {
+          errorMessage += ': Rules engine configuration issue';
+          troubleshootingTips = `
+🔧 **Configuration Required:**
+1. Set ENABLE_RULES_ENGINE=true in your .env file
+2. Create a rules file: mcp-zebrunner-rules.md (optional)
+3. Restart the MCP server`;
+        } else {
+          errorMessage += `: ${error.message}`;
+          troubleshootingTips = `
+🔧 **General Troubleshooting:**
+1. **Implementation Context**: Provide detailed implementation context with code examples
+2. **Framework Detection**: Try specifying target_framework explicitly
+3. **Test Case Validity**: Ensure the test case has sufficient detail and steps`;
+        }
+        
         return {
           content: [{
             type: "text" as const,
-            text: `❌ Error generating draft test for ${args.case_key}: ${error.message}\n\nTip: Ensure the test case exists and your implementation context provides enough information for framework detection.`
+            text: errorMessage + troubleshootingTips
           }]
         };
       }
@@ -1588,7 +1531,7 @@ async function main() {
         // Use existing getTestSuites method with pagination
         const result = await client.getTestSuites(project_key, {
           size: max_page_size,
-          page: page_token ? parseInt(page_token, 10) : 0
+          pageToken: page_token
         });
 
         const formattedResult = FormatProcessor.format(result, format as any);
@@ -1693,22 +1636,9 @@ async function main() {
 
         debugLog("Getting root suites", { project_key });
 
-        // Get all suites first
-        const allSuitesResult = await client.getTestSuites(project_key, { size: MAX_PAGE_SIZE });
-        let allSuites = allSuitesResult.items;
-
-        // Get more pages if needed
-        let page = 1;
-        while (allSuitesResult.items.length === MAX_PAGE_SIZE) {
-          const nextPage = await client.getTestSuites(project_key, { 
-            size: MAX_PAGE_SIZE, 
-            page: page 
-          });
-          if (nextPage.items.length === 0) break;
-          allSuites.push(...nextPage.items);
-          page++;
-          if (page > 50) break; // Safety limit
-        }
+        // Get all suites using comprehensive method
+        debugLog("Fetching all suites for root suite identification", { project_key });
+        const allSuites = await client.getAllTestSuites(project_key);
 
         // Filter to root suites only
         const rootSuites = HierarchyProcessor.getRootSuites(allSuites);
@@ -1751,21 +1681,15 @@ async function main() {
 
         debugLog("Getting TCM suite by ID", { project_key, suite_id, only_root_suites });
 
-        // Get all suites from project
-        const allSuitesResult = await client.getTestSuites(project_key, { size: MAX_PAGE_SIZE });
-        let allSuites = allSuitesResult.items;
-
-        // Get more pages if needed
-        let page = 1;
-        while (allSuitesResult.items.length === MAX_PAGE_SIZE && page < 50) {
-          const nextPage = await client.getTestSuites(project_key, { 
-            size: MAX_PAGE_SIZE, 
-            page: page 
-          });
-          if (nextPage.items.length === 0) break;
-          allSuites.push(...nextPage.items);
-          page++;
-        }
+        // Get all suites from project using comprehensive method
+        debugLog("Fetching all suites using getAllTestSuites method", { project_key, suite_id });
+        const allSuites = await client.getAllTestSuites(project_key);
+        
+        debugLog("Fetched suites", { 
+          totalSuites: allSuites.length,
+          searchingSuiteId: suite_id,
+          sampleSuiteIds: allSuites.slice(0, 5).map(s => s.id)
+        });
 
         // Filter to root suites if requested
         let searchSuites = allSuites;
@@ -1832,24 +1756,30 @@ async function main() {
 
         debugLog("Getting all TCM test cases", { project_key });
 
-        // Get all test cases with pagination
+        // Get all test cases using proper token-based pagination
         let allTestCases: ZebrunnerTestCase[] = [];
-        let page = 0;
-        let hasMore = true;
-        const pageSize = MAX_PAGE_SIZE;
+        let pageToken: string | undefined = undefined;
+        let pageCount = 0;
+        const maxPages = 100; // Safety limit
 
-        while (hasMore && page < 100) { // Safety limit
+        do {
           const result = await client.getTestCases(project_key, {
-            size: pageSize,
-            page: page
+            size: MAX_PAGE_SIZE,
+            pageToken: pageToken
           });
 
           allTestCases.push(...result.items);
+          pageToken = result._meta?.nextPageToken;
+          pageCount++;
           
-          // Check if we have more pages
-          hasMore = result.items.length === pageSize;
-          page++;
-        }
+          debugLog("Fetched test cases page", { 
+            pageCount, 
+            currentPageSize: result.items.length, 
+            totalSoFar: allTestCases.length,
+            hasNextPage: !!pageToken
+          });
+          
+        } while (pageToken && pageCount < maxPages);
 
         console.error(`Found ${allTestCases.length} testcases.`);
 
@@ -1887,38 +1817,27 @@ async function main() {
 
         debugLog("Getting all TCM test cases with root suite ID", { project_key });
 
-        // Get all test cases
+        // Get all test cases using proper token-based pagination
         let allTestCases: ZebrunnerTestCase[] = [];
-        let page = 0;
-        let hasMore = true;
-        const pageSize = MAX_PAGE_SIZE;
+        let pageToken: string | undefined = undefined;
+        let pageCount = 0;
+        const maxPages = 100; // Safety limit
 
-        while (hasMore && page < 100) {
+        do {
           const result = await client.getTestCases(project_key, {
-            size: pageSize,
-            page: page
+            size: MAX_PAGE_SIZE,
+            pageToken: pageToken
           });
 
           allTestCases.push(...result.items);
-          hasMore = result.items.length === pageSize;
-          page++;
-        }
+          pageToken = result._meta?.nextPageToken;
+          pageCount++;
+          
+        } while (pageToken && pageCount < maxPages);
 
-        // Get all suites for hierarchy processing
-        let allSuites: ZebrunnerTestSuite[] = [];
-        page = 0;
-        hasMore = true;
-
-        while (hasMore && page < 50) {
-          const result = await client.getTestSuites(project_key, {
-            size: pageSize,
-            page: page
-          });
-
-          allSuites.push(...result.items);
-          hasMore = result.items.length === pageSize;
-          page++;
-        }
+        // Get all suites for hierarchy processing using comprehensive method
+        debugLog("Fetching all suites for hierarchy enrichment", { project_key });
+        const allSuites = await client.getAllTestSuites(project_key);
 
         // Process suite hierarchy
         const processedSuites = HierarchyProcessor.setRootParentsToSuites(allSuites);
@@ -1970,22 +1889,9 @@ async function main() {
 
         debugLog("Getting root ID by suite ID", { project_key, suite_id });
 
-        // Get all suites for hierarchy processing
-        let allSuites: ZebrunnerTestSuite[] = [];
-        let page = 0;
-        let hasMore = true;
-        const pageSize = MAX_PAGE_SIZE;
-
-        while (hasMore && page < 50) {
-          const result = await client.getTestSuites(project_key, {
-            size: pageSize,
-            page: page
-          });
-
-          allSuites.push(...result.items);
-          hasMore = result.items.length === pageSize;
-          page++;
-        }
+        // Get all suites for hierarchy processing using comprehensive method
+        debugLog("Fetching all suites for root ID calculation", { project_key, suite_id });
+        const allSuites = await client.getAllTestSuites(project_key);
 
         // Process hierarchy and find root ID
         const rootId = HierarchyProcessor.getRootId(allSuites, suite_id);
@@ -2440,7 +2346,6 @@ async function main() {
   
   if (DEBUG_MODE) {
     console.error(`🔍 Debug mode: ${DEBUG_MODE}`);
-    console.error(`🧪 Experimental features: ${EXPERIMENTAL_FEATURES}`);
     console.error(`🌐 Zebrunner URL: ${ZEBRUNNER_URL}`);
   }
 }
