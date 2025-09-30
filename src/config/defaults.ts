@@ -61,7 +61,6 @@ export const ENV_MAPPINGS = {
   MAX_PAGE_SIZE: 'maxPageSize',
   DEFAULT_PAGE_SIZE: 'defaultPageSize',
   DEBUG: 'debug',
-  EXPERIMENTAL_FEATURES: 'experimentalFeatures',
   ENABLE_RULES_ENGINE: 'enableRulesEngine'
 } as const;
 
