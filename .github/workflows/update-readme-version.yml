@@ -29,15 +29,29 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="${{ steps.version.outputs.version }}"
-          # non-greedy .*? between markers
-          perl -0777 -pe "s/(<!--VERSION_START-->).*?(<!--VERSION_END-->)/\$1${VERSION}\$2/s" -i README.md
+          echo "Updating README with version: $VERSION"
+          # Use sed with Linux syntax (GitHub Actions runs on Linux)
+          sed -i "s/<!--VERSION_START-->.*<!--VERSION_END-->/<!--VERSION_START-->${VERSION}<!--VERSION_END-->/g" README.md
+          echo "README updated successfully"
 
       - name: Show diff (debug)
         run: |
           git status --porcelain || true
           git --no-pager diff -- README.md || true
 
+      - name: Check for changes
+        id: changes
+        run: |
+          if git diff --quiet -- README.md; then
+            echo "No changes to README.md"
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Changes detected in README.md"
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Commit changes
+        if: steps.changes.outputs.has_changes == 'true'
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "docs: update version to ${{ steps.version.outputs.version }}"
