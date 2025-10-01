@@ -40,8 +40,8 @@ describe('Project Discovery Unit Tests', () => {
         items: [
           {
             id: 7,
-            name: 'MFP Android',
-            key: 'MFPAND',
+            name: 'Android',
+            key: 'MCP',
             logoUrl: '/files/18b4939f-37e9-0576-8c73-478c7095192e',
             createdAt: '2023-09-11T17:43:13.337691Z',
             leadId: 26,
@@ -51,8 +51,8 @@ describe('Project Discovery Unit Tests', () => {
           },
           {
             id: 8,
-            name: 'MFP iOS',
-            key: 'MFPIOS',
+            name: 'iOS',
+            key: 'MCP',
             logoUrl: '/files/18b49392-14e6-bd47-bf9d-195db8161702',
             createdAt: '2023-09-11T17:43:52.711029Z',
             leadId: null,
@@ -121,33 +121,33 @@ describe('Project Discovery Unit Tests', () => {
     
     it('should validate project resolution logic', () => {
       const mockAvailableProjects = [
-        { id: 7, name: 'MFP Android', key: 'MFPAND' },
-        { id: 8, name: 'MFP iOS', key: 'MFPIOS' },
-        { id: 9, name: 'MFP Web', key: 'MFPWEB' },
-        { id: 3, name: 'MFP', key: 'MFP' }
+        { id: 7, name: 'MCP Project', key: 'MCP' },
+        { id: 8, name: 'MCP iOS', key: 'MCPIOS' },
+        { id: 9, name: 'MCP Web', key: 'MCPWEB' },
+        { id: 3, name: 'MCP Core', key: 'MCPCORE' }
       ];
       
       const hardcodedAliases = {
-        web: 'MFPWEB',
-        android: 'MFPAND', 
-        ios: 'MFPIOS',
-        api: 'MFPAPI'
+        web: 'MCPWEB',
+        android: 'MCP', 
+        ios: 'MCPIOS',
+        api: 'MCPAPI'
       };
       
       // Test exact key match
-      const exactMatch = mockAvailableProjects.find(p => p.key === 'MFPAND');
+      const exactMatch = mockAvailableProjects.find(p => p.key === 'MCP');
       assert.ok(exactMatch, 'should find exact key match');
       assert.equal(exactMatch.id, 7, 'should return correct project ID');
       
       // Test case-insensitive match
       const caseInsensitiveMatch = mockAvailableProjects.find(p => 
-        p.key.toLowerCase() === 'mfpand'.toLowerCase()
+        p.key.toLowerCase() === 'mcp'.toLowerCase()
       );
       assert.ok(caseInsensitiveMatch, 'should find case-insensitive match');
       
       // Test name-based match
       const nameMatch = mockAvailableProjects.find(p => 
-        p.name.toLowerCase() === 'mfp android'.toLowerCase()
+        p.name.toLowerCase() === 'MCP Project'.toLowerCase()
       );
       assert.ok(nameMatch, 'should find name-based match');
       
@@ -155,15 +155,15 @@ describe('Project Discovery Unit Tests', () => {
       const aliasKey = hardcodedAliases['android'];
       const aliasMatch = mockAvailableProjects.find(p => p.key === aliasKey);
       assert.ok(aliasMatch, 'should resolve hardcoded aliases');
-      assert.equal(aliasMatch.key, 'MFPAND', 'should resolve to correct key');
+      assert.equal(aliasMatch.key, 'MCP', 'should resolve to correct key');
     });
     
     it('should generate helpful suggestions for invalid projects', () => {
       const mockAvailableProjects = [
-        { id: 7, name: 'MFP Android', key: 'MFPAND' },
-        { id: 8, name: 'MFP iOS', key: 'MFPIOS' },
-        { id: 9, name: 'MFP Web', key: 'MFPWEB' },
-        { id: 3, name: 'MFP', key: 'MFP' }
+        { id: 7, name: 'MCP Project', key: 'MCP' },
+        { id: 8, name: 'MCP iOS', key: 'MCPIOS' },
+        { id: 9, name: 'MCP Web', key: 'MCPWEB' },
+        { id: 3, name: 'MCP Core', key: 'MCPCORE' }
       ];
       
       const generateSuggestions = (input: string, projects: any[]) => {
@@ -177,14 +177,14 @@ describe('Project Discovery Unit Tests', () => {
       };
       
       // Test partial match suggestions
-      const suggestions1 = generateSuggestions('MFP', mockAvailableProjects);
+      const suggestions1 = generateSuggestions('MCP', mockAvailableProjects);
       assert.ok(suggestions1.length > 0, 'should generate suggestions for partial matches');
-      assert.ok(suggestions1.some(s => s.includes('MFPAND')), 'should include relevant suggestions');
+      assert.ok(suggestions1.some(s => s.includes('MCP')), 'should include relevant suggestions');
       
       // Test typo suggestions
-      const suggestions2 = generateSuggestions('ANDROID', mockAvailableProjects);
+      const suggestions2 = generateSuggestions('PROJECT', mockAvailableProjects);
       assert.ok(suggestions2.length > 0, 'should generate suggestions for typos');
-      assert.ok(suggestions2.some(s => s.includes('MFP Android')), 'should suggest based on name match');
+      assert.ok(suggestions2.some(s => s.includes('MCP Project')), 'should suggest based on name match');
       
       // Test no match case
       const suggestions3 = generateSuggestions('INVALID', mockAvailableProjects);
@@ -193,8 +193,8 @@ describe('Project Discovery Unit Tests', () => {
     
     it('should validate suggestion message formatting', () => {
       const mockProjects = [
-        { id: 7, name: 'MFP Android', key: 'MFPAND' },
-        { id: 8, name: 'MFP iOS', key: 'MFPIOS' }
+        { id: 7, name: 'MCP Project', key: 'MCP' },
+        { id: 8, name: 'MCP iOS', key: 'MCPIOS' }
       ];
       
       const formatSuggestionMessage = (input: string, suggestions: string[], allProjects: string[]) => {
@@ -205,15 +205,15 @@ describe('Project Discovery Unit Tests', () => {
         return `Project "${input}" not found.${suggestionText}`;
       };
       
-      const suggestions = ['"MFPAND" (MFP Android)'];
-      const allProjects = ['"MFPAND" (MFP Android)', '"MFPIOS" (MFP iOS)'];
+      const suggestions = ['"MCP" (MCP Project)'];
+      const allProjects = ['"MCP" (MCP Project)', '"MCPIOS" (MCP iOS)'];
       
       const message = formatSuggestionMessage('INVALID', suggestions, allProjects);
       
       assert.ok(message.includes('Project "INVALID" not found'), 'should include original input');
       assert.ok(message.includes('💡 Did you mean'), 'should include suggestion prompt');
       assert.ok(message.includes('📋 Available projects'), 'should include full project list');
-      assert.ok(message.includes('MFPAND'), 'should include suggested projects');
+      assert.ok(message.includes('MCP'), 'should include suggested projects');
     });
   });
   
@@ -230,8 +230,8 @@ describe('Project Discovery Unit Tests', () => {
         },
         projects: [
           {
-            name: 'MFP Android',
-            key: 'MFPAND',
+            name: 'MCP Project',
+            key: 'MCP',
             id: 7,
             starred: true,
             publiclyAccessible: true,
@@ -241,16 +241,16 @@ describe('Project Discovery Unit Tests', () => {
           }
         ],
         keyToIdMapping: {
-          'MFPAND': 7,
-          'MFPIOS': 8,
-          'MFPWEB': 9
+          'MCP': 7,
+          'MCPIOS': 8,
+          'MCPWEB': 9
         },
         usage: {
           note: 'Use \'key\' field for project parameter in other tools',
           examples: [
-            'project: "MFPAND" (for MFP Android)',
-            'project: "MFPIOS" (for MFP iOS)',
-            'project: "MFPWEB" (for MFP Web)'
+            'project: "MCP" (for MCP Project)',
+            'project: "MCPIOS" (for MCP iOS)',
+            'project: "MCPWEB" (for MCP Web)'
           ]
         }
       };
@@ -285,10 +285,10 @@ describe('Project Discovery Unit Tests', () => {
     
     it('should maintain hardcoded alias support', () => {
       const hardcodedAliases = {
-        web: 'MFPWEB',
-        android: 'MFPAND',
-        ios: 'MFPIOS',
-        api: 'MFPAPI'
+        web: 'MCPWEB',
+        android: 'MCP',
+        ios: 'MCPIOS',
+        api: 'MCPAPI'
       };
       
       // Test that hardcoded aliases are still valid
@@ -303,8 +303,8 @@ describe('Project Discovery Unit Tests', () => {
         return aliases[input] || input;
       };
       
-      assert.equal(resolveProjectKey('android', hardcodedAliases), 'MFPAND', 'should resolve android alias');
-      assert.equal(resolveProjectKey('MFPAND', hardcodedAliases), 'MFPAND', 'should pass through direct keys');
+      assert.equal(resolveProjectKey('android', hardcodedAliases), 'MCP', 'should resolve android alias');
+      assert.equal(resolveProjectKey('MCP', hardcodedAliases), 'MCP', 'should pass through direct keys');
       assert.equal(resolveProjectKey('CUSTOM', hardcodedAliases), 'CUSTOM', 'should pass through unknown keys');
     });
     
@@ -316,11 +316,11 @@ describe('Project Discovery Unit Tests', () => {
         }
         
         // Try hardcoded aliases first
-        const hardcodedAliases = { android: 'MFPAND' };
+        const hardcodedAliases = { android: 'MCP' };
         const projectKey = hardcodedAliases[input as keyof typeof hardcodedAliases] || input;
         
         // Simulate API call success/failure
-        const knownProjects = ['MFPAND', 'MFPIOS', 'MFPWEB'];
+        const knownProjects = ['MCP', 'MCPIOS', 'MCPWEB'];
         if (knownProjects.includes(projectKey)) {
           return { projectId: 7 }; // Mock ID
         }

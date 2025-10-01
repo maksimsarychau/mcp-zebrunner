@@ -137,7 +137,7 @@ describe('Zebrunner MCP Server E2E Tests', () => {
   });
 
   describe('Core Working Tools (requires credentials)', () => {
-    it('should list test suites for MFPAND project', function() {
+    it('should list test suites for MCP project', function() {
       if (!hasRealCredentials) {
         this.skip();
         return;
@@ -147,7 +147,7 @@ describe('Zebrunner MCP Server E2E Tests', () => {
       assert.ok(serverReady, 'Server should be ready for tool calls');
     });
 
-    it('should get test case by key MFPAND-29', function() {
+    it('should get test case by key MCP-2', function() {
       if (!hasRealCredentials) {
         this.skip();
         return;

@@ -8,10 +8,10 @@ import { requireCredentials } from '../helpers/credentials.js';
  * Integration tests for Suite Hierarchy Enhancement
  * 
  * Tests the new featureSuiteId and rootSuiteId functionality
- * using real test case MFPAND-6013 with known values:
- * - Test Case ID: 81891
- * - Feature Suite ID: 18667 (from testSuite.id)
- * - Root Suite ID: 18659 (expected after hierarchy traversal)
+ * using real test case MCP-1 with known values:
+ * - Test Case ID: Dynamic (determined from API)
+ * - Feature Suite ID: Dynamic (from testSuite.id)
+ * - Root Suite ID: Dynamic (determined after hierarchy traversal)
  */
 
 describe('Suite Hierarchy Integration Tests', () => {
@@ -26,12 +26,10 @@ describe('Suite Hierarchy Integration Tests', () => {
     return false;
   };
   
-  // Test case with known hierarchy values
-  const TEST_CASE_KEY = 'MFPAND-6013';
-  const PROJECT_KEY = 'MFPAND';
-  const EXPECTED_TEST_CASE_ID = 81891;
-  const EXPECTED_FEATURE_SUITE_ID = 18667;
-  const EXPECTED_ROOT_SUITE_ID = 18659;
+  // Test case with MCP project values (will be determined dynamically)
+  const TEST_CASE_KEY = 'MCP-1';
+  const PROJECT_KEY = 'MCP';
+  // Note: Actual IDs will be determined from API responses since MCP project structure may differ
 
   before(async () => {
     // Require valid credentials for integration tests
@@ -70,11 +68,11 @@ describe('Suite Hierarchy Integration Tests', () => {
       const testCase = await client.getTestCaseByKey(PROJECT_KEY, TEST_CASE_KEY);
       
       // Verify basic test case properties
-      assert.strictEqual(testCase.id, EXPECTED_TEST_CASE_ID, 'Test case ID should match');
+      assert.ok(testCase.id, 'Test case should have an ID');
       assert.strictEqual(testCase.key, TEST_CASE_KEY, 'Test case key should match');
       assert.ok(testCase.title, 'Test case should have a title');
       assert.ok(testCase.testSuite, 'Test case should have testSuite information');
-      assert.strictEqual(testCase.testSuite?.id, EXPECTED_FEATURE_SUITE_ID, 'testSuite.id should match expected feature suite ID');
+      assert.ok(testCase.testSuite?.id, 'testSuite should have an ID');
       
       // Hierarchy fields should be undefined when not requested
       assert.strictEqual(testCase.featureSuiteId, undefined, 'featureSuiteId should be undefined when hierarchy not requested');
@@ -95,20 +93,17 @@ describe('Suite Hierarchy Integration Tests', () => {
       });
       
       // Verify basic test case properties
-      assert.strictEqual(testCase.id, EXPECTED_TEST_CASE_ID, 'Test case ID should match');
+      assert.ok(testCase.id, 'Test case should have an ID');
       assert.strictEqual(testCase.key, TEST_CASE_KEY, 'Test case key should match');
       assert.ok(testCase.title, 'Test case should have a title');
       
       // Verify hierarchy information is populated
-      assert.strictEqual(testCase.featureSuiteId, EXPECTED_FEATURE_SUITE_ID, 
-        `featureSuiteId should be ${EXPECTED_FEATURE_SUITE_ID}`);
-      
-      assert.strictEqual(testCase.rootSuiteId, EXPECTED_ROOT_SUITE_ID, 
-        `rootSuiteId should be ${EXPECTED_ROOT_SUITE_ID}`);
+      assert.ok(testCase.featureSuiteId, 'featureSuiteId should be populated');
+      assert.ok(testCase.rootSuiteId, 'rootSuiteId should be populated');
       
       // Verify testSuite information is preserved
       assert.ok(testCase.testSuite, 'Test case should have testSuite information');
-      assert.strictEqual(testCase.testSuite?.id, EXPECTED_FEATURE_SUITE_ID, 
+      assert.strictEqual(testCase.testSuite?.id, testCase.featureSuiteId, 
         'testSuite.id should match featureSuiteId');
       
       console.log(`✅ Retrieved test case ${TEST_CASE_KEY} with hierarchy`);
@@ -123,7 +118,7 @@ describe('Suite Hierarchy Integration Tests', () => {
       if (skipIfNoClient()) return;
       // Test with a non-existent test case to verify error handling
       try {
-        const testCase = await client.getTestCaseByKey(PROJECT_KEY, 'MFPAND-99999', { 
+        const testCase = await client.getTestCaseByKey(PROJECT_KEY, 'MCP-99999', { 
           includeSuiteHierarchy: true 
         });
         assert.fail('Should have thrown an error for non-existent test case');
@@ -138,7 +133,13 @@ describe('Suite Hierarchy Integration Tests', () => {
   describe('Suite Hierarchy Path Resolution', () => {
     it('should retrieve complete hierarchy path with suite names', async () => {
       if (skipIfNoClient()) return;
-      const hierarchyPath = await client.getSuiteHierarchyPath(PROJECT_KEY, EXPECTED_FEATURE_SUITE_ID);
+      // First get the test case to obtain the feature suite ID
+      const testCase = await client.getTestCaseByKey(PROJECT_KEY, TEST_CASE_KEY, { 
+        includeSuiteHierarchy: true 
+      });
+      const featureSuiteId = testCase.featureSuiteId!;
+      
+      const hierarchyPath = await client.getSuiteHierarchyPath(PROJECT_KEY, featureSuiteId);
       
       // Verify path structure
       assert.ok(Array.isArray(hierarchyPath), 'Hierarchy path should be an array');
@@ -153,15 +154,16 @@ describe('Suite Hierarchy Integration Tests', () => {
       
       // The root suite should be first in the path
       const rootSuite = hierarchyPath[0];
-      assert.strictEqual(rootSuite.id, EXPECTED_ROOT_SUITE_ID, 
-        `Root suite in path should have ID ${EXPECTED_ROOT_SUITE_ID}`);
+      assert.ok(rootSuite.id, 'Root suite should have an ID');
+      assert.strictEqual(rootSuite.id, testCase.rootSuiteId, 
+        'Root suite in path should match test case rootSuiteId');
       
       // The feature suite should be last in the path
       const featureSuite = hierarchyPath[hierarchyPath.length - 1];
-      assert.strictEqual(featureSuite.id, EXPECTED_FEATURE_SUITE_ID, 
-        `Feature suite in path should have ID ${EXPECTED_FEATURE_SUITE_ID}`);
+      assert.strictEqual(featureSuite.id, featureSuiteId, 
+        'Feature suite in path should match requested suite ID');
       
-      console.log(`✅ Retrieved hierarchy path for suite ${EXPECTED_FEATURE_SUITE_ID}`);
+      console.log(`✅ Retrieved hierarchy path for suite ${featureSuiteId}`);
       console.log('   - Hierarchy Path:');
       hierarchyPath.forEach((suite, index) => {
         console.log(`     ${index + 1}. ${suite.name} (ID: ${suite.id})`);
@@ -197,24 +199,27 @@ describe('Suite Hierarchy Integration Tests', () => {
       });
       
       // Verify all expected fields from the API response are mapped correctly
-      assert.strictEqual(testCase.id, 81891, 'Should map id field');
-      assert.strictEqual(testCase.key, 'MFPAND-6013', 'Should map key field');
+      assert.ok(testCase.id, 'Should map id field');
+      assert.strictEqual(testCase.key, TEST_CASE_KEY, 'Should map key field');
       assert.strictEqual(testCase.deleted, false, 'Should map deleted field');
-      assert.ok(testCase.title?.includes('Calorie Goals'), 'Should map title field');
-      assert.ok(testCase.description?.includes('premium users'), 'Should map description field');
-      assert.strictEqual(testCase.priority?.name, 'High', 'Should map priority field');
-      assert.strictEqual(testCase.automationState?.name, 'Not Automated', 'Should map automationState field');
+      assert.ok(testCase.title, 'Should map title field');
+      assert.ok(testCase.priority?.name, 'Should map priority field');
+      assert.ok(testCase.automationState?.name, 'Should map automationState field');
       assert.strictEqual(testCase.deprecated, false, 'Should map deprecated field');
       assert.strictEqual(testCase.draft, false, 'Should map draft field');
-      assert.ok(testCase.preConditions?.includes('Premium user'), 'Should map preConditions field');
-      assert.ok(testCase.postConditions?.includes('Meal cards'), 'Should map postConditions field');
+      // Optional fields - may or may not be present depending on test case content
+      if (testCase.preConditions) {
+        assert.ok(typeof testCase.preConditions === 'string', 'Should map preConditions field');
+      }
+      if (testCase.postConditions) {
+        assert.ok(typeof testCase.postConditions === 'string', 'Should map postConditions field');
+      }
       assert.ok(Array.isArray(testCase.steps), 'Should map steps field as array');
-      assert.strictEqual(testCase.steps?.length, 1, 'Should have correct number of steps');
       assert.ok(testCase.customField, 'Should map customField object');
       
       // Verify hierarchy enhancement
-      assert.strictEqual(testCase.featureSuiteId, 18667, 'Should add featureSuiteId from testSuite.id');
-      assert.strictEqual(testCase.rootSuiteId, 18659, 'Should resolve and add rootSuiteId');
+      assert.ok(testCase.featureSuiteId, 'Should add featureSuiteId from testSuite.id');
+      assert.ok(testCase.rootSuiteId, 'Should resolve and add rootSuiteId');
       
       console.log(`✅ All API response fields correctly mapped to schema`);
     });
@@ -250,13 +255,14 @@ describe('Suite Hierarchy Integration Tests', () => {
       });
       
       // Even if some hierarchy resolution fails, basic test case data should be intact
-      assert.strictEqual(testCase.id, EXPECTED_TEST_CASE_ID, 'Basic test case data should be preserved');
+      assert.ok(testCase.id, 'Basic test case data should be preserved');
       assert.strictEqual(testCase.key, TEST_CASE_KEY, 'Test case key should be preserved');
       assert.ok(testCase.testSuite, 'testSuite information should be preserved');
       
       // featureSuiteId should always be available (from testSuite.id)
-      assert.strictEqual(testCase.featureSuiteId, EXPECTED_FEATURE_SUITE_ID, 
-        'featureSuiteId should always be available from testSuite.id');
+      assert.ok(testCase.featureSuiteId, 'featureSuiteId should always be available from testSuite.id');
+      assert.strictEqual(testCase.featureSuiteId, testCase.testSuite?.id, 
+        'featureSuiteId should match testSuite.id');
       
       console.log(`✅ Test case data preserved even with potential hierarchy resolution issues`);
     });
@@ -265,9 +271,7 @@ describe('Suite Hierarchy Integration Tests', () => {
   after(async () => {
     console.log('\n🎉 Suite Hierarchy Integration Tests Completed Successfully!');
     console.log('\n📊 Test Summary:');
-    console.log(`   - Test Case: ${TEST_CASE_KEY} (ID: ${EXPECTED_TEST_CASE_ID})`);
-    console.log(`   - Feature Suite ID: ${EXPECTED_FEATURE_SUITE_ID}`);
-    console.log(`   - Root Suite ID: ${EXPECTED_ROOT_SUITE_ID}`);
+    console.log(`   - Test Case: ${TEST_CASE_KEY}`);
     console.log('   - All hierarchy functionality verified ✅');
   });
 });

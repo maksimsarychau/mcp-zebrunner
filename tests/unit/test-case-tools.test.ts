@@ -20,8 +20,8 @@ describe('Test Case Tools Unit Tests', () => {
     
     it('should validate required parameters', () => {
       const validParams = {
-        project_key: 'MFPAND',
-        case_key: 'MFPAND-4678',
+        project_key: 'MCP',
+        case_key: 'MCP-1',
         format: 'json'
       };
       
@@ -32,7 +32,7 @@ describe('Test Case Tools Unit Tests', () => {
     });
     
     it('should validate case_key format', () => {
-      const validCaseKey = 'MFPAND-4678';
+      const validCaseKey = 'MCP-1';
       const invalidCaseKey = 'invalid-key';
       
       assert.ok(validCaseKey.includes('-'), 'valid case key should contain hyphen');
@@ -51,8 +51,8 @@ describe('Test Case Tools Unit Tests', () => {
     
     it('should handle include_steps parameter', () => {
       const params = {
-        project_key: 'MFPAND',
-        case_key: 'MFPAND-4678',
+        project_key: 'MCP',
+        case_key: 'MCP-1',
         include_steps: true
       };
       
@@ -65,7 +65,7 @@ describe('Test Case Tools Unit Tests', () => {
     
     it('should validate required parameters', () => {
       const validParams = {
-        project_key: 'MFPAND',
+        project_key: 'MCP',
         format: 'json'
       };
       
@@ -86,7 +86,7 @@ describe('Test Case Tools Unit Tests', () => {
     
     it('should handle suite_id filter', () => {
       const params = {
-        project_key: 'MFPAND',
+        project_key: 'MCP',
         suite_id: 17470
       };
       
@@ -96,7 +96,7 @@ describe('Test Case Tools Unit Tests', () => {
     it('should handle automation_status filter', () => {
       const validStatuses = ['AUTOMATED', 'NOT_AUTOMATED', 'PARTIALLY_AUTOMATED'];
       const params = {
-        project_key: 'MFPAND',
+        project_key: 'MCP',
         automation_status: 'AUTOMATED'
       };
       
@@ -106,7 +106,7 @@ describe('Test Case Tools Unit Tests', () => {
     it('should handle priority filter', () => {
       const validPriorities = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
       const params = {
-        project_key: 'MFPAND',
+        project_key: 'MCP',
         priority: 'HIGH'
       };
       
@@ -119,7 +119,7 @@ describe('Test Case Tools Unit Tests', () => {
     
     it('should validate required parameters', () => {
       const validParams = {
-        project_key: 'MFPAND',
+        project_key: 'MCP',
         max_page_size: 100,
         format: 'json'
       };
@@ -130,7 +130,7 @@ describe('Test Case Tools Unit Tests', () => {
     
     it('should handle page_token for pagination', () => {
       const params = {
-        project_key: 'MFPAND',
+        project_key: 'MCP',
         page_token: 'abc123token'
       };
       
@@ -148,7 +148,7 @@ describe('Test Case Tools Unit Tests', () => {
     
     it('should handle include_steps parameter', () => {
       const params = {
-        project_key: 'MFPAND',
+        project_key: 'MCP',
         include_steps: false
       };
       
@@ -161,7 +161,7 @@ describe('Test Case Tools Unit Tests', () => {
     
     it('should validate required parameters', () => {
       const validParams = {
-        project_key: 'MFPAND',
+        project_key: 'MCP',
         max_page_size: 100,
         format: 'json'
       };
@@ -172,7 +172,7 @@ describe('Test Case Tools Unit Tests', () => {
     
     it('should handle root_suite_id filter', () => {
       const params = {
-        project_key: 'MFPAND',
+        project_key: 'MCP',
         root_suite_id: 18659
       };
       
@@ -181,7 +181,7 @@ describe('Test Case Tools Unit Tests', () => {
     
     it('should validate pagination with token', () => {
       const params = {
-        project_key: 'MFPAND',
+        project_key: 'MCP',
         page_token: 'next-page-token',
         max_page_size: 50
       };
@@ -196,7 +196,7 @@ describe('Test Case Tools Unit Tests', () => {
     
     it('should validate required parameters', () => {
       const validParams = {
-        project_key: 'MFPAND',
+        project_key: 'MCP',
         suite_id: 17470,
         format: 'json'
       };
@@ -218,7 +218,7 @@ describe('Test Case Tools Unit Tests', () => {
     
     it('should handle include_steps parameter', () => {
       const params = {
-        project_key: 'MFPAND',
+        project_key: 'MCP',
         suite_id: 17470,
         include_steps: true
       };
@@ -232,8 +232,8 @@ describe('Test Case Tools Unit Tests', () => {
     
     it('should validate required parameters', () => {
       const validParams = {
-        project_key: 'MFPAND',
-        case_key: 'MFPAND-4678',
+        project_key: 'MCP',
+        case_key: 'MCP-1',
         format: 'json'
       };
       
@@ -244,8 +244,8 @@ describe('Test Case Tools Unit Tests', () => {
     
     it('should handle include_hierarchy parameter', () => {
       const params = {
-        project_key: 'MFPAND',
-        case_key: 'MFPAND-4678',
+        project_key: 'MCP',
+        case_key: 'MCP-1',
         include_hierarchy: true
       };
       
@@ -254,8 +254,8 @@ describe('Test Case Tools Unit Tests', () => {
     
     it('should handle include_custom_fields parameter', () => {
       const params = {
-        project_key: 'MFPAND',
-        case_key: 'MFPAND-4678',
+        project_key: 'MCP',
+        case_key: 'MCP-1',
         include_custom_fields: true
       };
       
@@ -268,8 +268,8 @@ describe('Test Case Tools Unit Tests', () => {
     
     it('should validate required parameters', () => {
       const validParams = {
-        project_key: 'MFPAND',
-        case_key: 'MFPAND-4678',
+        project_key: 'MCP',
+        case_key: 'MCP-1',
         implementation_context: 'Test implementation context',
         target_framework: 'auto'
       };
@@ -280,7 +280,7 @@ describe('Test Case Tools Unit Tests', () => {
     });
     
     it('should validate case_key format', () => {
-      const validCaseKey = 'MFPAND-4678';
+      const validCaseKey = 'MCP-1';
       const invalidCaseKey = 'invalid';
       
       assert.ok(validCaseKey.match(/^[A-Z]+-\d+$/), 'valid case key should match pattern');
@@ -298,8 +298,8 @@ describe('Test Case Tools Unit Tests', () => {
     
     it('should handle optional parameters', () => {
       const params = {
-        project_key: 'MFPAND',
-        case_key: 'MFPAND-4678',
+        project_key: 'MCP',
+        case_key: 'MCP-1',
         implementation_context: 'Context',
         target_framework: 'auto',
         include_page_objects: true,
@@ -329,7 +329,7 @@ describe('Test Case Tools Unit Tests', () => {
     it('should validate test case object structure', () => {
       const mockTestCase = {
         id: 123456,
-        key: 'MFPAND-4678',
+        key: 'MCP-1',
         title: 'Test case title',
         description: 'Test case description',
         suiteId: 17470,
@@ -349,7 +349,7 @@ describe('Test Case Tools Unit Tests', () => {
     it('should validate test case with steps', () => {
       const testCaseWithSteps = {
         id: 123456,
-        key: 'MFPAND-4678',
+        key: 'MCP-1',
         title: 'Test case title',
         steps: [
           { id: 1, description: 'Step 1', expectedResult: 'Expected 1' },
@@ -365,7 +365,7 @@ describe('Test Case Tools Unit Tests', () => {
     it('should validate test case with custom fields', () => {
       const testCaseWithCustomFields = {
         id: 123456,
-        key: 'MFPAND-4678',
+        key: 'MCP-1',
         title: 'Test case title',
         customFields: [
           { name: 'Manual Only', value: 'Yes' },
@@ -381,12 +381,12 @@ describe('Test Case Tools Unit Tests', () => {
     it('should validate paged test case response', () => {
       const pagedResponse = {
         items: [
-          { id: 1, key: 'MFPAND-4678', title: 'Test 1' },
-          { id: 2, key: 'MFPAND-4679', title: 'Test 2' }
+          { id: 1, key: 'MCP-1', title: 'Test 1' },
+          { id: 2, key: 'MCP-2', title: 'Test 2' }
         ],
         _meta: {
           nextPageToken: 'token123',
-          totalElements: 4579,
+          totalElements: 3,
           currentPage: 0,
           pageSize: 50
         }
@@ -395,7 +395,7 @@ describe('Test Case Tools Unit Tests', () => {
       assert.ok(Array.isArray(pagedResponse.items), 'items should be array');
       assert.ok(pagedResponse._meta, 'response should have metadata');
       assert.ok(typeof pagedResponse._meta.totalElements === 'number', 'totalElements should be number');
-      assert.equal(pagedResponse._meta.totalElements, 4579, 'should match expected total for MFPAND');
+      assert.equal(pagedResponse._meta.totalElements, 3, 'should match expected total for MCP');
     });
     
   });
@@ -404,7 +404,7 @@ describe('Test Case Tools Unit Tests', () => {
     
     it('should handle missing project_key', () => {
       const invalidParams = {
-        case_key: 'MFPAND-4678',
+        case_key: 'MCP-1',
         format: 'json'
       };
       
@@ -413,7 +413,7 @@ describe('Test Case Tools Unit Tests', () => {
     
     it('should handle missing case_key', () => {
       const invalidParams = {
-        project_key: 'MFPAND',
+        project_key: 'MCP',
         format: 'json'
       };
       
@@ -421,7 +421,7 @@ describe('Test Case Tools Unit Tests', () => {
     });
     
     it('should handle invalid case_key format', () => {
-      const invalidCaseKeys = ['', 'invalid', '123', 'MFPAND', 'MFPAND-', '-4678'];
+      const invalidCaseKeys = ['', 'invalid', '123', 'MCP', 'MCP-', '-4678'];
       
       invalidCaseKeys.forEach(key => {
         assert.ok(!key.match(/^[A-Z]+-\d+$/), `"${key}" should be invalid case key format`);
@@ -450,7 +450,7 @@ describe('Test Case Tools Unit Tests', () => {
         {
           type: 'not_found',
           message: 'Test case not found',
-          tips: 'Verify Test Case Key: Ensure MFPAND-4678 exists in project MFPAND'
+          tips: 'Verify Test Case Key: Ensure MCP-1 exists in project MCP'
         },
         {
           type: 'rules_engine',
@@ -481,11 +481,11 @@ describe('Test Case Tools Unit Tests', () => {
   describe('Performance Considerations', () => {
     
     it('should validate large dataset handling', () => {
-      const EXPECTED_MFPAND_TOTAL = 4579;
+      const EXPECTED_MCP_TOTAL = 3;
       const MAX_PAGE_SIZE = 100;
-      const expectedPages = Math.ceil(EXPECTED_MFPAND_TOTAL / MAX_PAGE_SIZE);
+      const expectedPages = Math.ceil(EXPECTED_MCP_TOTAL / MAX_PAGE_SIZE);
       
-      assert.ok(expectedPages > 1, 'Should require multiple pages for all test cases');
+      assert.ok(expectedPages >= 1, 'Should require at least one page for all test cases');
       assert.ok(expectedPages <= 50, 'Should not require excessive pagination');
     });
     
@@ -503,10 +503,10 @@ describe('Test Case Tools Unit Tests', () => {
     
     it('should validate memory-efficient processing', () => {
       const BATCH_SIZE = 100;
-      const TOTAL_ITEMS = 4579;
+      const TOTAL_ITEMS = 3;
       const batches = Math.ceil(TOTAL_ITEMS / BATCH_SIZE);
       
-      assert.ok(batches > 1, 'Should process in multiple batches');
+      assert.ok(batches >= 1, 'Should process in at least one batch');
       assert.ok(BATCH_SIZE <= 100, 'Batch size should be reasonable for memory usage');
     });
     

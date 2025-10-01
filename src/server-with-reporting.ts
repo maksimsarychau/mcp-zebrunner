@@ -94,7 +94,7 @@ async function main() {
     "get_test_cases",
     "📋 Retrieve test cases from Zebrunner with advanced filtering and pagination",
     {
-      projectKey: z.string().min(1).describe("Project key (e.g., MFPAND)"),
+      projectKey: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
       suiteId: z.number().int().positive().optional().describe("Filter by specific suite ID"),
       rootSuiteId: z.number().int().positive().optional().describe("Filter by root suite ID"),
       includeSteps: z.boolean().default(false).describe("Include detailed test steps"),
@@ -109,8 +109,8 @@ async function main() {
     "find_test_case_by_key",
     "🔍 Find a specific test case by its key with detailed information",
     {
-      projectKey: z.string().min(1).describe("Project key (e.g., MFPAND)"),
-      caseKey: z.string().min(1).describe("Test case key (e.g., MFPAND-29)"),
+      projectKey: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
+      caseKey: z.string().min(1).describe("Test case key (e.g., 'ANDROID-29')"),
       includeSteps: z.boolean().default(true).describe("Include detailed test steps"),
       format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format")
     },
@@ -121,7 +121,7 @@ async function main() {
     "get_test_suites",
     "📂 Retrieve test suites from Zebrunner with pagination support",
     {
-      projectKey: z.string().min(1).describe("Project key (e.g., MFPAND)"),
+      projectKey: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
       rootOnly: z.boolean().default(false).describe("Return only root suites"),
       includeHierarchy: z.boolean().default(false).describe("Include hierarchy information"),
       parentSuiteId: z.number().int().positive().optional().describe("Filter by parent suite ID"),
@@ -136,7 +136,7 @@ async function main() {
     "get_suite_hierarchy",
     "🌳 Get hierarchical view of test suites with depth control",
     {
-      projectKey: z.string().min(1).describe("Project key (e.g., MFPAND)"),
+      projectKey: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
       rootSuiteId: z.number().int().positive().optional().describe("Root suite ID to start from"),
       maxDepth: z.number().int().positive().max(10).default(5).describe("Maximum hierarchy depth"),
       format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format")
@@ -150,7 +150,7 @@ async function main() {
     "get_launch_details",
     "🚀 Get comprehensive launch details including test sessions (uses new reporting API with enhanced authentication)",
     {
-      projectKey: z.string().min(1).optional().describe("Project key (e.g., MFPAND) - alternative to projectId"),
+      projectKey: z.string().min(1).optional().describe("Project key (e.g., 'android' or 'ANDROID') - alternative to projectId"),
       projectId: z.number().int().positive().optional().describe("Project ID (e.g., 7) - alternative to projectKey"),
       launchId: z.number().int().positive().describe("Launch ID (e.g., 118685)"),
       includeLaunchDetails: z.boolean().default(true).describe("Include detailed launch information"),
@@ -164,7 +164,7 @@ async function main() {
     "get_launch_summary",
     "📊 Get quick launcher summary without detailed test sessions (uses new reporting API)",
     {
-      projectKey: z.string().min(1).optional().describe("Project key (e.g., MFPAND) - alternative to projectId"),
+      projectKey: z.string().min(1).optional().describe("Project key (e.g., 'android' or 'ANDROID') - alternative to projectId"),
       projectId: z.number().int().positive().optional().describe("Project ID (e.g., 7) - alternative to projectKey"),
       launchId: z.number().int().positive().describe("Launch ID (e.g., 118685)"),
       format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format")
@@ -181,7 +181,7 @@ async function main() {
     async () => {
       try {
         // Simple test by trying to get test suites for a known project
-        const result = await enhancedClient.getTestSuites('MFPAND', { 
+        const result = await enhancedClient.getTestSuites('ANDROID', { 
           rootOnly: false, 
           size: 1 
         });

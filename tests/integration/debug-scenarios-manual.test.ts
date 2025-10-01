@@ -49,7 +49,7 @@ describe('Manual Debug Scenario Tests', () => {
     it('should retrieve test cases for different suites', async () => {
       console.log('📋 Testing test case retrieval...');
 
-      const allTestCases = await client.getTestCases('MFPAND', { size: 10 });
+      const allTestCases = await client.getTestCases('MCP', { size: 10 });
       assert.ok(allTestCases.items.length > 0);
 
       const firstTestCase = allTestCases.items[0];
@@ -57,7 +57,7 @@ describe('Manual Debug Scenario Tests', () => {
 
       // Test specific suite retrieval if we have a suite ID
       if (firstTestCase.testSuite?.id) {
-        const suiteTestCases = await client.getTestCases('MFPAND', {
+        const suiteTestCases = await client.getTestCases('MCP', {
           suiteId: firstTestCase.testSuite.id,
           size: 5
         });
@@ -74,7 +74,7 @@ describe('Manual Debug Scenario Tests', () => {
 
       for (const suiteId of targetSuiteIds) {
         try {
-          const suiteTestCases = await client.getTestCases('MFPAND', { suiteId: suiteId, size: 5 });
+          const suiteTestCases = await client.getTestCases('MCP', { suiteId: suiteId, size: 5 });
           results.push({ id: suiteId, count: suiteTestCases.items.length, found: true });
           console.log(`   Suite ${suiteId}: ${suiteTestCases.items.length} test cases`);
         } catch (error: any) {
@@ -93,12 +93,12 @@ describe('Manual Debug Scenario Tests', () => {
       console.log('☕ Testing Java approach for comprehensive test case retrieval...');
 
       const startTime = Date.now();
-      const allTestCases = await client.getAllTCMTestCasesByProject('MFPAND');
+      const allTestCases = await client.getAllTCMTestCasesByProject('MCP');
       const duration = Date.now() - startTime;
 
       console.log(`   Retrieved ${allTestCases.length} test cases in ${duration}ms`);
 
-      assert.ok(allTestCases.length > 1000, 'Expected substantial number of test cases');
+      assert.ok(allTestCases.length > 0, 'Expected at least some test cases');
 
       if (allTestCases.length > 0) {
         const sampleTestCase = allTestCases[0];
@@ -114,17 +114,17 @@ describe('Manual Debug Scenario Tests', () => {
 
       // Test with suite 605 if it exists
       try {
-        const suite605TestCases = await client.getAllTCMTestCasesBySuiteId('MFPAND', 605, true);
+        const suite605TestCases = await client.getAllTCMTestCasesBySuiteId('MCP', 605, true);
         console.log(`   Root suite 605: ${suite605TestCases.length} test cases`);
         assert.ok(Array.isArray(suite605TestCases));
       } catch (error: any) {
         console.log('   Suite 605: not accessible, testing alternative suites...');
 
         // Try to find any suite and test with that
-        const suitesPage = await client.getTestSuites('MFPAND', { size: 10 });
+        const suitesPage = await client.getTestSuites('MCP', { size: 10 });
         if (suitesPage.items.length > 0) {
           const testSuite = suitesPage.items[0];
-          const testCases = await client.getAllTCMTestCasesBySuiteId('MFPAND', testSuite.id, false);
+          const testCases = await client.getAllTCMTestCasesBySuiteId('MCP', testSuite.id, false);
           console.log(`   Suite ${testSuite.id}: ${testCases.length} test cases (direct)`);
           assert.ok(Array.isArray(testCases));
         }
@@ -136,7 +136,7 @@ describe('Manual Debug Scenario Tests', () => {
     it('should find and process suite hierarchies', async () => {
       console.log('🌳 Testing hierarchy processing...');
 
-      const suitesPage = await client.getTestSuites('MFPAND', { size: 50 });
+      const suitesPage = await client.getTestSuites('MCP', { size: 50 });
       const suites = suitesPage.items;
 
       console.log(`   Processing ${suites.length} suites...`);
@@ -160,7 +160,7 @@ describe('Manual Debug Scenario Tests', () => {
     it('should build suite trees', async () => {
       console.log('🏗️  Testing suite tree building...');
 
-      const suitesPage = await client.getTestSuites('MFPAND', { size: 100 });
+      const suitesPage = await client.getTestSuites('MCP', { size: 100 });
       const suites = suitesPage.items;
 
       const tree = HierarchyProcessor.buildSuiteTree(suites);
@@ -192,11 +192,11 @@ describe('Manual Debug Scenario Tests', () => {
     it('should handle specific test cases from debug scenarios', async () => {
       console.log('🔍 Testing specific test cases...');
 
-      const testCaseKeys = ['MFPAND-917', 'MFPAND-6013'];
+      const testCaseKeys = ['MCP-1', 'MCP-2'];
 
       for (const key of testCaseKeys) {
         try {
-          const testCase = await client.getTestCaseByKey('MFPAND', key, { includeSuiteHierarchy: true });
+          const testCase = await client.getTestCaseByKey('MCP', key, { includeSuiteHierarchy: true });
           console.log(`   ${key}: found, suite ${testCase.testSuite?.id}`);
 
           assert.ok(testCase.id);
@@ -221,7 +221,7 @@ describe('Manual Debug Scenario Tests', () => {
 
       // Try to get hierarchy for suite 736 (from debug scenarios)
       try {
-        const hierarchyPath = await client.getSuiteHierarchyPath('MFPAND', 736);
+        const hierarchyPath = await client.getSuiteHierarchyPath('MCP', 736);
         console.log(`   Suite 736 hierarchy: ${hierarchyPath.length} levels`);
 
         hierarchyPath.forEach((suite, index) => {
@@ -234,11 +234,11 @@ describe('Manual Debug Scenario Tests', () => {
         console.log('   Suite 736 not accessible, testing with available suite...');
 
         // Try with first available suite
-        const suitesPage = await client.getTestSuites('MFPAND', { size: 10 });
+        const suitesPage = await client.getTestSuites('MCP', { size: 10 });
         if (suitesPage.items.length > 0) {
           const testSuite = suitesPage.items[0];
           try {
-            const hierarchyPath = await client.getSuiteHierarchyPath('MFPAND', testSuite.id);
+            const hierarchyPath = await client.getSuiteHierarchyPath('MCP', testSuite.id);
             console.log(`   Suite ${testSuite.id} hierarchy: ${hierarchyPath.length} levels`);
             assert.ok(Array.isArray(hierarchyPath));
           } catch (e: any) {
@@ -254,7 +254,7 @@ describe('Manual Debug Scenario Tests', () => {
       console.log('⚡ Testing performance with large data sets...');
 
       const startTime = Date.now();
-      const allTestCases = await client.getAllTCMTestCasesByProject('MFPAND');
+      const allTestCases = await client.getAllTCMTestCasesByProject('MCP');
       const endTime = Date.now();
 
       const processingTime = endTime - startTime;

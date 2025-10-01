@@ -667,7 +667,7 @@ async function main() {
     "list_test_suites",
     "📋 List test suites for a project (✅ Verified Working)",
     {
-      project_key: z.string().min(1).describe("Project key (e.g., MFPAND)"),
+      project_key: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
       project_id: z.number().int().positive().optional().describe("Project ID (alternative to project_key)"),
       format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format"),
       include_hierarchy: z.boolean().default(false).describe("Include hierarchy information"),
@@ -751,8 +751,8 @@ async function main() {
     "get_test_case_by_key",
     "🔍 Get detailed test case by key (✅ Verified Working)",
     {
-      project_key: z.string().min(1).optional().describe("Project key (e.g., MFPAND) - auto-detected from case_key if not provided"),
-      case_key: z.string().min(1).describe("Test case key (e.g., MFPAND-29, MFPIOS-2)"),
+      project_key: z.string().min(1).optional().describe("Project key (e.g., 'android' or 'ANDROID') - auto-detected from case_key if not provided"),
+      case_key: z.string().min(1).describe("Test case key (e.g., 'ANDROID-29', 'IOS-2')"),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
       include_debug: z.boolean().default(false).describe("Include debug information in markdown"),
       include_suite_hierarchy: z.boolean().default(false).describe("Include featureSuiteId and rootSuiteId with suite hierarchy path")
@@ -1270,7 +1270,7 @@ async function main() {
     "get_automation_states",
     "🔧 Get available automation states for a project (names and IDs)",
     {
-      project: z.union([z.enum(["web","android","ios","api"]), z.string(), z.number()]).describe("Project alias (web/android/ios/api), project key (MFPAND), or project ID (7)"),
+      project: z.union([z.enum(["web","android","ios","api"]), z.string(), z.number()]).describe("Project alias (web/android/ios/api), project key, or project ID"),
       format: z.enum(['json', 'markdown']).default('json').describe("Output format")
     },
     async (args) => {
@@ -1299,7 +1299,7 @@ async function main() {
           markdown += `### Filter by Name:\n`;
           markdown += `\`\`\`\n`;
           markdown += `get_test_cases_by_automation_state(\n`;
-          markdown += `  project_key: "${typeof args.project === 'string' ? args.project : 'MFPAND'}",\n`;
+          markdown += `  project_key: "${typeof args.project === 'string' ? args.project : 'android'}",\n`;
           markdown += `  automation_states: "Not Automated"\n`;
           markdown += `)\n`;
           markdown += `\`\`\`\n\n`;
@@ -1307,7 +1307,7 @@ async function main() {
           markdown += `### Filter by ID:\n`;
           markdown += `\`\`\`\n`;
           markdown += `get_test_cases_by_automation_state(\n`;
-          markdown += `  project_key: "${typeof args.project === 'string' ? args.project : 'MFPAND'}",\n`;
+          markdown += `  project_key: "${typeof args.project === 'string' ? args.project : 'android'}",\n`;
           markdown += `  automation_states: ${automationStates[0]?.id || 10}\n`;
           markdown += `)\n`;
           markdown += `\`\`\`\n\n`;
@@ -1315,7 +1315,7 @@ async function main() {
           markdown += `### Filter by Multiple States:\n`;
           markdown += `\`\`\`\n`;
           markdown += `get_test_cases_by_automation_state(\n`;
-          markdown += `  project_key: "${typeof args.project === 'string' ? args.project : 'MFPAND'}",\n`;
+          markdown += `  project_key: "${typeof args.project === 'string' ? args.project : 'android'}",\n`;
           markdown += `  automation_states: ["Not Automated", "To Be Automated"]\n`;
           markdown += `)\n`;
           markdown += `\`\`\`\n`;
@@ -1374,7 +1374,7 @@ async function main() {
     "🔍 Analyze test case coverage against actual implementation with recommendations",
     {
       project_key: z.string().min(1).optional().describe("Project key (auto-detected from case_key if not provided)"),
-      case_key: z.string().min(1).describe("Test case key (e.g., MFPAND-6)"),
+      case_key: z.string().min(1).describe("Test case key (e.g., 'ANDROID-6')"),
       implementation_context: z.string().min(10).describe("Actual implementation details (code snippets, file paths, or implementation description)"),
       analysis_scope: z.enum(['steps', 'assertions', 'data', 'full']).default('full').describe("Scope of analysis: steps, assertions, data coverage, or full analysis"),
       output_format: z.enum(['chat', 'markdown', 'code_comments', 'all']).default('chat').describe("Output format: chat response, markdown file, code comments, or all formats"),
@@ -1429,7 +1429,7 @@ async function main() {
     "🧪 Generate draft test code from Zebrunner test case with intelligent framework detection",
     {
       project_key: z.string().min(1).optional().describe("Project key (auto-detected from case_key if not provided)"),
-      case_key: z.string().min(1).describe("Test case key (e.g., MFPAND-6)"),
+      case_key: z.string().min(1).describe("Test case key (e.g., 'ANDROID-6')"),
       implementation_context: z.string().min(10).describe("Implementation context (existing code, file paths, or framework hints)"),
       target_framework: z.enum(['auto', 'java-carina', 'javascript-jest', 'python-pytest']).default('auto').describe("Target test framework (auto-detected if 'auto')"),
       output_format: z.enum(['code', 'markdown', 'comments', 'all']).default('code').describe("Output format for generated test"),
@@ -1628,7 +1628,7 @@ async function main() {
     "🔍 Enhanced test coverage analysis with configurable rules validation and quality scoring",
     {
       project_key: z.string().min(1).optional().describe("Project key (auto-detected from case_key if not provided)"),
-      case_key: z.string().min(1).describe("Test case key (e.g., MFPAND-6)"),
+      case_key: z.string().min(1).describe("Test case key (e.g., 'ANDROID-6')"),
       implementation_context: z.string().min(10).describe("Actual implementation details (code snippets, file paths, or implementation description)"),
       analysis_scope: z.enum(['steps', 'assertions', 'data', 'full']).default('full').describe("Scope of analysis: steps, assertions, data coverage, or full analysis"),
       output_format: z.enum(['chat', 'markdown', 'detailed', 'all']).default('detailed').describe("Output format: chat response, markdown file, detailed analysis, or all formats"),
@@ -1839,7 +1839,7 @@ async function main() {
     "get_tcm_test_suites_by_project",
     "📋 Get TCM test suites by project with pagination (Java methodology)",
     {
-      project_key: z.string().min(1).describe("Project key (e.g., MFPAND)"),
+      project_key: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
       max_page_size: z.number().int().positive().max(1000).default(100).describe("Maximum page size for pagination"),
       page_token: z.string().optional().describe("Page token for pagination"),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format")
@@ -1891,7 +1891,7 @@ async function main() {
     "get_all_tcm_test_case_suites_by_project",
     "📋 Get ALL TCM test case suites by project using comprehensive pagination",
     {
-      project_key: z.string().min(1).describe("Project key (e.g., MFPAND)"),
+      project_key: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
       include_hierarchy: z.boolean().default(true).describe("Include hierarchy information (rootSuiteId, parentSuiteName, etc.)"),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format")
     },
@@ -1959,7 +1959,7 @@ async function main() {
     "get_root_suites",
     "🌳 Get root suites (suites with no parent) from project",
     {
-      project_key: z.string().min(1).describe("Project key (e.g., MFPAND)"),
+      project_key: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format")
     },
     async (args) => {
@@ -2002,7 +2002,7 @@ async function main() {
     "get_tcm_suite_by_id",
     "🔍 Find TCM suite by ID with comprehensive search",
     {
-      project_key: z.string().min(1).describe("Project key (e.g., MFPAND)"),
+      project_key: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
       suite_id: z.number().int().positive().describe("Suite ID to find"),
       only_root_suites: z.boolean().default(false).describe("Search only in root suites"),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format")
@@ -2079,7 +2079,7 @@ async function main() {
     "get_all_tcm_test_cases_by_project",
     "📋 Get ALL TCM test cases by project using comprehensive pagination",
     {
-      project_key: z.string().min(1).describe("Project key (e.g., MFPAND)"),
+      project_key: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format")
     },
     async (args) => {
@@ -2140,7 +2140,7 @@ async function main() {
     "get_all_tcm_test_cases_with_root_suite_id",
     "🌳 Get ALL TCM test cases enriched with root suite ID information",
     {
-      project_key: z.string().min(1).describe("Project key (e.g., MFPAND)"),
+      project_key: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format")
     },
     async (args) => {
@@ -2211,7 +2211,7 @@ async function main() {
     "get_root_id_by_suite_id",
     "🔍 Get root suite ID for a specific suite ID",
     {
-      project_key: z.string().min(1).describe("Project key (e.g., MFPAND)"),
+      project_key: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
       suite_id: z.number().int().positive().describe("Suite ID to find root for"),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format")
     },
@@ -2267,7 +2267,7 @@ async function main() {
     "get_launch_details",
     "🚀 Get comprehensive launch details including test sessions (uses new reporting API with enhanced authentication)",
     {
-      projectKey: z.string().min(1).optional().describe("Project key (e.g., MFPAND) - alternative to projectId"),
+      projectKey: z.string().min(1).optional().describe("Project key (e.g., 'android' or 'ANDROID') - alternative to projectId"),
       projectId: z.number().int().positive().optional().describe("Project ID (e.g., 7) - alternative to projectKey"),
       launchId: z.number().int().positive().describe("Launch ID (e.g., 118685)"),
       includeLaunchDetails: z.boolean().default(true).describe("Include detailed launch information"),
@@ -2294,7 +2294,7 @@ async function main() {
     "get_launch_summary",
     "📊 Get quick launch summary without detailed test sessions (uses new reporting API)",
     {
-      projectKey: z.string().min(1).optional().describe("Project key (e.g., MFPAND) - alternative to projectId"),
+      projectKey: z.string().min(1).optional().describe("Project key (e.g., 'android' or 'ANDROID') - alternative to projectId"),
       projectId: z.number().int().positive().optional().describe("Project ID (e.g., 7) - alternative to projectKey"),
       launchId: z.number().int().positive().describe("Launch ID (e.g., 118685)"),
       format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format")
@@ -2319,7 +2319,7 @@ async function main() {
     "get_all_launches_for_project",
     "📋 Get all launches for a project with pagination (uses new reporting API)",
     {
-      project: z.union([z.enum(["web","android","ios","api"]), z.string(), z.number()]).describe("Project alias (web/android/ios/api), project key (MFPAND), or project ID (7)"),
+      project: z.union([z.enum(["web","android","ios","api"]), z.string(), z.number()]).describe("Project alias (web/android/ios/api), project key, or project ID"),
       page: z.number().int().positive().default(1).describe("Page number (starts from 1)"),
       pageSize: z.number().int().positive().max(100).default(20).describe("Number of launches per page (max 100)"),
       format: z.enum(['raw', 'formatted']).default('formatted').describe("Output format - 'raw' for full API response, 'formatted' for user-friendly display")
@@ -2423,9 +2423,9 @@ async function main() {
     "get_all_launches_with_filter",
     "🔍 Get launches with filtering by milestone, build number, or launch name (uses new reporting API)",
     {
-      project: z.union([z.enum(["web","android","ios","api"]), z.string(), z.number()]).describe("Project alias (web/android/ios/api), project key (MFPAND), or project ID (7)"),
+      project: z.union([z.enum(["web","android","ios","api"]), z.string(), z.number()]).describe("Project alias (web/android/ios/api), project key, or project ID"),
       milestone: z.string().optional().describe("Filter by milestone name (e.g., '25.39.0')"),
-      query: z.string().optional().describe("Search query for build number or launch name (e.g., 'myfitnesspal-25.39.0-45915' or 'Performance')"),
+      query: z.string().optional().describe("Search query for build number or launch name (e.g., 'your-app-25.39.0-45915' or 'Performance')"),
       page: z.number().int().positive().default(1).describe("Page number (starts from 1)"),
       pageSize: z.number().int().positive().max(100).default(20).describe("Number of launches per page (max 100)"),
       format: z.enum(['raw', 'formatted']).default('formatted').describe("Output format - 'raw' for full API response, 'formatted' for user-friendly display")
@@ -2587,7 +2587,7 @@ async function main() {
     {
       project: z.union([z.enum(["web","android","ios","api"]), z.string(), z.number()])
         .default("web")
-        .describe("Project alias ('web', 'android', 'ios', 'api'), project key ('MFPAND', 'MCP', etc.), or numeric projectId"),
+        .describe("Project alias ('web', 'android', 'ios', 'api'), project key, or numeric projectId"),
       period: z.enum(["Last 7 Days","Week","Month"])
         .default("Last 7 Days")
         .describe("Time period"),
@@ -2670,7 +2670,7 @@ async function main() {
     {
       project: z.union([z.enum(["web","android","ios","api"]), z.string(), z.number()])
         .default("web")
-        .describe("Project alias ('web', 'android', 'ios', 'api'), project key ('MFPAND', 'MCP', etc.), or numeric projectId"),
+        .describe("Project alias ('web', 'android', 'ios', 'api'), project key, or numeric projectId"),
       period: z.enum(["Last 7 Days","Week","Month"])
         .default("Last 7 Days")
         .describe("Time period"),
@@ -2681,7 +2681,7 @@ async function main() {
         .default(TEMPLATE.TOP_BUGS)
         .describe("Override templateId if needed"),
       issueUrlPattern: z.string().optional()
-        .describe("e.g., 'https://myfitnesspal.atlassian.net/browse/{key}'"),
+        .describe("e.g., 'https://yourcompany.atlassian.net/browse/{key}'"),
       platform: z.union([z.enum(["web","android","ios","api"]), z.array(z.string())])
         .optional()
         .describe("Optional platform filter; defaults to [] for this widget"),
@@ -2833,7 +2833,7 @@ async function main() {
     {
       project: z.union([z.enum(["web","android","ios","api"]), z.string(), z.number()])
         .default("web")
-        .describe("Project alias ('web', 'android', 'ios', 'api'), project key ('MFPAND', 'MCP', etc.), or numeric projectId"),
+        .describe("Project alias ('web', 'android', 'ios', 'api'), project key, or numeric projectId"),
       page: z.number().int().positive()
         .default(1)
         .describe("Page number for pagination (1-based)"),
@@ -3055,9 +3055,9 @@ async function main() {
             usage: {
               note: "Use 'key' field for project parameter in other tools",
               examples: [
-                "project: \"MFPAND\" (for MFP Android)",
-                "project: \"MFPIOS\" (for MFP iOS)", 
-                "project: \"MFPWEB\" (for MFP Web)"
+                "project: \"android\" (for Android app)",
+                "project: \"ios\" (for iOS app)", 
+                "project: \"web\" (for Web app)"
               ]
             }
           };
@@ -3084,8 +3084,8 @@ async function main() {
     "validate_test_case",
     "🔍 Validate a test case against quality standards and best practices (Dynamic Rules Support + Improvement)",
     {
-      projectKey: z.string().min(1).describe("Project key (e.g., MFPAND)"),
-      caseKey: z.string().min(1).describe("Test case key (e.g., MFPAND-29)"),
+      projectKey: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
+      caseKey: z.string().min(1).describe("Test case key (e.g., 'ANDROID-29')"),
       rulesFilePath: z.string().optional().describe("Path to custom rules markdown file"),
       checkpointsFilePath: z.string().optional().describe("Path to custom checkpoints markdown file"),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('markdown').describe("Output format"),
@@ -3119,8 +3119,8 @@ async function main() {
     "improve_test_case",
     "🔧 Analyze and improve a test case with detailed suggestions and optional automatic fixes",
     {
-      projectKey: z.string().min(1).describe("Project key (e.g., MFPAND)"),
-      caseKey: z.string().min(1).describe("Test case key (e.g., MFPAND-29)"),
+      projectKey: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
+      caseKey: z.string().min(1).describe("Test case key (e.g., 'ANDROID-29')"),
       rulesFilePath: z.string().optional().describe("Path to custom rules markdown file"),
       checkpointsFilePath: z.string().optional().describe("Path to custom checkpoints markdown file"),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('markdown').describe("Output format"),
@@ -3158,7 +3158,7 @@ async function main() {
     {
       project: z.union([z.enum(["web","android","ios","api"]), z.string()])
         .default("web")
-        .describe("Project alias ('web', 'android', 'ios', 'api') or project key ('MFPAND', 'MCP', etc.)"),
+        .describe("Project alias ('web', 'android', 'ios', 'api') or project key"),
       pageToken: z.string().optional()
         .describe("Token for pagination (from previous response)"),
       maxPageSize: z.number().int().positive().max(100)
@@ -3192,7 +3192,7 @@ async function main() {
           : undefined;
 
         if (!projectKey || projectKey.length === 0) {
-          throw new Error(`Invalid project: ${args.project}. Use aliases like 'android', 'ios', 'web', 'api' or direct project keys like 'MFPAND', 'MFPIOS', 'MCP', etc.`);
+          throw new Error(`Invalid project: ${args.project}. Use aliases like 'android', 'ios', 'web', 'api' or direct project keys.`);
         }
 
         // Build filter expression using Resource Query Language
@@ -3324,7 +3324,7 @@ async function main() {
         .describe("Test Run ID"),
       project: z.union([z.enum(["web","android","ios","api"]), z.string()])
         .default("web")
-        .describe("Project alias ('web', 'android', 'ios', 'api') or project key ('MFPAND', 'MCP', etc.)"),
+        .describe("Project alias ('web', 'android', 'ios', 'api') or project key"),
       format: z.enum(['raw', 'formatted']).default('formatted')
         .describe("Output format: raw API response or formatted data")
     },
@@ -3342,7 +3342,7 @@ async function main() {
           : undefined;
 
         if (!projectKey || projectKey.length === 0) {
-          throw new Error(`Invalid project: ${args.project}. Use aliases like 'android', 'ios', 'web', 'api' or direct project keys like 'MFPAND', 'MFPIOS', 'MCP', etc.`);
+          throw new Error(`Invalid project: ${args.project}. Use aliases like 'android', 'ios', 'web', 'api' or direct project keys.`);
         }
 
         const testRunData = await client.getPublicTestRunById({
@@ -3433,7 +3433,7 @@ async function main() {
         .describe("Test Run ID"),
       project: z.union([z.enum(["web","android","ios","api"]), z.string()])
         .default("web")
-        .describe("Project alias ('web', 'android', 'ios', 'api') or project key ('MFPAND', 'MCP', etc.)"),
+        .describe("Project alias ('web', 'android', 'ios', 'api') or project key"),
       format: z.enum(['raw', 'formatted']).default('formatted')
         .describe("Output format: raw API response or formatted data")
     },
@@ -3451,7 +3451,7 @@ async function main() {
           : undefined;
 
         if (!projectKey || projectKey.length === 0) {
-          throw new Error(`Invalid project: ${args.project}. Use aliases like 'android', 'ios', 'web', 'api' or direct project keys like 'MFPAND', 'MFPIOS', 'MCP', etc.`);
+          throw new Error(`Invalid project: ${args.project}. Use aliases like 'android', 'ios', 'web', 'api' or direct project keys.`);
         }
 
         const testCasesData = await client.listPublicTestRunTestCases({
@@ -3538,7 +3538,7 @@ async function main() {
     "Get list of Result Statuses configured for a project. These statuses are used when assigning results to Test Cases.",
     {
       project: z.union([z.enum(["web","android","ios","api"]), z.string()])
-        .describe("Project alias ('web', 'android', 'ios', 'api') or project key ('MFPAND', 'MCP', etc.)"),
+        .describe("Project alias ('web', 'android', 'ios', 'api') or project key"),
       format: z.enum(["raw", "formatted"]).default("formatted").describe("Output format")
     },
     async (args) => {
@@ -3554,7 +3554,7 @@ async function main() {
           : PROJECT_ALIASES[args.project as keyof typeof PROJECT_ALIASES];
 
         if (!projectKey) {
-          throw new Error(`Invalid project: ${args.project}. ${suggestions || 'Use web, android, ios, api, or a valid project key like MFPAND, MFPIOS, etc.'}`);
+          throw new Error(`Invalid project: ${args.project}. ${suggestions || 'Use web, android, ios, api, or a valid project key.'}`);
         }
 
         const publicClient = new EnhancedZebrunnerClient(config);
@@ -3609,7 +3609,7 @@ async function main() {
     "Get list of Configuration Groups and their Options for a project. These are used to configure Test Runs.",
     {
       project: z.union([z.enum(["web","android","ios","api"]), z.string()])
-        .describe("Project alias ('web', 'android', 'ios', 'api') or project key ('MFPAND', 'MCP', etc.)"),
+        .describe("Project alias ('web', 'android', 'ios', 'api') or project key"),
       format: z.enum(["raw", "formatted"]).default("formatted").describe("Output format")
     },
     async (args) => {
@@ -3625,7 +3625,7 @@ async function main() {
           : PROJECT_ALIASES[args.project as keyof typeof PROJECT_ALIASES];
 
         if (!projectKey) {
-          throw new Error(`Invalid project: ${args.project}. ${suggestions || 'Use web, android, ios, api, or a valid project key like MFPAND, MFPIOS, etc.'}`);
+          throw new Error(`Invalid project: ${args.project}. ${suggestions || 'Use web, android, ios, api, or a valid project key.'}`);
         }
 
         const publicClient = new EnhancedZebrunnerClient(config);

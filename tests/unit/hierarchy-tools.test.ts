@@ -19,7 +19,7 @@ describe('Hierarchy Tools Unit Tests', () => {
     
     it('should validate required parameters', () => {
       const validParams = {
-        project_key: 'MFPAND',
+        project_key: 'MCP',
         suite_id: 17470,
         format: 'json'
       };
@@ -66,7 +66,7 @@ describe('Hierarchy Tools Unit Tests', () => {
     
     it('should validate required parameters', () => {
       const validParams = {
-        project_key: 'MFPAND',
+        project_key: 'MCP',
         max_depth: 5,
         format: 'json'
       };
@@ -95,7 +95,7 @@ describe('Hierarchy Tools Unit Tests', () => {
     
     it('should handle root_suite_id filter', () => {
       const params = {
-        project_key: 'MFPAND',
+        project_key: 'MCP',
         root_suite_id: 18659,
         max_depth: 5
       };
@@ -105,7 +105,7 @@ describe('Hierarchy Tools Unit Tests', () => {
     
     it('should handle include_test_counts parameter', () => {
       const params = {
-        project_key: 'MFPAND',
+        project_key: 'MCP',
         include_test_counts: true,
         max_depth: 5
       };
@@ -153,7 +153,7 @@ describe('Hierarchy Tools Unit Tests', () => {
     
     it('should validate required parameters', () => {
       const validParams = {
-        project_key: 'MFPAND',
+        project_key: 'MCP',
         root_suite_id: 1079,
         include_root: true,
         format: 'json'
@@ -165,7 +165,7 @@ describe('Hierarchy Tools Unit Tests', () => {
     
     it('should handle include_root parameter', () => {
       const params = {
-        project_key: 'MFPAND',
+        project_key: 'MCP',
         root_suite_id: 1079,
         include_root: false
       };
@@ -221,7 +221,7 @@ describe('Hierarchy Tools Unit Tests', () => {
     
     it('should validate required parameters', () => {
       const validParams = {
-        project_key: 'MFPAND',
+        project_key: 'MCP',
         format: 'json'
       };
       
@@ -230,7 +230,7 @@ describe('Hierarchy Tools Unit Tests', () => {
     
     it('should handle root_suite_id filter', () => {
       const params = {
-        project_key: 'MFPAND',
+        project_key: 'MCP',
         root_suite_id: 18659
       };
       
@@ -298,7 +298,7 @@ describe('Hierarchy Tools Unit Tests', () => {
     
     it('should validate required parameters', () => {
       const validParams = {
-        project_key: 'MFPAND',
+        project_key: 'MCP',
         suite_id: 17470,
         format: 'json'
       };
@@ -309,7 +309,7 @@ describe('Hierarchy Tools Unit Tests', () => {
     
     it('should handle separator parameter', () => {
       const params = {
-        project_key: 'MFPAND',
+        project_key: 'MCP',
         suite_id: 17470,
         separator: ' > '
       };
@@ -354,7 +354,7 @@ describe('Hierarchy Tools Unit Tests', () => {
     
     it('should validate required parameters', () => {
       const validParams = {
-        project_key: 'MFPAND',
+        project_key: 'MCP',
         suite_id: 17441,
         format: 'json'
       };
@@ -365,7 +365,7 @@ describe('Hierarchy Tools Unit Tests', () => {
     
     it('should handle direct_only parameter', () => {
       const params = {
-        project_key: 'MFPAND',
+        project_key: 'MCP',
         suite_id: 17441,
         direct_only: true
       };
@@ -480,7 +480,7 @@ describe('Hierarchy Tools Unit Tests', () => {
     
     it('should handle missing suite_id', () => {
       const invalidParams = {
-        project_key: 'MFPAND',
+        project_key: 'MCP',
         format: 'json'
       };
       
@@ -517,7 +517,7 @@ describe('Hierarchy Tools Unit Tests', () => {
       const errorScenarios = [
         {
           type: 'suite_not_found',
-          message: 'Suite with ID 17470 not found in project MFPAND',
+          message: 'Suite with ID 17470 not found in project MCP',
           suggestion: 'Verify the suite ID exists and you have access to it'
         },
         {

@@ -44,7 +44,7 @@ describe('Launch Tools Unit Tests', () => {
         total: 90,
         projectId: 7,
         userId: 604,
-        buildNumber: "myfitnesspal-25.39.0-45915-qa-release-candidate.apk",
+        buildNumber: "mcp-1.0.0-build-123.apk",
         jobUrl: "https://jenkins.example.com/job/android-tests/123",
         upstream: false,
         reviewed: true
@@ -213,7 +213,7 @@ describe('Launch Tools Unit Tests', () => {
         'android', 
         'ios',
         'api',
-        'MFPAND',
+        'MCP',
         'MCP',
         7,
         16
@@ -288,7 +288,7 @@ describe('Launch Tools Unit Tests', () => {
 
     it('should validate query filter parameter', () => {
       const validQueryFilters = [
-        'myfitnesspal-25.39.0-45915',
+        'mcp-1.0.0-build-123',
         'Performance',
         'Android Regression',
         'build-12345',
@@ -477,7 +477,7 @@ describe('Launch Tools Unit Tests', () => {
     it('should support all project parameter formats', () => {
       const projectFormats = [
         { input: 'android', expected: 'alias' },
-        { input: 'MFPAND', expected: 'key' },
+        { input: 'MCP', expected: 'key' },
         { input: 7, expected: 'id' },
         { input: 'MCP', expected: 'key' }
       ];
@@ -525,7 +525,7 @@ describe('Launch Tools Unit Tests', () => {
             total: 506,
             projectId: 7,
             userId: 604,
-            buildNumber: "myfitnesspal-25.39.0-45915-qa-release-candidate.apk",
+            buildNumber: "mcp-1.0.0-build-123.apk",
             jobUrl: "https://jenkins.example.com/job/android-regression/118685",
             upstream: false,
             reviewed: true

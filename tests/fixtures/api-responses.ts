@@ -1,46 +1,24 @@
 /**
- * Test fixtures with real Zebrunner API responses
- * These are based on actual API responses from the MFPAND project
+ * Test fixtures with Zebrunner API responses
+ * These are based on MCP project structure
  */
 
 export const testSuitesResponse = {
   items: [
     {
-      id: 18708,
-      title: "Intro Primer Screen",
-      description: "Task - https://myfitnesspal.atlassian.net/browse/TOTS-3785",
+      id: 1,
+      title: "MCP Test Suite",
+      description: "Main test suite for MCP project",
       parentSuiteId: null,
       relativePosition: 0,
-      projectId: 123,
-      projectKey: "MFPAND",
-      deleted: false,
-      createdAt: "2023-10-01T10:00:00Z"
-    },
-    {
-      id: 18707,
-      title: "Non-trial",
-      description: null,
-      parentSuiteId: null,
-      relativePosition: 1,
-      projectId: 123,
-      projectKey: "MFPAND",
-      deleted: false,
-      createdAt: "2023-10-01T10:00:00Z"
-    },
-    {
-      id: 18706,
-      title: "Trial",
-      description: null,
-      parentSuiteId: null,
-      relativePosition: 2,
-      projectId: 123,
-      projectKey: "MFPAND",
+      projectId: 1,
+      projectKey: "MCP",
       deleted: false,
       createdAt: "2023-10-01T10:00:00Z"
     }
   ],
   _meta: {
-    totalElements: 10,
+    totalElements: 1,
     totalPages: 1,
     currentPage: 0,
     pageSize: 50,
@@ -51,50 +29,39 @@ export const testSuitesResponse = {
 
 export const testCaseByKeyResponse = {
   data: {
-    id: 201,
-    key: "MFPAND-29",
+    id: 1,
+    key: "MCP-1",
     deleted: false,
-    testSuite: { id: 88 },
+    testSuite: { id: 1 },
     relativePosition: 0,
     createdAt: "2023-10-11T21:07:30.647458Z",
-    createdBy: {
-      id: 604,
-      username: "maksim.sarychau",
-      email: "maksim.sarychau@ext.myfitnesspal.com"
-    },
     lastModifiedAt: "2023-11-03T11:08:15.674298Z",
-    lastModifiedBy: {
-      id: 522,
-      username: "iiemelianova",
-      email: "irina.iemelianova@ext.myfitnesspal.com"
-    },
-    title: "Reminders -> Add reminder",
-    description: null,
+    title: "Test case 1",
+    description: "Description for test case 1",
     priority: { id: 16, name: "Medium" },
-    automationState: { id: 12, name: "Automated" },
+    automationState: { id: 12, name: "Not Automated" },
     deprecated: false,
     draft: false,
     attachments: [],
     preConditions: null,
     postConditions: null,
-    steps: [],
+    steps: [
+      {
+        id: 1,
+        description: "Step 1 description",
+        expectedResult: "Expected result for step 1"
+      },
+      {
+        id: 2,
+        description: "Step 2 description",
+        expectedResult: "Expected result for step 2"
+      }
+    ],
     requirements: [],
     customField: {
-      testrailUpdatedAt: "2022-03-18 17:17:19 UTC",
-      expectedResultAdditional: "Time Reminder added",
-      testrailUpdatedBy: "<unknown>",
-      testrailCaseType: "Other",
-      caseStatus: "Implemented correctly",
-      stepsAdditional: "Create new reminder, select time, not group, set reminder time",
-      testrailId: "102898",
-      deprecated_1: "No",
-      testrailCreatedAt: "2022-03-18 17:17:19 UTC",
-      deprecated_3: "No",
-      deprecated_2: "No",
-      testrailCreatedBy: "<unknown>",
-      legacy_id: "C1727002",
+      caseStatus: "Active",
       manualOnly: "No",
-      isAutomated: "Yes"
+      isAutomated: "No"
     }
   }
 };
@@ -102,80 +69,65 @@ export const testCaseByKeyResponse = {
 export const testCasesResponse = {
   items: [
     {
-      id: 201,
-      key: "MFPAND-29",
-      title: "Reminders -> Add reminder",
+      id: 1,
+      key: "MCP-1",
+      title: "Test case 1",
       status: "Active",
       priority: { id: 16, name: "Medium" },
-      automationState: { id: 12, name: "Automated" },
-      testSuite: { id: 88, title: "Reminders" },
+      automationState: { id: 12, name: "Not Automated" },
+      testSuite: { id: 1, title: "MCP Test Suite" },
       deleted: false,
       deprecated: false,
       draft: false
     },
     {
-      id: 202,
-      key: "MFPAND-30",
-      title: "Login -> Valid credentials",
+      id: 2,
+      key: "MCP-2",
+      title: "Test case 2",
       status: "Active",
-      priority: { id: 17, name: "High" },
-      automationState: { id: 12, name: "Automated" },
-      testSuite: { id: 89, title: "Authentication" },
+      priority: { id: 16, name: "Medium" },
+      automationState: { id: 12, name: "Not Automated" },
+      testSuite: { id: 1, title: "MCP Test Suite" },
+      deleted: false,
+      deprecated: false,
+      draft: false
+    },
+    {
+      id: 3,
+      key: "MCP-3",
+      title: "Test case 3",
+      status: "Active",
+      priority: { id: 16, name: "Medium" },
+      automationState: { id: 12, name: "Not Automated" },
+      testSuite: { id: 1, title: "MCP Test Suite" },
       deleted: false,
       deprecated: false,
       draft: false
     }
   ],
   _meta: {
-    totalElements: 150,
-    totalPages: 3,
+    totalElements: 3,
+    totalPages: 1,
     currentPage: 0,
     pageSize: 50,
-    hasNext: true,
+    hasNext: false,
     hasPrevious: false
   }
 };
 
 export const hierarchicalSuitesResponse = [
   {
-    id: 18708,
-    title: "Root Suite 1",
-    description: "Top level suite",
+    id: 1,
+    title: "MCP Test Suite",
+    description: "Main test suite for MCP project",
     parentSuiteId: null,
-    rootSuiteId: 18708,
+    rootSuiteId: 1,
     relativePosition: 0,
-    projectId: 123,
-    projectKey: "MFPAND",
+    projectId: 1,
+    projectKey: "MCP",
     level: 0,
-    path: "Root Suite 1",
-    children: [
-      {
-        id: 18709,
-        title: "Child Suite 1.1",
-        description: "First child",
-        parentSuiteId: 18708,
-        rootSuiteId: 18708,
-        relativePosition: 0,
-        projectId: 123,
-        projectKey: "MFPAND",
-        level: 1,
-        path: "Root Suite 1 > Child Suite 1.1",
-        children: []
-      },
-      {
-        id: 18710,
-        title: "Child Suite 1.2",
-        description: "Second child",
-        parentSuiteId: 18708,
-        rootSuiteId: 18708,
-        relativePosition: 1,
-        projectId: 123,
-        projectKey: "MFPAND",
-        level: 1,
-        path: "Root Suite 1 > Child Suite 1.2",
-        children: []
-      }
-    ]
+    path: "MCP Test Suite",
+    children: []
   }
 ];
 
@@ -209,20 +161,20 @@ export const errorResponses = {
 export const searchTestCasesResponse = {
   content: [
     {
-      id: 201,
-      key: "MFPAND-29",
-      title: "Reminders -> Add reminder",
+      id: 1,
+      key: "MCP-1",
+      title: "Test case 1",
       status: "Active",
       priority: { id: 16, name: "Medium" },
-      automationState: { id: 12, name: "Automated" }
+      automationState: { id: 12, name: "Not Automated" }
     },
     {
-      id: 205,
-      key: "MFPAND-33",
-      title: "Test reminder functionality",
+      id: 2,
+      key: "MCP-2",
+      title: "Test case 2",
       status: "Active",
       priority: { id: 16, name: "Medium" },
-      automationState: { id: 13, name: "Manual" }
+      automationState: { id: 12, name: "Not Automated" }
     }
   ],
   totalElements: 2,
@@ -237,28 +189,23 @@ export const testRunsResponse = {
   items: [
     {
       id: 1001,
-      name: "Regression Test Run - Nov 2023",
-      description: "Full regression testing for release 2.1.0",
+      name: "MCP Test Run - Nov 2023",
+      description: "Test run for MCP project",
       status: "COMPLETED",
       startedAt: "2023-11-01T09:00:00Z",
       endedAt: "2023-11-01T15:30:00Z",
-      createdBy: {
-        id: 604,
-        username: "maksim.sarychau",
-        email: "maksim.sarychau@ext.myfitnesspal.com"
-      },
-      projectKey: "MFPAND",
-      milestone: "Release 2.1.0",
-      build: "2.1.0-RC1",
+      projectKey: "MCP",
+      milestone: "Release 1.0.0",
+      build: "1.0.0-RC1",
       environment: "staging",
-      totalTests: 150,
-      passedTests: 142,
-      failedTests: 6,
-      skippedTests: 2
+      totalTests: 3,
+      passedTests: 2,
+      failedTests: 1,
+      skippedTests: 0
     }
   ],
   _meta: {
-    totalElements: 25,
+    totalElements: 1,
     currentPage: 0,
     pageSize: 50,
     hasNext: false
@@ -267,9 +214,9 @@ export const testRunsResponse = {
 
 export const testResultsResponse = [
   {
-    testCaseId: 201,
-    testCaseKey: "MFPAND-29",
-    testCaseTitle: "Reminders -> Add reminder",
+    testCaseId: 1,
+    testCaseKey: "MCP-1",
+    testCaseTitle: "Test case 1",
     status: "PASSED",
     executedAt: "2023-11-01T10:15:00Z",
     duration: 2500,
@@ -279,28 +226,30 @@ export const testResultsResponse = [
     attachments: []
   },
   {
-    testCaseId: 202,
-    testCaseKey: "MFPAND-30",
-    testCaseTitle: "Login -> Valid credentials",
+    testCaseId: 2,
+    testCaseKey: "MCP-2",
+    testCaseTitle: "Test case 2",
     status: "FAILED",
     executedAt: "2023-11-01T10:20:00Z",
     duration: 1800,
-    message: "Login button not found",
-    stackTrace: "ElementNotFoundError: Unable to locate element with selector '#login-btn'",
-    issues: ["BUG-1234"],
+    message: "Test execution failed",
+    stackTrace: "Error: Test assertion failed",
+    issues: ["BUG-001"],
     attachments: ["screenshot-failure.png"]
   }
 ];
 
 // Environment variables for testing
 export const testConfig = {
-  ZEBRUNNER_URL: "https://mfp.zebrunner.com/api/public/v1",
+  ZEBRUNNER_URL: "https://test.zebrunner.com/api/public/v1",
   ZEBRUNNER_LOGIN: "test.user@example.com",
   ZEBRUNNER_TOKEN: "test-token-123",
-  PROJECT_KEY: "MFPAND",
-  TEST_CASE_KEY: "MFPAND-29",
-  TEST_SUITE_ID: 18708
+  PROJECT_KEY: "MCP",
+  TEST_CASE_KEY: "MCP-1",
+  TEST_SUITE_ID: 1
 };
+
+
 
 
 

@@ -5,7 +5,7 @@ describe('MCP Tools Schema Validation', () => {
   describe('Tool Input Validation', () => {
     it('should validate list_test_suites parameters', () => {
       const validInput = {
-        project_key: 'MFPAND',
+        project_key: 'MCP',
         format: 'json',
         include_hierarchy: false
       };
@@ -17,8 +17,8 @@ describe('MCP Tools Schema Validation', () => {
 
     it('should validate get_test_case_by_key parameters', () => {
       const validInput = {
-        project_key: 'MFPAND',
-        case_key: 'MFPAND-29',
+        project_key: 'MCP',
+        case_key: 'MCP-1',
         format: 'markdown',
         include_suite_hierarchy: true,
         include_debug: false
@@ -33,13 +33,13 @@ describe('MCP Tools Schema Validation', () => {
 
     it('should validate get_test_cases_advanced parameters', () => {
       const validInput = {
-        project_key: 'MFPAND',
+        project_key: 'MCP',
         page: 0,
         size: 10,
         format: 'json',
         include_steps: true,
-        suite_id: 12345,
-        root_suite_id: 67890
+        suite_id: 1,
+        root_suite_id: 1
       };
 
       assert.equal(typeof validInput.project_key, 'string');
@@ -53,7 +53,7 @@ describe('MCP Tools Schema Validation', () => {
 
     it('should validate get_suite_hierarchy parameters', () => {
       const validInput = {
-        project_key: 'MFPAND',
+        project_key: 'MCP',
         max_depth: 5,
         root_suite_id: 12345,
         format: 'json'
@@ -100,7 +100,7 @@ describe('MCP Tools Schema Validation', () => {
     it('should handle markdown format structure', () => {
       const testCase = {
         id: 789,
-        key: 'MFPAND-29',
+        key: 'MCP-1',
         title: 'Sample Test Case',
         description: 'Test description',
         priority: { id: 1, name: 'High' },
@@ -120,11 +120,11 @@ describe('MCP Tools Schema Validation', () => {
   describe('Error Handling', () => {
     it('should validate required parameters', () => {
       const invalidInputs = [
-        { project_key: '', case_key: 'MFPAND-29' }, // Empty project key
-        { project_key: 'MFPAND', case_key: '' }, // Empty case key
-        { project_key: 'MFPAND', page: -1 }, // Negative page
-        { project_key: 'MFPAND', size: 0 }, // Zero size
-        { project_key: 'MFPAND', max_depth: 11 } // Exceeds max depth
+        { project_key: '', case_key: 'MCP-1' }, // Empty project key
+        { project_key: 'MCP', case_key: '' }, // Empty case key
+        { project_key: 'MCP', page: -1 }, // Negative page
+        { project_key: 'MCP', size: 0 }, // Zero size
+        { project_key: 'MCP', max_depth: 11 } // Exceeds max depth
       ];
 
       invalidInputs.forEach(input => {
@@ -236,7 +236,7 @@ describe('MCP Tools Schema Validation', () => {
     it('should validate test case hierarchy enhancement', () => {
       const enhancedTestCase = {
         id: 123,
-        key: 'MFPAND-29',
+        key: 'MCP-1',
         title: 'Test Case',
         testSuite: { id: 456, title: 'Feature Suite' },
         featureSuiteId: 456,
@@ -365,9 +365,9 @@ describe('MCP Tools Schema Validation', () => {
     it('should validate enhanced project resolution', () => {
       const projectInputs = [
         'android',        // Hardcoded alias
-        'MFPAND',        // Direct project key
-        7,               // Numeric project ID
-        'MFP Android'    // Project name (for dynamic discovery)
+        'MCP',           // Direct project key
+        1,               // Numeric project ID
+        'MCP Project'    // Project name (for dynamic discovery)
       ];
 
       projectInputs.forEach(input => {

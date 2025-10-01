@@ -198,7 +198,7 @@ describe('Zod Schema Validation', () => {
     it('should validate test case with null values', () => {
       const testCaseWithNulls = {
         id: 127,
-        key: 'MFPAND-16',
+        key: 'MCP-1',
         title: 'Premium user test',
         description: null,
         preConditions: null,

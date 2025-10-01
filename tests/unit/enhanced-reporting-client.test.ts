@@ -130,8 +130,8 @@ describe('Enhanced Reporting Client Unit Tests', () => {
         items: [
           {
             id: 7,
-            name: 'MFP Android',
-            key: 'MFPAND',
+            name: 'Android',
+            key: 'MCP',
             logoUrl: '/files/18b4939f-37e9-0576-8c73-478c7095192e',
             createdAt: '2023-09-11T17:43:13.337691Z',
             leadId: 26,
@@ -214,7 +214,7 @@ describe('Enhanced Reporting Client Unit Tests', () => {
     
     it('should validate Bearer token authentication', () => {
       const mockConfig = {
-        baseUrl: 'https://mfp.zebrunner.com',
+        baseUrl: 'https://test.zebrunner.com',
         accessToken: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
         timeout: 30000,
         debug: false

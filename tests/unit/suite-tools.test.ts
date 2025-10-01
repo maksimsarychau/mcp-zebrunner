@@ -20,7 +20,7 @@ describe('Suite Tools Unit Tests', () => {
     
     it('should validate required parameters', () => {
       const validParams = {
-        project_key: 'MFPAND',
+        project_key: 'MCP',
         format: 'json',
         page: 0,
         size: 50
@@ -75,7 +75,7 @@ describe('Suite Tools Unit Tests', () => {
     
     it('should validate required parameters', () => {
       const validParams = {
-        project_key: 'MFPAND',
+        project_key: 'MCP',
         suite_id: 17470,
         format: 'json'
       };
@@ -94,7 +94,7 @@ describe('Suite Tools Unit Tests', () => {
     
     it('should handle only_root_suites parameter', () => {
       const params = {
-        project_key: 'MFPAND',
+        project_key: 'MCP',
         suite_id: 17470,
         only_root_suites: false
       };
@@ -127,7 +127,7 @@ describe('Suite Tools Unit Tests', () => {
     
     it('should validate required parameters', () => {
       const validParams = {
-        project_key: 'MFPAND',
+        project_key: 'MCP',
         format: 'json'
       };
       
@@ -154,7 +154,7 @@ describe('Suite Tools Unit Tests', () => {
     
     it('should validate required parameters', () => {
       const validParams = {
-        project_key: 'MFPAND',
+        project_key: 'MCP',
         max_depth: 5,
         format: 'json'
       };
@@ -176,7 +176,7 @@ describe('Suite Tools Unit Tests', () => {
     
     it('should handle root_suite_id parameter', () => {
       const params = {
-        project_key: 'MFPAND',
+        project_key: 'MCP',
         root_suite_id: 18659
       };
       
@@ -189,7 +189,7 @@ describe('Suite Tools Unit Tests', () => {
     
     it('should validate required parameters', () => {
       const validParams = {
-        project_key: 'MFPAND',
+        project_key: 'MCP',
         root_suite_id: 1079,
         include_root: true,
         format: 'json'
@@ -212,7 +212,7 @@ describe('Suite Tools Unit Tests', () => {
     
     it('should handle include_root parameter', () => {
       const params = {
-        project_key: 'MFPAND',
+        project_key: 'MCP',
         root_suite_id: 1079,
         include_root: true
       };
@@ -226,7 +226,7 @@ describe('Suite Tools Unit Tests', () => {
     
     it('should validate required parameters', () => {
       const validParams = {
-        project_key: 'MFPAND',
+        project_key: 'MCP',
         max_page_size: 100,
         format: 'json'
       };
@@ -238,7 +238,7 @@ describe('Suite Tools Unit Tests', () => {
     
     it('should handle page_token parameter', () => {
       const params = {
-        project_key: 'MFPAND',
+        project_key: 'MCP',
         page_token: 'abc123token'
       };
       
