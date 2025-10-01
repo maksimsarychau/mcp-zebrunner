@@ -1,5 +1,5 @@
 # Zebrunner MCP Server
-**Current version:** 🟢 <!--VERSION_START-->3.8.45<!--VERSION_END--> 
+**Current version:** 🟢 <!--VERSION_START-->4.0.156<!--VERSION_END--> 
 
 A **Model Context Protocol (MCP)** server that integrates with **Zebrunner Test Case Management** to help QA teams manage test cases, test suites, and test execution data through AI assistants like Claude.
 
