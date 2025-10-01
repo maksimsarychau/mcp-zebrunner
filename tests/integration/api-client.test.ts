@@ -12,8 +12,8 @@ import 'dotenv/config';
  * 
  * Prerequisites:
  * - Valid .env file with Zebrunner credentials
- * - Access to MFPAND project
- * - Test case MFPAND-29 should exist
+ * - Access to MCP project
+ * - Test case MCP-1 should exist
  */
 
 describe('EnhancedZebrunnerClient Integration Tests', () => {
@@ -54,8 +54,8 @@ describe('EnhancedZebrunnerClient Integration Tests', () => {
   });
 
   describe('Test Suites API', () => {
-    it('should list test suites for MFPAND project', async () => {
-      const response = await client.getTestSuites('MFPAND');
+    it('should list test suites for MCP project', async () => {
+      const response = await client.getTestSuites('MCP');
       
       assert.ok(response);
       assert.ok(response.items);
@@ -70,19 +70,19 @@ describe('EnhancedZebrunnerClient Integration Tests', () => {
     });
 
     it('should get all test suites with pagination', async () => {
-      const allSuites = await client.getAllTestSuites('MFPAND');
+      const allSuites = await client.getAllTestSuites('MCP');
       
       assert.ok(Array.isArray(allSuites));
       assert.ok(allSuites.length > 0);
 
       // Should have more or equal items than single page
-      const singlePage = await client.getTestSuites('MFPAND', { size: 5 });
+      const singlePage = await client.getTestSuites('MCP', { size: 5 });
       assert.ok(allSuites.length >= singlePage.items.length);
     });
 
     it('should handle pagination parameters correctly', async () => {
-      const page0 = await client.getTestSuites('MFPAND', { page: 0, size: 2 });
-      const page1 = await client.getTestSuites('MFPAND', { page: 1, size: 2 });
+      const page0 = await client.getTestSuites('MCP', { page: 0, size: 2 });
+      const page1 = await client.getTestSuites('MCP', { page: 1, size: 2 });
       
       assert.ok(page0.items.length <= 2);
       assert.ok(page1.items.length <= 2);
@@ -136,12 +136,12 @@ describe('EnhancedZebrunnerClient Integration Tests', () => {
   });
 
   describe('Test Cases API', () => {
-    it('should get test case by key MFPAND-29', async () => {
-      const testCase = await client.getTestCaseByKey('MFPAND', 'MFPAND-29');
+    it('should get test case by key MCP-1', async () => {
+      const testCase = await client.getTestCaseByKey('MCP', 'MCP-1');
       
       assert.ok(testCase);
       assert.ok(testCase.id);
-      assert.equal(testCase.key, 'MFPAND-29');
+      assert.equal(testCase.key, 'MCP-1');
       assert.ok(testCase.title);
       assert.ok(testCase.priority);
       assert.ok(testCase.automationState);
@@ -154,7 +154,7 @@ describe('EnhancedZebrunnerClient Integration Tests', () => {
     });
 
     it('should list test cases with pagination', async () => {
-      const response = await client.getTestCases('MFPAND', { size: 10 });
+      const response = await client.getTestCases('MCP', { size: 10 });
       
       assert.ok(response);
       assert.ok(response.items);
@@ -170,7 +170,7 @@ describe('EnhancedZebrunnerClient Integration Tests', () => {
 
     it('should handle invalid test case key', async () => {
       try {
-        await client.getTestCaseByKey('MFPAND', 'INVALID-KEY-999');
+        await client.getTestCaseByKey('MCP', 'INVALID-KEY-999');
         assert.fail('Should have thrown an error');
       } catch (error: any) {
         assert.ok(error);
@@ -179,14 +179,14 @@ describe('EnhancedZebrunnerClient Integration Tests', () => {
 
     it('should validate required parameters', async () => {
       try {
-        await client.getTestCaseByKey('', 'MFPAND-29');
+        await client.getTestCaseByKey('', 'MCP-1');
         assert.fail('Should have thrown an error');
       } catch (error: any) {
         assert.ok(error.message.includes('Project key is required'));
       }
 
       try {
-        await client.getTestCaseByKey('MFPAND', '');
+        await client.getTestCaseByKey('MCP', '');
         assert.fail('Should have thrown an error');
       } catch (error: any) {
         assert.ok(error.message.includes('Test case key is required'));
@@ -213,7 +213,7 @@ describe('EnhancedZebrunnerClient Integration Tests', () => {
       });
 
       try {
-        await invalidClient.getTestSuites('MFPAND');
+        await invalidClient.getTestSuites('MCP');
         assert.fail('Should have thrown an error');
       } catch (error: any) {
         assert.equal(error.name, 'ZebrunnerAuthError');
@@ -223,21 +223,21 @@ describe('EnhancedZebrunnerClient Integration Tests', () => {
 
     it('should validate pagination parameters', async () => {
       // Test with negative page - API might accept it or handle gracefully
-      const result = await client.getTestSuites('MFPAND', { page: -1 });
+      const result = await client.getTestSuites('MCP', { page: -1 });
       // Just verify we get a valid response structure
       assert.ok(result);
       assert.ok(result.items);
       assert.ok(Array.isArray(result.items));
 
       // Test with size 0 - API might accept it or handle gracefully
-      const resultSize0 = await client.getTestSuites('MFPAND', { size: 0 });
+      const resultSize0 = await client.getTestSuites('MCP', { size: 0 });
       // Just verify we get a valid response structure
       assert.ok(resultSize0);
       assert.ok(resultSize0.items);
       assert.ok(Array.isArray(resultSize0.items));
 
       // Test with large size - API might accept it or handle gracefully
-      const resultLargeSize = await client.getTestSuites('MFPAND', { size: 1000 });
+      const resultLargeSize = await client.getTestSuites('MCP', { size: 1000 });
       // Just verify we get a valid response structure
       assert.ok(resultLargeSize);
       assert.ok(resultLargeSize.items);
@@ -248,13 +248,13 @@ describe('EnhancedZebrunnerClient Integration Tests', () => {
   describe('Experimental Features', () => {
     it('should attempt to get test cases by suite (experimental)', async () => {
       // Get a suite ID first
-      const suites = await client.getTestSuites('MFPAND', { size: 1 });
+      const suites = await client.getTestSuites('MCP', { size: 1 });
       
       if (suites.items.length > 0) {
         const suiteId = suites.items[0].id;
         
         try {
-          const testCases = await client.getTestCasesBySuite('MFPAND', suiteId);
+          const testCases = await client.getTestCasesBySuite('MCP', suiteId);
           assert.ok(Array.isArray(testCases));
         } catch (error: any) {
           // Expected to fail on some instances
@@ -265,14 +265,14 @@ describe('EnhancedZebrunnerClient Integration Tests', () => {
 
     it('should validate suite ID parameter', async () => {
       try {
-        await client.getTestCasesBySuite('MFPAND', 0);
+        await client.getTestCasesBySuite('MCP', 0);
         assert.fail('Should have thrown an error');
       } catch (error: any) {
         assert.ok(error.message.includes('Valid suite ID is required'));
       }
 
       try {
-        await client.getTestCasesBySuite('MFPAND', -1);
+        await client.getTestCasesBySuite('MCP', -1);
         assert.fail('Should have thrown an error');
       } catch (error: any) {
         assert.ok(error.message.includes('Valid suite ID is required'));
@@ -283,9 +283,9 @@ describe('EnhancedZebrunnerClient Integration Tests', () => {
   describe('Performance and Reliability', () => {
     it('should handle multiple concurrent requests', async () => {
       const promises = [
-        client.getTestSuites('MFPAND', { size: 2 }),
-        client.getTestCaseByKey('MFPAND', 'MFPAND-29'),
-        client.searchTestCases('MFPAND', 'test', { size: 2 })
+        client.getTestSuites('MCP', { size: 2 }),
+        client.getTestCaseByKey('MCP', 'MCP-1'),
+        client.searchTestCases('MCP', 'test', { size: 2 })
       ];
 
       const results = await Promise.allSettled(promises);
@@ -298,7 +298,7 @@ describe('EnhancedZebrunnerClient Integration Tests', () => {
     it('should retry failed requests', async () => {
       // This test verifies retry mechanism by checking debug logs
       // In a real scenario, we'd need to simulate network failures
-      const response = await client.getTestSuites('MFPAND');
+      const response = await client.getTestSuites('MCP');
       assert.ok(response);
     });
 
@@ -309,7 +309,7 @@ describe('EnhancedZebrunnerClient Integration Tests', () => {
       });
 
       try {
-        await fastClient.getTestSuites('MFPAND');
+        await fastClient.getTestSuites('MCP');
         // If it succeeds, the API is very fast
         assert.ok(true);
       } catch (error: any) {

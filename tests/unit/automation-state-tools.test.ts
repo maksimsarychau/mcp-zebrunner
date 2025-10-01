@@ -238,7 +238,7 @@ describe('Automation State Tools', () => {
 
   describe('Test Case Filtering by Automation State', () => {
     it('should filter test cases by single automation state name', async () => {
-      const result = await mockEnhancedClient.getTestCases('MFPAND', {
+      const result = await mockEnhancedClient.getTestCases('MCP', {
         automationState: 'Not Automated'
       });
       
@@ -248,7 +248,7 @@ describe('Automation State Tools', () => {
     });
 
     it('should filter test cases by single automation state ID', async () => {
-      const result = await mockEnhancedClient.getTestCases('MFPAND', {
+      const result = await mockEnhancedClient.getTestCases('MCP', {
         automationState: 11
       });
       
@@ -258,7 +258,7 @@ describe('Automation State Tools', () => {
     });
 
     it('should filter test cases by multiple automation states', async () => {
-      const result = await mockEnhancedClient.getTestCases('MFPAND', {
+      const result = await mockEnhancedClient.getTestCases('MCP', {
         automationState: ['Not Automated', 'To Be Automated']
       });
       
@@ -268,7 +268,7 @@ describe('Automation State Tools', () => {
     });
 
     it('should return empty results for non-matching automation state', async () => {
-      const result = await mockEnhancedClient.getTestCases('MFPAND', {
+      const result = await mockEnhancedClient.getTestCases('MCP', {
         automationState: 'Non-existent State'
       });
       
@@ -276,7 +276,7 @@ describe('Automation State Tools', () => {
     });
 
     it('should handle mixed automation state types', async () => {
-      const result = await mockEnhancedClient.getTestCases('MFPAND', {
+      const result = await mockEnhancedClient.getTestCases('MCP', {
         automationState: ['Not Automated', 12] // Mix of name and ID
       });
       
@@ -343,13 +343,13 @@ describe('Automation State Tools', () => {
     it('should work with project resolution', async () => {
       // Mock project resolution
       const mockResolveProjectId = async (project: any) => {
-        if (project === 'MFPAND' || project === 'android') {
+        if (project === 'MCP' || project === 'android') {
           return { projectId: 7 };
         }
         throw new Error('Project not found');
       };
 
-      const result = await mockResolveProjectId('MFPAND');
+      const result = await mockResolveProjectId('MCP');
       assert.strictEqual(result.projectId, 7);
       
       const states = await mockReportingClient.getAutomationStates(result.projectId);
@@ -357,7 +357,7 @@ describe('Automation State Tools', () => {
     });
 
     it('should support pagination with automation state filtering', async () => {
-      const result = await mockEnhancedClient.getTestCases('MFPAND', {
+      const result = await mockEnhancedClient.getTestCases('MCP', {
         automationState: 'Not Automated',
         page: 0,
         size: 10
@@ -369,7 +369,7 @@ describe('Automation State Tools', () => {
     });
 
     it('should combine automation state with other filters', async () => {
-      const result = await mockEnhancedClient.getTestCases('MFPAND', {
+      const result = await mockEnhancedClient.getTestCases('MCP', {
         automationState: 'To Be Automated',
         suiteId: 123,
         createdAfter: '2024-01-01'
@@ -390,7 +390,7 @@ describe('Automation State Tools', () => {
       ];
       
       const result = {
-        project: 'MFPAND',
+        project: 'MCP',
         projectId: 7,
         automationStates: mockStates,
         mapping: mockStates.reduce((acc, state) => {
@@ -399,7 +399,7 @@ describe('Automation State Tools', () => {
         }, {} as Record<string, number>)
       };
       
-      assert.strictEqual(result.project, 'MFPAND');
+      assert.strictEqual(result.project, 'MCP');
       assert.strictEqual(result.projectId, 7);
       assert.strictEqual(result.automationStates.length, 3);
       assert.strictEqual(result.mapping['Not Automated'], 10);
@@ -414,7 +414,7 @@ describe('Automation State Tools', () => {
         { id: 12, name: 'Automated' }
       ];
       
-      let markdown = '# Automation States for Project MFPAND\n\n';
+      let markdown = '# Automation States for Project MCP\n\n';
       markdown += '**Project ID:** 7\n';
       markdown += `**Total States:** ${mockStates.length}\n\n`;
       
@@ -426,7 +426,7 @@ describe('Automation State Tools', () => {
 
   describe('Performance and Edge Cases', () => {
     it('should handle empty automation state arrays', async () => {
-      const result = await mockEnhancedClient.getTestCases('MFPAND', {
+      const result = await mockEnhancedClient.getTestCases('MCP', {
         automationState: []
       });
       
@@ -435,11 +435,11 @@ describe('Automation State Tools', () => {
     });
 
     it('should handle null/undefined automation states', async () => {
-      const result1 = await mockEnhancedClient.getTestCases('MFPAND', {
+      const result1 = await mockEnhancedClient.getTestCases('MCP', {
         automationState: null
       });
       
-      const result2 = await mockEnhancedClient.getTestCases('MFPAND', {
+      const result2 = await mockEnhancedClient.getTestCases('MCP', {
         automationState: undefined
       });
       

@@ -1,7 +1,7 @@
 import axios, { AxiosInstance } from "axios";
 
 export interface ZebrunnerConfig {
-  baseUrl: string;      // e.g. https://mfp.zebrunner.com/api/public/v1
+  baseUrl: string;      // e.g. https://yourcompany.zebrunner.com/api/public/v1
   username: string;     // Zebrunner login (email)
   token: string;        // Personal API token
 }

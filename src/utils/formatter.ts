@@ -329,8 +329,8 @@ export class FormatProcessor {
 
   /**
    * Extracts project key from a test case key
-   * @param testCaseKey - Test case key like "MFPIOS-2", "MFPAND-123", etc.
-   * @returns Project key like "MFPIOS", "MFPAND", etc.
+   * @param testCaseKey - Test case key like "IOS-2", "ANDROID-123", etc.
+   * @returns Project key like "IOS", "ANDROID", etc.
    */
   static extractProjectKeyFromTestCaseKey(testCaseKey: string): string {
     if (!testCaseKey || typeof testCaseKey !== 'string') {
@@ -340,7 +340,7 @@ export class FormatProcessor {
     const match = testCaseKey.match(/^([A-Z][A-Z0-9]*)-(\d+)$/);
     
     if (!match) {
-      throw new Error(`Invalid test case key format: "${testCaseKey}". Expected format: PROJECT_KEY-NUMBER (e.g., MFPIOS-2)`);
+      throw new Error(`Invalid test case key format: "${testCaseKey}". Expected format: PROJECT_KEY-NUMBER (e.g., IOS-2)`);
     }
 
     return match[1];

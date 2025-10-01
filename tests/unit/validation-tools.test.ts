@@ -16,8 +16,8 @@ describe('Validation Tools Unit Tests', () => {
     
     it('should validate required parameters', () => {
       const validParams = {
-        projectKey: 'MFPAND',
-        caseKey: 'MFPAND-2734',
+        projectKey: 'MCP',
+        caseKey: 'MCP-1',
         format: 'json',
         improveIfPossible: true
       };
@@ -29,8 +29,8 @@ describe('Validation Tools Unit Tests', () => {
     });
     
     it('should validate caseKey format', () => {
-      const validCaseKeys = ['MFPAND-2734', 'TEST-123', 'PROJECT-9999'];
-      const invalidCaseKeys = ['', 'invalid', 'MFPAND', 'MFPAND-', '-2734', 'mfpand-2734'];
+      const validCaseKeys = ['MCP-1', 'TEST-123', 'PROJECT-9999'];
+      const invalidCaseKeys = ['', 'invalid', 'MCP', 'MCP-', '-1', 'mcp-1'];
       
       validCaseKeys.forEach(key => {
         assert.ok(key.match(/^[A-Z]+-\d+$/), `"${key}" should be valid case key format`);
@@ -54,8 +54,8 @@ describe('Validation Tools Unit Tests', () => {
     
     it('should handle improveIfPossible parameter', () => {
       const params = {
-        projectKey: 'MFPAND',
-        caseKey: 'MFPAND-2734',
+        projectKey: 'MCP',
+        caseKey: 'MCP-1',
         improveIfPossible: true
       };
       
@@ -65,8 +65,8 @@ describe('Validation Tools Unit Tests', () => {
     
     it('should handle optional file paths', () => {
       const params = {
-        projectKey: 'MFPAND',
-        caseKey: 'MFPAND-2734',
+        projectKey: 'MCP',
+        caseKey: 'MCP-1',
         rulesFilePath: './custom-rules.md',
         checkpointsFilePath: './custom-checkpoints.md'
       };
@@ -77,7 +77,7 @@ describe('Validation Tools Unit Tests', () => {
     
     it('should validate validation result structure', () => {
       const mockValidationResult = {
-        testCaseKey: 'MFPAND-2734',
+        testCaseKey: 'MCP-1',
         testCaseTitle: 'Test case title',
         automationStatus: 'NOT_AUTOMATED',
         priority: 'HIGH',
@@ -132,8 +132,8 @@ describe('Validation Tools Unit Tests', () => {
     
     it('should validate required parameters', () => {
       const validParams = {
-        projectKey: 'MFPAND',
-        caseKey: 'MFPAND-2734',
+        projectKey: 'MCP',
+        caseKey: 'MCP-1',
         format: 'json'
       };
       
@@ -145,7 +145,7 @@ describe('Validation Tools Unit Tests', () => {
     
     it('should validate improvement result structure', () => {
       const mockImprovementResult = {
-        testCaseKey: 'MFPAND-2734',
+        testCaseKey: 'MCP-1',
         originalTitle: 'Original test case title',
         confidence: 0.85,
         improvements: [
@@ -212,7 +212,7 @@ describe('Validation Tools Unit Tests', () => {
     
     it('should validate required parameters', () => {
       const validParams = {
-        case_key: 'MFPAND-4888',
+        case_key: 'MCP-2',
         implementation_context: 'Test implementation context',
         analysis_scope: 'full',
         output_format: 'detailed'
@@ -247,7 +247,7 @@ describe('Validation Tools Unit Tests', () => {
     
     it('should handle boolean parameters', () => {
       const params = {
-        case_key: 'MFPAND-4888',
+        case_key: 'MCP-2',
         implementation_context: 'Context',
         include_recommendations: true,
         show_framework_detection: false,
@@ -263,7 +263,7 @@ describe('Validation Tools Unit Tests', () => {
       const validContext = `Test Implementation found at:
 /Users/test/src/test.java
 
-The test case MFPAND-4888 is implemented as part of a comprehensive test method.
+The test case MCP-2 is implemented as part of a comprehensive test method.
 
 Key implementation details:
 1. Test creates a new account
@@ -281,7 +281,7 @@ Key implementation details:
     
     it('should validate coverage analysis result structure', () => {
       const mockCoverageResult = {
-        testCaseKey: 'MFPAND-4888',
+        testCaseKey: 'MCP-2',
         testCaseTitle: 'Sourcepoint returns the first layer message as a web view',
         implementationAnalysis: {
           frameworkDetected: 'TestNG + Selenium',
@@ -398,8 +398,8 @@ Key implementation details:
     
     it('should handle missing required parameters', () => {
       const invalidParams = [
-        { caseKey: 'MFPAND-2734' }, // missing projectKey
-        { projectKey: 'MFPAND' }, // missing caseKey
+        { caseKey: 'MCP-1' }, // missing projectKey
+        { projectKey: 'MCP' }, // missing caseKey
         {} // missing both
       ];
       
@@ -412,7 +412,7 @@ Key implementation details:
     });
     
     it('should handle invalid case key formats', () => {
-      const invalidCaseKeys = ['', 'invalid', 'MFPAND', 'MFPAND-', '-2734', 'mfpand-2734'];
+      const invalidCaseKeys = ['', 'invalid', 'MCP', 'MCP-', '-2734', 'and-2734'];
       
       invalidCaseKeys.forEach(key => {
         assert.ok(!key.match(/^[A-Z]+-\d+$/), `"${key}" should be detected as invalid format`);
@@ -442,12 +442,12 @@ Key implementation details:
         {
           type: 'missing_case_key',
           message: 'Test case key is required',
-          suggestion: 'Provide a valid test case key in format PROJECT-NUMBER (e.g., MFPAND-2734)'
+          suggestion: 'Provide a valid test case key in format PROJECT-NUMBER (e.g., MCP-1)'
         },
         {
           type: 'invalid_format',
           message: 'Invalid case key format',
-          suggestion: 'Case key must match pattern PROJECT-NUMBER (e.g., MFPAND-2734)'
+          suggestion: 'Case key must match pattern PROJECT-NUMBER (e.g., MCP-1)'
         },
         {
           type: 'rules_not_found',
@@ -481,7 +481,7 @@ Key implementation details:
     
     it('should validate JSON format output', () => {
       const mockResult = {
-        testCaseKey: 'MFPAND-2734',
+        testCaseKey: 'MCP-1',
         overallScore: 85,
         issues: [],
         improvements: []
@@ -498,7 +498,7 @@ Key implementation details:
 
 ## 📋 Test Case Information
 
-- **Test Case:** MFPAND-2734 - Test case title
+- **Test Case:** MCP-1 - Test case title
 - **Automation Status:** NOT_AUTOMATED
 - **Priority:** HIGH
 - **Status:** active
@@ -522,9 +522,9 @@ Test case is well-structured but could use improvement.
     });
     
     it('should validate string format output', () => {
-      const mockStringOutput = 'MFPAND-2734: Test case validation completed. Score: 85% (GOOD). Ready for automation: Yes.';
+      const mockStringOutput = 'MCP-1: Test case validation completed. Score: 85% (GOOD). Ready for automation: Yes.';
       
-      assert.ok(mockStringOutput.includes('MFPAND-2734'), 'should include case key');
+      assert.ok(mockStringOutput.includes('MCP-1'), 'should include case key');
       assert.ok(mockStringOutput.includes('Score:'), 'should include score');
       assert.ok(mockStringOutput.includes('%'), 'should include percentage');
       assert.ok(mockStringOutput.includes('Ready for automation'), 'should include automation readiness');

@@ -17,7 +17,7 @@ describe('Performance Tests', () => {
   describe('Pagination Performance', () => {
     
     it('should validate efficient pagination logic', () => {
-      const TOTAL_ITEMS = 4579; // MFPAND test cases
+      const TOTAL_ITEMS = 4579; // MCP test cases
       const PAGE_SIZE = 100;
       const EXPECTED_PAGES = Math.ceil(TOTAL_ITEMS / PAGE_SIZE);
       

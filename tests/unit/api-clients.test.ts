@@ -16,7 +16,7 @@ describe('API Clients Unit Tests', () => {
     
     it('should validate constructor parameters', () => {
       const validConfig = {
-        baseUrl: 'https://mfp.zebrunner.com',
+        baseUrl: 'https://test.zebrunner.com',
         username: 'testuser',
         password: 'testpass'
       };
@@ -28,11 +28,11 @@ describe('API Clients Unit Tests', () => {
     });
     
     it('should validate URL construction', () => {
-      const baseUrl = 'https://mfp.zebrunner.com';
+      const baseUrl = 'https://test.zebrunner.com';
       const endpoint = '/api/tcm/v1/test-suites';
       const expectedUrl = `${baseUrl}${endpoint}`;
       
-      assert.equal(expectedUrl, 'https://mfp.zebrunner.com/api/tcm/v1/test-suites', 'should construct correct URL');
+      assert.equal(expectedUrl, 'https://test.zebrunner.com/api/tcm/v1/test-suites', 'should construct correct URL');
     });
     
     it('should validate authentication headers', () => {
@@ -50,7 +50,7 @@ describe('API Clients Unit Tests', () => {
     
     it('should validate request parameters', () => {
       const validParams = {
-        projectKey: 'MFPAND',
+        projectKey: 'MCP',
         page: 0,
         size: 50
       };
@@ -157,7 +157,7 @@ describe('API Clients Unit Tests', () => {
       
       assert.ok(expectedBatches > 1, 'should require multiple batches');
       assert.ok(expectedBatches <= 50, 'should not require excessive batches');
-      assert.equal(expectedBatches, 46, 'should calculate correct batch count for MFPAND');
+      assert.equal(expectedBatches, 46, 'should calculate correct batch count for MCP');
     });
     
     it('should validate suite enrichment', () => {
@@ -216,7 +216,7 @@ describe('API Clients Unit Tests', () => {
     it('should validate launcher parameters', () => {
       const launcherParams = {
         launcherId: 12345,
-        projectKey: 'MFPAND',
+        projectKey: 'MCP',
         includeDetails: true
       };
       
@@ -413,11 +413,11 @@ describe('API Clients Unit Tests', () => {
     });
     
     it('should validate memory usage for large datasets', () => {
-      const MFPAND_TOTAL_CASES = 4579;
+      const MCP_TOTAL_CASES = 4579;
       const BATCH_SIZE = 100;
       const MEMORY_PER_CASE = 1024; // bytes
       
-      const totalMemory = MFPAND_TOTAL_CASES * MEMORY_PER_CASE;
+      const totalMemory = MCP_TOTAL_CASES * MEMORY_PER_CASE;
       const batchMemory = BATCH_SIZE * MEMORY_PER_CASE;
       
       assert.ok(batchMemory < totalMemory, 'batch processing should use less memory');

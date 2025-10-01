@@ -41,7 +41,7 @@ describe('FormatProcessor', () => {
   describe('formatTestCaseMarkdown', () => {
     const testCase = {
       id: 12345,
-      key: 'MFPAND-29',
+      key: 'MCP-1',
       title: 'User Login Test',
       description: 'Test user login functionality',
       priority: { id: 1, name: 'High' },
@@ -72,7 +72,7 @@ describe('FormatProcessor', () => {
       
       assert.ok(markdown.includes('# Test Case: User Login Test'));
       assert.ok(markdown.includes('**ID:** 12345'));
-      assert.ok(markdown.includes('**Key:** MFPAND-29'));
+      assert.ok(markdown.includes('**Key:** MCP-1'));
       assert.ok(markdown.includes('**Priority:** High'));
       assert.ok(markdown.includes('**Automation State:** Automated'));
     });

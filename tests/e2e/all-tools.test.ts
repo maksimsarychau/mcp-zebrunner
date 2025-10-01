@@ -19,14 +19,15 @@ import 'dotenv/config';
  * - ZEBRUNNER_TOKEN
  */
 
-// Test data constants
-const TEST_PROJECT_KEY = 'MFPAND';
-const TEST_CASE_KEY = 'MFPAND-4678';
-const TEST_CASE_KEY_2 = 'MFPAND-4679';
-const TEST_SUITE_ID = 17470;
-const TEST_ROOT_SUITE_ID = 18659;
-const EXPECTED_TOTAL_TEST_CASES = 4579;
-const EXPECTED_ROOT_SUITES_COUNT = 24;
+// Test data constants - MCP Project
+const TEST_PROJECT_KEY = 'MCP';
+const TEST_CASE_KEY = 'MCP-1';
+const TEST_CASE_KEY_2 = 'MCP-2';
+const TEST_CASE_KEY_3 = 'MCP-3';
+const TEST_SUITE_ID = 1; // Based on MCP project structure
+const TEST_ROOT_SUITE_ID = 1;
+const EXPECTED_TOTAL_TEST_CASES = 3; // Based on MCP project having 3 test cases
+const EXPECTED_ROOT_SUITES_COUNT = 1; // MCP project has 1 root suite
 
 describe('All MCP Tools E2E Tests', () => {
   
@@ -47,27 +48,26 @@ describe('All MCP Tools E2E Tests', () => {
       // This would be a real MCP tool call in actual implementation
       const mockResponse = {
         items: [
-          { id: 18815, title: 'Treatment ON', parentSuiteId: 18814 },
-          { id: 18816, title: 'Treatment OFF', parentSuiteId: 18814 }
+          { id: TEST_SUITE_ID, title: 'MCP Test Suite', parentSuiteId: null }
         ],
         _meta: {
-          nextPageToken: 'token123',
-          totalElements: 1188,
+          nextPageToken: null,
+          totalElements: 1,
           currentPage: 0,
           pageSize: 50
         },
         pagination: {
           currentPage: 0,
           pageSize: 50,
-          hasNextPage: true,
-          nextPageToken: 'token123'
+          hasNextPage: false,
+          nextPageToken: null
         }
       };
       
       assert.ok(Array.isArray(mockResponse.items), 'should return items array');
       assert.ok(mockResponse.items.length > 0, 'should have test suites');
-      assert.ok(mockResponse._meta.totalElements > 1000, 'MFPAND should have many suites');
-      assert.ok(mockResponse.pagination.hasNextPage, 'should indicate more pages available');
+      assert.ok(mockResponse._meta.totalElements >= 1, 'MCP should have at least one suite');
+      assert.ok(mockResponse.pagination.hasNextPage === false, 'MCP project should fit in one page');
       
       // Validate suite structure
       const suite = mockResponse.items[0];
@@ -79,54 +79,55 @@ describe('All MCP Tools E2E Tests', () => {
     it('should get specific test suite by ID', async () => {
       const mockSuiteResponse = {
         id: TEST_SUITE_ID,
-        title: 'Budget',
-        description: null,
-        parentSuiteId: 17468,
+        title: 'MCP Test Suite',
+        description: 'Main test suite for MCP project',
+        parentSuiteId: null,
         relativePosition: 1,
-        rootSuiteId: 17441,
-        rootSuiteName: '10. Meal Planner',
-        parentSuiteName: 'Settings',
-        treeNames: '10. Meal Planner > Settings > Budget'
+        rootSuiteId: TEST_ROOT_SUITE_ID,
+        rootSuiteName: 'MCP Test Suite',
+        parentSuiteName: null,
+        treeNames: 'MCP Test Suite'
       };
       
       assert.equal(mockSuiteResponse.id, TEST_SUITE_ID, 'should return requested suite');
       assert.ok(mockSuiteResponse.title, 'suite should have title');
       assert.ok(mockSuiteResponse.rootSuiteId, 'suite should have root suite ID');
       assert.ok(mockSuiteResponse.treeNames, 'suite should have hierarchy path');
-      assert.ok(mockSuiteResponse.treeNames.includes(' > '), 'hierarchy should use separator');
+      // For root suite, treeNames might not contain separator
+      assert.ok(mockSuiteResponse.treeNames.length > 0, 'hierarchy should have content');
     });
     
     it('should get all root suites', async () => {
       const mockRootSuites = Array.from({ length: EXPECTED_ROOT_SUITES_COUNT }, (_, i) => ({
-        id: 17441 + i,
-        title: `Root Suite ${i + 1}`,
+        id: TEST_ROOT_SUITE_ID + i,
+        title: `MCP Test Suite ${i + 1}`,
         parentSuiteId: null,
         level: 0
       }));
       
-      assert.equal(mockRootSuites.length, EXPECTED_ROOT_SUITES_COUNT, `should find ${EXPECTED_ROOT_SUITES_COUNT} root suites`);
+      assert.equal(mockRootSuites.length, EXPECTED_ROOT_SUITES_COUNT, `should find ${EXPECTED_ROOT_SUITES_COUNT} root suite(s)`);
       assert.ok(mockRootSuites.every(suite => suite.parentSuiteId === null), 'all root suites should have null parent');
       assert.ok(mockRootSuites.every(suite => suite.level === 0), 'all root suites should be level 0');
     });
     
     it('should get test suites by project with token pagination', async () => {
       const mockPagedResponse = {
-        items: Array.from({ length: 50 }, (_, i) => ({
-          id: 18000 + i,
-          title: `Suite ${i + 1}`,
-          parentSuiteId: i % 2 === 0 ? null : 18000 + i - 1
+        items: Array.from({ length: 1 }, (_, i) => ({
+          id: TEST_SUITE_ID + i,
+          title: `MCP Test Suite ${i + 1}`,
+          parentSuiteId: null
         })),
         _meta: {
-          nextPageToken: 'page2token',
-          totalElements: 1188,
+          nextPageToken: null,
+          totalElements: 1,
           currentPage: 0,
           pageSize: 50
         }
       };
       
-      assert.equal(mockPagedResponse.items.length, 50, 'should return full page');
-      assert.ok(mockPagedResponse._meta.nextPageToken, 'should have next page token');
-      assert.ok(mockPagedResponse._meta.totalElements > 1000, 'should have many total suites');
+      assert.equal(mockPagedResponse.items.length, 1, 'should return MCP suites');
+      assert.ok(mockPagedResponse._meta.nextPageToken === null, 'should not have next page token for small project');
+      assert.equal(mockPagedResponse._meta.totalElements, 1, 'MCP should have 1 suite');
     });
     
   });
@@ -135,25 +136,25 @@ describe('All MCP Tools E2E Tests', () => {
     
     it('should get test case by key', async () => {
       const mockTestCase = {
-        id: 123456,
+        id: 1,
         key: TEST_CASE_KEY,
-        title: 'Verify user can view meal plan details',
-        description: 'Test case to verify meal plan functionality',
+        title: 'Test case 1',
+        description: 'Description for test case 1',
         suiteId: TEST_SUITE_ID,
         automationState: { name: 'NOT_AUTOMATED' },
-        priority: { name: 'HIGH' },
+        priority: { name: 'MEDIUM' },
         draft: false,
         deprecated: false,
         steps: [
           {
             id: 1,
-            description: 'Navigate to meal planner',
-            expectedResult: 'Meal planner page is displayed'
+            description: 'Step 1 description',
+            expectedResult: 'Expected result for step 1'
           },
           {
             id: 2,
-            description: 'Select a meal plan',
-            expectedResult: 'Meal plan details are shown'
+            description: 'Step 2 description',
+            expectedResult: 'Expected result for step 2'
           }
         ]
       };
@@ -171,67 +172,73 @@ describe('All MCP Tools E2E Tests', () => {
       const mockFilteredResponse = {
         items: [
           {
-            id: 123456,
-            key: TEST_CASE_KEY,
-            title: 'High priority automated test',
-            automationState: { name: 'AUTOMATED' },
-            priority: { name: 'HIGH' },
+            id: 2,
+            key: TEST_CASE_KEY_2,
+            title: 'Test case 2',
+            automationState: { name: 'NOT_AUTOMATED' },
+            priority: { name: 'MEDIUM' },
             suiteId: TEST_SUITE_ID
           }
         ],
         _meta: {
-          totalElements: 25,
+          totalElements: 1,
           currentPage: 0,
           pageSize: 50
         }
       };
       
       assert.ok(Array.isArray(mockFilteredResponse.items), 'should return filtered items');
-      assert.ok(mockFilteredResponse.items[0].automationState.name === 'AUTOMATED', 'should match automation filter');
-      assert.ok(mockFilteredResponse.items[0].priority.name === 'HIGH', 'should match priority filter');
-      assert.ok(mockFilteredResponse._meta.totalElements < 100, 'filtered results should be smaller subset');
+      assert.ok(mockFilteredResponse.items[0].automationState.name === 'NOT_AUTOMATED', 'should match automation filter');
+      assert.ok(mockFilteredResponse.items[0].priority.name === 'MEDIUM', 'should match priority filter');
+      assert.ok(mockFilteredResponse._meta.totalElements <= EXPECTED_TOTAL_TEST_CASES, 'filtered results should be subset of total');
     });
     
     it('should get all test cases by project', async () => {
       const mockAllTestCases = {
         totalRetrieved: EXPECTED_TOTAL_TEST_CASES,
-        pages: 46, // Math.ceil(4579 / 100)
-        items: Array.from({ length: 100 }, (_, i) => ({
-          id: 100000 + i,
-          key: `${TEST_PROJECT_KEY}-${4000 + i}`,
+        pages: 1, // Math.ceil(3 / 100)
+        items: Array.from({ length: EXPECTED_TOTAL_TEST_CASES }, (_, i) => ({
+          id: i + 1,
+          key: `${TEST_PROJECT_KEY}-${i + 1}`,
           title: `Test case ${i + 1}`,
-          automationState: { name: i % 3 === 0 ? 'AUTOMATED' : 'NOT_AUTOMATED' }
+          automationState: { name: 'NOT_AUTOMATED' }
         })),
         _meta: {
           totalElements: EXPECTED_TOTAL_TEST_CASES,
-          nextPageToken: 'nextBatch'
+          nextPageToken: null
         }
       };
       
       assert.equal(mockAllTestCases.totalRetrieved, EXPECTED_TOTAL_TEST_CASES, 
         `should retrieve all ${EXPECTED_TOTAL_TEST_CASES} test cases`);
-      assert.ok(mockAllTestCases.pages > 40, 'should require multiple pages');
-      assert.ok(mockAllTestCases.items.length === 100, 'should use efficient batch size');
+      assert.equal(mockAllTestCases.pages, 1, 'should require only one page for MCP');
+      assert.equal(mockAllTestCases.items.length, EXPECTED_TOTAL_TEST_CASES, 'should return all test cases');
     });
     
     it('should get test cases by suite ID', async () => {
       const mockSuiteTestCases = {
         items: [
           {
-            id: 123456,
+            id: 1,
             key: TEST_CASE_KEY,
-            title: 'Budget calculation test',
+            title: 'Test case 1',
             suiteId: TEST_SUITE_ID
           },
           {
-            id: 123457,
+            id: 2,
             key: TEST_CASE_KEY_2,
-            title: 'Budget validation test',
+            title: 'Test case 2',
+            suiteId: TEST_SUITE_ID
+          },
+          {
+            id: 3,
+            key: TEST_CASE_KEY_3,
+            title: 'Test case 3',
             suiteId: TEST_SUITE_ID
           }
         ],
         _meta: {
-          totalElements: 15,
+          totalElements: EXPECTED_TOTAL_TEST_CASES,
           currentPage: 0,
           pageSize: 50
         }
@@ -240,7 +247,7 @@ describe('All MCP Tools E2E Tests', () => {
       assert.ok(Array.isArray(mockSuiteTestCases.items), 'should return test cases for suite');
       assert.ok(mockSuiteTestCases.items.every(tc => tc.suiteId === TEST_SUITE_ID), 
         'all test cases should belong to requested suite');
-      assert.ok(mockSuiteTestCases._meta.totalElements < 50, 'suite should have reasonable number of test cases');
+      assert.equal(mockSuiteTestCases._meta.totalElements, EXPECTED_TOTAL_TEST_CASES, 'suite should have all MCP test cases');
     });
     
   });
@@ -250,49 +257,33 @@ describe('All MCP Tools E2E Tests', () => {
     it('should get root ID by suite ID', async () => {
       const mockRootIdResponse = {
         suiteId: TEST_SUITE_ID,
-        rootSuiteId: 17441,
-        rootSuiteName: '10. Meal Planner',
-        path: '10. Meal Planner > Settings > Budget',
-        level: 2
+        rootSuiteId: TEST_ROOT_SUITE_ID,
+        rootSuiteName: 'MCP Test Suite',
+        path: 'MCP Test Suite',
+        level: 0
       };
       
       assert.equal(mockRootIdResponse.suiteId, TEST_SUITE_ID, 'should reference requested suite');
       assert.ok(mockRootIdResponse.rootSuiteId, 'should find root suite ID');
       assert.ok(mockRootIdResponse.rootSuiteName, 'should include root suite name');
-      assert.ok(mockRootIdResponse.path.includes(' > '), 'should show hierarchy path');
-      assert.ok(mockRootIdResponse.level > 0, 'non-root suite should have positive level');
+      assert.ok(mockRootIdResponse.path.length > 0, 'should show hierarchy path');
+      assert.equal(mockRootIdResponse.level, 0, 'root suite should have level 0');
     });
     
     it('should build suite hierarchy', async () => {
       const mockHierarchy = {
         roots: [
           {
-            id: 17441,
-            title: '10. Meal Planner',
+            id: TEST_ROOT_SUITE_ID,
+            title: 'MCP Test Suite',
             level: 0,
-            children: [
-              {
-                id: 17468,
-                title: 'Settings',
-                level: 1,
-                parentId: 17441,
-                children: [
-                  {
-                    id: TEST_SUITE_ID,
-                    title: 'Budget',
-                    level: 2,
-                    parentId: 17468,
-                    children: []
-                  }
-                ]
-              }
-            ]
+            children: []
           }
         ],
         statistics: {
-          totalSuites: 3,
+          totalSuites: 1,
           rootSuites: 1,
-          maxDepth: 2,
+          maxDepth: 0,
           orphanedSuites: 0
         }
       };
@@ -306,39 +297,27 @@ describe('All MCP Tools E2E Tests', () => {
       assert.equal(rootSuite.level, 0, 'root suite should be level 0');
       assert.ok(Array.isArray(rootSuite.children), 'root should have children array');
       
-      if (rootSuite.children.length > 0) {
-        const childSuite = rootSuite.children[0];
-        assert.equal(childSuite.level, 1, 'child suite should be level 1');
-        assert.equal(childSuite.parentId, rootSuite.id, 'child should reference parent');
-      }
+      // MCP project has a simple structure with no child suites
+      assert.equal(rootSuite.children.length, 0, 'MCP root suite should have no children');
     });
     
     it('should get all subsuites', async () => {
       const mockSubsuites = {
         rootSuite: {
           id: TEST_ROOT_SUITE_ID,
-          title: '1. Onboarding',
+          title: 'MCP Test Suite',
           included: true
         },
-        subsuites: [
-          { id: 18660, title: 'Registration', parentSuiteId: TEST_ROOT_SUITE_ID, level: 1 },
-          { id: 18661, title: 'Profile Setup', parentSuiteId: TEST_ROOT_SUITE_ID, level: 1 },
-          { id: 18662, title: 'Email Verification', parentSuiteId: 18660, level: 2 }
-        ],
-        totalCount: 4, // Including root
-        maxDepth: 2
+        subsuites: [],
+        totalCount: 1, // Only root suite
+        maxDepth: 0
       };
       
       assert.ok(mockSubsuites.rootSuite, 'should include root suite info');
       assert.ok(Array.isArray(mockSubsuites.subsuites), 'should have subsuites array');
-      assert.ok(mockSubsuites.subsuites.length > 0, 'should find subsuites');
-      assert.ok(mockSubsuites.totalCount > mockSubsuites.subsuites.length, 'total should include root');
-      
-      // Verify hierarchy levels
-      const level1Suites = mockSubsuites.subsuites.filter(s => s.level === 1);
-      const level2Suites = mockSubsuites.subsuites.filter(s => s.level === 2);
-      assert.ok(level1Suites.length > 0, 'should have level 1 suites');
-      assert.ok(level2Suites.length >= 0, 'may have level 2 suites');
+      assert.equal(mockSubsuites.subsuites.length, 0, 'MCP should have no subsuites');
+      assert.equal(mockSubsuites.totalCount, 1, 'total should include only root suite');
+      assert.equal(mockSubsuites.maxDepth, 0, 'MCP should have flat hierarchy');
     });
     
   });
@@ -348,18 +327,18 @@ describe('All MCP Tools E2E Tests', () => {
     it('should validate test case with improvement', async () => {
       const mockValidationResult = {
         testCaseKey: TEST_CASE_KEY,
-        testCaseTitle: 'Verify user can view meal plan details',
+        testCaseTitle: 'Test case 1',
         automationStatus: 'NOT_AUTOMATED',
-        priority: 'HIGH',
+        priority: 'MEDIUM',
         status: 'active',
         manualOnly: 'No',
-        overallScore: 82,
+        overallScore: 75,
         scoreCategory: 'good',
         issues: [
           {
             category: 'steps',
             severity: 'medium',
-            message: 'Step 2 could be more specific about expected meal plan details',
+            message: 'Test steps could be more detailed',
             checkpoint: 'Step Detail Quality'
           }
         ],
@@ -369,19 +348,19 @@ describe('All MCP Tools E2E Tests', () => {
           'Preconditions',
           'Expected Results'
         ],
-        summary: 'Test case is well-structured with clear title and description. Minor improvement needed in step specificity.',
+        summary: 'Test case has basic structure but could benefit from more detailed steps.',
         readyForAutomation: true,
         readyForManualExecution: true,
         rulesUsed: 'test_case_review_rules.md v1.0',
         improvementResult: {
-          confidence: 0.85,
+          confidence: 0.80,
           improvements: [
             {
               type: 'steps',
-              original: 'Select a meal plan',
-              improved: 'Select a specific meal plan (e.g., "Mediterranean Diet - Week 1")',
-              reason: 'More specific test data makes the test more reliable and clear',
-              confidence: 0.9
+              original: 'Step 1 description',
+              improved: 'Step 1: Detailed description with specific actions and expected outcomes',
+              reason: 'More specific test steps make the test more reliable and clear',
+              confidence: 0.85
             }
           ],
           summary: 'Enhanced step specificity for better test reliability'
@@ -412,22 +391,22 @@ describe('All MCP Tools E2E Tests', () => {
     it('should improve test case independently', async () => {
       const mockImprovementResult = {
         testCaseKey: TEST_CASE_KEY_2,
-        originalTitle: 'Budget validation',
-        confidence: 0.88,
+        originalTitle: 'Test case 2',
+        confidence: 0.85,
         improvements: [
           {
             type: 'title',
-            original: 'Budget validation',
-            improved: 'Verify budget calculation accuracy with various meal plan options',
-            reason: 'More descriptive title that explains what is being validated',
-            confidence: 0.92
+            original: 'Test case 2',
+            improved: 'Verify specific functionality in test case 2',
+            reason: 'More descriptive title that explains what is being tested',
+            confidence: 0.90
           },
           {
             type: 'description',
-            original: 'Test budget feature',
-            improved: 'Verify that the budget calculation correctly reflects the cost of selected meal plans, including taxes and discounts',
+            original: 'Description for test case 2',
+            improved: 'Detailed description explaining the test purpose, scope, and expected behavior for test case 2',
             reason: 'Detailed description explaining the test purpose and scope',
-            confidence: 0.85
+            confidence: 0.80
           }
         ],
         summary: 'Enhanced test case clarity and specificity for better understanding and maintenance',
@@ -459,49 +438,48 @@ describe('All MCP Tools E2E Tests', () => {
     
     it('should analyze test coverage with rules', async () => {
       const mockCoverageAnalysis = {
-        testCaseKey: 'MFPAND-4888',
-        testCaseTitle: 'Sourcepoint returns the first layer message as a web view',
+        testCaseKey: TEST_CASE_KEY_3,
+        testCaseTitle: 'Test case 3',
         implementationAnalysis: {
-          frameworkDetected: 'TestNG + Selenium WebDriver',
-          confidence: 0.95,
-          implementationQuality: 'high',
-          coveragePercentage: 87,
+          frameworkDetected: 'Generic Test Framework',
+          confidence: 0.85,
+          implementationQuality: 'medium',
+          coveragePercentage: 75,
           detectedPatterns: [
-            'Page Object Model usage',
-            'Explicit wait conditions',
-            'Localization support',
-            'Account creation automation'
+            'Basic test structure',
+            'Standard assertions',
+            'Simple test flow'
           ]
         },
         rulesValidation: {
-          totalRules: 18,
-          passedRules: 15,
+          totalRules: 15,
+          passedRules: 12,
           failedRules: 3,
-          score: 83,
+          score: 80,
           failedRuleDetails: [
-            'Missing error handling for network failures',
-            'No data cleanup after test execution',
-            'Limited cross-browser compatibility'
+            'Test steps could be more detailed',
+            'Missing preconditions',
+            'Limited error scenarios coverage'
           ]
         },
         recommendations: [
-          'Add explicit error handling for network timeouts',
-          'Implement test data cleanup in @AfterMethod',
-          'Consider parameterized tests for multiple browsers',
-          'Add logging for better debugging capabilities'
+          'Add more detailed test steps',
+          'Include preconditions section',
+          'Consider error scenarios',
+          'Add more specific assertions'
         ],
-        summary: 'Implementation shows good coverage of the test case requirements with proper automation framework usage. Minor improvements needed in error handling and cleanup.'
+        summary: 'Test case shows basic coverage but could benefit from more detailed implementation and error handling.'
       };
       
-      assert.equal(mockCoverageAnalysis.testCaseKey, 'MFPAND-4888', 'should analyze requested test case');
+      assert.equal(mockCoverageAnalysis.testCaseKey, TEST_CASE_KEY_3, 'should analyze requested test case');
       assert.ok(mockCoverageAnalysis.implementationAnalysis, 'should have implementation analysis');
       assert.ok(mockCoverageAnalysis.rulesValidation, 'should have rules validation');
       assert.ok(Array.isArray(mockCoverageAnalysis.recommendations), 'should have recommendations');
       
       const impl = mockCoverageAnalysis.implementationAnalysis;
       assert.ok(impl.frameworkDetected, 'should detect testing framework');
-      assert.ok(impl.confidence > 0.9, 'should have high detection confidence');
-      assert.ok(impl.coveragePercentage > 80, 'should show good coverage');
+      assert.ok(impl.confidence > 0.8, 'should have reasonable detection confidence');
+      assert.ok(impl.coveragePercentage > 70, 'should show decent coverage');
       assert.ok(Array.isArray(impl.detectedPatterns), 'should detect implementation patterns');
       
       const rules = mockCoverageAnalysis.rulesValidation;
@@ -517,36 +495,33 @@ describe('All MCP Tools E2E Tests', () => {
     it('should generate draft test implementation', async () => {
       const mockDraftGeneration = {
         testCaseKey: TEST_CASE_KEY,
-        generatedCode: `@Test(description = "Verify user can view meal plan details")
-public void testMealPlanDetailsView() {
+        generatedCode: `@Test(description = "Test case 1")
+public void testCase1() {
     // Arrange
-    User user = createTestUser();
-    loginAs(user);
+    setupTestData();
     
     // Act
-    navigateToMealPlanner();
-    MealPlan selectedPlan = selectMealPlan("Mediterranean Diet - Week 1");
+    performTestAction();
     
     // Assert
-    assertThat(selectedPlan.isDisplayed()).isTrue();
-    assertThat(selectedPlan.getTitle()).contains("Mediterranean Diet");
-    assertThat(selectedPlan.getWeekNumber()).isEqualTo(1);
+    assertThat(getResult()).isNotNull();
+    assertThat(getResult().isValid()).isTrue();
 }`,
-        framework: 'TestNG + Selenium',
-        confidence: 0.89,
+        framework: 'TestNG',
+        confidence: 0.85,
         implementationNotes: [
-          'Uses Page Object Model pattern',
-          'Follows Arrange-Act-Assert structure',
-          'Includes meaningful assertions',
-          'Uses fluent assertion library'
+          'Uses basic test structure',
+          'Follows Arrange-Act-Assert pattern',
+          'Includes basic assertions',
+          'Simple test implementation'
         ],
         suggestions: [
-          'Consider adding data provider for multiple meal plans',
-          'Add explicit waits for dynamic content',
-          'Include negative test scenarios',
-          'Add test data cleanup'
+          'Add more specific test data',
+          'Include error handling',
+          'Add more detailed assertions',
+          'Consider edge cases'
         ],
-        estimatedEffort: 'Medium (2-4 hours including page objects)'
+        estimatedEffort: 'Low (1-2 hours)'
       };
       
       assert.equal(mockDraftGeneration.testCaseKey, TEST_CASE_KEY, 'should generate for requested test case');
@@ -599,8 +574,8 @@ public void testMealPlanDetailsView() {
   
   describe('Performance and Reliability', () => {
     
-    it('should handle large dataset pagination efficiently', async () => {
-      const BATCH_SIZE = 100;
+    it('should handle small dataset efficiently', async () => {
+      const BATCH_SIZE = 50;
       const TOTAL_ITEMS = EXPECTED_TOTAL_TEST_CASES;
       const EXPECTED_BATCHES = Math.ceil(TOTAL_ITEMS / BATCH_SIZE);
       
@@ -608,22 +583,22 @@ public void testMealPlanDetailsView() {
         totalItems: TOTAL_ITEMS,
         batchSize: BATCH_SIZE,
         totalBatches: EXPECTED_BATCHES,
-        averageResponseTime: 850, // milliseconds
-        maxResponseTime: 1200,
-        minResponseTime: 650,
-        successRate: 0.998,
+        averageResponseTime: 200, // milliseconds
+        maxResponseTime: 300,
+        minResponseTime: 150,
+        successRate: 1.0,
         timeoutCount: 0,
-        retryCount: 2
+        retryCount: 0
       };
       
       assert.equal(mockPaginationPerformance.totalBatches, EXPECTED_BATCHES, 
         'should calculate correct number of batches');
-      assert.ok(mockPaginationPerformance.averageResponseTime < 1000, 
-        'average response time should be under 1 second');
-      assert.ok(mockPaginationPerformance.successRate > 0.99, 
-        'success rate should be very high');
-      assert.ok(mockPaginationPerformance.timeoutCount === 0, 
-        'should not have timeouts with proper configuration');
+      assert.ok(mockPaginationPerformance.averageResponseTime < 500, 
+        'average response time should be very fast for small dataset');
+      assert.equal(mockPaginationPerformance.successRate, 1.0, 
+        'success rate should be perfect for small dataset');
+      assert.equal(mockPaginationPerformance.timeoutCount, 0, 
+        'should not have timeouts with small dataset');
     });
     
     it('should validate API rate limiting handling', async () => {
@@ -682,22 +657,22 @@ public void testMealPlanDetailsView() {
     it('should support end-to-end workflow', async () => {
       const mockWorkflow = {
         steps: [
-          { name: 'List test suites', duration: 450, success: true },
-          { name: 'Get specific suite', duration: 320, success: true },
-          { name: 'Get test cases in suite', duration: 680, success: true },
-          { name: 'Validate test case', duration: 1200, success: true },
-          { name: 'Generate improvements', duration: 2100, success: true },
-          { name: 'Analyze coverage', duration: 1800, success: true }
+          { name: 'List test suites', duration: 200, success: true },
+          { name: 'Get specific suite', duration: 150, success: true },
+          { name: 'Get test cases in suite', duration: 250, success: true },
+          { name: 'Validate test case', duration: 800, success: true },
+          { name: 'Generate improvements', duration: 1200, success: true },
+          { name: 'Analyze coverage', duration: 1000, success: true }
         ],
-        totalDuration: 6550, // milliseconds
+        totalDuration: 3600, // milliseconds
         successRate: 1.0,
         dataConsistency: true
       };
       
       assert.ok(mockWorkflow.steps.every(step => step.success), 
         'all workflow steps should succeed');
-      assert.ok(mockWorkflow.totalDuration < 10000, 
-        'complete workflow should finish under 10 seconds');
+      assert.ok(mockWorkflow.totalDuration < 5000, 
+        'complete workflow should finish under 5 seconds for small project');
       assert.equal(mockWorkflow.successRate, 1.0, 
         'workflow should have 100% success rate');
       assert.ok(mockWorkflow.dataConsistency, 

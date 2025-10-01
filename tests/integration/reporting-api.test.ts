@@ -24,7 +24,7 @@ describe('ZebrunnerReportingClient Integration Tests', () => {
 
   beforeEach(() => {
     // Check if required environment variables are available
-    const baseUrl = process.env.ZEBRUNNER_URL?.replace('/api/public/v1', '') || 'https://mfp.zebrunner.com';
+    const baseUrl = process.env.ZEBRUNNER_URL?.replace('/api/public/v1', '') || 'https://test.zebrunner.com';
     const accessToken = process.env.ZEBRUNNER_TOKEN;
 
     if (!accessToken) {

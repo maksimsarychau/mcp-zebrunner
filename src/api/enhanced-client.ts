@@ -122,7 +122,7 @@ export class EnhancedZebrunnerClient {
       }
       if (!/^[A-Z][A-Z0-9]*$/.test(params.projectKey)) {
       throw new ZebrunnerApiError(
-        `Invalid project key format: '${params.projectKey}'. Expected format: uppercase letters and numbers (e.g., MFPAND)`
+        `Invalid project key format: '${params.projectKey}'. Expected format: uppercase letters and numbers (e.g., ANDROID)`
       );
       }
     }
@@ -284,7 +284,7 @@ export class EnhancedZebrunnerClient {
     try {
       // Try a minimal request to test-suites endpoint which should work with valid auth
       const response = await this.http.get('/test-suites', {
-        params: { projectKey: 'MFPAND', size: 1 }, // Use a known project
+        params: { projectKey: 'MCP', size: 1 }, // Use MCP project
         timeout: 10000
       });
       

@@ -119,7 +119,7 @@ describe('Manual E2E Tests - Zebrunner MCP Server', () => {
         params: {
           name: 'list_test_suites',
           arguments: {
-            project_key: 'MFPAND',
+            project_key: 'MCP',
             format: 'json'
           }
         }
@@ -167,7 +167,7 @@ describe('Manual E2E Tests - Zebrunner MCP Server', () => {
         params: {
           name: 'list_test_suites',
           arguments: {
-            project_key: 'MFPAND',
+            project_key: 'MCP',
             format: 'json'
           }
         }

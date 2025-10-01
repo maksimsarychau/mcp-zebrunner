@@ -130,7 +130,7 @@ describe('Public API Test Run Tools Unit Tests', () => {
           {
             testCase: {
               id: 456,
-              key: "MFPAND-123",
+              key: "MCP-123",
               title: "Test login functionality"
             },
             assignee: {
@@ -234,7 +234,7 @@ describe('Public API Test Run Tools Unit Tests', () => {
 
       it('should accept project keys and aliases', () => {
         assert.strictEqual(listTestRunsSchema.parse({ project: "web" }).project, "web");
-        assert.strictEqual(listTestRunsSchema.parse({ project: "MFPAND" }).project, "MFPAND");
+        assert.strictEqual(listTestRunsSchema.parse({ project: "MCP" }).project, "MCP");
         assert.strictEqual(listTestRunsSchema.parse({ project: "CUSTOM_PROJECT" }).project, "CUSTOM_PROJECT");
       });
     });
@@ -438,7 +438,7 @@ describe('Public API Test Run Tools Unit Tests', () => {
     it('should format test cases list correctly', () => {
       const mockTestCases = [
         {
-          testCase: { id: 456, key: "MFPAND-123", title: "Login Test" },
+          testCase: { id: 456, key: "MCP-123", title: "Login Test" },
           assignee: { id: 604, username: "tester", email: "tester@example.com" },
           result: {
             status: { id: 1, name: "PASSED", aliases: "pass" },
@@ -449,7 +449,7 @@ describe('Public API Test Run Tools Unit Tests', () => {
           }
         },
         {
-          testCase: { id: 457, key: "MFPAND-124", title: "Logout Test" },
+          testCase: { id: 457, key: "MCP-124", title: "Logout Test" },
           assignee: null,
           result: null
         }

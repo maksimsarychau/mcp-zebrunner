@@ -40,7 +40,7 @@ describe('Configuration Management Unit Tests', () => {
     it('should validate mandatory configuration fields', () => {
       const mandatoryFields = ['zebrunnerUrl', 'zebrunnerLogin', 'zebrunnerToken'];
       const config = {
-        zebrunnerUrl: 'https://mfp.zebrunner.com',
+        zebrunnerUrl: 'https://test.zebrunner.com',
         zebrunnerLogin: 'testuser',
         zebrunnerToken: 'testtoken',
         enableRulesEngine: true
@@ -204,7 +204,7 @@ describe('Configuration Management Unit Tests', () => {
     
     it('should validate URL format', () => {
       const urlExamples = [
-        { url: 'https://mfp.zebrunner.com', valid: true },
+        { url: 'https://test.zebrunner.com', valid: true },
         { url: 'http://localhost:8080', valid: true },
         { url: 'https://test.zebrunner.com:443', valid: true },
         { url: 'invalid-url', valid: false },
@@ -286,7 +286,7 @@ describe('Configuration Management Unit Tests', () => {
     
     it('should validate complete configuration', () => {
       const completeConfig = {
-        zebrunnerUrl: 'https://mfp.zebrunner.com',
+        zebrunnerUrl: 'https://test.zebrunner.com',
         zebrunnerLogin: 'testuser',
         zebrunnerToken: 'abc123token',
         enableRulesEngine: true,

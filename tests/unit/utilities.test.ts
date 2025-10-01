@@ -169,7 +169,7 @@ describe('Utilities Unit Tests', () => {
     it('should validate DTO formatting', () => {
       const mockTestCase = {
         id: 123456,
-        key: 'MFPAND-4678',
+        key: 'MCP-4678',
         title: 'Test case title',
         description: 'Test case description',
         steps: [
@@ -193,7 +193,7 @@ describe('Utilities Unit Tests', () => {
     
     it('should validate markdown formatting', () => {
       const mockValidationResult = {
-        testCaseKey: 'MFPAND-2734',
+        testCaseKey: 'MCP-2734',
         testCaseTitle: 'Test case title',
         overallScore: 85,
         scoreCategory: 'good',
