@@ -428,6 +428,36 @@ export class ZebrunnerReportingClient {
   }
 
   /**
+   * Get automation states for a project
+   */
+  async getAutomationStates(projectId: number): Promise<{ id: number; name: string }[]> {
+    const url = `/api/tcm/v1/test-case-settings/system-fields/automation-states?projectId=${projectId}`;
+    
+    try {
+      const response = await this.makeAuthenticatedRequest<any>('GET', url);
+      const data = response.data || response;
+      
+      // Expected format: array of { id: number, name: string } objects
+      if (Array.isArray(data)) {
+        return data.map((item: any) => ({
+          id: item.id,
+          name: item.name
+        }));
+      }
+      
+      throw new ZebrunnerReportingError('Unexpected response format for automation states');
+    } catch (error) {
+      // If the API call fails, return default mapping
+      console.warn('Failed to fetch automation states from API, using default mapping:', error);
+      return [
+        { id: 10, name: "Not Automated" },
+        { id: 11, name: "To Be Automated" },
+        { id: 12, name: "Automated" }
+      ];
+    }
+  }
+
+  /**
    * Get current authentication status
    */
   getAuthStatus(): { authenticated: boolean; expiresAt: Date | null; timeToExpiry?: number } {

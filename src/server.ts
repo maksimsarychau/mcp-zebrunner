@@ -909,18 +909,42 @@ async function main() {
 
   server.tool(
     "get_test_cases_advanced",
-    "📊 Advanced test case retrieval with filtering and pagination",
+    "📊 Advanced test case retrieval with filtering and pagination (✨ Enhanced with automation state and date filtering)",
     {
       project_key: z.string().min(1).describe("Project key"),
       suite_id: z.number().int().positive().optional().describe("Filter by suite ID"),
       root_suite_id: z.number().int().positive().optional().describe("Filter by root suite ID"),
       include_steps: z.boolean().default(false).describe("Include detailed test steps"),
+      // 🆕 Automation state filtering
+      automation_states: z.union([
+        z.string(),
+        z.number(),
+        z.array(z.union([z.string(), z.number()]))
+      ]).optional().describe("Filter by automation state(s). Can be: single name ('Not Automated'), single ID (10), array of names (['Not Automated', 'To Be Automated']), array of IDs ([10, 12]), or mixed array (['Not Automated', 12])"),
+      // 🆕 Date filtering
+      created_after: z.string().optional().describe("Filter test cases created after this date (ISO format: '2024-01-01' or '2024-01-01T10:00:00Z')"),
+      created_before: z.string().optional().describe("Filter test cases created before this date (ISO format: '2024-12-31' or '2024-12-31T23:59:59Z')"),
+      modified_after: z.string().optional().describe("Filter test cases modified after this date (ISO format: '2024-01-01' or '2024-01-01T10:00:00Z')"),
+      modified_before: z.string().optional().describe("Filter test cases modified before this date (ISO format: '2024-12-31' or '2024-12-31T23:59:59Z')"),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
       page: z.number().int().nonnegative().default(0).describe("Page number (0-based)"),
       size: z.number().int().positive().max(100).default(10).describe("Page size (configurable via MAX_PAGE_SIZE env var)")
     },
     async (args) => {
-      const { project_key, suite_id, root_suite_id, include_steps, format, page, size } = args;
+      const { 
+        project_key, 
+        suite_id, 
+        root_suite_id, 
+        include_steps, 
+        automation_states,
+        created_after,
+        created_before,
+        modified_after,
+        modified_before,
+        format, 
+        page, 
+        size 
+      } = args;
       
       // Runtime validation for configured MAX_PAGE_SIZE
       if (size > MAX_PAGE_SIZE) {
@@ -933,13 +957,18 @@ async function main() {
       }
       
       try {
-        debugLog("Getting advanced test cases", args);
+        debugLog("Getting advanced test cases with enhanced filtering", args);
         
         const searchParams = {
           page,
           size,
           suiteId: suite_id,
-          rootSuiteId: root_suite_id
+          rootSuiteId: root_suite_id,
+          automationState: automation_states,
+          createdAfter: created_after,
+          createdBefore: created_before,
+          modifiedAfter: modified_after,
+          modifiedBefore: modified_before
         };
 
         const response = await client.getTestCases(project_key, searchParams);
@@ -1075,6 +1104,255 @@ async function main() {
           content: [{
             type: "text" as const,
             text: `❌ Error building suite hierarchy: ${error.message}`
+          }]
+        };
+      }
+    }
+  );
+
+  server.tool(
+    "get_test_cases_by_automation_state",
+    "🤖 Get test cases filtered by automation state (💡 Use get_automation_states to see available states)",
+    {
+      project_key: z.string().min(1).describe("Project key"),
+      automation_states: z.union([
+        z.string(),
+        z.number(),
+        z.array(z.union([z.string(), z.number()]))
+      ]).describe("Automation state(s) to filter by. Examples: 'Not Automated', ['Not Automated', 'To Be Automated'], [10, 12], or 'Automated'"),
+      suite_id: z.number().int().positive().optional().describe("Optional: Filter by specific suite ID"),
+      created_after: z.string().optional().describe("Optional: Filter test cases created after this date (ISO format: '2024-01-01')"),
+      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
+      page: z.number().int().nonnegative().default(0).describe("Page number (0-based)"),
+      size: z.number().int().positive().max(100).default(20).describe("Page size")
+    },
+    async (args) => {
+      const { project_key, automation_states, suite_id, created_after, format, page, size } = args;
+      
+      try {
+        debugLog("Getting test cases by automation state", args);
+        
+        const searchParams = {
+          page,
+          size,
+          suiteId: suite_id,
+          automationState: automation_states,
+          createdAfter: created_after
+        };
+
+        const response = await client.getTestCases(project_key, searchParams);
+        
+        if (!validateApiResponse(response, 'array')) {
+          throw new Error('Invalid API response format');
+        }
+
+        let processedCases = response.items || response;
+        
+        // Add automation state info to the output
+        const automationStateInfo = Array.isArray(automation_states) 
+          ? automation_states.join(', ')
+          : automation_states;
+
+        if (format === 'markdown') {
+          let markdown = `# Test Cases by Automation State\n\n`;
+          markdown += `**Project:** ${project_key}\n`;
+          markdown += `**Automation State(s):** ${automationStateInfo}\n`;
+          if (suite_id) markdown += `**Suite ID:** ${suite_id}\n`;
+          if (created_after) markdown += `**Created After:** ${created_after}\n`;
+          markdown += `**Total Found:** ${processedCases.length}\n\n`;
+
+          if (processedCases.length === 0) {
+            markdown += `No test cases found matching the specified automation state(s).\n\n`;
+            markdown += `💡 **Available automation states:**\n`;
+            markdown += `- 🖐️ Not Automated\n`;
+            markdown += `- 👤 To Be Automated\n`;
+            markdown += `- ⚙️ Automated\n`;
+          } else {
+            markdown += `## Test Cases\n\n`;
+            processedCases.forEach((testCase: any, index: number) => {
+              const num = page * size + index + 1;
+              markdown += `### ${num}. ${testCase.key || 'N/A'} - ${testCase.title || 'Untitled'}\n\n`;
+              
+              if (testCase.automationState) {
+                const stateIcon = testCase.automationState.name === 'Automated' ? '⚙️' : 
+                                testCase.automationState.name === 'To Be Automated' ? '👤' : '🖐️';
+                markdown += `**Automation State:** ${stateIcon} ${testCase.automationState.name}\n`;
+              }
+              
+              if (testCase.priority) {
+                markdown += `**Priority:** ${testCase.priority.name}\n`;
+              }
+              
+              if (testCase.createdAt) {
+                markdown += `**Created:** ${new Date(testCase.createdAt).toLocaleDateString()}\n`;
+              }
+              
+              if (testCase.description) {
+                markdown += `**Description:** ${testCase.description.substring(0, 200)}${testCase.description.length > 200 ? '...' : ''}\n`;
+              }
+              
+              markdown += `\n`;
+            });
+          }
+
+          return {
+            content: [{
+              type: "text" as const,
+              text: markdown
+            }]
+          };
+        }
+
+        // For other formats, return structured data
+        const result = {
+          project_key,
+          automation_states: automationStateInfo,
+          suite_id,
+          created_after,
+          total_found: processedCases.length,
+          page,
+          size,
+          test_cases: processedCases
+        };
+
+        if (format === 'string') {
+          let output = `Test Cases by Automation State\n`;
+          output += `Project: ${project_key}\n`;
+          output += `Automation State(s): ${automationStateInfo}\n`;
+          if (suite_id) output += `Suite ID: ${suite_id}\n`;
+          if (created_after) output += `Created After: ${created_after}\n`;
+          output += `Total Found: ${processedCases.length}\n\n`;
+
+          if (processedCases.length === 0) {
+            output += `No test cases found matching the specified automation state(s).\n`;
+          } else {
+            processedCases.forEach((testCase: any, index: number) => {
+              const num = page * size + index + 1;
+              output += `${num}. ${testCase.key || 'N/A'} - ${testCase.title || 'Untitled'}\n`;
+              if (testCase.automationState) {
+                output += `   Automation State: ${testCase.automationState.name}\n`;
+              }
+              if (testCase.priority) {
+                output += `   Priority: ${testCase.priority.name}\n`;
+              }
+              output += `\n`;
+            });
+          }
+
+          return {
+            content: [{
+              type: "text" as const,
+              text: output
+            }]
+          };
+        }
+
+        return {
+          content: [{
+            type: "text" as const,
+            text: JSON.stringify(result, null, 2)
+          }]
+        };
+
+      } catch (error: any) {
+        debugLog("Error getting test cases by automation state", { error: error.message, args });
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error: ${error.message}`
+          }]
+        };
+      }
+    }
+  );
+
+  server.tool(
+    "get_automation_states",
+    "🔧 Get available automation states for a project (names and IDs)",
+    {
+      project: z.union([z.enum(["web","android","ios","api"]), z.string(), z.number()]).describe("Project alias (web/android/ios/api), project key (MFPAND), or project ID (7)"),
+      format: z.enum(['json', 'markdown']).default('json').describe("Output format")
+    },
+    async (args) => {
+      try {
+        debugLog("Getting automation states", args);
+        
+        // Resolve project ID using the same logic as other tools
+        const { projectId } = await resolveProjectId(args.project);
+        
+        // Get automation states using the reporting client
+        const automationStates = await reportingClient.getAutomationStates(projectId);
+        
+        if (args.format === 'markdown') {
+          let markdown = `# Automation States for Project ${args.project}\n\n`;
+          markdown += `**Project ID:** ${projectId}\n`;
+          markdown += `**Total States:** ${automationStates.length}\n\n`;
+          
+          markdown += `## Available Automation States\n\n`;
+          automationStates.forEach((state, index) => {
+            const icon = state.name === 'Automated' ? '⚙️' : 
+                        state.name === 'To Be Automated' ? '👤' : '🖐️';
+            markdown += `${index + 1}. **${icon} ${state.name}** (ID: ${state.id})\n`;
+          });
+          
+          markdown += `\n## Usage Examples\n\n`;
+          markdown += `### Filter by Name:\n`;
+          markdown += `\`\`\`\n`;
+          markdown += `get_test_cases_by_automation_state(\n`;
+          markdown += `  project_key: "${typeof args.project === 'string' ? args.project : 'MFPAND'}",\n`;
+          markdown += `  automation_states: "Not Automated"\n`;
+          markdown += `)\n`;
+          markdown += `\`\`\`\n\n`;
+          
+          markdown += `### Filter by ID:\n`;
+          markdown += `\`\`\`\n`;
+          markdown += `get_test_cases_by_automation_state(\n`;
+          markdown += `  project_key: "${typeof args.project === 'string' ? args.project : 'MFPAND'}",\n`;
+          markdown += `  automation_states: ${automationStates[0]?.id || 10}\n`;
+          markdown += `)\n`;
+          markdown += `\`\`\`\n\n`;
+          
+          markdown += `### Filter by Multiple States:\n`;
+          markdown += `\`\`\`\n`;
+          markdown += `get_test_cases_by_automation_state(\n`;
+          markdown += `  project_key: "${typeof args.project === 'string' ? args.project : 'MFPAND'}",\n`;
+          markdown += `  automation_states: ["Not Automated", "To Be Automated"]\n`;
+          markdown += `)\n`;
+          markdown += `\`\`\`\n`;
+          
+          return {
+            content: [{
+              type: "text" as const,
+              text: markdown
+            }]
+          };
+        }
+        
+        // JSON format
+        const result = {
+          project: args.project,
+          projectId,
+          automationStates: automationStates,
+          // Also provide a mapping for easy reference
+          mapping: automationStates.reduce((acc, state) => {
+            acc[state.name] = state.id;
+            return acc;
+          }, {} as Record<string, number>)
+        };
+        
+        return {
+          content: [{
+            type: "text" as const,
+            text: JSON.stringify(result, null, 2)
+          }]
+        };
+        
+      } catch (error: any) {
+        debugLog("Error getting automation states", { error: error.message, args });
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error getting automation states: ${error.message}`
           }]
         };
       }

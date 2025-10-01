@@ -147,8 +147,8 @@ async function main() {
   // ========== NEW REPORTING API TOOLS ==========
 
   server.tool(
-    "get_launcher_details",
-    "🚀 Get comprehensive launcher details including test sessions (uses new reporting API with enhanced authentication)",
+    "get_launch_details",
+    "🚀 Get comprehensive launch details including test sessions (uses new reporting API with enhanced authentication)",
     {
       projectKey: z.string().min(1).optional().describe("Project key (e.g., MFPAND) - alternative to projectId"),
       projectId: z.number().int().positive().optional().describe("Project ID (e.g., 7) - alternative to projectKey"),
@@ -161,7 +161,7 @@ async function main() {
   );
 
   server.tool(
-    "get_launcher_summary",
+    "get_launch_summary",
     "📊 Get quick launcher summary without detailed test sessions (uses new reporting API)",
     {
       projectKey: z.string().min(1).optional().describe("Project key (e.g., MFPAND) - alternative to projectId"),
