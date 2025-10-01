@@ -909,11 +909,13 @@ async function main() {
 
   server.tool(
     "get_test_cases_advanced",
-    "📊 Advanced test case retrieval with filtering and pagination (✨ Enhanced with automation state and date filtering)",
+    "📊 Advanced test case retrieval with filtering and pagination (✨ Enhanced with automation state and date filtering)\n" +
+    "⚠️  IMPORTANT: Use 'suite_id' for direct parent suites, 'root_suite_id' for root suites that contain sub-suites.\n" +
+    "💡 TIP: Use 'get_test_cases_by_suite_smart' for automatic suite type detection!",
     {
       project_key: z.string().min(1).describe("Project key"),
-      suite_id: z.number().int().positive().optional().describe("Filter by suite ID"),
-      root_suite_id: z.number().int().positive().optional().describe("Filter by root suite ID"),
+      suite_id: z.number().int().positive().optional().describe("Filter by direct parent suite ID (for child suites)"),
+      root_suite_id: z.number().int().positive().optional().describe("Filter by root suite ID (includes all sub-suites)"),
       include_steps: z.boolean().default(false).describe("Include detailed test steps"),
       // 🆕 Automation state filtering
       automation_states: z.union([
@@ -2255,6 +2257,288 @@ async function main() {
           content: [{
             type: "text" as const,
             text: `❌ Error getting root ID for suite ${args.suite_id} in ${args.project_key}: ${error.message}`
+          }]
+        };
+      }
+    }
+  );
+
+  server.tool(
+    "get_test_cases_by_suite_smart",
+    "🧠 Smart test case retrieval by suite ID - automatically detects if suite is root suite and uses appropriate filtering with enhanced pagination",
+    {
+      project_key: z.string().min(1).describe("Project key (e.g., 'MPC')"),
+      suite_id: z.number().int().positive().describe("Suite ID to get test cases from"),
+      include_steps: z.boolean().default(false).describe("Include detailed test steps for first few cases"),
+      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
+      get_all: z.boolean().default(true).describe("Get all test cases (true) or paginated results (false)"),
+      include_sub_suites: z.boolean().default(true).describe("Include test cases from sub-suites (if any)"),
+      page: z.number().int().nonnegative().default(0).describe("Page number (0-based, only used if get_all=false)"),
+      size: z.number().int().positive().max(100).default(50).describe("Page size (only used if get_all=false)")
+    },
+    async (args) => {
+      try {
+        const { project_key, suite_id, include_steps, format, get_all, include_sub_suites, page, size } = args;
+
+        debugLog("Smart test case retrieval by suite", { project_key, suite_id, include_steps, format, get_all, include_sub_suites, page, size });
+
+        // Step 1: Get all suites to determine hierarchy
+        debugLog("Fetching all suites for hierarchy analysis", { project_key, suite_id });
+        const allSuites = await client.getAllTestSuites(project_key);
+        
+        // Step 2: Find the suite and determine if it's a root suite
+        const targetSuite = allSuites.find(s => s.id === suite_id);
+        if (!targetSuite) {
+          return {
+            content: [{
+              type: "text" as const,
+              text: `❌ Suite ${suite_id} not found in project ${project_key}`
+            }]
+          };
+        }
+
+        // Step 3: Determine root suite ID and process hierarchy
+        const processedSuites = HierarchyProcessor.setRootParentsToSuites(allSuites);
+        const rootId = HierarchyProcessor.getRootId(processedSuites, suite_id);
+        const isRootSuite = rootId === suite_id;
+        
+        // Step 4: Check if this suite has children (regardless of being root or not)
+        const hasChildren = processedSuites.some(s => s.parentSuiteId === suite_id);
+        
+        debugLog("Suite hierarchy analysis", { 
+          suite_id, 
+          rootId, 
+          isRootSuite,
+          hasChildren,
+          suiteName: targetSuite.name || targetSuite.title 
+        });
+
+        // Step 5: Get test cases using appropriate method
+        let testCases: any[];
+        let filterDescription: string;
+        
+        if ((isRootSuite || hasChildren) && include_sub_suites) {
+          // For root suites OR suites with children, use the enhanced filtering approach
+          if (get_all) {
+            // Count child suites for summary
+            const childSuites = processedSuites.filter(s => 
+              isRootSuite ? s.rootSuiteId === suite_id : s.parentSuiteId === suite_id
+            );
+            const childSuitesWithTestCases = childSuites.length;
+            
+            debugLog(`Processing ${isRootSuite ? 'root' : 'parent'} suite with ${childSuitesWithTestCases} sub-suites`, { suite_id, childSuitesWithTestCases });
+            
+            if (isRootSuite) {
+              // Use existing root suite logic
+              testCases = await client.getTestCasesByRootSuiteWithFilter(project_key, suite_id, processedSuites);
+              filterDescription = `root suite ${suite_id} (includes all sub-suites) - all results`;
+            } else {
+              // New logic for parent suites that aren't root suites
+              const childSuiteIds: number[] = [suite_id]; // Include parent suite itself
+              
+              // Find ALL descendants recursively (not just direct children)
+              function findAllDescendants(parentId: number, processedSuites: any[]): number[] {
+                const descendants: number[] = [];
+                const directChildren = processedSuites.filter(s => s.parentSuiteId === parentId);
+                
+                for (const child of directChildren) {
+                  descendants.push(child.id);
+                  // Recursively find descendants of this child
+                  const childDescendants = findAllDescendants(child.id, processedSuites);
+                  descendants.push(...childDescendants);
+                }
+                
+                return descendants;
+              }
+              
+              const allDescendants = findAllDescendants(suite_id, processedSuites);
+              childSuiteIds.push(...allDescendants);
+              
+              debugLog(`Found ${allDescendants.length} total descendants for parent suite ${suite_id}`, { 
+                descendants: allDescendants 
+              });
+              
+              const filter = `testSuite.id IN [${childSuiteIds.join(',')}]`;
+              testCases = await client.getAllTestCases(project_key, { filter });
+              filterDescription = `parent suite ${suite_id} with ${allDescendants.length} descendants (all levels) - all results`;
+            }
+          } else {
+            // Get paginated results with filter for root/parent suites
+            const childSuiteIds: number[] = [suite_id]; // Include suite itself
+            
+            // Find all child suites using processed suites (recursive for parent suites)
+            if (isRootSuite) {
+              // For root suites, use existing logic
+              for (const suite of processedSuites) {
+                if (suite.rootSuiteId === suite_id && suite.id !== suite_id) {
+                  childSuiteIds.push(suite.id);
+                }
+              }
+            } else {
+              // For parent suites, find ALL descendants recursively
+              function findAllDescendants(parentId: number, processedSuites: any[]): number[] {
+                const descendants: number[] = [];
+                const directChildren = processedSuites.filter(s => s.parentSuiteId === parentId);
+                
+                for (const child of directChildren) {
+                  descendants.push(child.id);
+                  // Recursively find descendants of this child
+                  const childDescendants = findAllDescendants(child.id, processedSuites);
+                  descendants.push(...childDescendants);
+                }
+                
+                return descendants;
+              }
+              
+              const allDescendants = findAllDescendants(suite_id, processedSuites);
+              childSuiteIds.push(...allDescendants);
+            }
+            
+            const filter = `testSuite.id IN [${childSuiteIds.join(',')}]`;
+            const response = await client.getTestCases(project_key, {
+              filter,
+              page,
+              size
+            });
+            
+            testCases = response.items;
+            filterDescription = `${isRootSuite ? 'root' : 'parent'} suite ${suite_id} with filter (${childSuiteIds.length - 1} child suites) - page ${page + 1}`;
+          }
+        } else {
+          // For leaf suites (no children), use direct filtering
+          if (get_all) {
+            testCases = await client.getAllTestCases(project_key, {
+              filter: `testSuite.id=${suite_id}`
+            });
+            filterDescription = `direct suite ${suite_id} - all results`;
+          } else {
+            const response = await client.getTestCases(project_key, {
+              filter: `testSuite.id=${suite_id}`,
+              page,
+              size
+            });
+            testCases = response.items;
+            filterDescription = `direct suite ${suite_id} - page ${page + 1}`;
+          }
+        }
+
+        debugLog("Retrieved test cases", { count: testCases.length, filterDescription });
+
+        // Step 6: Create summary information for root/parent suites
+        let summaryInfo = '';
+        if ((isRootSuite || hasChildren) && get_all && include_sub_suites) {
+          if (isRootSuite) {
+            const childSuites = processedSuites.filter(s => s.rootSuiteId === suite_id);
+            summaryInfo = `\n📊 Summary: Processed ${childSuites.length} sub-suites from root suite ${suite_id}`;
+          } else {
+            // For parent suites, count all descendants
+            function countAllDescendants(parentId: number, processedSuites: any[]): number {
+              let count = 0;
+              const directChildren = processedSuites.filter(s => s.parentSuiteId === parentId);
+              
+              for (const child of directChildren) {
+                count++;
+                count += countAllDescendants(child.id, processedSuites);
+              }
+              
+              return count;
+            }
+            
+            const totalDescendants = countAllDescendants(suite_id, processedSuites);
+            summaryInfo = `\n📊 Summary: Processed ${totalDescendants} descendants (all levels) from parent suite ${suite_id}`;
+          }
+        }
+
+        // Step 6: Include detailed steps if requested (limit to first 5 for performance)
+        if (include_steps && testCases.length > 0) {
+          debugLog("Fetching detailed steps for test cases", { count: Math.min(5, testCases.length) });
+          
+          const casesToFetch = testCases.slice(0, 5).filter((tc): tc is (typeof tc & { key: string }) => Boolean(tc?.key));
+
+          const detailedCases = await Promise.allSettled(
+            casesToFetch.map(async (testCase) => {
+              try {
+                return await client.getTestCaseByKey(project_key, testCase.key);
+              } catch (error) {
+                debugLog(`Failed to fetch detailed case ${testCase.key}`, { error });
+                return testCase; // Fallback to original data
+              }
+            })
+          );
+
+          // Replace original cases with detailed versions where successful
+          const detailedMap = new Map();
+          detailedCases.forEach((result, index) => {
+            if (result.status === 'fulfilled' && result.value) {
+              const originalCase = casesToFetch[index];
+              if (originalCase?.key) {
+                detailedMap.set(originalCase.key, result.value);
+              }
+            }
+          });
+
+          testCases = testCases.map((tc) => {
+            if (tc?.key && detailedMap.has(tc.key)) {
+              return detailedMap.get(tc.key);
+            }
+            return tc;
+          });
+        }
+
+        // Step 6: Build response with metadata
+        const metadata = {
+          suite: {
+            id: suite_id,
+            name: targetSuite.name || targetSuite.title,
+            isRootSuite,
+            rootSuiteId: rootId
+          },
+          filtering: {
+            method: isRootSuite ? 'filter with child suites' : 'filter direct suite',
+            description: filterDescription,
+            usesFilter: true
+          },
+          results: {
+            count: testCases.length,
+            getAllResults: get_all,
+            page: get_all ? undefined : page,
+            size: get_all ? undefined : size,
+            includesSteps: include_steps
+          }
+        };
+
+        const result = {
+          metadata,
+          testCases
+        };
+
+        const formattedData = FormatProcessor.format(result, format);
+        
+        // Add helpful summary message
+        let summaryMessage = `✅ Found ${testCases.length} test cases from ${filterDescription}${summaryInfo}\n` +
+          `📊 Suite: "${targetSuite.name || targetSuite.title}" (ID: ${suite_id})\n` +
+          `🎯 Filter method: ${isRootSuite ? 'Root suite filtering with child suites' : hasChildren && include_sub_suites ? 'Parent suite filtering with child suites' : 'Direct suite filtering'} (filter-based)\n` +
+          `🔄 Results: ${get_all ? 'All results' : `Page ${page + 1} (size: ${size})`}\n`;
+        
+        if (include_steps) {
+          summaryMessage += `📝 Detailed steps included for first ${Math.min(5, testCases.length)} cases\n`;
+        }
+        
+        summaryMessage += `\n${typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2)}`;
+
+        return {
+          content: [{
+            type: "text" as const,
+            text: summaryMessage
+          }]
+        };
+
+      } catch (error: any) {
+        debugLog("Error in get_test_cases_by_suite_smart", { error: error.message, args });
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error getting test cases from suite ${args.suite_id} in ${args.project_key}: ${error.message}`
           }]
         };
       }
