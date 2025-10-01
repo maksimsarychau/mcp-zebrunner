@@ -5,8 +5,8 @@ import { z } from "zod";
 // User information
 export const ZebrunnerUserSchema = z.object({
   id: z.number(),
-  username: z.string(),
-  email: z.string()
+  username: z.string().nullable(),
+  email: z.string().nullable()
 });
 
 // Priority levels

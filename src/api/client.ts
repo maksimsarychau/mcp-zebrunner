@@ -141,7 +141,8 @@ export class ZebrunnerApiClient {
         rootSuiteId: options.rootSuiteId,
         status: options.status,
         priority: options.priority,
-        automationState: options.automationState
+        automationState: options.automationState,
+        filter: options.filter // Add filter parameter support
       };
 
       // Use token-based pagination instead of page-based
@@ -166,20 +167,113 @@ export class ZebrunnerApiClient {
     });
   }
 
-  async getAllTestCases(projectKey: string, options: Omit<TestCaseSearchParams, 'page' | 'size'> = {}): Promise<ZebrunnerShortTestCase[]> {
-    const allItems: ZebrunnerShortTestCase[] = [];
-    let page = 0;
-    let hasMore = true;
-
-    while (hasMore) {
-      const response = await this.getTestCases(projectKey, { ...options, page, size: this.config.maxPageSize });
-      allItems.push(...response.items);
-      
-      hasMore = response._meta?.hasNext || false;
-      page++;
+    async getAllTestCases(projectKey: string, options: Omit<TestCaseSearchParams, 'page' | 'size'> = {}): Promise<ZebrunnerShortTestCase[]> {
+      const allItems: ZebrunnerShortTestCase[] = [];
+      const seenIds = new Set<number>(); // Track seen IDs to avoid duplicates
+      let page = 0;
+      let hasMore = true;
+  
+      while (hasMore) {
+        const response = await this.getTestCases(projectKey, { ...options, page, size: this.config.maxPageSize });
+        
+        // Filter out duplicates and add only new items
+        const newItems = response.items.filter((item: any) => {
+          if (seenIds.has(item.id)) {
+            return false; // Skip duplicates
+          }
+          seenIds.add(item.id);
+          return true;
+        });
+        
+        allItems.push(...newItems);
+        
+        // Stop if response is empty OR there's no _meta section OR no nextPageToken in _meta
+        // OR if we got no new items (all were duplicates)
+        hasMore = response.items.length > 0 && 
+                  !!response._meta && 
+                  !!response._meta.nextPageToken &&
+                  newItems.length > 0;
+        page++;
+        
+        if (this.config.debug) {
+          console.error(`📄 [getAllTestCases] Page ${page}: ${response.items.length} items, ${newItems.length} new (total: ${allItems.length})`);
+          console.error(`📄 [getAllTestCases] _meta exists: ${!!response._meta}, nextPageToken: ${response._meta?.nextPageToken ? 'Available' : 'None'} - hasMore: ${hasMore}`);
+        }
+        
+        // Safety check to prevent infinite loops
+        if (page > 100) {
+          console.error('⚠️ [getAllTestCases] Stopped after 100 pages to prevent infinite loop');
+          break;
+        }
+      }
+  
+      return allItems;
     }
 
-    return allItems;
+  /**
+   * Get all test cases for a root suite by filtering on all child suite IDs
+   * Uses the filter approach but splits into smaller batches to avoid API limitations
+   */
+  async getTestCasesByRootSuiteWithFilter(
+    projectKey: string, 
+    rootSuiteId: number,
+    allSuites: any[]
+  ): Promise<ZebrunnerShortTestCase[]> {
+    // Find all child suites (including the root suite itself if it has direct test cases)
+    const childSuiteIds: number[] = [];
+    
+    // Find all suites that have this root suite as their root (after hierarchy processing)
+    for (const suite of allSuites) {
+      if (suite.rootSuiteId === rootSuiteId) {
+        childSuiteIds.push(suite.id);
+      }
+    }
+    
+    if (this.config.debug) {
+      console.error(`🔍 [getTestCasesByRootSuiteWithFilter] Root suite ${rootSuiteId} has ${childSuiteIds.length} child suites: [${childSuiteIds.join(', ')}]`);
+    }
+    
+    // Split child suite IDs into smaller batches to avoid API limitations
+    const batchSize = 10; // Smaller batches to ensure API compatibility
+    const allTestCases: ZebrunnerShortTestCase[] = [];
+    const seenIds = new Set<number>(); // Global deduplication across batches
+    
+    for (let i = 0; i < childSuiteIds.length; i += batchSize) {
+      const batch = childSuiteIds.slice(i, i + batchSize);
+      const filter = `testSuite.id IN [${batch.join(',')}]`;
+      
+      if (this.config.debug) {
+        console.error(`🔍 [getTestCasesByRootSuiteWithFilter] Batch ${Math.floor(i/batchSize) + 1}: ${filter}`);
+      }
+      
+      try {
+        const batchResults = await this.getAllTestCases(projectKey, { filter });
+        
+        // Deduplicate across batches
+        const newItems = batchResults.filter(item => {
+          if (seenIds.has(item.id)) {
+            return false;
+          }
+          seenIds.add(item.id);
+          return true;
+        });
+        
+        allTestCases.push(...newItems);
+        
+        if (this.config.debug) {
+          console.error(`🔍 [getTestCasesByRootSuiteWithFilter] Batch ${Math.floor(i/batchSize) + 1}: ${batchResults.length} items, ${newItems.length} new (total: ${allTestCases.length})`);
+        }
+        
+        // Small delay between batches to avoid rate limiting
+        if (i + batchSize < childSuiteIds.length) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      } catch (error) {
+        console.error(`❌ [getTestCasesByRootSuiteWithFilter] Error in batch ${Math.floor(i/batchSize) + 1}: ${(error as Error).message}`);
+      }
+    }
+    
+    return allTestCases;
   }
 
   async getTestCaseByKey(projectKey: string, key: string): Promise<ZebrunnerTestCase> {

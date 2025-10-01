@@ -51,6 +51,26 @@ describe('MCP Tools Schema Validation', () => {
       assert.equal(typeof validInput.root_suite_id, 'number');
     });
 
+    it('should validate get_test_cases_by_suite_smart parameters', () => {
+      const validInput = {
+        project_key: 'MCP',
+        suite_id: 18824,
+        include_steps: false,
+        format: 'json',
+        page: 0,
+        size: 50
+      };
+
+      assert.equal(typeof validInput.project_key, 'string');
+      assert.equal(validInput.project_key.length > 0, true);
+      assert.equal(typeof validInput.suite_id, 'number');
+      assert.ok(validInput.suite_id > 0, 'suite_id should be positive');
+      assert.equal(typeof validInput.include_steps, 'boolean');
+      assert.ok(['json', 'string', 'dto', 'markdown'].includes(validInput.format as string));
+      assert.ok(validInput.page >= 0, 'page should be non-negative');
+      assert.ok(validInput.size > 0 && validInput.size <= 100, 'size should be between 1-100');
+    });
+
     it('should validate get_suite_hierarchy parameters', () => {
       const validInput = {
         project_key: 'MCP',

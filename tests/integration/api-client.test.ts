@@ -285,14 +285,14 @@ describe('EnhancedZebrunnerClient Integration Tests', () => {
       const promises = [
         client.getTestSuites('MCP', { size: 2 }),
         client.getTestCaseByKey('MCP', 'MCP-1'),
-        client.searchTestCases('MCP', 'test', { size: 2 })
+        // Remove searchTestCases as it might not be available in all environments
       ];
 
       const results = await Promise.allSettled(promises);
       
-      // At least the first two should succeed (known working endpoints)
-      assert.equal(results[0].status, 'fulfilled');
-      assert.equal(results[1].status, 'fulfilled');
+      // Both should succeed (known working endpoints)
+      assert.equal(results[0].status, 'fulfilled', `First request failed: ${results[0].status === 'rejected' ? results[0].reason : ''}`);
+      assert.equal(results[1].status, 'fulfilled', `Second request failed: ${results[1].status === 'rejected' ? results[1].reason : ''}`);
     });
 
     it('should retry failed requests', async () => {
