@@ -33,12 +33,15 @@ export interface TestCaseSearchParams extends PaginationOptions {
   suiteId?: number;
   rootSuiteId?: number;
   status?: string;
-  priority?: string;
-  automationState?: string;
+  priority?: string | number;
+  automationState?: string | number | (string | number)[]; // Support mixed arrays of names and IDs
   createdAfter?: string;
   createdBefore?: string;
   modifiedAfter?: string;
   modifiedBefore?: string;
+  sortBy?: string; // Sorting parameter
+  // RQL filter for advanced filtering
+  filter?: string;
 }
 
 export interface TestSuiteSearchParams extends PaginationOptions {

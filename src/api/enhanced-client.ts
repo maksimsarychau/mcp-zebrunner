@@ -774,6 +774,155 @@ export class EnhancedZebrunnerClient {
     return returnList;
   }
 
+  /**
+   * Build RQL filter string from search parameters
+   */
+  private buildRQLFilter(options: TestCaseSearchParams): string {
+    const filters: string[] = [];
+
+    // Automation state filtering
+    if (options.automationState) {
+      if (Array.isArray(options.automationState)) {
+        if (options.automationState.length > 0) {
+          // Check if all values are numbers (IDs) or strings (names)
+          const allNumbers = options.automationState.every(state => typeof state === 'number');
+          const allStrings = options.automationState.every(state => typeof state === 'string');
+          
+          if (allNumbers) {
+            filters.push(`automationState.id IN [${options.automationState.join(', ')}]`);
+          } else if (allStrings) {
+            const quotedNames = options.automationState.map(state => `'${String(state).replace(/'/g, "\\'")}'`);
+            filters.push(`automationState.name IN [${quotedNames.join(', ')}]`);
+          } else {
+            // Mixed types - handle each separately
+            const ids = options.automationState.filter(state => typeof state === 'number');
+            const names = options.automationState.filter(state => typeof state === 'string');
+            
+            const subFilters: string[] = [];
+            if (ids.length > 0) {
+              subFilters.push(`automationState.id IN [${ids.join(', ')}]`);
+            }
+            if (names.length > 0) {
+              const quotedNames = names.map(name => `'${String(name).replace(/'/g, "\\'")}'`);
+              subFilters.push(`automationState.name IN [${quotedNames.join(', ')}]`);
+            }
+            
+            if (subFilters.length > 0) {
+              filters.push(`(${subFilters.join(' OR ')})`);
+            }
+          }
+        }
+      } else {
+        // Single value
+        if (typeof options.automationState === 'number') {
+          filters.push(`automationState.id = ${options.automationState}`);
+        } else {
+          filters.push(`automationState.name = '${String(options.automationState).replace(/'/g, "\\'")}'`);
+        }
+      }
+    }
+
+    // Date filtering
+    if (options.createdAfter) {
+      filters.push(`createdAt >= '${options.createdAfter}'`);
+    }
+    if (options.createdBefore) {
+      filters.push(`createdAt <= '${options.createdBefore}'`);
+    }
+    if (options.modifiedAfter) {
+      filters.push(`lastModifiedAt >= '${options.modifiedAfter}'`);
+    }
+    if (options.modifiedBefore) {
+      filters.push(`lastModifiedAt <= '${options.modifiedBefore}'`);
+    }
+
+    // Suite filtering
+    if (options.suiteId) {
+      filters.push(`testSuite.id = ${options.suiteId}`);
+    }
+
+    // Priority filtering
+    if (options.priority) {
+      if (typeof options.priority === 'number') {
+        filters.push(`priority.id = ${options.priority}`);
+      } else {
+        filters.push(`priority.name = '${String(options.priority).replace(/'/g, "\\'")}'`);
+      }
+    }
+
+    // Custom filter (if provided, it takes precedence)
+    if (options.filter) {
+      return options.filter;
+    }
+
+    return filters.join(' AND ');
+  }
+
+  /**
+   * Client-side automation state filtering
+   */
+  private filterByAutomationState(items: any[], automationState: string | number | (string | number)[]): any[] {
+    const states = Array.isArray(automationState) ? automationState : [automationState];
+    
+    return items.filter(item => {
+      if (!item.automationState) return false;
+      
+      return states.some(state => {
+        if (typeof state === 'number') {
+          return item.automationState.id === state;
+        } else {
+          return item.automationState.name === state;
+        }
+      });
+    });
+  }
+
+  /**
+   * Client-side creation date filtering
+   */
+  private filterByCreationDate(items: any[], createdAfter?: string, createdBefore?: string): any[] {
+    return items.filter(item => {
+      if (!item.createdAt) return false;
+      
+      const createdDate = new Date(item.createdAt);
+      
+      if (createdAfter) {
+        const afterDate = new Date(createdAfter);
+        if (createdDate < afterDate) return false;
+      }
+      
+      if (createdBefore) {
+        const beforeDate = new Date(createdBefore);
+        if (createdDate > beforeDate) return false;
+      }
+      
+      return true;
+    });
+  }
+
+  /**
+   * Client-side modification date filtering
+   */
+  private filterByModificationDate(items: any[], modifiedAfter?: string, modifiedBefore?: string): any[] {
+    return items.filter(item => {
+      if (!item.lastModifiedAt) return false;
+      
+      const modifiedDate = new Date(item.lastModifiedAt);
+      
+      if (modifiedAfter) {
+        const afterDate = new Date(modifiedAfter);
+        if (modifiedDate < afterDate) return false;
+      }
+      
+      if (modifiedBefore) {
+        const beforeDate = new Date(modifiedBefore);
+        if (modifiedDate > beforeDate) return false;
+      }
+      
+      return true;
+    });
+  }
+
   async getTestCases(
     projectKey: string, 
     options: TestCaseSearchParams = {}
@@ -785,19 +934,29 @@ export class EnhancedZebrunnerClient {
     return this.retryRequest(async () => {
       const params: any = {
         projectKey,
-        maxPageSize: Math.min(options.size || this.config.defaultPageSize || 50, 100), // Limit to 100 as per API requirements
-        suiteId: options.suiteId,
-        rootSuiteId: options.rootSuiteId,
-        status: options.status,
-        priority: options.priority,
-        automationState: options.automationState
+        maxPageSize: Math.min(options.size || this.config.defaultPageSize || 50, 100)
       };
 
-      // Use token-based pagination instead of page-based
+      // Use token-based pagination
       if (options.pageToken) {
-        params.pageToken = options.pageToken; // Use 'pageToken' not 'nextPageToken' as per API spec
+        params.pageToken = options.pageToken;
       }
 
+      // Build RQL filter for advanced filtering
+      const rqlFilter = this.buildRQLFilter(options);
+      if (rqlFilter) {
+        params.filter = rqlFilter;
+        if (this.config.debug) {
+          console.error(`🔍 Using RQL filter: ${rqlFilter}`);
+        }
+      }
+
+      // Add sorting if specified
+      if (options.sortBy) {
+        params.sortBy = options.sortBy;
+      }
+
+      // Use Public API endpoint for test cases (supports RQL filtering)
       const response = await this.http.get('/test-cases', { params });
       const data = response.data;
       
@@ -814,51 +973,13 @@ export class EnhancedZebrunnerClient {
         throw new ZebrunnerApiError('Unexpected response format from test-cases endpoint');
       }
 
-      // WORKAROUND: Since Zebrunner API doesn't respect pagination/filtering parameters,
-      // we need to fetch ALL test cases first, then do client-side filtering
-      let filteredItems = items;
-      
-      // Client-side suite filtering (since API ignores suiteId parameter)
-      if (options.suiteId) {
-        // Always fetch ALL test cases when filtering by suiteId to ensure we don't miss any
-        const allTestCases = await this.getAllTCMTestCasesByProject(projectKey);
-        items = allTestCases;
-        
-        filteredItems = items.filter(item => 
-          item.testSuite?.id === options.suiteId
-        );
-        
-        if (this.config.debug) {
-          console.error(`🔍 Client-side filtering: ${items.length} → ${filteredItems.length} items for suite ${options.suiteId}`);
-        }
-      }
-      
-      // Client-side pagination (since API ignores page/size parameters)
-      const page = options.page || 0;
-      const requestedSize = options.size || this.config.defaultPageSize || 50;
-      const size = Math.min(requestedSize, this.config.maxPageSize || 200);
-      const startIndex = page * size;
-      const endIndex = startIndex + size;
-      const paginatedItems = filteredItems.slice(startIndex, endIndex);
-      
-      if (this.config.debug && (options.page !== undefined || options.size !== undefined)) {
-        console.error(`🔍 Client-side pagination: page ${page}, size ${size}, showing ${startIndex}-${endIndex} of ${filteredItems.length} items`);
-      }
-      
-      // Update metadata to reflect actual pagination
-      const updatedMeta = {
-        ...meta,
-        totalElements: filteredItems.length,
-        currentPage: page,
-        pageSize: size,
-        totalPages: Math.ceil(filteredItems.length / size),
-        hasNext: endIndex < filteredItems.length,
-        hasPrevious: page > 0
-      };
-      
+      // Note: Root suite filtering would require hierarchy traversal
+      // For now, we rely on RQL filters to handle suite filtering
+      // TODO: Implement proper root suite hierarchy filtering if needed
+
       return {
-        items: paginatedItems.map((item: any) => ZebrunnerShortTestCaseSchema.parse(item)),
-        _meta: updatedMeta
+        items: items.map((item: any) => ZebrunnerShortTestCaseSchema.parse(item)),
+        _meta: meta
       };
     });
   }
@@ -890,40 +1011,14 @@ export class EnhancedZebrunnerClient {
       throw new ZebrunnerApiError('Search query is required');
     }
 
-    return this.retryRequest(async () => {
-      const params = {
-        projectKey,
-        query: query.trim(),
-        page: options.page,
-        size: options.size || this.config.defaultPageSize,
-        suiteId: options.suiteId,
-        status: options.status,
-        priority: options.priority,
-        automationState: options.automationState
-      };
+    // Use the main getTestCases method with title search via RQL
+    const searchOptions: TestCaseSearchParams = {
+      ...options,
+      // Build RQL filter for title search
+      filter: `title ~= '${query.trim().replace(/'/g, "\\'")}'`
+    };
 
-      const response = await this.http.get('/test-cases/search', { params });
-      const data = response.data;
-      
-      if (Array.isArray(data)) {
-        return { 
-          items: data.map(item => ZebrunnerShortTestCaseSchema.parse(item)),
-          _meta: { totalElements: data.length, currentPage: 0, pageSize: data.length }
-        };
-      } else if (data && (data.items || data.content)) {
-        const items = data.items || data.content || [];
-        return {
-          items: items.map((item: any) => ZebrunnerShortTestCaseSchema.parse(item)),
-          _meta: data._meta || { 
-            totalElements: data.totalElements || items.length,
-            currentPage: data.currentPage || 0,
-            pageSize: items.length
-          }
-        };
-      }
-      
-      throw new ZebrunnerApiError('Unexpected response format from test-cases/search endpoint');
-    });
+    return this.getTestCases(projectKey, searchOptions);
   }
 
   // Test Runs API (experimental)

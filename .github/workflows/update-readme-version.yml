@@ -1,0 +1,31 @@
+name: Update README version
+
+on:
+  push:
+    branches:
+      - master        # adjust if your default branch is different
+    paths:
+      - "package.json"
+  workflow_dispatch:  # allows manual trigger
+
+jobs:
+  update-readme:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Read version from package.json
+        id: version
+        run: echo "version=$(node -p \"require('./package.json').version\")" >> $GITHUB_OUTPUT
+
+      - name: Update README.md
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          perl -0777 -pe "s/(<!--VERSION_START-->).*(<!--VERSION_END-->)/\$1${VERSION}\$2/s" -i README.md
+
+      - name: Commit changes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "docs: update version to ${{ steps.version.outputs.version }}"
+          file_pattern: README.md
