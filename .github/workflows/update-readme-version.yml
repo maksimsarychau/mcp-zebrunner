@@ -2,11 +2,13 @@ name: Update README version
 
 on:
   push:
-    branches:
-      - master        # adjust if your default branch is different
+    branches: [ master ]     # adjust if your default branch is different
     paths:
-      - "package.json"
-  workflow_dispatch:  # allows manual trigger
+      - package.json
+  workflow_dispatch:
+
+permissions:
+  contents: write            # <-- REQUIRED to push changes back
 
 jobs:
   update-readme:
@@ -19,10 +21,19 @@ jobs:
         id: version
         run: echo "version=$(node -p \"require('./package.json').version\")" >> $GITHUB_OUTPUT
 
+      - name: Show version (debug)
+        run: echo "Version is: ${{ steps.version.outputs.version }}"
+
       - name: Update README.md
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          perl -0777 -pe "s/(<!--VERSION_START-->).*(<!--VERSION_END-->)/\$1${VERSION}\$2/s" -i README.md
+          # non-greedy match .*? and treat file as a single stream (-0777)
+          perl -0777 -pe "s/(<!--VERSION_START-->).*?(<!--VERSION_END-->)/\$1${VERSION}\$2/s" -i README.md
+
+      - name: Show diff (debug)
+        run: |
+          git status --porcelain
+          git --no-pager diff -- README.md || true
 
       - name: Commit changes
         uses: stefanzweifel/git-auto-commit-action@v5
