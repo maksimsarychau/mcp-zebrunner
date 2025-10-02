@@ -60,10 +60,28 @@ function generateChangelogEntry() {
       return 'Version update with minor improvements';
     }
 
-    // Analyze each modified file
+    // Filter out files that are likely not part of the current feature
+    // Focus on newly added files and recently modified files
+    const relevantFiles = gitStatus.filter(f => {
+      // Always include new files (untracked)
+      if (f.status.includes('?')) return true;
+      
+      // For modified files, exclude some common files that change frequently
+      if (f.status.includes('M')) {
+        // Skip files that are commonly updated during version increments
+        if (f.file === 'package.json' || f.file === 'change-logs.md' || f.file === 'README.md') {
+          return false;
+        }
+        return true;
+      }
+      
+      return true;
+    });
+
+    // Analyze each relevant file
     const fileAnalyses = [];
-    const modifiedFiles = gitStatus.filter(f => f.status.includes('M'));
-    const newFiles = gitStatus.filter(f => f.status.includes('?'));
+    const modifiedFiles = relevantFiles.filter(f => f.status.includes('M'));
+    const newFiles = relevantFiles.filter(f => f.status.includes('?'));
     
     for (const fileInfo of [...modifiedFiles, ...newFiles]) {
       const analysis = analyzeFileChanges(fileInfo.file);
@@ -80,34 +98,40 @@ function generateChangelogEntry() {
     let descriptions = [];
     let primaryFeature = null;
 
-    // Check for major feature additions
+    // Check for major feature additions based on new files first
+    const hasClickableLinks = fileAnalyses.some(f => 
+      f.file.includes('clickable-links') || 
+      (f.analysis && /clickable|link|url|href/i.test(f.file))
+    );
     const hasDuplicateAnalyzer = fileAnalyses.some(f => 
-      f.file.includes('duplicate-analyzer') || f.analysis.hasDuplicateLogic
+      f.file.includes('duplicate-analyzer') || (f.analysis && f.analysis.hasDuplicateLogic)
     );
     const hasSemanticFeatures = fileAnalyses.some(f => 
-      f.file.includes('semantic') || f.analysis.hasSemanticAnalysis
+      f.file.includes('semantic') || (f.analysis && f.analysis.hasSemanticAnalysis)
     );
     const hasNewUtilities = fileAnalyses.some(f => 
       f.file.includes('utils/') && f.status.includes('?')
     );
     const hasApiEnhancements = fileAnalyses.some(f => 
-      (f.file.includes('api/') || f.file.includes('client')) && f.analysis.hasNewFunctions
+      (f.file.includes('api/') || f.file.includes('client')) && f.analysis && f.analysis.hasNewFunctions
     );
     const hasServerUpdates = fileAnalyses.some(f => 
-      f.file.includes('server') && f.analysis.hasNewFunctions
+      f.file.includes('server') && f.analysis && f.analysis.hasNewFunctions
     );
     const hasNewTests = fileAnalyses.some(f => 
-      f.file.includes('test') && (f.status.includes('?') || f.analysis.hasTests)
+      f.file.includes('test') && (f.status.includes('?') || (f.analysis && f.analysis.hasTests))
     );
     const hasValidationFeatures = fileAnalyses.some(f => 
-      f.analysis.hasValidation && f.file.includes('validator')
+      f.analysis && f.analysis.hasValidation && f.file.includes('validator')
     );
     const hasTypeDefinitions = fileAnalyses.some(f => 
-      f.analysis.hasTypeDefinitions && f.status.includes('?')
+      f.analysis && f.analysis.hasTypeDefinitions && f.status.includes('?')
     );
 
-    // Determine primary feature
-    if (hasDuplicateAnalyzer && hasSemanticFeatures) {
+    // Determine primary feature - prioritize new files/features
+    if (hasClickableLinks) {
+      primaryFeature = 'Added clickable links functionality for enhanced user experience';
+    } else if (hasDuplicateAnalyzer && hasSemanticFeatures) {
       primaryFeature = 'Advanced duplicate test case detection with semantic analysis';
     } else if (hasDuplicateAnalyzer) {
       primaryFeature = 'Enhanced duplicate test case analysis capabilities';
@@ -130,9 +154,9 @@ function generateChangelogEntry() {
     }
 
     // Add secondary improvements
-    const errorHandlingFiles = fileAnalyses.filter(f => f.analysis.hasErrorHandling).length;
-    const asyncFiles = fileAnalyses.filter(f => f.analysis.hasAsyncCode).length;
-    const loggingFiles = fileAnalyses.filter(f => f.analysis.hasLogging).length;
+    const errorHandlingFiles = fileAnalyses.filter(f => f.analysis && f.analysis.hasErrorHandling).length;
+    const asyncFiles = fileAnalyses.filter(f => f.analysis && f.analysis.hasAsyncCode).length;
+    const loggingFiles = fileAnalyses.filter(f => f.analysis && f.analysis.hasLogging).length;
     
     if (errorHandlingFiles > 0) {
       descriptions.push('improved error handling');
@@ -156,8 +180,14 @@ function generateChangelogEntry() {
       const modifiedCount = modifiedFiles.length;
       const newCount = newFiles.length;
       
-      if (newCount > modifiedCount) {
-        finalDescription = `Added ${newCount} new files with enhanced functionality`;
+      if (newCount > 0) {
+        // Look at specific new files to generate better descriptions
+        const newFileNames = newFiles.map(f => f.file);
+        if (newFileNames.some(name => name.includes('guide') || name.includes('summary'))) {
+          finalDescription = `Added documentation and implementation guides`;
+        } else {
+          finalDescription = `Added ${newCount} new files with enhanced functionality`;
+        }
       } else if (modifiedCount > 0) {
         finalDescription = `Updated ${modifiedCount} files with bug fixes and improvements`;
       }
