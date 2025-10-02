@@ -1434,6 +1434,384 @@ async function main() {
     }
   );
 
+  server.tool(
+    "get_test_case_by_title",
+    "🔍 Get test cases by title using partial match search with pagination support",
+    {
+      project_key: z.string().min(1).describe("Project key"),
+      title: z.string().min(1).describe("Title to search for (partial match)"),
+      max_page_size: z.number().int().positive().max(100).default(10).describe("Maximum number of results per page"),
+      page_token: z.string().optional().describe("Token for pagination (from previous response _meta.nextPageToken)"),
+      get_all: z.boolean().default(false).describe("Get all matching test cases across all pages"),
+      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
+      include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI")
+    },
+    async (args) => {
+      const { project_key, title, max_page_size, page_token, get_all, format, include_clickable_links } = args;
+      
+      try {
+        debugLog("Getting test case by title", args);
+        
+        // Get clickable links configuration
+        const clickableLinkConfig = getClickableLinkConfig(include_clickable_links, ZEBRUNNER_URL);
+        
+        // Build RQL filter for title search using partial match
+        // Properly escape backslashes first, then quotes to prevent injection
+        const escapedTitle = title.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        const filter = `title~="${escapedTitle}"`;
+        
+        if (get_all) {
+          // Get all pages
+          const allTestCases: any[] = [];
+          let currentPageToken = page_token;
+          
+          do {
+            const searchParams = {
+              size: max_page_size,
+              filter: filter,
+              pageToken: currentPageToken
+            };
+
+            const response = await client.getTestCases(project_key, searchParams);
+            
+            if (!validateApiResponse(response, 'array')) {
+              throw new Error('Invalid API response format');
+            }
+
+            const pageItems = response.items || response;
+            allTestCases.push(...pageItems);
+            
+            // Check for next page
+            currentPageToken = response._meta?.nextPageToken;
+          } while (currentPageToken);
+
+          // Add clickable links if requested
+          let processedCases = allTestCases;
+          if (include_clickable_links && clickableLinkConfig.includeClickableLinks) {
+            processedCases = processedCases.map(testCase => 
+              addTestCaseWebUrl(testCase, project_key, clickableLinkConfig.baseWebUrl, clickableLinkConfig)
+            );
+          }
+
+          const formattedData = FormatProcessor.format(processedCases, format);
+          const resultText = typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2);
+          const summary = `Found ${processedCases.length} test case(s) total matching title "${title}"`;
+          
+          return {
+            content: [{
+              type: "text" as const,
+              text: `${summary}\n\n${resultText}`
+            }]
+          };
+        } else {
+          // Single page
+          const searchParams = {
+            size: max_page_size,
+            filter: filter,
+            pageToken: page_token
+          };
+
+          const response = await client.getTestCases(project_key, searchParams);
+          
+          if (!validateApiResponse(response, 'array')) {
+            throw new Error('Invalid API response format');
+          }
+
+          let processedCases = response.items || response;
+          
+          // Add clickable links if requested
+          if (include_clickable_links && clickableLinkConfig.includeClickableLinks) {
+            processedCases = processedCases.map(testCase => 
+              addTestCaseWebUrl(testCase, project_key, clickableLinkConfig.baseWebUrl, clickableLinkConfig)
+            );
+          }
+
+          const formattedData = FormatProcessor.format(processedCases, format);
+          const resultText = typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2);
+          
+          const summary = `Found ${processedCases.length} test case(s) on this page matching title "${title}"`;
+          let paginationInfo = '';
+          
+          if (response._meta?.nextPageToken) {
+            paginationInfo = `\n\n📄 **Pagination:** Use page_token="${response._meta.nextPageToken}" to get next page, or set get_all=true to retrieve all results.`;
+          }
+          
+          return {
+            content: [{
+              type: "text" as const,
+              text: `${summary}${paginationInfo}\n\n${resultText}`
+            }]
+          };
+        }
+
+      } catch (error: any) {
+        debugLog("Error getting test case by title", { error: error.message, args });
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error getting test case by title: ${error.message}`
+          }]
+        };
+      }
+    }
+  );
+
+  server.tool(
+    "get_test_case_by_filter",
+    "🔍 Get test cases using advanced filtering options with exact matching",
+    {
+      project_key: z.string().min(1).describe("Project key"),
+      test_suite_id: z.number().int().positive().optional().describe("Filter by exact test suite ID"),
+      created_after: z.string().optional().describe("Filter test cases created after this date (ISO format: '2024-01-01T00:00:00Z')"),
+      created_before: z.string().optional().describe("Filter test cases created before this date (ISO format: '2024-12-31T23:59:59Z')"),
+      last_modified_after: z.string().optional().describe("Filter test cases last modified after this date (ISO format: '2024-01-01T00:00:00Z')"),
+      last_modified_before: z.string().optional().describe("Filter test cases last modified before this date (ISO format: '2024-12-31T23:59:59Z')"),
+      priority_id: z.number().int().positive().optional().describe("Filter by priority ID (use get_automation_priorities to see available priorities)"),
+      automation_state_id: z.number().int().positive().optional().describe("Filter by automation state ID (use get_automation_states to see available states)"),
+      max_page_size: z.number().int().positive().max(100).default(20).describe("Maximum number of results per page"),
+      page_token: z.string().optional().describe("Token for pagination (from previous response _meta.nextPageToken)"),
+      get_all: z.boolean().default(false).describe("Get all matching test cases across all pages"),
+      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
+      include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI")
+    },
+    async (args) => {
+      const { 
+        project_key, 
+        test_suite_id, 
+        created_after, 
+        created_before, 
+        last_modified_after, 
+        last_modified_before, 
+        priority_id,
+        automation_state_id,
+        max_page_size,
+        page_token,
+        get_all,
+        format, 
+        include_clickable_links 
+      } = args;
+      
+      try {
+        debugLog("Getting test cases by filter", args);
+        
+        // Get clickable links configuration
+        const clickableLinkConfig = getClickableLinkConfig(include_clickable_links, ZEBRUNNER_URL);
+        
+        // Build RQL filter from provided parameters
+        const filters: string[] = [];
+        
+        if (test_suite_id) {
+          filters.push(`testSuite.id = ${test_suite_id}`);
+        }
+        
+        if (created_after) {
+          filters.push(`createdAt >= '${created_after}'`);
+        }
+        
+        if (created_before) {
+          filters.push(`createdAt <= '${created_before}'`);
+        }
+        
+        if (last_modified_after) {
+          filters.push(`lastModifiedAt >= '${last_modified_after}'`);
+        }
+        
+        if (last_modified_before) {
+          filters.push(`lastModifiedAt <= '${last_modified_before}'`);
+        }
+        
+        if (priority_id) {
+          filters.push(`priority.id = ${priority_id}`);
+        }
+        
+        if (automation_state_id) {
+          filters.push(`automationState.id = ${automation_state_id}`);
+        }
+        
+        if (filters.length === 0) {
+          throw new Error('At least one filter parameter must be provided');
+        }
+        
+        const filter = filters.join(' AND ');
+        
+        if (get_all) {
+          // Get all pages
+          const allTestCases: any[] = [];
+          let currentPageToken = page_token;
+          
+          do {
+            const searchParams = {
+              size: max_page_size,
+              filter: filter,
+              pageToken: currentPageToken
+            };
+
+            const response = await client.getTestCases(project_key, searchParams);
+            
+            if (!validateApiResponse(response, 'array')) {
+              throw new Error('Invalid API response format');
+            }
+
+            const pageItems = response.items || response;
+            allTestCases.push(...pageItems);
+            
+            // Check for next page
+            currentPageToken = response._meta?.nextPageToken;
+          } while (currentPageToken);
+
+          // Add clickable links if requested
+          let processedCases = allTestCases;
+          if (include_clickable_links && clickableLinkConfig.includeClickableLinks) {
+            processedCases = processedCases.map(testCase => 
+              addTestCaseWebUrl(testCase, project_key, clickableLinkConfig.baseWebUrl, clickableLinkConfig)
+            );
+          }
+
+          const formattedData = FormatProcessor.format(processedCases, format);
+          const resultText = typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2);
+          const summary = `Found ${processedCases.length} test case(s) total matching the specified filters`;
+          const filterSummary = `Applied filters: ${filter}`;
+          
+          return {
+            content: [{
+              type: "text" as const,
+              text: `${summary}\n${filterSummary}\n\n${resultText}`
+            }]
+          };
+        } else {
+          // Single page
+          const searchParams = {
+            size: max_page_size,
+            filter: filter,
+            pageToken: page_token
+          };
+
+          const response = await client.getTestCases(project_key, searchParams);
+          
+          if (!validateApiResponse(response, 'array')) {
+            throw new Error('Invalid API response format');
+          }
+
+          let processedCases = response.items || response;
+          
+          // Add clickable links if requested
+          if (include_clickable_links && clickableLinkConfig.includeClickableLinks) {
+            processedCases = processedCases.map(testCase => 
+              addTestCaseWebUrl(testCase, project_key, clickableLinkConfig.baseWebUrl, clickableLinkConfig)
+            );
+          }
+
+          const formattedData = FormatProcessor.format(processedCases, format);
+          const resultText = typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2);
+          
+          const summary = `Found ${processedCases.length} test case(s) on this page matching the specified filters`;
+          const filterSummary = `Applied filters: ${filter}`;
+          let paginationInfo = '';
+          
+          if (response._meta?.nextPageToken) {
+            paginationInfo = `\n\n📄 **Pagination:** Use page_token="${response._meta.nextPageToken}" to get next page, or set get_all=true to retrieve all results.`;
+          }
+          
+          return {
+            content: [{
+              type: "text" as const,
+              text: `${summary}\n${filterSummary}${paginationInfo}\n\n${resultText}`
+            }]
+          };
+        }
+
+      } catch (error: any) {
+        debugLog("Error getting test cases by filter", { error: error.message, args });
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error getting test cases by filter: ${error.message}`
+          }]
+        };
+      }
+    }
+  );
+
+  server.tool(
+    "get_automation_priorities",
+    "🎯 Get available priorities for a project (names and IDs)",
+    {
+      project: z.union([z.enum(["web","android","ios","api"]), z.string(), z.number()]).describe("Project alias (web/android/ios/api), project key, or project ID"),
+      format: z.enum(['json', 'markdown']).default('json').describe("Output format")
+    },
+    async (args) => {
+      try {
+        debugLog("Getting automation priorities", args);
+        
+        // Resolve project ID using the same logic as other tools
+        const { projectId } = await resolveProjectId(args.project);
+        
+        // Get priorities using the reporting client
+        const priorities = await reportingClient.getPriorities(projectId);
+        
+        if (args.format === 'markdown') {
+          let markdown = `# Priorities for Project ${args.project}\n\n`;
+          markdown += `**Project ID:** ${projectId}\n`;
+          markdown += `**Total Priorities:** ${priorities.length}\n\n`;
+          
+          markdown += `## Available Priorities\n\n`;
+          priorities.forEach((priority, index) => {
+            const icon = priority.name === 'High' ? '🔴' : 
+                        priority.name === 'Medium' ? '🟡' : 
+                        priority.name === 'Low' ? '🟢' :
+                        priority.name === 'Trivial' ? '⚪' :
+                        priority.name === 'Critical' ? '❗' : '⚪';
+            markdown += `${index + 1}. **${icon} ${priority.name}** (ID: ${priority.id})\n`;
+          });
+          
+          markdown += `\n## Usage Examples\n\n`;
+          markdown += `### Filter by Priority ID:\n`;
+          markdown += `\`\`\`\n`;
+          markdown += `get_test_case_by_filter(\n`;
+          markdown += `  project_key: "${typeof args.project === 'string' ? args.project : 'android'}",\n`;
+          markdown += `  priority_id: ${priorities[0]?.id || 15}\n`;
+          markdown += `)\n`;
+          markdown += `\`\`\`\n`;
+          
+          return {
+            content: [{
+              type: "text" as const,
+              text: markdown
+            }]
+          };
+        }
+        
+        // JSON format
+        const result = {
+          project: args.project,
+          projectId,
+          priorities: priorities,
+          // Also provide a mapping for easy reference
+          mapping: priorities.reduce((acc, priority) => {
+            acc[priority.name] = priority.id;
+            return acc;
+          }, {} as Record<string, number>)
+        };
+        
+        return {
+          content: [{
+            type: "text" as const,
+            text: JSON.stringify(result, null, 2)
+          }]
+        };
+        
+      } catch (error: any) {
+        debugLog("Error getting automation priorities", { error: error.message, args });
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error getting automation priorities: ${error.message}`
+          }]
+        };
+      }
+    }
+  );
+
   // ========== EXPERIMENTAL FEATURES ==========
   // Note: Experimental features have been removed as they relied on API endpoints
   // that are not available or working properly. Use the following alternatives:

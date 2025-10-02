@@ -16,10 +16,10 @@ const oldVersion = packageJson.version;
 function analyzeFileChanges(filePath) {
   try {
     if (!existsSync(filePath)) return null;
-
+    
     const content = readFileSync(filePath, 'utf8').toLowerCase();
     const lines = content.split('\n');
-
+    
     // Analyze content patterns
     const analysis = {
       hasNewFunctions: /function\s+\w+|const\s+\w+\s*=\s*\(|=>\s*{/.test(content),
@@ -34,9 +34,13 @@ function analyzeFileChanges(filePath) {
       hasDuplicateLogic: /duplicate|similar|match|compare/i.test(content),
       hasSemanticAnalysis: /semantic|nlp|analyze|similarity/i.test(content),
       hasTypeDefinitions: /interface|type\s+\w+\s*=|enum/i.test(content),
+      hasTestCaseByTitle: /get_test_case_by_title|title~=|title search/i.test(content),
+      hasTestCaseByFilter: /get_test_case_by_filter|testsuite\.id|priority\.id|automationstate\.id/i.test(content),
+      hasAutomationPriorities: /get_automation_priorities|getpriorities|automation.*priorities/i.test(content),
+      hasReportingEnhancements: /reportingclient|bearer.*token|authentication|cache.*project/i.test(content),
       lineCount: lines.length
     };
-
+    
     return analysis;
   } catch (error) {
     return null;
@@ -63,27 +67,37 @@ function generateChangelogEntry() {
     // Filter out files that are likely not part of the current feature
     // Focus on newly added files and recently modified files
     const relevantFiles = gitStatus.filter(f => {
-      // Always include new files (untracked)
+      // Always include new files (untracked) - these are most likely the current feature
       if (f.status.includes('?')) return true;
-
+      
       // For modified files, exclude some common files that change frequently
       if (f.status.includes('M')) {
         // Skip files that are commonly updated during version increments
-        if (f.file === 'package.json' || f.file === 'change-logs.md' || f.file === 'README.md') {
+        if (f.file === 'package.json' || f.file === 'change-logs.md') {
+          return false;
+        }
+        // Skip README.md unless it's the only modified file (indicating documentation work)
+        const modifiedFiles = gitStatus.filter(gf => gf.status.includes('M'));
+        if (f.file === 'README.md' && modifiedFiles.length > 3) {
           return false;
         }
         return true;
       }
-
+      
       return true;
     });
 
+    // If we only have common modified files left, focus on the most recent/specific changes
+    const newFiles = relevantFiles.filter(f => f.status.includes('?'));
+    const modifiedFiles = relevantFiles.filter(f => f.status.includes('M'));
+    
+    // Prioritize new files over modified files for feature detection
+    const filesToAnalyze = newFiles.length > 0 ? [...newFiles, ...modifiedFiles.slice(0, 2)] : modifiedFiles;
+
     // Analyze each relevant file
     const fileAnalyses = [];
-    const modifiedFiles = relevantFiles.filter(f => f.status.includes('M'));
-    const newFiles = relevantFiles.filter(f => f.status.includes('?'));
-
-    for (const fileInfo of [...modifiedFiles, ...newFiles]) {
+    
+    for (const fileInfo of filesToAnalyze) {
       const analysis = analyzeFileChanges(fileInfo.file);
       if (analysis) {
         fileAnalyses.push({
@@ -99,44 +113,77 @@ function generateChangelogEntry() {
     let primaryFeature = null;
 
     // Check for major feature additions based on new files first
-    const hasClickableLinks = fileAnalyses.some(f =>
-      f.file.includes('clickable-links') ||
+    const hasTestCaseByTitle = fileAnalyses.some(f => 
+      f.analysis && f.analysis.hasTestCaseByTitle
+    );
+    const hasTestCaseByFilter = fileAnalyses.some(f => 
+      f.analysis && f.analysis.hasTestCaseByFilter
+    );
+    const hasAutomationPriorities = fileAnalyses.some(f => 
+      f.analysis && f.analysis.hasAutomationPriorities
+    );
+    const hasReportingEnhancements = fileAnalyses.some(f => 
+      f.analysis && f.analysis.hasReportingEnhancements
+    );
+    const hasNewTests = fileAnalyses.some(f => 
+      f.file.includes('test') && f.status.includes('?')
+    );
+    const hasTestCaseTools = fileAnalyses.some(f => 
+      f.file.includes('test-case-tools') || f.file.includes('new-test-case')
+    );
+    const hasClickableLinks = fileAnalyses.some(f => 
+      f.file.includes('clickable-links') || 
       (f.analysis && /clickable|link|url|href/i.test(f.file))
     );
-    const hasDocumentationChanges = fileAnalyses.some(f =>
-      f.file.endsWith('.md') && f.status.includes('?') &&
+    const hasDocumentationChanges = fileAnalyses.some(f => 
+      f.file.endsWith('.md') && f.status.includes('?') && 
       (f.file.includes('GUIDE') || f.file.includes('INSTALL') || f.file.includes('DOC'))
     );
-    const hasReadmeUpdates = fileAnalyses.some(f =>
+    const hasReadmeUpdates = fileAnalyses.some(f => 
       f.file === 'README.md' && f.status.includes('M')
     );
-    const hasDuplicateAnalyzer = fileAnalyses.some(f =>
-      f.file.includes('duplicate-analyzer') || (f.analysis && f.analysis.hasDuplicateLogic)
-    );
-    const hasSemanticFeatures = fileAnalyses.some(f =>
-      f.file.includes('semantic') || (f.analysis && f.analysis.hasSemanticAnalysis)
-    );
-    const hasNewUtilities = fileAnalyses.some(f =>
-      f.file.includes('utils/') && f.status.includes('?') && !f.file.endsWith('.md')
-    );
-    const hasApiEnhancements = fileAnalyses.some(f =>
+    const hasApiEnhancements = fileAnalyses.some(f => 
       (f.file.includes('api/') || f.file.includes('client')) && f.analysis && f.analysis.hasNewFunctions
     );
-    const hasServerUpdates = fileAnalyses.some(f =>
+    const hasServerUpdates = fileAnalyses.some(f => 
       f.file.includes('server') && f.analysis && f.analysis.hasNewFunctions
     );
-    const hasNewTests = fileAnalyses.some(f =>
-      f.file.includes('test') && (f.status.includes('?') || (f.analysis && f.analysis.hasTests))
+    
+    // Only check for duplicate analyzer if it's in NEW files or primary focus
+    const hasDuplicateAnalyzer = fileAnalyses.some(f => 
+      f.file.includes('duplicate-analyzer') && f.status.includes('?')
     );
-    const hasValidationFeatures = fileAnalyses.some(f =>
-      f.analysis && f.analysis.hasValidation && f.file.includes('validator')
+    const hasSemanticFeatures = fileAnalyses.some(f => 
+      f.file.includes('semantic') && f.status.includes('?')
     );
-    const hasTypeDefinitions = fileAnalyses.some(f =>
+    const hasNewUtilities = fileAnalyses.some(f => 
+      f.file.includes('utils/') && f.status.includes('?') && !f.file.endsWith('.md')
+    );
+    const hasValidationFeatures = fileAnalyses.some(f => 
+      f.analysis && f.analysis.hasValidation && f.file.includes('validator') && f.status.includes('?')
+    );
+    const hasTypeDefinitions = fileAnalyses.some(f => 
       f.analysis && f.analysis.hasTypeDefinitions && f.status.includes('?')
     );
 
     // Determine primary feature - prioritize new files/features
-    if (hasClickableLinks) {
+    if (hasTestCaseByTitle && hasTestCaseByFilter && hasAutomationPriorities) {
+      primaryFeature = 'Added advanced test case search tools: title search, multi-criteria filtering, and automation priorities';
+    } else if (hasTestCaseByTitle && hasTestCaseByFilter) {
+      primaryFeature = 'Added new test case search tools: title search and advanced filtering capabilities';
+    } else if (hasTestCaseByTitle) {
+      primaryFeature = 'Added test case search by title functionality';
+    } else if (hasTestCaseByFilter) {
+      primaryFeature = 'Added advanced test case filtering by multiple criteria';
+    } else if (hasAutomationPriorities) {
+      primaryFeature = 'Added automation priorities management tools';
+    } else if (hasReportingEnhancements && hasApiEnhancements) {
+      primaryFeature = 'Enhanced reporting API with improved authentication and caching';
+    } else if (hasReportingEnhancements) {
+      primaryFeature = 'Improved reporting client with better error handling and caching';
+    } else if (hasTestCaseTools || hasNewTests) {
+      primaryFeature = 'Enhanced test case management tools and capabilities';
+    } else if (hasClickableLinks) {
       primaryFeature = 'Added clickable links functionality for enhanced user experience';
     } else if (hasDocumentationChanges && hasReadmeUpdates) {
       primaryFeature = 'Enhanced documentation and user guides with improved navigation';

@@ -354,7 +354,10 @@ Once connected, you can use these tools through natural language in your AI assi
 | `get_test_case_by_key` | Get detailed test case information | `"Get test case MCP-123 details"` | All roles |
 | `get_test_cases_advanced` | Advanced filtering with automation states, dates | `"Get test cases created after 2024-01-01 with automation state 'Manual'"` | QA, SDETs |
 | `get_test_cases_by_automation_state` | Filter by specific automation states | `"Show me all 'Not Automated' test cases in project MCP"` | SDETs, Managers |
+| `get_test_case_by_title` | Search test cases by title (partial match) | `"Find test cases with title containing 'login functionality'"` | All roles |
+| `get_test_case_by_filter` | Advanced filtering by suite, dates, priority, automation state | `"Get test cases from suite 491 created after 2024-01-01 with high priority"` | QA, Managers |
 | `get_automation_states` | List available automation states | `"What automation states are available for project MCP?"` | All roles |
+| `get_automation_priorities` | List available priorities with IDs | `"Show me all priority levels for project MCP"` | All roles |
 
 #### **Batch Test Case Operations**
 | Tool | Description | Example Usage | Best For |
@@ -533,6 +536,8 @@ Once connected, you can use these tools through natural language in your AI assi
 "Get test case MCP-45 details and validate its quality"
 "Show me all test cases in suite 18708 that need improvement"
 "Validate test case MCP-67 and suggest specific improvements"
+"Find test cases with title containing 'login' to review authentication tests"
+"Get test cases from suite 491 with high priority for today's testing"
 ```
 
 #### Test Case Creation & Improvement
@@ -547,6 +552,8 @@ Once connected, you can use these tools through natural language in your AI assi
 "Show me the hierarchy of test suites for project MYAPP to understand the structure"
 "Get all subsuites from Authentication suite to review test coverage"
 "List test cases in suite 18708 and identify which ones need validation"
+"Find test cases with title containing 'payment' to organize payment testing"
+"Get all high priority test cases from suite 491 for release testing"
 ```
 
 #### Coverage Analysis
@@ -562,6 +569,9 @@ Once connected, you can use these tools through natural language in your AI assi
 "Validate test case MCP-78 for automation readiness"
 "Get all test cases in suite 18708 and identify which ones are ready for automation"
 "Check test case MCP-23 - does it have clear, unambiguous steps for automation?"
+"Find test cases with title containing 'API' to prioritize API automation"
+"Get automation priorities to understand which test cases to automate first"
+"Get test cases from suite 491 with 'Not Automated' state for automation planning"
 ```
 
 #### Test Code Generation
@@ -590,6 +600,9 @@ Once connected, you can use these tools through natural language in your AI assi
 "Validate all test cases in Authentication suite for automation readiness"
 "Generate coverage report for all test cases in project MYAPP"
 "Identify test cases in suite 18708 that have automation blockers"
+"Find test cases with title containing 'regression' for automation sprint planning"
+"Get test cases from suite 491 created after 2024-01-01 with high priority for next automation cycle"
+"Get automation priorities and states to create automation roadmap"
 ```
 
 ### 👨‍💻 Developers
@@ -599,6 +612,8 @@ Once connected, you can use these tools through natural language in your AI assi
 "Get test case MCP-45 details to understand what I need to implement"
 "Show me test cases related to login functionality in project MYAPP"
 "Explain test case MCP-67 requirements in developer-friendly format"
+"Find test cases with title containing 'authentication' for my feature development"
+"Get high priority test cases from suite 491 that I need to implement"
 ```
 
 #### Implementation Validation
@@ -629,6 +644,9 @@ Once connected, you can use these tools through natural language in your AI assi
 "Get quality metrics for all test cases in project MYAPP"
 "Show me test cases that need improvement in suite 18708"
 "Generate quality report for test cases created this month"
+"Find test cases with title containing 'critical' to assess critical path quality"
+"Get automation priorities to align team efforts with business priorities"
+"Get test cases from suite 491 with high priority that need quality improvements"
 ```
 
 #### Test Suite Analysis
@@ -656,6 +674,9 @@ Once connected, you can use these tools through natural language in your AI assi
 "Get top 10 bugs from last month to identify process improvements"
 "Show me test runs with detailed failure analysis for process optimization"
 "Get automation readiness metrics across all test cases"
+"Find test cases with title containing 'flaky' to address test stability"
+"Get test cases from suite 491 with medium priority that could be automated"
+"Get automation priorities to optimize team resource allocation"
 ```
 
 #### Reporting & Stakeholder Communication
@@ -706,6 +727,9 @@ Once connected, you can use these tools through natural language in your AI assi
 "Generate testing quality report for stakeholder presentation"
 "Get top bugs analysis for quality trend assessment"
 "Show me automation vs manual testing ratio across the project"
+"Find test cases with title containing 'smoke' to assess smoke test coverage"
+"Get automation priorities to communicate testing strategy to stakeholders"
+"Get test cases from suite 491 with critical priority for risk assessment"
 ```
 
 #### Risk Assessment
@@ -726,6 +750,9 @@ Once connected, you can use these tools through natural language in your AI assi
 "Get testing resource utilization by platform and time period"
 "Show me milestone testing progress for sprint planning"
 "Get comprehensive launch analysis for capacity planning"
+"Find test cases with title containing 'performance' to plan performance testing"
+"Get automation priorities to allocate automation resources effectively"
+"Get test cases from suite 491 created in last month to plan review sessions"
 ```
 
 #### Executive Reporting
