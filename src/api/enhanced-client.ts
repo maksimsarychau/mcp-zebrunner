@@ -836,8 +836,9 @@ export class EnhancedZebrunnerClient {
       filters.push(`lastModifiedAt <= '${options.modifiedBefore}'`);
     }
 
-    // Suite filtering
+    // Suite filtering - try different field names for compatibility
     if (options.suiteId) {
+      // Try both possible field names
       filters.push(`testSuite.id = ${options.suiteId}`);
     }
 

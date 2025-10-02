@@ -383,6 +383,12 @@ Once connected, you can use these tools through natural language in your AI assi
 | `get_test_coverage_by_test_case_steps_by_key` | Analyze implementation coverage | `"Analyze coverage for MCP-123 against this code: [paste code]"` | Developers, SDETs |
 | `get_enhanced_test_coverage_with_rules` | Rules-based coverage analysis | `"Enhanced coverage analysis for MCP-123 with framework detection"` | SDETs, Leads |
 
+#### **Duplicate Analysis**
+| Tool | Description | Example Usage | Best For |
+|------|-------------|---------------|----------|
+| `analyze_test_cases_duplicates` | Find and group similar test cases by step similarity | `"Analyze suite 12345 for duplicates with 80% similarity threshold"` | QA Managers, SDETs |
+| `analyze_test_cases_duplicates_semantic` | Advanced semantic analysis with LLM-powered step clustering | `"Semantic analysis of suite 12345 with step clustering and medoid selection"` | Senior QA, Test Architects |
+
 ### 🧪 Test Code Generation & Validation
 
 #### **AI-Powered Tools**
@@ -444,6 +450,27 @@ Once connected, you can use these tools through natural language in your AI assi
 
 # Review recent launches
 "Get all launches for project MCP from last 3 days"
+```
+
+### **🔍 Test Suite Optimization**
+```bash
+# Basic duplicate analysis
+"Analyze suite 12345 for duplicates with 80% similarity threshold"
+
+# Advanced semantic analysis with step clustering
+"Semantic analysis of suite 12345 with 85% step clustering and medoid selection"
+
+# Analyze specific test cases for duplicates
+"Analyze test cases MCP-123, MCP-124, MCP-125 for duplicates"
+
+# Project-wide duplicate analysis (use with caution - large datasets)
+"Analyze project MCP for test case duplicates with 85% similarity"
+
+# Get detailed similarity matrix with pattern types
+"Analyze suite 12345 for duplicates with similarity matrix included"
+
+# Two-phase clustering with semantic insights
+"Semantic duplicate analysis with step clustering threshold 90% and insights enabled"
 ```
 
 ### **📊 Weekly Management Reports**
