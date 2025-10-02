@@ -108,24 +108,26 @@ If you see ✅ Health check completed → you’re ready.
 ## 7. Connect to Claude Desktop application 
 
 🖥️ Install Claude Desktop
-	1.	Go to the official Anthropic download page:
+1.	Go to the official Anthropic download page:
 👉 https://claude.ai/download
-	2.	Choose your system:
-	•	macOS → click Download for Mac
-	•	Windows → click Download for Windows
-	3.	Once downloaded:
-	•	On Mac, open the .dmg file and drag Claude.app into your Applications folder.
-	•	On Windows, run the .exe installer and follow the prompts.
-	4.	Open the Claude app and sign in with your Anthropic account (the same one you use on the web).
-
-⸻
+2.	Choose your system:
+   - macOS → click Download for Mac
+   - Windows → click Download for Windows
+3.	Once downloaded:
+  - On Mac, open the .dmg file and drag Claude.app into your Applications folder.
+  - On Windows, run the .exe installer and follow the prompts.
+4.	Open the Claude app and sign in with your Anthropic account (the same one you use on the web).
 
 ⚡ Tip: After install, you can link your MCP server (your Zebrunner MCP) in Claude’s Settings → MCP Servers by entering the path to your server executable.
-⸻
 
-Claude Desktop reads MCP servers from a JSON config file you can edit from Settings → Developer → Edit Config, which opens  folder for `claude_desktop_config.json`. Paths:
+
+Claude Desktop reads MCP servers from a JSON config file you can edit from Settings → Developer → Edit Config, which opens  folder for `claude_desktop_config.json`. 
+Paths:
+
 	•	macOS: ~/Library/Application Support/Claude/claude_desktop_config.json
+
 	•	Windows: %APPDATA%\Claude\claude_desktop_config.json
+
 (These are the standard locations described in official MCP connection guides.)
 
 1. Open Claude Desktop → **Settings → Developer → Edit Config**.
