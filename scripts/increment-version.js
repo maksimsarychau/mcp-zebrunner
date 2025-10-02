@@ -103,6 +103,13 @@ function generateChangelogEntry() {
       f.file.includes('clickable-links') || 
       (f.analysis && /clickable|link|url|href/i.test(f.file))
     );
+    const hasDocumentationChanges = fileAnalyses.some(f => 
+      f.file.endsWith('.md') && f.status.includes('?') && 
+      (f.file.includes('GUIDE') || f.file.includes('INSTALL') || f.file.includes('DOC'))
+    );
+    const hasReadmeUpdates = fileAnalyses.some(f => 
+      f.file === 'README.md' && f.status.includes('M')
+    );
     const hasDuplicateAnalyzer = fileAnalyses.some(f => 
       f.file.includes('duplicate-analyzer') || (f.analysis && f.analysis.hasDuplicateLogic)
     );
@@ -110,7 +117,7 @@ function generateChangelogEntry() {
       f.file.includes('semantic') || (f.analysis && f.analysis.hasSemanticAnalysis)
     );
     const hasNewUtilities = fileAnalyses.some(f => 
-      f.file.includes('utils/') && f.status.includes('?')
+      f.file.includes('utils/') && f.status.includes('?') && !f.file.endsWith('.md')
     );
     const hasApiEnhancements = fileAnalyses.some(f => 
       (f.file.includes('api/') || f.file.includes('client')) && f.analysis && f.analysis.hasNewFunctions
@@ -131,6 +138,12 @@ function generateChangelogEntry() {
     // Determine primary feature - prioritize new files/features
     if (hasClickableLinks) {
       primaryFeature = 'Added clickable links functionality for enhanced user experience';
+    } else if (hasDocumentationChanges && hasReadmeUpdates) {
+      primaryFeature = 'Enhanced documentation and user guides with improved navigation';
+    } else if (hasDocumentationChanges) {
+      primaryFeature = 'Added comprehensive installation and setup documentation';
+    } else if (hasReadmeUpdates) {
+      primaryFeature = 'Updated documentation and user guides';
     } else if (hasDuplicateAnalyzer && hasSemanticFeatures) {
       primaryFeature = 'Advanced duplicate test case detection with semantic analysis';
     } else if (hasDuplicateAnalyzer) {
@@ -183,10 +196,17 @@ function generateChangelogEntry() {
       if (newCount > 0) {
         // Look at specific new files to generate better descriptions
         const newFileNames = newFiles.map(f => f.file);
-        if (newFileNames.some(name => name.includes('guide') || name.includes('summary'))) {
+        const docFiles = newFileNames.filter(name => name.endsWith('.md'));
+        const codeFiles = newFileNames.filter(name => !name.endsWith('.md'));
+        
+        if (docFiles.length > 0 && codeFiles.length === 0) {
+          finalDescription = `Enhanced documentation and user guides`;
+        } else if (newFileNames.some(name => name.includes('guide') || name.includes('summary'))) {
           finalDescription = `Added documentation and implementation guides`;
-        } else {
+        } else if (codeFiles.length > 0) {
           finalDescription = `Added ${newCount} new files with enhanced functionality`;
+        } else {
+          finalDescription = `Added ${newCount} new files with improvements`;
         }
       } else if (modifiedCount > 0) {
         finalDescription = `Updated ${modifiedCount} files with bug fixes and improvements`;
