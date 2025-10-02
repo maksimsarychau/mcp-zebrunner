@@ -194,7 +194,7 @@ Choose one of these methods:
 
 #### Option A: Clone from repository (recommended)
 ```bash
-git clone <repository-url>
+git clone https://github.com/maksimsarychau/mcp-zebrunner.git
 cd mcp-zebrunner
 ```
 
@@ -243,6 +243,38 @@ npm run build
 npm run test:health
 ```
 If you see "✅ Health check completed", you're ready to go!
+
+## 🔄 Updating to New Version
+
+### Check current version
+```bash
+# Check your current version
+npm run version
+# or manually check package.json
+cat package.json | grep '"version"'
+```
+
+### Update steps
+```bash
+# 1. Pull latest changes from master branch
+git pull origin master
+
+# 2. Install any new dependencies
+npm install
+
+# 3. Rebuild the project
+npm run build
+
+# 4. Test your connection (requires valid .env file)
+npm run test:health
+```
+
+**Important Notes:**
+- ✅ **Your `.env` file must be properly configured** for the health check to work
+- ✅ **Restart Claude Desktop/Code** after updating to reload the MCP server
+- ✅ **Check release notes** for any breaking changes before updating
+
+If the health check fails, verify your `.env` configuration and Zebrunner credentials.
 
 [⬆️ Back to top](#-table-of-contents)
 
