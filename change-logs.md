@@ -1,5 +1,9 @@
 # Change Logs
 
+## v4.6.178
+- Updated INSTALL-GUIDE.md with the more detailed steps
+
+
 ## v4.6.177
 - Added comprehensive installation and setup documentation
 
