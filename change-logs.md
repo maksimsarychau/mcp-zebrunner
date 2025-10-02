@@ -1,5 +1,8 @@
 # Change Logs
 
+## v4.7.184
+- Added new helth test and potential LLM testing strategy document
+
 ## v4.7.182
 - Added advanced test case search tools: title search, multi-criteria filtering, and automation priorities with improved error handling, enhanced async operations, better logging
 
