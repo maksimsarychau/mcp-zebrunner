@@ -4,6 +4,8 @@
 
 A **Model Context Protocol (MCP)** server that integrates with **Zebrunner Test Case Management** to help QA teams manage test cases, test suites, and test execution data through AI assistants like Claude.
 
+> 📖 **Need help with installation?** Check out our [**Step-by-Step Install Guide**](INSTALL-GUIDE.md) for detailed setup instructions.
+
 ## 📑 Table of Contents
 
 1. [🎯 What is this tool?](#-what-is-this-tool)
@@ -188,6 +190,8 @@ If you see version numbers, you're ready to go!
 [⬆️ Back to top](#-table-of-contents)
 
 ## 🚀 Quick Start Guide
+
+> 💡 **Want more detailed instructions?** Check out our [**More Detailed Step-by-step Install Guide**](INSTALL-GUIDE.md) with troubleshooting tips and platform-specific instructions.
 
 ### Step 1: Get the code
 Choose one of these methods:
