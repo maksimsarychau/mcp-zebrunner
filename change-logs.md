@@ -1,6 +1,6 @@
 # Change Logs
 
-## v4.7.181
+## v4.7.182
 - Added advanced test case search tools: title search, multi-criteria filtering, and automation priorities with improved error handling, enhanced async operations, better logging
 
 

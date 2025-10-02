@@ -1456,7 +1456,9 @@ async function main() {
         const clickableLinkConfig = getClickableLinkConfig(include_clickable_links, ZEBRUNNER_URL);
         
         // Build RQL filter for title search using partial match
-        const filter = `title~="${title.replace(/"/g, '\\"')}"`;
+        // Properly escape backslashes first, then quotes to prevent injection
+        const escapedTitle = title.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        const filter = `title~="${escapedTitle}"`;
         
         if (get_all) {
           // Get all pages

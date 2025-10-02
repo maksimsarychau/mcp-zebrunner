@@ -233,7 +233,14 @@ describe('New Test Case Tools Unit Tests', () => {
       // Test with quotes in title (should be escaped)
       const titleWithQuotes = 'Test "quoted" title';
       const expectedEscapedFilter = `title~="Test \\"quoted\\" title"`;
-      assert.strictEqual(`title~="${titleWithQuotes.replace(/"/g, '\\"')}"`, expectedEscapedFilter);
+      const escapedTitle = titleWithQuotes.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      assert.strictEqual(`title~="${escapedTitle}"`, expectedEscapedFilter);
+      
+      // Test with backslashes and quotes (should escape backslashes first, then quotes)
+      const titleWithBackslashes = 'Test\\Path "quoted"';
+      const expectedBackslashFilter = `title~="Test\\\\Path \\"quoted\\""`;
+      const escapedBackslashTitle = titleWithBackslashes.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      assert.strictEqual(`title~="${escapedBackslashTitle}"`, expectedBackslashFilter);
     });
     
     it('should handle pagination parameters correctly', () => {
