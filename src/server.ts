@@ -3959,6 +3959,713 @@ async function main() {
     }
   );
 
+  // ========== DUPLICATE ANALYSIS TOOL ==========
+  
+  server.tool(
+    "analyze_test_cases_duplicates",
+    "🔍 Analyze test cases for duplicates and group similar ones by step similarity (80-90%)",
+    {
+      project_key: z.string().min(1).describe("Project key (e.g., 'ANDROID', 'IOS')"),
+      suite_id: z.number().optional().describe("Optional: Analyze specific test suite ID"),
+      test_case_keys: z.array(z.string()).optional().describe("Optional: Analyze specific test case keys instead of suite"),
+      similarity_threshold: z.number().min(50).max(100).default(80).describe("Similarity threshold percentage (50-100, default: 80)"),
+      format: z.enum(['dto', 'json', 'string', 'markdown']).default('markdown').describe("Output format"),
+      include_similarity_matrix: z.boolean().default(false).describe("Include detailed similarity matrix in output")
+    },
+    async (args) => {
+      try {
+        const { project_key, suite_id, test_case_keys, similarity_threshold, format, include_similarity_matrix } = args;
+        
+        debugLog("analyze_test_cases_duplicates called", { args });
+        
+        // Import the analyzer
+        const { TestCaseDuplicateAnalyzer } = await import('./utils/duplicate-analyzer.js');
+        const analyzer = new TestCaseDuplicateAnalyzer(similarity_threshold);
+        
+        let testCases: ZebrunnerTestCase[] = [];
+        
+        // Get test cases either from suite or specific keys
+        if (test_case_keys && test_case_keys.length > 0) {
+          // Get specific test cases by keys
+          debugLog("Getting test cases by keys", { keys: test_case_keys });
+          
+          for (const caseKey of test_case_keys) {
+            try {
+              const testCase = await client.getTestCaseByKey(project_key, caseKey, {
+                includeSuiteHierarchy: false
+              });
+              if (testCase) {
+                testCases.push(testCase);
+              }
+            } catch (error) {
+              debugLog(`Failed to get test case ${caseKey}`, { error });
+            }
+          }
+        } else if (suite_id) {
+          // Get test cases from specific suite (including child suites for root suites)
+          debugLog("Getting test cases from suite using hierarchy-aware method", { suite_id });
+          
+          try {
+            // Use getAllTCMTestCasesBySuiteId which handles root suite hierarchies
+            const shortTestCases = await client.getAllTCMTestCasesBySuiteId(project_key, suite_id, true); // basedOnRootSuites = true
+            
+            if (shortTestCases && shortTestCases.length > 0) {
+              // Fetch detailed test cases with steps
+              const detailedTestCases: ZebrunnerTestCase[] = [];
+              for (const testCase of shortTestCases) {
+                try {
+                  const detailed = await client.getTestCaseByKey(project_key, testCase.key || `tc-${testCase.id}`, {
+                    includeSuiteHierarchy: false
+                  });
+                  if (detailed) {
+                    detailedTestCases.push(detailed);
+                  }
+                } catch (error) {
+                  debugLog(`Failed to get detailed test case ${testCase.key}`, { error });
+                }
+              }
+              testCases = detailedTestCases;
+            }
+          } catch (error) {
+            debugLog("Failed to get test cases from suite", { error });
+            return {
+              content: [{
+                type: "text" as const,
+                text: `❌ Error getting test cases from suite ${suite_id}: ${error}`
+              }]
+            };
+          }
+        } else {
+          // Get all test cases from project
+          debugLog("Getting all test cases from project", { project_key });
+          
+          try {
+            const response = await client.getTestCases(project_key, {
+              page: 0,
+              size: 1000 // Large size to get many cases
+            });
+            
+            if (response?.items) {
+              // Fetch detailed test cases with steps (limit to first 50 for performance)
+              const detailedTestCases: ZebrunnerTestCase[] = [];
+              const limitedItems = response.items.slice(0, 50); // Limit for performance
+              
+              for (const testCase of limitedItems) {
+                try {
+                  const detailed = await client.getTestCaseByKey(project_key, testCase.key || `tc-${testCase.id}`, {
+                    includeSuiteHierarchy: false
+                  });
+                  if (detailed) {
+                    detailedTestCases.push(detailed);
+                  }
+                } catch (error) {
+                  debugLog(`Failed to get detailed test case ${testCase.key}`, { error });
+                }
+              }
+              testCases = detailedTestCases;
+            }
+          } catch (error) {
+            debugLog("Failed to get test cases from project", { error });
+            return {
+              content: [{
+                type: "text" as const,
+                text: `❌ Error getting test cases from project ${project_key}: ${error}`
+              }]
+            };
+          }
+        }
+        
+        if (testCases.length === 0) {
+          return {
+            content: [{
+              type: "text" as const,
+              text: "❌ No test cases found to analyze"
+            }]
+          };
+        }
+        
+        if (testCases.length < 2) {
+          return {
+            content: [{
+              type: "text" as const,
+              text: "❌ Need at least 2 test cases to analyze for duplicates"
+            }]
+          };
+        }
+        
+        debugLog(`Analyzing ${testCases.length} test cases for duplicates`);
+        
+        // Perform duplicate analysis
+        const result = analyzer.analyzeDuplicates(testCases, project_key, suite_id);
+        
+        debugLog("Duplicate analysis completed", { 
+          clustersFound: result.clustersFound,
+          duplicateTestCases: result.potentialSavings.duplicateTestCases
+        });
+        
+        // Format output
+        if (format === 'dto') {
+          return {
+            content: [{
+              type: "text" as const,
+              text: JSON.stringify(result, null, 2)
+            }]
+          };
+        }
+        
+        if (format === 'json') {
+          return {
+            content: [{
+              type: "text" as const,
+              text: JSON.stringify(result, null, 2)
+            }]
+          };
+        }
+        
+        if (format === 'string') {
+          let output = `Duplicate Analysis Results\n`;
+          output += `Project: ${result.projectKey}\n`;
+          if (result.suiteId) output += `Suite ID: ${result.suiteId}\n`;
+          output += `Total Test Cases: ${result.totalTestCases}\n`;
+          output += `Clusters Found: ${result.clustersFound}\n`;
+          output += `Potential Savings: ${result.potentialSavings.duplicateTestCases} duplicates (${result.potentialSavings.estimatedTimeReduction})\n\n`;
+          
+          result.clusters.forEach((cluster: any, index: number) => {
+            output += `Cluster ${index + 1} (${cluster.averageSimilarity}% similarity):\n`;
+            cluster.testCases.forEach((tc: any) => {
+              output += `  - ${tc.key}: ${tc.title} [${tc.automationState}]\n`;
+            });
+            output += `  Shared Logic: ${cluster.sharedLogicSummary}\n`;
+            output += `  Recommended Base: ${cluster.recommendedBase.testCaseKey} (${cluster.recommendedBase.reason})\n`;
+            output += `  Strategy: ${cluster.mergingStrategy}\n\n`;
+          });
+          
+          return {
+            content: [{
+              type: "text" as const,
+              text: output
+            }]
+          };
+        }
+        
+        // Markdown format (default)
+        let markdown = `# 🔍 Test Case Duplicate Analysis\n\n`;
+        markdown += `**Project:** ${result.projectKey}\n`;
+        if (result.suiteId) markdown += `**Suite ID:** ${result.suiteId}\n`;
+        markdown += `**Total Test Cases Analyzed:** ${result.totalTestCases}\n`;
+        markdown += `**Similarity Threshold:** ${similarity_threshold}%\n\n`;
+        
+        markdown += `## 📊 Summary\n\n`;
+        markdown += `- **Clusters Found:** ${result.clustersFound}\n`;
+        markdown += `- **Duplicate Test Cases:** ${result.potentialSavings.duplicateTestCases}\n`;
+        markdown += `- **Estimated Time Reduction:** ${result.potentialSavings.estimatedTimeReduction}\n\n`;
+        
+        if (result.clustersFound === 0) {
+          markdown += `✅ **No duplicates found** above ${similarity_threshold}% similarity threshold.\n\n`;
+          markdown += `Consider lowering the threshold or checking if test cases have detailed steps.\n`;
+        } else {
+          markdown += `## 🗂️ Duplicate Clusters\n\n`;
+          
+          result.clusters.forEach((cluster: any, index: number) => {
+            markdown += `### Cluster ${index + 1}: ${cluster.averageSimilarity}% Average Similarity\n\n`;
+            
+            // Test cases table
+            markdown += `| Test Case | Title | Automation | Steps |\n`;
+            markdown += `|-----------|-------|------------|-------|\n`;
+            cluster.testCases.forEach((tc: any) => {
+              markdown += `| **${tc.key}** | ${tc.title} | ${tc.automationState} | ${tc.stepCount} |\n`;
+            });
+            markdown += `\n`;
+            
+            // Automation mix
+            const { manual, automated, mixed } = cluster.automationMix;
+            markdown += `**Automation Mix:** `;
+            if (automated > 0) markdown += `${automated} Automated `;
+            if (manual > 0) markdown += `${manual} Manual `;
+            if (mixed > 0) markdown += `${mixed} Mixed `;
+            markdown += `\n\n`;
+            
+            // Shared logic
+            if (cluster.sharedLogicSummary) {
+              markdown += `**Shared Steps:**\n`;
+              const steps = cluster.sharedLogicSummary.split('; ');
+              steps.slice(0, 3).forEach((step: string) => {
+                markdown += `- ${step}\n`;
+              });
+              if (steps.length > 3) {
+                markdown += `- *(${steps.length - 3} more similar steps...)*\n`;
+              }
+              markdown += `\n`;
+            }
+            
+            // Recommendations
+            markdown += `**💡 Recommendations:**\n`;
+            markdown += `- **Base Test Case:** ${cluster.recommendedBase.testCaseKey}\n`;
+            markdown += `- **Reason:** ${cluster.recommendedBase.reason}\n`;
+            markdown += `- **Strategy:** ${cluster.mergingStrategy}\n\n`;
+            
+            markdown += `---\n\n`;
+          });
+          
+          // Include similarity matrix if requested
+          if (include_similarity_matrix && result.similarityMatrix && result.similarityMatrix.length > 0) {
+            markdown += `## 📈 Similarity Matrix\n\n`;
+            markdown += `| Test Case 1 | Test Case 2 | Similarity | Pattern Type | Shared Steps | Summary |\n`;
+            markdown += `|-------------|-------------|------------|--------------|--------------|----------|\n`;
+            
+            result.similarityMatrix.slice(0, 20).forEach((sim: any) => { // Limit to top 20
+              const summary = sim.sharedStepsSummary.slice(0, 2).join(', ');
+              const patternType = sim.patternType || 'other';
+              const patternEmoji = patternType === 'user_type' ? '👤' : 
+                                 patternType === 'theme' ? '🎨' :
+                                 patternType === 'entry_point' ? '🚪' :
+                                 patternType === 'component' ? '🧩' :
+                                 patternType === 'permission' ? '🔐' : '❓';
+              markdown += `| ${sim.testCase1Key} | ${sim.testCase2Key} | ${sim.similarityPercentage}% | ${patternEmoji} ${patternType} | ${sim.sharedSteps}/${Math.max(sim.totalSteps1, sim.totalSteps2)} | ${summary} |\n`;
+            });
+            
+            if (result.similarityMatrix.length > 20) {
+              markdown += `\n*Showing top 20 similarities out of ${result.similarityMatrix.length} total pairs*\n`;
+            }
+            markdown += `\n`;
+          }
+        }
+        
+        markdown += `## 🎯 Next Steps\n\n`;
+        if (result.clustersFound > 0) {
+          markdown += `1. **Review each cluster** to confirm similarity assessment\n`;
+          markdown += `2. **Choose base test cases** from recommendations\n`;
+          markdown += `3. **Implement parameterization** for automated tests\n`;
+          markdown += `4. **Retire duplicate test cases** after validation\n`;
+          markdown += `5. **Update test execution plans** to reflect changes\n\n`;
+        } else {
+          markdown += `1. **Consider lowering similarity threshold** (try 60-70%)\n`;
+          markdown += `2. **Ensure test cases have detailed steps** for better analysis\n`;
+          markdown += `3. **Review test case titles** for potential duplicates\n\n`;
+        }
+        
+        markdown += `*Analysis completed with ${similarity_threshold}% similarity threshold*\n`;
+        
+        return {
+          content: [{
+            type: "text" as const,
+            text: markdown
+          }]
+        };
+        
+      } catch (error: any) {
+        debugLog("Error in analyze_test_cases_duplicates", { error: error.message, args });
+        return { 
+          content: [{ 
+            type: "text" as const, 
+            text: `❌ Error analyzing test case duplicates: ${error?.message || error}` 
+          }] 
+        };
+      }
+    }
+  );
+
+  // ========== SEMANTIC DUPLICATE ANALYSIS TOOL ==========
+  
+  server.tool(
+    "analyze_test_cases_duplicates_semantic",
+    "🧠 Advanced semantic duplicate analysis using LLM-powered step clustering and two-phase analysis",
+    {
+      project_key: z.string().min(1).describe("Project key (e.g., 'ANDROID', 'IOS')"),
+      suite_id: z.number().optional().describe("Optional: Analyze specific test suite ID"),
+      test_case_keys: z.array(z.string()).optional().describe("Optional: Analyze specific test case keys instead of suite"),
+      similarity_threshold: z.number().min(50).max(100).default(80).describe("Test case similarity threshold percentage (50-100, default: 80)"),
+      step_clustering_threshold: z.number().min(50).max(100).default(85).describe("Step clustering threshold percentage (50-100, default: 85)"),
+      analysis_mode: z.enum(['basic', 'semantic', 'hybrid']).default('hybrid').describe("Analysis mode: basic (fast), semantic (LLM-powered), hybrid (both)"),
+      use_step_clustering: z.boolean().default(true).describe("Enable two-phase clustering (step clusters first, then test case clusters)"),
+      use_medoid_selection: z.boolean().default(true).describe("Use medoid-based representative selection instead of heuristic"),
+      include_semantic_insights: z.boolean().default(true).describe("Generate semantic insights about workflows and patterns"),
+      format: z.enum(['dto', 'json', 'string', 'markdown']).default('markdown').describe("Output format"),
+      include_similarity_matrix: z.boolean().default(false).describe("Include detailed similarity matrix in output")
+    },
+    async (args) => {
+      try {
+        const { 
+          project_key, 
+          suite_id, 
+          test_case_keys, 
+          similarity_threshold,
+          step_clustering_threshold,
+          analysis_mode,
+          use_step_clustering,
+          use_medoid_selection,
+          include_semantic_insights,
+          format, 
+          include_similarity_matrix 
+        } = args;
+        
+        debugLog("analyze_test_cases_duplicates_semantic called", { args });
+        
+        // Import the semantic analyzer
+        const { SemanticDuplicateAnalyzer } = await import('./utils/semantic-duplicate-analyzer.js');
+        
+        const options = {
+          stepClusteringThreshold: step_clustering_threshold / 100,
+          testCaseClusteringThreshold: similarity_threshold / 100,
+          useStepClustering: use_step_clustering,
+          useMedoidSelection: use_medoid_selection,
+          includeSemanticPatterns: include_semantic_insights
+        };
+        
+        const analyzer = new SemanticDuplicateAnalyzer(similarity_threshold, options);
+        
+        let testCases: ZebrunnerTestCase[] = [];
+        
+        // Get test cases (same logic as basic analyzer)
+        if (test_case_keys && test_case_keys.length > 0) {
+          debugLog("Getting test cases by keys", { keys: test_case_keys });
+          
+          for (const caseKey of test_case_keys) {
+            try {
+              const testCase = await client.getTestCaseByKey(project_key, caseKey, {
+                includeSuiteHierarchy: false
+              });
+              if (testCase) {
+                testCases.push(testCase);
+              }
+            } catch (error) {
+              debugLog(`Failed to get test case ${caseKey}`, { error });
+            }
+          }
+        } else if (suite_id) {
+          // Get test cases from specific suite (including child suites for root suites)
+          debugLog("Getting test cases from suite using hierarchy-aware method", { suite_id });
+          
+          try {
+            // Use getAllTCMTestCasesBySuiteId which handles root suite hierarchies
+            const shortTestCases = await client.getAllTCMTestCasesBySuiteId(project_key, suite_id, true); // basedOnRootSuites = true
+            
+            if (shortTestCases && shortTestCases.length > 0) {
+              // Fetch detailed test cases with steps
+              const detailedTestCases: ZebrunnerTestCase[] = [];
+              for (const testCase of shortTestCases) {
+                try {
+                  const detailed = await client.getTestCaseByKey(project_key, testCase.key || `tc-${testCase.id}`, {
+                    includeSuiteHierarchy: false
+                  });
+                  if (detailed) {
+                    detailedTestCases.push(detailed);
+                  }
+                } catch (error) {
+                  debugLog(`Failed to get detailed test case ${testCase.key}`, { error });
+                }
+              }
+              testCases = detailedTestCases;
+            }
+          } catch (error) {
+            debugLog("Failed to get test cases from suite", { error });
+            return {
+              content: [{
+                type: "text" as const,
+                text: `❌ Error getting test cases from suite ${suite_id}: ${error}`
+              }]
+            };
+          }
+        } else {
+          debugLog("Getting all test cases from project", { project_key });
+          
+          try {
+            const response = await client.getTestCases(project_key, {
+              page: 0,
+              size: 1000
+            });
+            
+            if (response?.items) {
+              const detailedTestCases: ZebrunnerTestCase[] = [];
+              const limitedItems = response.items.slice(0, 50); // Limit for performance
+              
+              for (const testCase of limitedItems) {
+                try {
+                  const detailed = await client.getTestCaseByKey(project_key, testCase.key || `tc-${testCase.id}`, {
+                    includeSuiteHierarchy: false
+                  });
+                  if (detailed) {
+                    detailedTestCases.push(detailed);
+                  }
+                } catch (error) {
+                  debugLog(`Failed to get detailed test case ${testCase.key}`, { error });
+                }
+              }
+              testCases = detailedTestCases;
+            }
+          } catch (error) {
+            debugLog("Failed to get test cases from project", { error });
+            return {
+              content: [{
+                type: "text" as const,
+                text: `❌ Error getting test cases from project ${project_key}: ${error}`
+              }]
+            };
+          }
+        }
+        
+        if (testCases.length === 0) {
+          return {
+            content: [{
+              type: "text" as const,
+              text: "❌ No test cases found to analyze"
+            }]
+          };
+        }
+        
+        if (testCases.length < 2) {
+          return {
+            content: [{
+              type: "text" as const,
+              text: "❌ Need at least 2 test cases to analyze for duplicates"
+            }]
+          };
+        }
+        
+        debugLog(`Analyzing ${testCases.length} test cases with semantic analysis`);
+        
+        // Create LLM analysis function if semantic mode is enabled
+        let llmAnalysisFunction: ((prompt: string) => Promise<string>) | undefined;
+        
+        if (analysis_mode === 'semantic' || analysis_mode === 'hybrid') {
+          // Note: In a real MCP environment, this would be provided by the host (Claude)
+          // For now, we'll use a placeholder that indicates LLM analysis is requested
+          llmAnalysisFunction = async (prompt: string) => {
+            // This is a placeholder - in actual use, the MCP host (Claude) would process this
+            throw new Error("LLM analysis requires host support - please use this tool in Claude Desktop/Code for full semantic analysis");
+          };
+        }
+        
+        // Perform semantic analysis
+        const result = await analyzer.analyzeSemanticDuplicates(
+          testCases, 
+          project_key, 
+          suite_id,
+          llmAnalysisFunction
+        );
+        
+        debugLog("Semantic analysis completed", { 
+          clustersFound: result.clustersFound,
+          stepClusters: result.stepClusters?.length || 0,
+          analysisMode: result.analysisMode
+        });
+        
+        // Format output
+        if (format === 'dto' || format === 'json') {
+          return {
+            content: [{
+              type: "text" as const,
+              text: JSON.stringify(result, null, 2)
+            }]
+          };
+        }
+        
+        if (format === 'string') {
+          let output = `Semantic Duplicate Analysis Results\n`;
+          output += `Project: ${result.projectKey}\n`;
+          if (result.suiteId) output += `Suite ID: ${result.suiteId}\n`;
+          output += `Total Test Cases: ${result.totalTestCases}\n`;
+          output += `Analysis Mode: ${result.analysisMode}\n`;
+          output += `Step Clusters: ${result.stepClusters?.length || 0}\n`;
+          output += `Test Case Clusters: ${result.clustersFound}\n`;
+          output += `Potential Savings: ${result.potentialSavings.duplicateTestCases} duplicates (${result.potentialSavings.estimatedTimeReduction})\n\n`;
+          
+          if (result.semanticClusters) {
+            result.semanticClusters.forEach((cluster: any, index: number) => {
+              output += `Cluster ${index + 1} (${cluster.averageSimilarity}% similarity, ${cluster.clusterType}):\n`;
+              cluster.testCases.forEach((tc: any) => {
+                output += `  - ${tc.key}: ${tc.title} [${tc.automationState}]\n`;
+              });
+              output += `  Medoid: ${cluster.medoidTestCase}\n`;
+              output += `  Strategy: ${cluster.mergingStrategy}\n\n`;
+            });
+          }
+          
+          return {
+            content: [{
+              type: "text" as const,
+              text: output
+            }]
+          };
+        }
+        
+        // Markdown format (default)
+        let markdown = `# 🧠 Semantic Test Case Duplicate Analysis\n\n`;
+        markdown += `**Project:** ${result.projectKey}\n`;
+        if (result.suiteId) markdown += `**Suite ID:** ${result.suiteId}\n`;
+        markdown += `**Total Test Cases Analyzed:** ${result.totalTestCases}\n`;
+        markdown += `**Analysis Mode:** ${result.analysisMode}\n`;
+        markdown += `**Step Clustering Threshold:** ${step_clustering_threshold}%\n`;
+        markdown += `**Test Case Similarity Threshold:** ${similarity_threshold}%\n\n`;
+        
+        markdown += `## 📊 Analysis Summary\n\n`;
+        markdown += `- **Step Clusters Created:** ${result.stepClusters?.length || 0}\n`;
+        markdown += `- **Test Case Clusters Found:** ${result.clustersFound}\n`;
+        markdown += `- **Duplicate Test Cases:** ${result.potentialSavings.duplicateTestCases}\n`;
+        markdown += `- **Estimated Time Reduction:** ${result.potentialSavings.estimatedTimeReduction}\n\n`;
+        
+        // Step clusters summary
+        if (result.stepClusters && result.stepClusters.length > 0) {
+          markdown += `## 🗂️ Step Clusters (Top 10)\n\n`;
+          markdown += `| Cluster | Representative Step | Frequency | Summary |\n`;
+          markdown += `|---------|-------------------|-----------|----------|\n`;
+          
+          result.stepClusters.slice(0, 10).forEach((cluster: any) => {
+            markdown += `| ${cluster.id} | ${cluster.representativeStep} | ${cluster.frequency} | ${cluster.semanticSummary} |\n`;
+          });
+          markdown += `\n`;
+        }
+        
+        if (result.clustersFound === 0) {
+          markdown += `✅ **No duplicates found** above ${similarity_threshold}% similarity threshold.\n\n`;
+          markdown += `Consider lowering the threshold or checking if test cases have detailed steps.\n`;
+        } else {
+          markdown += `## 🧩 Semantic Test Case Clusters\n\n`;
+          
+          const clusters = result.semanticClusters || result.clusters;
+          clusters.forEach((cluster: any, index: number) => {
+            const clusterType = cluster.clusterType ? ` (${cluster.clusterType})` : '';
+            markdown += `### Cluster ${index + 1}: ${cluster.averageSimilarity}% Similarity${clusterType}\n\n`;
+            
+            // Test cases table
+            markdown += `| Test Case | Title | Automation | Steps |\n`;
+            markdown += `|-----------|-------|------------|-------|\n`;
+            cluster.testCases.forEach((tc: any) => {
+              const isMediad = cluster.medoidTestCase === tc.key ? ' 🎯' : '';
+              markdown += `| **${tc.key}**${isMediad} | ${tc.title} | ${tc.automationState} | ${tc.stepCount} |\n`;
+            });
+            markdown += `\n`;
+            
+            // Automation mix and semantic info
+            const { manual, automated, mixed } = cluster.automationMix;
+            markdown += `**Automation Mix:** `;
+            if (automated > 0) markdown += `${automated} Automated `;
+            if (manual > 0) markdown += `${manual} Manual `;
+            if (mixed > 0) markdown += `${mixed} Mixed `;
+            markdown += `\n\n`;
+            
+            if (cluster.semanticCoherence) {
+              markdown += `**Semantic Coherence:** ${cluster.semanticCoherence}%\n`;
+            }
+            
+            // Shared logic
+            if (cluster.sharedLogicSummary) {
+              markdown += `**Shared Steps:**\n`;
+              const steps = cluster.sharedLogicSummary.split('; ');
+              steps.slice(0, 3).forEach((step: string) => {
+                markdown += `- ${step}\n`;
+              });
+              if (steps.length > 3) {
+                markdown += `- *(${steps.length - 3} more similar steps...)*\n`;
+              }
+              markdown += `\n`;
+            }
+            
+            // Recommendations
+            markdown += `**💡 Recommendations:**\n`;
+            markdown += `- **Representative Test Case:** ${cluster.medoidTestCase || cluster.recommendedBase.testCaseKey} 🎯\n`;
+            if (cluster.recommendedBase?.reason) {
+              markdown += `- **Selection Reason:** ${cluster.recommendedBase.reason}\n`;
+            }
+            markdown += `- **Consolidation Strategy:** ${cluster.mergingStrategy}\n\n`;
+            
+            markdown += `---\n\n`;
+          });
+        }
+        
+        // Semantic insights
+        if (result.semanticInsights && include_semantic_insights) {
+          markdown += `## 🔍 Semantic Insights\n\n`;
+          
+          if (result.semanticInsights.commonStepPatterns.length > 0) {
+            markdown += `### Common Step Patterns\n`;
+            result.semanticInsights.commonStepPatterns.forEach((pattern: string) => {
+              markdown += `- ${pattern}\n`;
+            });
+            markdown += `\n`;
+          }
+          
+          if (result.semanticInsights.discoveredWorkflows.length > 0) {
+            markdown += `### Discovered Workflows\n`;
+            result.semanticInsights.discoveredWorkflows.forEach((workflow: string) => {
+              markdown += `- ${workflow}\n`;
+            });
+            markdown += `\n`;
+          }
+          
+          if (result.semanticInsights.automationOpportunities.length > 0) {
+            markdown += `### Automation Opportunities\n`;
+            result.semanticInsights.automationOpportunities.forEach((opportunity: string) => {
+              markdown += `- ${opportunity}\n`;
+            });
+            markdown += `\n`;
+          }
+        }
+        
+        // Include similarity matrix if requested
+        if (include_similarity_matrix && result.similarityMatrix && result.similarityMatrix.length > 0) {
+          markdown += `## 📈 Semantic Similarity Matrix\n\n`;
+          markdown += `| Test Case 1 | Test Case 2 | Overall | Step Clusters | Semantic | Pattern Type |\n`;
+          markdown += `|-------------|-------------|---------|---------------|----------|-------------|\n`;
+          
+          result.similarityMatrix.slice(0, 20).forEach((sim: any) => {
+            const patternType = sim.patternType || 'other';
+            const patternEmoji = patternType === 'user_type' ? '👤' : 
+                               patternType === 'theme' ? '🎨' :
+                               patternType === 'entry_point' ? '🚪' :
+                               patternType === 'component' ? '🧩' :
+                               patternType === 'permission' ? '🔐' : '❓';
+            
+            const stepClusterSim = sim.stepClusterOverlap || 'N/A';
+            const semanticConf = sim.semanticConfidence || 'N/A';
+            
+            markdown += `| ${sim.testCase1Key} | ${sim.testCase2Key} | ${sim.similarityPercentage}% | ${stepClusterSim}% | ${semanticConf}% | ${patternEmoji} ${patternType} |\n`;
+          });
+          
+          if (result.similarityMatrix.length > 20) {
+            markdown += `\n*Showing top 20 similarities out of ${result.similarityMatrix.length} total pairs*\n`;
+          }
+          markdown += `\n`;
+        }
+        
+        markdown += `## 🎯 Next Steps\n\n`;
+        if (result.clustersFound > 0) {
+          markdown += `1. **Review semantic clusters** - medoid test cases (🎯) are most representative\n`;
+          markdown += `2. **Implement parameterization** based on discovered patterns\n`;
+          markdown += `3. **Consider automation opportunities** from insights section\n`;
+          markdown += `4. **Validate step clusters** for reusable test components\n`;
+          markdown += `5. **Update test execution plans** to reflect consolidation\n\n`;
+        } else {
+          markdown += `1. **Lower similarity thresholds** for more lenient matching\n`;
+          markdown += `2. **Review step clustering results** for optimization opportunities\n`;
+          markdown += `3. **Check semantic insights** for workflow improvements\n\n`;
+        }
+        
+        if (analysis_mode === 'basic' || result.analysisMode === 'hybrid') {
+          markdown += `💡 **Tip:** For full semantic analysis with LLM-powered insights, use this tool in Claude Desktop/Code.\n\n`;
+        }
+        
+        markdown += `*Semantic analysis completed with ${step_clustering_threshold}% step clustering and ${similarity_threshold}% test case similarity thresholds*\n`;
+        
+        return {
+          content: [{
+            type: "text" as const,
+            text: markdown
+          }]
+        };
+        
+      } catch (error: any) {
+        debugLog("Error in analyze_test_cases_duplicates_semantic", { error: error.message, args });
+        return { 
+          content: [{ 
+            type: "text" as const, 
+            text: `❌ Error in semantic duplicate analysis: ${error?.message || error}` 
+          }] 
+        };
+      }
+    }
+  );
+
   // ========== SERVER STARTUP ==========
 
   const transport = new StdioServerTransport();
