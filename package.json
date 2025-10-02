@@ -1,6 +1,12 @@
 {
   "name": "mcp-zebrunner",
+<<<<<<< HEAD
   "version": "4.3.168",
+||||||| 08bd592
+  "version": "4.2.158",
+=======
+  "version": "4.3.167",
+>>>>>>> f6ac798ee068f691592634c223dd909e366f45e9
   "private": true,
   "type": "module",
   "description": "MCP server (stdio) for Zebrunner TCM API (read-only)",
