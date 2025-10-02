@@ -389,6 +389,12 @@ Once connected, you can use these tools through natural language in your AI assi
 | `analyze_test_cases_duplicates` | Find and group similar test cases by step similarity | `"Analyze suite 12345 for duplicates with 80% similarity threshold"` | QA Managers, SDETs |
 | `analyze_test_cases_duplicates_semantic` | Advanced semantic analysis with LLM-powered step clustering | `"Semantic analysis of suite 12345 with step clustering and medoid selection"` | Senior QA, Test Architects |
 
+**🔗 Clickable Links Feature**: Both duplicate analysis tools support clickable links to Zebrunner web UI:
+- Add `include_clickable_links: true` to make test case keys clickable in markdown output
+- JSON/DTO formats automatically include `webUrl` fields when enabled
+- Links are generated from your `ZEBRUNNER_URL` environment variable
+- Example: `"Analyze suite 17585 for duplicates with clickable links enabled"`
+
 ### 🧪 Test Code Generation & Validation
 
 #### **AI-Powered Tools**
@@ -471,6 +477,9 @@ Once connected, you can use these tools through natural language in your AI assi
 
 # Two-phase clustering with semantic insights
 "Semantic duplicate analysis with step clustering threshold 90% and insights enabled"
+
+# Enable clickable links for easy navigation
+"Analyze suite 17585 for duplicates with clickable links enabled"
 ```
 
 ### **📊 Weekly Management Reports**

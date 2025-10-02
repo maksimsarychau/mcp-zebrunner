@@ -12,6 +12,7 @@ import { FormatProcessor } from "./utils/formatter.js";
 import { HierarchyProcessor } from "./utils/hierarchy.js";
 import { RulesParser } from "./utils/rules-parser.js";
 import { TestGenerator } from "./utils/test-generator.js";
+import { getClickableLinkConfig, generateTestCaseLink, addTestCaseWebUrl, generateSuiteLink, addSuiteWebUrl } from "./utils/clickable-links.js";
 import { ZebrunnerConfig } from "./types/api.js";
 import { ZebrunnerReportingConfig } from "./types/reporting.js";
 import { 
@@ -274,9 +275,24 @@ async function renderTestCaseMarkdown(
   testCase: ZebrunnerTestCase, 
   includeDebugInfo: boolean = false,
   includeSuiteHierarchy: boolean = false,
-  projectKey?: string
+  projectKey?: string,
+  clickableLinkConfig?: any
 ): Promise<string> {
   let markdown = FormatProcessor.formatTestCaseMarkdown(testCase);
+  
+  // Add clickable links to test case key if enabled
+  if (clickableLinkConfig?.includeClickableLinks && projectKey) {
+    const testCaseLink = generateTestCaseLink(
+      projectKey, 
+      testCase.key || `tc-${testCase.id}`, 
+      testCase.id, 
+      clickableLinkConfig.baseWebUrl, 
+      clickableLinkConfig
+    );
+    // Replace the test case key in the markdown with clickable link
+    const keyPattern = new RegExp(`\\b${testCase.key || `tc-${testCase.id}`}\\b`, 'g');
+    markdown = markdown.replace(keyPattern, testCaseLink);
+  }
   
   // Add suite hierarchy information if available
   if (includeSuiteHierarchy && (testCase.featureSuiteId || testCase.rootSuiteId)) {
@@ -595,8 +611,8 @@ function generateCoverageRecommendations(analysis: any, rules?: any, detectedFra
 }
 
 /** Format coverage analysis output */
-async function formatCoverageAnalysis(analysis: any, outputFormat: string, filePath?: string): Promise<any> {
-  const chatResponse = generateChatResponse(analysis);
+async function formatCoverageAnalysis(analysis: any, outputFormat: string, filePath?: string, clickableLinkConfig?: any): Promise<any> {
+  const chatResponse = generateChatResponse(analysis, clickableLinkConfig);
   
   return {
     chatResponse,
@@ -606,12 +622,26 @@ async function formatCoverageAnalysis(analysis: any, outputFormat: string, fileP
 }
 
 /** Generate chat response format */
-function generateChatResponse(analysis: any): string {
+function generateChatResponse(analysis: any, clickableLinkConfig?: any): string {
   const testCase = analysis.testCase;
   const coverage = analysis.coverage;
   
   let response = `# 🔍 Test Coverage Analysis: ${testCase.key}\n\n`;
-  response += `**Test Case**: ${testCase.title}\n`;
+  
+  // Add clickable link to test case if enabled
+  if (clickableLinkConfig?.includeClickableLinks) {
+    const testCaseLink = generateTestCaseLink(
+      testCase.projectKey || testCase.project_key, 
+      testCase.key, 
+      testCase.id, 
+      clickableLinkConfig.baseWebUrl, 
+      clickableLinkConfig
+    );
+    response += `**Test Case**: ${testCaseLink} - ${testCase.title}\n`;
+  } else {
+    response += `**Test Case**: ${testCase.title}\n`;
+  }
+  
   response += `**Overall Score**: ${coverage.overallScore}%\n\n`;
   
   if (coverage.stepsCoverage.length > 0) {
@@ -673,12 +703,16 @@ async function main() {
       include_hierarchy: z.boolean().default(false).describe("Include hierarchy information"),
       page: z.number().int().nonnegative().default(0).describe("Page number (0-based)"),
       size: z.number().int().positive().max(1000).default(50).describe("Page size (configurable via MAX_PAGE_SIZE env var)"),
-      page_token: z.string().optional().describe("Page token for pagination")
+      page_token: z.string().optional().describe("Page token for pagination"),
+      include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI")
     },
     async (args) => {
-      const { project_key, project_id, format, include_hierarchy, page, size, page_token } = args;
+      const { project_key, project_id, format, include_hierarchy, page, size, page_token, include_clickable_links } = args;
       
       try {
+        // Get clickable links configuration
+        const clickableLinkConfig = getClickableLinkConfig(include_clickable_links, ZEBRUNNER_URL);
+        
         // Runtime validation for configured MAX_PAGE_SIZE
         if (size > MAX_PAGE_SIZE) {
           return {
@@ -715,9 +749,14 @@ async function main() {
           processedSuites = HierarchyProcessor.enrichSuitesWithHierarchy(processedSuites);
         }
 
+        // Add clickable links to suites if enabled
+        const enhancedSuites = processedSuites.map((suite: any) => 
+          addSuiteWebUrl(suite, project_key, clickableLinkConfig.baseWebUrl, clickableLinkConfig)
+        );
+
         // Prepare response with pagination metadata
         const response = {
-          items: processedSuites,
+          items: enhancedSuites,
           _meta: suites._meta,
           pagination: {
             currentPage: page,
@@ -755,7 +794,8 @@ async function main() {
       case_key: z.string().min(1).describe("Test case key (e.g., 'ANDROID-29', 'IOS-2')"),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
       include_debug: z.boolean().default(false).describe("Include debug information in markdown"),
-      include_suite_hierarchy: z.boolean().default(false).describe("Include featureSuiteId and rootSuiteId with suite hierarchy path")
+      include_suite_hierarchy: z.boolean().default(false).describe("Include featureSuiteId and rootSuiteId with suite hierarchy path"),
+      include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI")
     },
     async (args) => {
       // Auto-detect project key if not provided
@@ -771,10 +811,13 @@ async function main() {
         };
       }
       
-      const { project_key, case_key, format, include_debug, include_suite_hierarchy } = resolvedArgs;
+      const { project_key, case_key, format, include_debug, include_suite_hierarchy, include_clickable_links } = resolvedArgs;
       
       try {
-        debugLog("Getting test case by key", { project_key, case_key, format, include_suite_hierarchy });
+        debugLog("Getting test case by key", { project_key, case_key, format, include_suite_hierarchy, include_clickable_links });
+        
+        // Get clickable links configuration
+        const clickableLinkConfig = getClickableLinkConfig(include_clickable_links, ZEBRUNNER_URL);
         
         const testCase = await client.getTestCaseByKey(project_key, case_key, { includeSuiteHierarchy: include_suite_hierarchy });
         
@@ -783,7 +826,7 @@ async function main() {
         }
 
         if (format === 'markdown') {
-          const markdown = await renderTestCaseMarkdown(testCase, include_debug, include_suite_hierarchy, project_key);
+          const markdown = await renderTestCaseMarkdown(testCase, include_debug, include_suite_hierarchy, project_key, clickableLinkConfig);
           return {
             content: [{
               type: "text" as const,
@@ -792,7 +835,9 @@ async function main() {
           };
         }
 
-        const formattedData = FormatProcessor.format(testCase, format);
+        // Add webUrl for JSON/DTO formats if clickable links enabled
+        const enhancedTestCase = addTestCaseWebUrl(testCase, project_key, clickableLinkConfig.baseWebUrl, clickableLinkConfig);
+        const formattedData = FormatProcessor.format(enhancedTestCase, format);
         
         return {
           content: [{
@@ -930,7 +975,8 @@ async function main() {
       modified_before: z.string().optional().describe("Filter test cases modified before this date (ISO format: '2024-12-31' or '2024-12-31T23:59:59Z')"),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
       page: z.number().int().nonnegative().default(0).describe("Page number (0-based)"),
-      size: z.number().int().positive().max(100).default(10).describe("Page size (configurable via MAX_PAGE_SIZE env var)")
+      size: z.number().int().positive().max(100).default(10).describe("Page size (configurable via MAX_PAGE_SIZE env var)"),
+      include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI")
     },
     async (args) => {
       const { 
@@ -945,7 +991,8 @@ async function main() {
         modified_before,
         format, 
         page, 
-        size 
+        size,
+        include_clickable_links
       } = args;
       
       // Runtime validation for configured MAX_PAGE_SIZE
@@ -1051,13 +1098,17 @@ async function main() {
       project_key: z.string().min(1).describe("Project key"),
       root_suite_id: z.number().int().positive().optional().describe("Start from specific root suite"),
       max_depth: z.number().int().positive().max(10).default(5).describe("Maximum tree depth"),
-      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format")
+      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
+      include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI")
     },
     async (args) => {
-      const { project_key, root_suite_id, max_depth, format } = args;
+      const { project_key, root_suite_id, max_depth, format, include_clickable_links } = args;
       
       try {
         debugLog("Building suite hierarchy", args);
+        
+        // Get clickable links configuration
+        const clickableLinkConfig = getClickableLinkConfig(include_clickable_links, ZEBRUNNER_URL);
         
         const allSuites = await client.getAllTestSuites(project_key, {
           maxResults: 5000, // Reasonable limit for hierarchy processing
@@ -1079,16 +1130,16 @@ async function main() {
         // Build hierarchical tree
         const hierarchyTree = HierarchyProcessor.buildSuiteTree(suitesToProcess);
         
-        // Limit depth with proper typing
+        // Limit depth with proper typing and add clickable links
         const limitDepth = (suites: ZebrunnerTestSuite[], currentDepth: number): ZebrunnerTestSuite[] => {
           if (currentDepth >= max_depth) {
-            return suites.map(suite => ({ ...suite, children: [] }));
+            return suites.map(suite => addSuiteWebUrl({ ...suite, children: [] }, project_key, clickableLinkConfig.baseWebUrl, clickableLinkConfig));
           }
 
-          return suites.map(suite => ({
+          return suites.map(suite => addSuiteWebUrl({
             ...suite,
             children: suite.children ? limitDepth(suite.children, currentDepth + 1) : []
-          }));
+          }, project_key, clickableLinkConfig.baseWebUrl, clickableLinkConfig));
         };
 
         const limitedTree = limitDepth(hierarchyTree, 0);
@@ -1126,13 +1177,17 @@ async function main() {
       created_after: z.string().optional().describe("Optional: Filter test cases created after this date (ISO format: '2024-01-01')"),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
       page: z.number().int().nonnegative().default(0).describe("Page number (0-based)"),
-      size: z.number().int().positive().max(100).default(20).describe("Page size")
+      size: z.number().int().positive().max(100).default(20).describe("Page size"),
+      include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI")
     },
     async (args) => {
-      const { project_key, automation_states, suite_id, created_after, format, page, size } = args;
+      const { project_key, automation_states, suite_id, created_after, format, page, size, include_clickable_links } = args;
       
       try {
         debugLog("Getting test cases by automation state", args);
+        
+        // Get clickable links configuration
+        const clickableLinkConfig = getClickableLinkConfig(include_clickable_links, ZEBRUNNER_URL);
         
         const searchParams = {
           page,
@@ -1173,7 +1228,14 @@ async function main() {
             markdown += `## Test Cases\n\n`;
             processedCases.forEach((testCase: any, index: number) => {
               const num = page * size + index + 1;
-              markdown += `### ${num}. ${testCase.key || 'N/A'} - ${testCase.title || 'Untitled'}\n\n`;
+              const testCaseDisplay = generateTestCaseLink(
+                project_key, 
+                testCase.key || 'N/A', 
+                testCase.id, 
+                clickableLinkConfig.baseWebUrl, 
+                clickableLinkConfig
+              );
+              markdown += `### ${num}. ${testCaseDisplay} - ${testCase.title || 'Untitled'}\n\n`;
               
               if (testCase.automationState) {
                 const stateIcon = testCase.automationState.name === 'Automated' ? '⚙️' : 
@@ -1206,6 +1268,10 @@ async function main() {
         }
 
         // For other formats, return structured data
+        const enhancedTestCases = processedCases.map((tc: any) => 
+          addTestCaseWebUrl(tc, project_key, clickableLinkConfig.baseWebUrl, clickableLinkConfig)
+        );
+        
         const result = {
           project_key,
           automation_states: automationStateInfo,
@@ -1214,7 +1280,7 @@ async function main() {
           total_found: processedCases.length,
           page,
           size,
-          test_cases: processedCases
+          test_cases: enhancedTestCases
         };
 
         if (format === 'string') {
@@ -1230,7 +1296,14 @@ async function main() {
           } else {
             processedCases.forEach((testCase: any, index: number) => {
               const num = page * size + index + 1;
-              output += `${num}. ${testCase.key || 'N/A'} - ${testCase.title || 'Untitled'}\n`;
+              const testCaseDisplay = generateTestCaseLink(
+                project_key, 
+                testCase.key || 'N/A', 
+                testCase.id, 
+                clickableLinkConfig.baseWebUrl, 
+                clickableLinkConfig
+              );
+              output += `${num}. ${testCaseDisplay} - ${testCase.title || 'Untitled'}\n`;
               if (testCase.automationState) {
                 output += `   Automation State: ${testCase.automationState.name}\n`;
               }
@@ -1382,15 +1455,19 @@ async function main() {
       output_format: z.enum(['chat', 'markdown', 'code_comments', 'all']).default('chat').describe("Output format: chat response, markdown file, code comments, or all formats"),
       include_recommendations: z.boolean().default(true).describe("Include improvement recommendations"),
       include_suite_hierarchy: z.boolean().default(false).describe("Include featureSuiteId and rootSuiteId in analysis"),
-      file_path: z.string().optional().describe("File path for adding code comments or saving markdown (optional)")
+      file_path: z.string().optional().describe("File path for adding code comments or saving markdown (optional)"),
+      include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI")
     },
     async (args) => {
       try {
         // Auto-detect project key if not provided
         const resolvedArgs = FormatProcessor.resolveProjectKey(args);
-        const { project_key, case_key, implementation_context, analysis_scope, output_format, include_recommendations, include_suite_hierarchy, file_path } = resolvedArgs;
+        const { project_key, case_key, implementation_context, analysis_scope, output_format, include_recommendations, include_suite_hierarchy, file_path, include_clickable_links } = resolvedArgs;
         
-        debugLog("Analyzing test coverage", { project_key, case_key, analysis_scope, output_format, include_suite_hierarchy });
+        debugLog("Analyzing test coverage", { project_key, case_key, analysis_scope, output_format, include_suite_hierarchy, include_clickable_links });
+        
+        // Get clickable links configuration
+        const clickableLinkConfig = getClickableLinkConfig(include_clickable_links, ZEBRUNNER_URL);
         
         // Get the detailed test case
         const testCase = await client.getTestCaseByKey(project_key, case_key, { includeSuiteHierarchy: include_suite_hierarchy });
@@ -1403,7 +1480,7 @@ async function main() {
         const analysisResult = await performCoverageAnalysis(testCase, implementation_context, analysis_scope, include_recommendations);
         
         // Format output based on requested format
-        const outputs = await formatCoverageAnalysis(analysisResult, output_format, file_path);
+        const outputs = await formatCoverageAnalysis(analysisResult, output_format, file_path, clickableLinkConfig);
         
         return {
           content: [{
@@ -1521,23 +1598,6 @@ async function main() {
           if (generatedTest.dataProviderCode) {
             responseText += `## Data Provider\n\`\`\`${generatedTest.framework.includes('java') ? 'java' : 'javascript'}\n`;
             responseText += generatedTest.dataProviderCode + '\n\`\`\`\n\n';
-          }
-        }
-        
-        if (output_format === 'markdown' || output_format === 'all') {
-          responseText += `## 📋 Test Case Information\n`;
-          responseText += `- **Key**: ${testCase.key}\n`;
-          responseText += `- **Title**: ${testCase.title}\n`;
-          responseText += `- **Priority**: ${testCase.priority?.name || 'Not set'}\n`;
-          responseText += `- **Automation State**: ${testCase.automationState?.name || 'Not set'}\n\n`;
-          
-          if (testCase.steps && testCase.steps.length > 0) {
-            responseText += `## 🔄 Test Steps\n`;
-            testCase.steps.forEach((step: any, index: number) => {
-              responseText += `### Step ${index + 1}\n`;
-              responseText += `**Action**: ${step.action}\n`;
-              responseText += `**Expected**: ${step.expectedResult}\n\n`;
-            });
           }
         }
         
@@ -2007,13 +2067,17 @@ async function main() {
       project_key: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
       suite_id: z.number().int().positive().describe("Suite ID to find"),
       only_root_suites: z.boolean().default(false).describe("Search only in root suites"),
-      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format")
+      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
+      include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI")
     },
     async (args) => {
       try {
-        const { project_key, suite_id, only_root_suites, format } = args;
+        const { project_key, suite_id, only_root_suites, format, include_clickable_links } = args;
 
-        debugLog("Getting TCM suite by ID", { project_key, suite_id, only_root_suites });
+        debugLog("Getting TCM suite by ID", { project_key, suite_id, only_root_suites, include_clickable_links });
+
+        // Get clickable links configuration
+        const clickableLinkConfig = getClickableLinkConfig(include_clickable_links, ZEBRUNNER_URL);
 
         // Get all suites from project using comprehensive method
         debugLog("Fetching all suites using getAllTestSuites method", { project_key, suite_id });
@@ -2038,6 +2102,9 @@ async function main() {
           // Enhance with hierarchy information
           const processedSuites = HierarchyProcessor.setRootParentsToSuites(allSuites);
           const enhancedSuite = processedSuites.find(s => s.id === suite_id) || suite;
+          
+          // Add clickable links if enabled
+          const suiteWithLinks = addSuiteWebUrl(enhancedSuite, project_key, clickableLinkConfig.baseWebUrl, clickableLinkConfig);
 
           console.error(`Found suite by id ${suite_id} with title: ${enhancedSuite.name || enhancedSuite.title}`);
           console.error(`Item ID: ${enhancedSuite.id}`);
@@ -2047,7 +2114,7 @@ async function main() {
           console.error(`Title: ${enhancedSuite.name || enhancedSuite.title}`);
           console.error(`Description: ${enhancedSuite.description || ''}`);
 
-          const formattedResult = FormatProcessor.format(enhancedSuite, format as any);
+          const formattedResult = FormatProcessor.format(suiteWithLinks, format as any);
           
           return {
             content: [{
@@ -2082,13 +2149,18 @@ async function main() {
     "📋 Get ALL TCM test cases by project using comprehensive pagination",
     {
       project_key: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
-      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format")
+      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
+      include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI"),
+      max_results: z.number().int().positive().max(1000).default(500).describe("Maximum number of results (configurable limit for performance)")
     },
     async (args) => {
       try {
-        const { project_key, format } = args;
+        const { project_key, format, include_clickable_links, max_results } = args;
 
-        debugLog("Getting all TCM test cases", { project_key });
+        debugLog("Getting all TCM test cases", { project_key, include_clickable_links, max_results });
+
+        // Get clickable links configuration
+        const clickableLinkConfig = getClickableLinkConfig(include_clickable_links, ZEBRUNNER_URL);
 
         // Get all test cases using proper token-based pagination
         let allTestCases: ZebrunnerTestCase[] = [];
@@ -2106,6 +2178,13 @@ async function main() {
           pageToken = result._meta?.nextPageToken;
           pageCount++;
           
+          // Apply max_results limit for performance
+          if (allTestCases.length >= max_results) {
+            allTestCases = allTestCases.slice(0, max_results);
+            debugLog(`Limiting results to ${max_results} test cases for performance`);
+            break;
+          }
+          
           debugLog("Fetched test cases page", { 
             pageCount, 
             currentPageSize: result.items.length, 
@@ -2117,7 +2196,12 @@ async function main() {
 
         console.error(`Found ${allTestCases.length} testcases.`);
 
-        const formattedResult = FormatProcessor.format(allTestCases, format as any);
+        // Add clickable links to test cases if enabled
+        const enhancedTestCases = allTestCases.map((tc: any) => 
+          addTestCaseWebUrl(tc, project_key, clickableLinkConfig.baseWebUrl, clickableLinkConfig)
+        );
+
+        const formattedResult = FormatProcessor.format(enhancedTestCases, format as any);
         
         return {
           content: [{
@@ -3373,7 +3457,8 @@ async function main() {
       rulesFilePath: z.string().optional().describe("Path to custom rules markdown file"),
       checkpointsFilePath: z.string().optional().describe("Path to custom checkpoints markdown file"),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('markdown').describe("Output format"),
-      improveIfPossible: z.boolean().default(true).describe("Attempt to automatically improve the test case")
+      improveIfPossible: z.boolean().default(true).describe("Attempt to automatically improve the test case"),
+      include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI")
     },
     async (args) => {
       try {
@@ -3408,7 +3493,8 @@ async function main() {
       rulesFilePath: z.string().optional().describe("Path to custom rules markdown file"),
       checkpointsFilePath: z.string().optional().describe("Path to custom checkpoints markdown file"),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('markdown').describe("Output format"),
-      applyHighConfidenceChanges: z.boolean().default(true).describe("Automatically apply high-confidence improvements")
+      applyHighConfidenceChanges: z.boolean().default(true).describe("Automatically apply high-confidence improvements"),
+      include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI")
     },
     async (args) => {
       try {
@@ -3970,11 +4056,12 @@ async function main() {
       test_case_keys: z.array(z.string()).optional().describe("Optional: Analyze specific test case keys instead of suite"),
       similarity_threshold: z.number().min(50).max(100).default(80).describe("Similarity threshold percentage (50-100, default: 80)"),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('markdown').describe("Output format"),
-      include_similarity_matrix: z.boolean().default(false).describe("Include detailed similarity matrix in output")
+      include_similarity_matrix: z.boolean().default(false).describe("Include detailed similarity matrix in output"),
+      include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI (markdown format only)")
     },
     async (args) => {
       try {
-        const { project_key, suite_id, test_case_keys, similarity_threshold, format, include_similarity_matrix } = args;
+        const { project_key, suite_id, test_case_keys, similarity_threshold, format, include_similarity_matrix, include_clickable_links } = args;
         
         debugLog("analyze_test_cases_duplicates called", { args });
         
@@ -4095,6 +4182,9 @@ async function main() {
         
         debugLog(`Analyzing ${testCases.length} test cases for duplicates`);
         
+        // Get clickable links configuration
+        const clickableLinkConfig = getClickableLinkConfig(include_clickable_links, ZEBRUNNER_URL);
+        
         // Perform duplicate analysis
         const result = analyzer.analyzeDuplicates(testCases, project_key, suite_id);
         
@@ -4104,20 +4194,22 @@ async function main() {
         });
         
         // Format output
-        if (format === 'dto') {
-          return {
-            content: [{
-              type: "text" as const,
-              text: JSON.stringify(result, null, 2)
-            }]
+        if (format === 'dto' || format === 'json') {
+          // Add webUrl fields to test cases if clickable links are enabled
+          const enhancedResult = {
+            ...result,
+            clusters: result.clusters.map((cluster: any) => ({
+              ...cluster,
+              testCases: cluster.testCases.map((tc: any) => 
+                addTestCaseWebUrl(tc, project_key, clickableLinkConfig.baseWebUrl, clickableLinkConfig)
+              )
+            }))
           };
-        }
-        
-        if (format === 'json') {
+          
           return {
             content: [{
               type: "text" as const,
-              text: JSON.stringify(result, null, 2)
+              text: JSON.stringify(enhancedResult, null, 2)
             }]
           };
         }
@@ -4133,10 +4225,12 @@ async function main() {
           result.clusters.forEach((cluster: any, index: number) => {
             output += `Cluster ${index + 1} (${cluster.averageSimilarity}% similarity):\n`;
             cluster.testCases.forEach((tc: any) => {
-              output += `  - ${tc.key}: ${tc.title} [${tc.automationState}]\n`;
+              const testCaseDisplay = generateTestCaseLink(project_key, tc.key, tc.id, clickableLinkConfig.baseWebUrl, clickableLinkConfig);
+              output += `  - ${testCaseDisplay}: ${tc.title} [${tc.automationState}]\n`;
             });
             output += `  Shared Logic: ${cluster.sharedLogicSummary}\n`;
-            output += `  Recommended Base: ${cluster.recommendedBase.testCaseKey} (${cluster.recommendedBase.reason})\n`;
+            const baseTestCaseDisplay = generateTestCaseLink(project_key, cluster.recommendedBase.testCaseKey, undefined, clickableLinkConfig.baseWebUrl, clickableLinkConfig);
+            output += `  Recommended Base: ${baseTestCaseDisplay} (${cluster.recommendedBase.reason})\n`;
             output += `  Strategy: ${cluster.mergingStrategy}\n\n`;
           });
           
@@ -4173,7 +4267,8 @@ async function main() {
             markdown += `| Test Case | Title | Automation | Steps |\n`;
             markdown += `|-----------|-------|------------|-------|\n`;
             cluster.testCases.forEach((tc: any) => {
-              markdown += `| **${tc.key}** | ${tc.title} | ${tc.automationState} | ${tc.stepCount} |\n`;
+              const testCaseDisplay = generateTestCaseLink(project_key, tc.key, tc.id, clickableLinkConfig.baseWebUrl, clickableLinkConfig);
+              markdown += `| **${testCaseDisplay}** | ${tc.title} | ${tc.automationState} | ${tc.stepCount} |\n`;
             });
             markdown += `\n`;
             
@@ -4200,7 +4295,8 @@ async function main() {
             
             // Recommendations
             markdown += `**💡 Recommendations:**\n`;
-            markdown += `- **Base Test Case:** ${cluster.recommendedBase.testCaseKey}\n`;
+            const baseTestCaseDisplay = generateTestCaseLink(project_key, cluster.recommendedBase.testCaseKey, undefined, clickableLinkConfig.baseWebUrl, clickableLinkConfig);
+            markdown += `- **Base Test Case:** ${baseTestCaseDisplay}\n`;
             markdown += `- **Reason:** ${cluster.recommendedBase.reason}\n`;
             markdown += `- **Strategy:** ${cluster.mergingStrategy}\n\n`;
             
@@ -4221,7 +4317,9 @@ async function main() {
                                  patternType === 'entry_point' ? '🚪' :
                                  patternType === 'component' ? '🧩' :
                                  patternType === 'permission' ? '🔐' : '❓';
-              markdown += `| ${sim.testCase1Key} | ${sim.testCase2Key} | ${sim.similarityPercentage}% | ${patternEmoji} ${patternType} | ${sim.sharedSteps}/${Math.max(sim.totalSteps1, sim.totalSteps2)} | ${summary} |\n`;
+              const testCase1Display = generateTestCaseLink(project_key, sim.testCase1Key, undefined, clickableLinkConfig.baseWebUrl, clickableLinkConfig);
+              const testCase2Display = generateTestCaseLink(project_key, sim.testCase2Key, undefined, clickableLinkConfig.baseWebUrl, clickableLinkConfig);
+              markdown += `| ${testCase1Display} | ${testCase2Display} | ${sim.similarityPercentage}% | ${patternEmoji} ${patternType} | ${sim.sharedSteps}/${Math.max(sim.totalSteps1, sim.totalSteps2)} | ${summary} |\n`;
             });
             
             if (result.similarityMatrix.length > 20) {
@@ -4281,7 +4379,8 @@ async function main() {
       use_medoid_selection: z.boolean().default(true).describe("Use medoid-based representative selection instead of heuristic"),
       include_semantic_insights: z.boolean().default(true).describe("Generate semantic insights about workflows and patterns"),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('markdown').describe("Output format"),
-      include_similarity_matrix: z.boolean().default(false).describe("Include detailed similarity matrix in output")
+      include_similarity_matrix: z.boolean().default(false).describe("Include detailed similarity matrix in output"),
+      include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI (markdown format only)")
     },
     async (args) => {
       try {
@@ -4296,7 +4395,8 @@ async function main() {
           use_medoid_selection,
           include_semantic_insights,
           format, 
-          include_similarity_matrix 
+          include_similarity_matrix,
+          include_clickable_links 
         } = args;
         
         debugLog("analyze_test_cases_duplicates_semantic called", { args });
@@ -4424,6 +4524,9 @@ async function main() {
         
         debugLog(`Analyzing ${testCases.length} test cases with semantic analysis`);
         
+        // Get clickable links configuration
+        const clickableLinkConfig = getClickableLinkConfig(include_clickable_links, ZEBRUNNER_URL);
+        
         // Create LLM analysis function if semantic mode is enabled
         let llmAnalysisFunction: ((prompt: string) => Promise<string>) | undefined;
         
@@ -4452,10 +4555,21 @@ async function main() {
         
         // Format output
         if (format === 'dto' || format === 'json') {
+          // Add webUrl fields to test cases if clickable links are enabled
+          const enhancedResult = {
+            ...result,
+            semanticClusters: result.semanticClusters?.map((cluster: any) => ({
+              ...cluster,
+              testCases: cluster.testCases.map((tc: any) => 
+                addTestCaseWebUrl(tc, project_key, clickableLinkConfig.baseWebUrl, clickableLinkConfig)
+              )
+            }))
+          };
+          
           return {
             content: [{
               type: "text" as const,
-              text: JSON.stringify(result, null, 2)
+              text: JSON.stringify(enhancedResult, null, 2)
             }]
           };
         }
@@ -4474,9 +4588,11 @@ async function main() {
             result.semanticClusters.forEach((cluster: any, index: number) => {
               output += `Cluster ${index + 1} (${cluster.averageSimilarity}% similarity, ${cluster.clusterType}):\n`;
               cluster.testCases.forEach((tc: any) => {
-                output += `  - ${tc.key}: ${tc.title} [${tc.automationState}]\n`;
+                const testCaseDisplay = generateTestCaseLink(project_key, tc.key, tc.id, clickableLinkConfig.baseWebUrl, clickableLinkConfig);
+                output += `  - ${testCaseDisplay}: ${tc.title} [${tc.automationState}]\n`;
               });
-              output += `  Medoid: ${cluster.medoidTestCase}\n`;
+              const medoidDisplay = generateTestCaseLink(project_key, cluster.medoidTestCase, undefined, clickableLinkConfig.baseWebUrl, clickableLinkConfig);
+              output += `  Medoid: ${medoidDisplay}\n`;
               output += `  Strategy: ${cluster.mergingStrategy}\n\n`;
             });
           }
@@ -4532,7 +4648,8 @@ async function main() {
             markdown += `|-----------|-------|------------|-------|\n`;
             cluster.testCases.forEach((tc: any) => {
               const isMediad = cluster.medoidTestCase === tc.key ? ' 🎯' : '';
-              markdown += `| **${tc.key}**${isMediad} | ${tc.title} | ${tc.automationState} | ${tc.stepCount} |\n`;
+              const testCaseDisplay = generateTestCaseLink(project_key, tc.key, tc.id, clickableLinkConfig.baseWebUrl, clickableLinkConfig);
+              markdown += `| **${testCaseDisplay}**${isMediad} | ${tc.title} | ${tc.automationState} | ${tc.stepCount} |\n`;
             });
             markdown += `\n`;
             
@@ -4563,7 +4680,9 @@ async function main() {
             
             // Recommendations
             markdown += `**💡 Recommendations:**\n`;
-            markdown += `- **Representative Test Case:** ${cluster.medoidTestCase || cluster.recommendedBase.testCaseKey} 🎯\n`;
+            const representativeTestCase = cluster.medoidTestCase || cluster.recommendedBase?.testCaseKey;
+            const representativeDisplay = generateTestCaseLink(project_key, representativeTestCase, undefined, clickableLinkConfig.baseWebUrl, clickableLinkConfig);
+            markdown += `- **Representative Test Case:** ${representativeDisplay} 🎯\n`;
             if (cluster.recommendedBase?.reason) {
               markdown += `- **Selection Reason:** ${cluster.recommendedBase.reason}\n`;
             }
@@ -4619,7 +4738,10 @@ async function main() {
             const stepClusterSim = sim.stepClusterOverlap || 'N/A';
             const semanticConf = sim.semanticConfidence || 'N/A';
             
-            markdown += `| ${sim.testCase1Key} | ${sim.testCase2Key} | ${sim.similarityPercentage}% | ${stepClusterSim}% | ${semanticConf}% | ${patternEmoji} ${patternType} |\n`;
+            const testCase1Display = generateTestCaseLink(project_key, sim.testCase1Key, undefined, clickableLinkConfig.baseWebUrl, clickableLinkConfig);
+            const testCase2Display = generateTestCaseLink(project_key, sim.testCase2Key, undefined, clickableLinkConfig.baseWebUrl, clickableLinkConfig);
+            
+            markdown += `| ${testCase1Display} | ${testCase2Display} | ${sim.similarityPercentage}% | ${stepClusterSim}% | ${semanticConf}% | ${patternEmoji} ${patternType} |\n`;
           });
           
           if (result.similarityMatrix.length > 20) {
