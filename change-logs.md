@@ -1,5 +1,13 @@
 # Change Logs
 
+## v4.7.181
+- Added advanced test case search tools: title search, multi-criteria filtering, and automation priorities with improved error handling, enhanced async operations, better logging
+
+
+## v4.7.179
+- Advanced duplicate test case detection with semantic analysis with improved error handling, enhanced async operations, better logging
+
+
 ## v4.6.178
 - Updated INSTALL-GUIDE.md with the more detailed steps
 

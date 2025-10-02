@@ -458,6 +458,66 @@ export class ZebrunnerReportingClient {
   }
 
   /**
+   * Get priorities for a project
+   */
+  async getPriorities(projectId: number): Promise<{ id: number; name: string }[]> {
+    const url = `/api/tcm/v1/test-case-settings/system-fields/priorities?projectId=${projectId}`;
+    
+    try {
+      if (this.config.debug) {
+        console.error(`🔍 Fetching priorities from: ${url}`);
+      }
+      
+      const response = await this.makeAuthenticatedRequest<any>('GET', url);
+      const data = response.data || response;
+      
+      if (this.config.debug) {
+        console.error(`🔍 Priorities API response:`, JSON.stringify(data, null, 2));
+      }
+      
+      // Handle response format: {"items": [...]} or direct array
+      let prioritiesArray: any[] = [];
+      if (data && Array.isArray(data.items)) {
+        prioritiesArray = data.items;
+      } else if (Array.isArray(data)) {
+        prioritiesArray = data;
+      } else {
+        throw new ZebrunnerReportingError('Unexpected response format for priorities - no items array found');
+      }
+      
+      // Map to expected format
+      const priorities = prioritiesArray.map((item: any) => ({
+        id: item.id,
+        name: item.name
+      }));
+      
+      if (this.config.debug) {
+        console.error(`🔍 Parsed ${priorities.length} priorities:`, priorities);
+      }
+      
+      return priorities;
+    } catch (error) {
+      // Enhanced error logging
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.warn(`❌ Failed to fetch priorities from API (${url}):`, errorMessage);
+      
+      if (this.config.debug && error instanceof Error) {
+        console.error('Full error details:', error);
+      }
+      
+      // Return fallback priorities based on your actual system
+      console.warn('Using fallback priority mapping based on actual system values');
+      return [
+        { id: 15, name: "High" },
+        { id: 16, name: "Medium" },
+        { id: 17, name: "Low" },
+        { id: 18, name: "Trivial" },
+        { id: 35, name: "Critical" }
+      ];
+    }
+  }
+
+  /**
    * Get current authentication status
    */
   getAuthStatus(): { authenticated: boolean; expiresAt: Date | null; timeToExpiry?: number } {
