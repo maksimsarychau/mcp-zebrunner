@@ -44,7 +44,17 @@ If you see version numbers, everything is fine.
 1. In the project folder, create a new file named **.env**  
    (Note: the file name is exactly `.env`, no extension).
 
+   To do it based on .env.example you should call (For macOS):
+```bash
+cp .env.example .env
+```
+
 2. Add this content (replace with your own values):
+
+To edit `.env` file from the terminal on macOS:
+```bash
+nano .env
+```
 
    ```env
    ZEBRUNNER_URL=https://your-company.zebrunner.com/api/public/v1
@@ -54,10 +64,14 @@ If you see version numbers, everything is fine.
    ENABLE_RULES_ENGINE=true
    ```
 
+
 3. To get your Zebrunner token:
    - Log in to Zebrunner
    - Go to your profile settings → API Access
    - Create a token and paste it into `.env`
+
+4. After updating all parameters in `.env` you should save it in Nano editor using command: `Control+O (^O WriteOut)`
+And to exit from Nano editor use command: `Control+X (^X Exit)`
 
 ---
 
@@ -81,7 +95,7 @@ npm run build
 
 ## 6. Test the Setup
 
-Run:
+Run it if you have `.env` configured:
 
 ```bash
 npm run test:health
@@ -91,15 +105,32 @@ If you see ✅ Health check completed → you’re ready.
 
 ---
 
-## 7. Connect to Claude Desktop
+## 7. Connect to Claude Desktop application 
 
-Claude Desktop reads MCP servers from a JSON config file you can edit from Settings → Developer → Edit Config, which opens claude_desktop_config.json. Paths:
+🖥️ Install Claude Desktop
+	1.	Go to the official Anthropic download page:
+👉 https://claude.ai/download
+	2.	Choose your system:
+	•	macOS → click Download for Mac
+	•	Windows → click Download for Windows
+	3.	Once downloaded:
+	•	On Mac, open the .dmg file and drag Claude.app into your Applications folder.
+	•	On Windows, run the .exe installer and follow the prompts.
+	4.	Open the Claude app and sign in with your Anthropic account (the same one you use on the web).
+
+⸻
+
+⚡ Tip: After install, you can link your MCP server (your Zebrunner MCP) in Claude’s Settings → MCP Servers by entering the path to your server executable.
+⸻
+
+Claude Desktop reads MCP servers from a JSON config file you can edit from Settings → Developer → Edit Config, which opens  folder for `claude_desktop_config.json`. Paths:
 	•	macOS: ~/Library/Application Support/Claude/claude_desktop_config.json
 	•	Windows: %APPDATA%\Claude\claude_desktop_config.json
 (These are the standard locations described in official MCP connection guides.)
 
 1. Open Claude Desktop → **Settings → Developer → Edit Config**.
-2. Add an entry under "mcpServers" pointing to your local server (replace with your actual folder path). 
+2. To edit `claude_desktop_config.json` file on macOS use Right click and open file with `TextEditor`
+3. Add an entry under "mcpServers" pointing to your local server (replace with your actual folder path). 
 Example: 
 
 ```json
@@ -121,13 +152,23 @@ Example:
   }
 }
 ```
+4. To get your actual absolute path use command on macOS terminal in folder where we have `mcp-zebrunner` cloned: 
+```bash
+pwd
+```
 
 **Example paths:**
 - **Windows:** `C:\\Users\\YourName\\Projects\\mcp-zebrunner\\dist\\server.js`
 - **macOS/Linux:** `/Users/YourName/Projects/mcp-zebrunner/dist/server.js`
 
-3. Restart Claude Desktop.
-4. Open a chat and type `/mcp` → you should see **mcp-zebrunner** connected.
+5. Replace `/full/absolute/path/to/mcp-zebrunner/` with absolute path what you get from `pwd`.
+👉 Don't forget to add `/dist/server.js`
+
+6. Save `claude_desktop_config.json` file in **TextEditor**
+
+7. Restart Claude Desktop.
+
+8. Open a chat and type `/mcp` → you should see **mcp-zebrunner** connected.
 
 ---
 
@@ -149,8 +190,18 @@ claude mcp add mcp-zebrunner \
 - **Windows:** `C:\\Users\\YourName\\Projects\\mcp-zebrunner\\dist\\server.js`
 - **macOS/Linux:** `/Users/YourName/Projects/mcp-zebrunner/dist/server.js`
 
-2. Restart Claude Code.
-3. Run `/mcp` inside Claude Code terminal → check that **mcp-zebrunner** appears.
+2. To get your actual absolute path use command on macOS terminal in folder where we have `mcp-zebrunner` cloned: 
+```bash
+pwd
+```
+
+3. Replace `/full/absolute/path/to/mcp-zebrunner/` with absolute path what you get from `pwd`.
+Don't forget to add `/dist/server.js`
+
+4. Replace `ZEBRUNNER_URL`, `ZEBRUNNER_LOGIN` and `ZEBRUNNER_TOKEN` with your actual values.
+
+5. Restart Claude Code.
+6. Run `/mcp` inside Claude Code terminal → check that **mcp-zebrunner** appears.
 
 ---
 
@@ -169,6 +220,7 @@ cd mcp-zebrunner
 git pull origin master
 npm install
 npm run build
+## (Optional) Only if you have .env configured properly
 npm run test:health
 ```
 
