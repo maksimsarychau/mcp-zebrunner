@@ -16,10 +16,10 @@ const oldVersion = packageJson.version;
 function analyzeFileChanges(filePath) {
   try {
     if (!existsSync(filePath)) return null;
-    
+
     const content = readFileSync(filePath, 'utf8').toLowerCase();
     const lines = content.split('\n');
-    
+
     // Analyze content patterns
     const analysis = {
       hasNewFunctions: /function\s+\w+|const\s+\w+\s*=\s*\(|=>\s*{/.test(content),
@@ -36,7 +36,7 @@ function analyzeFileChanges(filePath) {
       hasTypeDefinitions: /interface|type\s+\w+\s*=|enum/i.test(content),
       lineCount: lines.length
     };
-    
+
     return analysis;
   } catch (error) {
     return null;
@@ -65,7 +65,7 @@ function generateChangelogEntry() {
     const relevantFiles = gitStatus.filter(f => {
       // Always include new files (untracked)
       if (f.status.includes('?')) return true;
-      
+
       // For modified files, exclude some common files that change frequently
       if (f.status.includes('M')) {
         // Skip files that are commonly updated during version increments
@@ -74,7 +74,7 @@ function generateChangelogEntry() {
         }
         return true;
       }
-      
+
       return true;
     });
 
@@ -82,7 +82,7 @@ function generateChangelogEntry() {
     const fileAnalyses = [];
     const modifiedFiles = relevantFiles.filter(f => f.status.includes('M'));
     const newFiles = relevantFiles.filter(f => f.status.includes('?'));
-    
+
     for (const fileInfo of [...modifiedFiles, ...newFiles]) {
       const analysis = analyzeFileChanges(fileInfo.file);
       if (analysis) {
@@ -99,39 +99,39 @@ function generateChangelogEntry() {
     let primaryFeature = null;
 
     // Check for major feature additions based on new files first
-    const hasClickableLinks = fileAnalyses.some(f => 
-      f.file.includes('clickable-links') || 
+    const hasClickableLinks = fileAnalyses.some(f =>
+      f.file.includes('clickable-links') ||
       (f.analysis && /clickable|link|url|href/i.test(f.file))
     );
-    const hasDocumentationChanges = fileAnalyses.some(f => 
-      f.file.endsWith('.md') && f.status.includes('?') && 
+    const hasDocumentationChanges = fileAnalyses.some(f =>
+      f.file.endsWith('.md') && f.status.includes('?') &&
       (f.file.includes('GUIDE') || f.file.includes('INSTALL') || f.file.includes('DOC'))
     );
-    const hasReadmeUpdates = fileAnalyses.some(f => 
+    const hasReadmeUpdates = fileAnalyses.some(f =>
       f.file === 'README.md' && f.status.includes('M')
     );
-    const hasDuplicateAnalyzer = fileAnalyses.some(f => 
+    const hasDuplicateAnalyzer = fileAnalyses.some(f =>
       f.file.includes('duplicate-analyzer') || (f.analysis && f.analysis.hasDuplicateLogic)
     );
-    const hasSemanticFeatures = fileAnalyses.some(f => 
+    const hasSemanticFeatures = fileAnalyses.some(f =>
       f.file.includes('semantic') || (f.analysis && f.analysis.hasSemanticAnalysis)
     );
-    const hasNewUtilities = fileAnalyses.some(f => 
+    const hasNewUtilities = fileAnalyses.some(f =>
       f.file.includes('utils/') && f.status.includes('?') && !f.file.endsWith('.md')
     );
-    const hasApiEnhancements = fileAnalyses.some(f => 
+    const hasApiEnhancements = fileAnalyses.some(f =>
       (f.file.includes('api/') || f.file.includes('client')) && f.analysis && f.analysis.hasNewFunctions
     );
-    const hasServerUpdates = fileAnalyses.some(f => 
+    const hasServerUpdates = fileAnalyses.some(f =>
       f.file.includes('server') && f.analysis && f.analysis.hasNewFunctions
     );
-    const hasNewTests = fileAnalyses.some(f => 
+    const hasNewTests = fileAnalyses.some(f =>
       f.file.includes('test') && (f.status.includes('?') || (f.analysis && f.analysis.hasTests))
     );
-    const hasValidationFeatures = fileAnalyses.some(f => 
+    const hasValidationFeatures = fileAnalyses.some(f =>
       f.analysis && f.analysis.hasValidation && f.file.includes('validator')
     );
-    const hasTypeDefinitions = fileAnalyses.some(f => 
+    const hasTypeDefinitions = fileAnalyses.some(f =>
       f.analysis && f.analysis.hasTypeDefinitions && f.status.includes('?')
     );
 
@@ -170,7 +170,7 @@ function generateChangelogEntry() {
     const errorHandlingFiles = fileAnalyses.filter(f => f.analysis && f.analysis.hasErrorHandling).length;
     const asyncFiles = fileAnalyses.filter(f => f.analysis && f.analysis.hasAsyncCode).length;
     const loggingFiles = fileAnalyses.filter(f => f.analysis && f.analysis.hasLogging).length;
-    
+
     if (errorHandlingFiles > 0) {
       descriptions.push('improved error handling');
     }
@@ -183,7 +183,7 @@ function generateChangelogEntry() {
 
     // Build final description
     let finalDescription = primaryFeature || 'Code improvements and enhancements';
-    
+
     if (descriptions.length > 0) {
       finalDescription += ` with ${descriptions.join(', ')}`;
     }
@@ -192,13 +192,13 @@ function generateChangelogEntry() {
     if (!primaryFeature) {
       const modifiedCount = modifiedFiles.length;
       const newCount = newFiles.length;
-      
+
       if (newCount > 0) {
         // Look at specific new files to generate better descriptions
         const newFileNames = newFiles.map(f => f.file);
         const docFiles = newFileNames.filter(name => name.endsWith('.md'));
         const codeFiles = newFileNames.filter(name => !name.endsWith('.md'));
-        
+
         if (docFiles.length > 0 && codeFiles.length === 0) {
           finalDescription = `Enhanced documentation and user guides`;
         } else if (newFileNames.some(name => name.includes('guide') || name.includes('summary'))) {
@@ -214,7 +214,7 @@ function generateChangelogEntry() {
     }
 
     return finalDescription;
-    
+
   } catch (error) {
     console.warn('Could not analyze file changes, using default description');
     return 'Version update with improvements';
@@ -224,7 +224,7 @@ function generateChangelogEntry() {
 // Create or update changelog
 function updateChangelog(version, description) {
   const newEntry = `## v${version}\n- ${description}\n\n`;
-  
+
   if (!existsSync(changelogPath)) {
     // Create new changelog file
     const initialContent = `# Change Logs\n\nThis file tracks version changes and improvements to the MCP Zebrunner project.\n\n${newEntry}`;
@@ -233,7 +233,7 @@ function updateChangelog(version, description) {
     // Read existing changelog and prepend new entry
     const existingContent = readFileSync(changelogPath, 'utf8');
     const lines = existingContent.split('\n');
-    
+
     // Find where to insert the new entry (after the header)
     let insertIndex = 0;
     for (let i = 0; i < lines.length; i++) {
@@ -242,7 +242,7 @@ function updateChangelog(version, description) {
         break;
       }
     }
-    
+
     // Insert new entry
     lines.splice(insertIndex, 0, ...newEntry.split('\n'));
     writeFileSync(changelogPath, lines.join('\n'));
