@@ -299,6 +299,19 @@ export class EnhancedZebrunnerClient {
         }
       };
     } catch (error: any) {
+      // Handle 403 Forbidden as success (auth works, just no project access)
+      if (error.response?.status === 403) {
+        return {
+          success: true,
+          message: 'Connection successful (authentication verified)',
+          details: {
+            status: error.response.status,
+            baseUrl: this.config.baseUrl,
+            note: 'Authentication works but no access to test project MCP'
+          }
+        };
+      }
+
       // If root endpoint fails, try with a known project pattern (more permissive)
       try {
         const fallbackResponse = await this.http.get('/test-suites', {
@@ -316,15 +329,17 @@ export class EnhancedZebrunnerClient {
           }
         };
       } catch (fallbackError: any) {
-        // Even 400/404 responses indicate the server is reachable
-        if (fallbackError.response?.status === 400 || fallbackError.response?.status === 404) {
+        // Even 400/403/404 responses indicate the server is reachable and auth is working
+        if (fallbackError.response?.status === 400 || 
+            fallbackError.response?.status === 403 || 
+            fallbackError.response?.status === 404) {
           return {
             success: true,
             message: 'Connection successful (server reachable)',
             details: {
               status: fallbackError.response.status,
               baseUrl: this.config.baseUrl,
-              note: 'Server is reachable but requires valid project parameters'
+              note: 'Server is reachable and authentication works, but test project access is limited'
             }
           };
         }

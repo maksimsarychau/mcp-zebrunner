@@ -121,12 +121,11 @@ If you see ✅ Health check completed → you’re ready.
 ⚡ Tip: After install, you can link your MCP server (your Zebrunner MCP) in Claude’s Settings → MCP Servers by entering the path to your server executable.
 
 
-Claude Desktop reads MCP servers from a JSON config file you can edit from Settings → Developer → Edit Config, which opens  folder for `claude_desktop_config.json`. 
+Claude Desktop reads MCP servers from a JSON config file you can edit from Settings → Developer → Edit Config, which opens folder for `claude_desktop_config.json`. 
 Paths:
 
-	•	macOS: ~/Library/Application Support/Claude/claude_desktop_config.json
-
-	•	Windows: %APPDATA%\Claude\claude_desktop_config.json
+   - macOS: ~/Library/Application Support/Claude/claude_desktop_config.json
+   - Windows: %APPDATA%\Claude\claude_desktop_config.json
 
 (These are the standard locations described in official MCP connection guides.)
 
@@ -164,7 +163,7 @@ pwd
 - **macOS/Linux:** `/Users/YourName/Projects/mcp-zebrunner/dist/server.js`
 
 5. Replace `/full/absolute/path/to/mcp-zebrunner/` with absolute path what you get from `pwd`.
-👉 Don't forget to add `/dist/server.js`
+   - 👉 Don't forget to add `/dist/server.js`
 
 6. Save `claude_desktop_config.json` file in **TextEditor**
 
