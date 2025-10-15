@@ -3037,8 +3037,41 @@ async function main() {
   );
 
   server.tool(
+    "get_launch_test_summary",
+    "📊 Get lightweight launch test summary with statistics (auto-paginated, token-optimized)",
+    {
+      projectKey: z.string().min(1).optional().describe("Project key (e.g., 'MCP') - alternative to projectId"),
+      projectId: z.number().int().positive().optional().describe("Project ID (e.g., 7) - alternative to projectKey"),
+      launchId: z.number().int().positive().describe("Launch ID (e.g., 119783)"),
+      statusFilter: z.array(z.string()).optional().describe("Filter by status (e.g., ['FAILED', 'SKIPPED'])"),
+      minStability: z.number().min(0).max(100).optional().describe("Minimum stability percentage (0-100)"),
+      maxStability: z.number().min(0).max(100).optional().describe("Maximum stability percentage (0-100)"),
+      sortBy: z.enum(['stability', 'duration', 'name']).default('stability').describe("Sort order (stability=most unstable first)"),
+      limit: z.number().int().positive().optional().describe("Limit number of tests returned (e.g., 10 for first 10 tests)"),
+      summaryOnly: z.boolean().default(false).describe("Return only statistics without full test list (most lightweight)"),
+      includeLabels: z.boolean().default(false).describe("Include labels array (increases token usage)"),
+      includeTestCases: z.boolean().default(false).describe("Include testCases array (increases token usage)"),
+      format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format")
+    },
+    async (args) => {
+      try {
+        debugLog("get_launch_test_summary called", args);
+        return await reportingHandlers.getLaunchTestSummary(args);
+      } catch (error: any) {
+        debugLog("Error in get_launch_test_summary", { error: error.message, args });
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error getting launch test summary: ${error.message}`
+          }]
+        };
+      }
+    }
+  );
+
+  server.tool(
     "get_launch_summary",
-    "📊 Get quick launch summary without detailed test sessions (uses new reporting API)",
+    "📋 Get quick launch summary without detailed test sessions (uses new reporting API)",
     {
       projectKey: z.string().min(1).optional().describe("Project key (e.g., 'android' or 'ANDROID') - alternative to projectId"),
       projectId: z.number().int().positive().optional().describe("Project ID (e.g., 7) - alternative to projectKey"),
