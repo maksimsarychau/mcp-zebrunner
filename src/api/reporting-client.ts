@@ -9,6 +9,8 @@ import {
   ProjectResponseSchema,
   TestSessionsResponse,
   TestSessionsResponseSchema,
+  TestRunsResponse,
+  TestRunsResponseSchema,
   MilestonesResponse,
   MilestonesResponseSchema,
   AvailableProjectsResponse,
@@ -281,6 +283,68 @@ export class ZebrunnerReportingClient {
     const sessionsData = response.data || response;
     
     return TestSessionsResponseSchema.parse(sessionsData);
+  }
+
+  /**
+   * Get test runs (test executions) for a launch
+   */
+  async getTestRuns(
+    launchId: number,
+    projectId: number,
+    options: {
+      page?: number;
+      pageSize?: number;
+    } = {}
+  ): Promise<TestRunsResponse> {
+    const { page = 1, pageSize = 50 } = options;
+    const url = `/api/reporting/v1/launches/${launchId}/tests?projectId=${projectId}&page=${page}&pageSize=${pageSize}`;
+    const response = await this.makeAuthenticatedRequest<any>('GET', url);
+    
+    // Handle different response structures
+    const runsData = response.data || response;
+    
+    return TestRunsResponseSchema.parse(runsData);
+  }
+
+  /**
+   * Get ALL test runs for a launch (auto-paginate through all pages)
+   */
+  async getAllTestRuns(
+    launchId: number,
+    projectId: number,
+    pageSize: number = 100
+  ): Promise<TestRunsResponse> {
+    const allItems: any[] = [];
+    let currentPage = 1;
+    let hasMorePages = true;
+
+    while (hasMorePages) {
+      const response = await this.getTestRuns(launchId, projectId, {
+        page: currentPage,
+        pageSize
+      });
+
+      allItems.push(...response.items);
+
+      // Check if there are more pages
+      const totalElements = response.totalElements || 0;
+      const fetchedSoFar = currentPage * pageSize;
+      hasMorePages = fetchedSoFar < totalElements;
+
+      if (this.config.debug) {
+        console.log(`[ZebrunnerReportingClient] Fetched page ${currentPage}: ${response.items.length} items (total: ${allItems.length}/${totalElements})`);
+      }
+
+      currentPage++;
+    }
+
+    return {
+      items: allItems,
+      totalElements: allItems.length,
+      totalPages: Math.ceil(allItems.length / pageSize),
+      page: 1,
+      size: allItems.length
+    };
   }
 
   /**

@@ -50,9 +50,9 @@ export const LaunchResponseSchema = z.object({
     jobUrl: z.string(),
     number: z.string()
   }).optional(),
-  startedAt: z.number(), // timestamp
-  endedAt: z.number().optional(), // timestamp
-  elapsed: z.number().optional(),
+  startedAt: z.coerce.number(), // timestamp - coerce to handle string or number
+  endedAt: z.coerce.number().optional(), // timestamp - coerce to handle string or number
+  elapsed: z.coerce.number().optional(),
   framework: z.string().optional(),
   environment: z.string().optional(),
   build: z.string().optional(),
@@ -60,14 +60,14 @@ export const LaunchResponseSchema = z.object({
   platform: z.string().optional(),
   platformVersion: z.string().optional(),
   device: z.string().optional(),
-  passed: z.number().optional(),
-  passedManually: z.number().optional(),
-  failed: z.number().optional(),
-  failedAsKnown: z.number().optional(),
-  skipped: z.number().optional(),
-  blocked: z.number().optional(),
-  inProgress: z.number().optional(),
-  aborted: z.number().optional(),
+  passed: z.coerce.number().optional(),
+  passedManually: z.coerce.number().optional(),
+  failed: z.coerce.number().optional(),
+  failedAsKnown: z.coerce.number().optional(),
+  skipped: z.coerce.number().optional(),
+  blocked: z.coerce.number().optional(),
+  inProgress: z.coerce.number().optional(),
+  aborted: z.coerce.number().optional(),
   reviewed: z.boolean().optional(),
   isRelaunchPossible: z.boolean().optional(),
   isLaunchAgainPossible: z.boolean().optional(),
@@ -105,19 +105,19 @@ export const TestSessionResponseSchema = z.object({
   id: z.number(),
   name: z.string(),
   status: z.string(),
-  startedAt: z.number(),
-  endedAt: z.number().optional(),
+  startedAt: z.coerce.number(), // timestamp - coerce to handle string or number
+  endedAt: z.coerce.number().optional(), // timestamp - coerce to handle string or number
   platform: z.string().optional(),
   platformVersion: z.string().optional(),
   browser: z.string().optional(),
   browserVersion: z.string().optional(),
   device: z.string().optional(),
   sessionId: z.string().optional(),
-  passed: z.number().optional(),
-  failed: z.number().optional(),
-  skipped: z.number().optional(),
-  aborted: z.number().optional(),
-  knownIssue: z.number().optional(),
+  passed: z.coerce.number().optional(),
+  failed: z.coerce.number().optional(),
+  skipped: z.coerce.number().optional(),
+  aborted: z.coerce.number().optional(),
+  knownIssue: z.coerce.number().optional(),
   artifactReferences: z.array(z.object({
     name: z.string(),
     value: z.string()
@@ -206,15 +206,15 @@ export const LaunchListItemSchema = z.object({
     startDate: z.string().nullable().optional(),
     dueDate: z.string().nullable().optional()
   }).nullable().optional(),
-  startedAt: z.number().optional(), // timestamp
-  finishedAt: z.number().nullable().optional(), // timestamp
-  duration: z.number().nullable().optional(),
-  passed: z.number().optional(),
-  failed: z.number().optional(),
-  skipped: z.number().optional(),
-  aborted: z.number().optional(),
-  queued: z.number().optional(),
-  total: z.number().optional(),
+  startedAt: z.coerce.number().optional(), // timestamp - coerce to handle string or number
+  finishedAt: z.coerce.number().nullable().optional(), // timestamp - coerce to handle string or number
+  duration: z.coerce.number().nullable().optional(),
+  passed: z.coerce.number().optional(),
+  failed: z.coerce.number().optional(),
+  skipped: z.coerce.number().optional(),
+  aborted: z.coerce.number().optional(),
+  queued: z.coerce.number().optional(),
+  total: z.coerce.number().optional(),
   projectId: z.number(),
   userId: z.number().optional(),
   buildNumber: z.string().nullable().optional(),
@@ -235,6 +235,58 @@ export const LaunchesResponseSchema = z.object({
 });
 
 export type LaunchesResponse = z.infer<typeof LaunchesResponseSchema>;
+
+// Test run response schema (individual test execution within a launch)
+export const TestRunResponseSchema = z.object({
+  id: z.coerce.number(),
+  name: z.string(),
+  status: z.string(),
+  message: z.string().optional(),
+  messageHashCode: z.coerce.number().optional(),
+  startTime: z.coerce.number(), // timestamp
+  finishTime: z.coerce.number().optional(), // timestamp
+  issueReferences: z.array(z.object({
+    id: z.coerce.number(),
+    type: z.string(),
+    value: z.string()
+  })).optional(),
+  knownIssue: z.boolean().optional(),
+  passedManually: z.boolean().optional(),
+  owner: z.string().optional(),
+  testClass: z.string().optional(),
+  artifacts: z.array(z.any()).optional(),
+  labels: z.array(z.object({
+    key: z.string(),
+    value: z.string()
+  })).optional(),
+  failureTagAssignments: z.array(z.any()).optional(),
+  testCases: z.array(z.object({
+    testId: z.coerce.number(),
+    tcmType: z.string(),
+    testCaseId: z.string(),
+    resultStatus: z.string().nullable().optional()
+  })).optional(),
+  testGroups: z.array(z.any()).optional(),
+  testSessionsCount: z.coerce.number().optional(),
+  maintainerId: z.coerce.number().optional(),
+  stability: z.coerce.number().optional(),
+  notNullTestGroup: z.string().optional(),
+  testRunId: z.coerce.number(),
+  testCaseId: z.coerce.number().optional()
+});
+
+export type TestRunResponse = z.infer<typeof TestRunResponseSchema>;
+
+// Paginated test runs response
+export const TestRunsResponseSchema = z.object({
+  items: z.array(TestRunResponseSchema),
+  totalElements: z.coerce.number().optional(),
+  totalPages: z.coerce.number().optional(),
+  page: z.coerce.number().optional(),
+  size: z.coerce.number().optional()
+});
+
+export type TestRunsResponse = z.infer<typeof TestRunsResponseSchema>;
 
 // Error types for reporting API
 export class ZebrunnerReportingError extends Error {

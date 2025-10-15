@@ -23,6 +23,7 @@ export const ZebrunnerAutomationStateSchema = z.object({
 
 // Test case step
 export const ZebrunnerCaseStepSchema = z.object({
+  id: z.number().optional(),
   stepNumber: z.number().optional(),
   number: z.number().optional(),
   index: z.number().optional(),

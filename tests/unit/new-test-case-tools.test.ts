@@ -65,8 +65,8 @@ describe('New Test Case Tools Unit Tests', () => {
         const mockTestCases = [
           {
             id: 1501,
-            key: 'MFPAND-605',
-            title: 'Verify a non premium user is taken to the Meal Scan walkthrough when tapping [mfp://mfp/meal_scan]',
+            key: 'MCP-605',
+            title: 'Verify a non premium user is taken to the Meal Scan walkthrough when tapping [mcp://mcp/meal_scan]',
             automationState: { id: 12, name: 'Automated' },
             priority: { id: 16, name: 'Medium' },
             testSuite: { id: 491 },
@@ -78,8 +78,8 @@ describe('New Test Case Tools Unit Tests', () => {
           },
           {
             id: 82095,
-            key: 'MFPAND-6042',
-            title: 'Verify a non premium user is taken to the Meal Scan walkthrough when tapping [mfp://mfp/meal_scan]',
+            key: 'MCP-6042',
+            title: 'Verify a non premium user is taken to the Meal Scan walkthrough when tapping [mcp://mcp/meal_scan]',
             automationState: { id: 10, name: 'Not Automated' },
             priority: { id: 15, name: 'High' },
             testSuite: { id: 18744 },
@@ -182,7 +182,7 @@ describe('New Test Case Tools Unit Tests', () => {
     
     it('should validate required parameters', () => {
       const validParams = {
-        project_key: 'MFPAND',
+        project_key: 'MCP',
         title: 'Meal Scan walkthrough',
         max_page_size: 10,
         format: 'json'
@@ -196,7 +196,7 @@ describe('New Test Case Tools Unit Tests', () => {
     
     it('should validate parameter types and ranges', () => {
       const params = {
-        project_key: 'MFPAND',
+        project_key: 'MCP',
         title: 'test',
         max_page_size: 50,
         page_token: 'token-123',
@@ -269,7 +269,7 @@ describe('New Test Case Tools Unit Tests', () => {
     });
     
     it('should simulate successful API response parsing', async () => {
-      const projectKey = 'MFPAND';
+      const projectKey = 'MCP';
       const options = {
         size: 10,
         filter: 'title~="Meal Scan"'
@@ -292,7 +292,7 @@ describe('New Test Case Tools Unit Tests', () => {
     it('should handle clickable links configuration', () => {
       const withLinksConfig = {
         include_clickable_links: true,
-        baseWebUrl: 'https://mfp.zebrunner.com'
+        baseWebUrl: 'https://mcp.zebrunner.com'
       };
       
       const withoutLinksConfig = {
@@ -303,7 +303,7 @@ describe('New Test Case Tools Unit Tests', () => {
       // Test link generation logic
       if (withLinksConfig.include_clickable_links && withLinksConfig.baseWebUrl) {
         const testCaseId = 1501;
-        const projectKey = 'MFPAND';
+        const projectKey = 'MCP';
         const expectedUrl = `${withLinksConfig.baseWebUrl}/projects/${projectKey}/test-cases?caseId=${testCaseId}`;
         assert.ok(expectedUrl.includes('test-cases?caseId='), 'Should generate correct URL format');
       }
@@ -336,7 +336,7 @@ describe('New Test Case Tools Unit Tests', () => {
     
     it('should validate parameter types and formats', () => {
       const params = {
-        project_key: 'MFPAND',
+        project_key: 'MCP',
         test_suite_id: 491,
         created_after: '2024-01-01T00:00:00Z',
         created_before: '2024-12-31T23:59:59Z',
@@ -407,7 +407,7 @@ describe('New Test Case Tools Unit Tests', () => {
     });
     
     it('should simulate complex filter API response', async () => {
-      const projectKey = 'MFPAND';
+      const projectKey = 'MCP';
       const options = {
         size: 20,
         filter: 'testSuite.id = 491 AND priority.id = 16 AND createdAt >= \'2023-01-01T00:00:00Z\''
@@ -428,7 +428,7 @@ describe('New Test Case Tools Unit Tests', () => {
     });
     
     it('should handle pagination for filtered results', async () => {
-      const projectKey = 'MFPAND';
+      const projectKey = 'MCP';
       const options = {
         size: 1, // Small page size to trigger pagination
         filter: 'testSuite.id = 491'
@@ -475,7 +475,7 @@ describe('New Test Case Tools Unit Tests', () => {
   describe('get_automation_priorities Tool', () => {
     
     it('should validate project parameter', () => {
-      const validProjects = ['web', 'android', 'ios', 'api', 'MFPAND', 7];
+      const validProjects = ['web', 'android', 'ios', 'api', 'MCP', 7];
       const invalidProjects = ['', null, undefined, -1];
       
       validProjects.forEach(project => {
@@ -663,7 +663,7 @@ describe('New Test Case Tools Unit Tests', () => {
       assert.ok(highPriorityId, 'Should find High priority ID');
       
       // 2. Use priority ID in filter search
-      const projectKey = 'MFPAND';
+      const projectKey = 'MCP';
       const filterOptions = {
         size: 10,
         filter: `priority.id = ${highPriorityId}`
@@ -705,7 +705,7 @@ describe('New Test Case Tools Unit Tests', () => {
         filter: 'testSuite.id = 99999' // Non-existent suite
       };
       
-      const emptyResponse = await mockEnhancedClient.getTestCases('MFPAND', emptyFilterOptions);
+      const emptyResponse = await mockEnhancedClient.getTestCases('MCP', emptyFilterOptions);
       assert.ok(Array.isArray(emptyResponse.items), 'Should return empty array for no results');
     });
   });

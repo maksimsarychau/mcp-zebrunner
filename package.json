@@ -1,6 +1,6 @@
 {
   "name": "mcp-zebrunner",
-  "version": "4.7.184",
+  "version": "4.8.188",
   "private": true,
   "type": "module",
   "description": "MCP server (stdio) for Zebrunner TCM API (read-only)",
