@@ -16,7 +16,8 @@ import {
   GetTestResultsInputSchema,
   FindTestCaseByKeyInputSchema,
   GetSuiteHierarchyInputSchema,
-  GetLauncherDetailsInputSchema
+  GetLauncherDetailsInputSchema,
+  AnalyzeTestFailureInputSchema
 } from "./types/api.js";
 import { ZebrunnerReportingConfig } from "./types/reporting.js";
 
@@ -170,6 +171,25 @@ async function main() {
       format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format")
     },
     async (args) => reportingHandlers.getLauncherSummary(args)
+  );
+
+  server.tool(
+    "analyze_test_failure",
+    "🔍 Deep forensic analysis of a failed test including logs, screenshots, error classification, and similar failures",
+    {
+      testId: z.number().int().positive().describe("Test ID (e.g., 5451420)"),
+      testRunId: z.number().int().positive().describe("Test Run ID / Launch ID (e.g., 120806)"),
+      projectKey: z.string().min(1).optional().describe("Project key (e.g., 'MCP') - alternative to projectId"),
+      projectId: z.number().int().positive().optional().describe("Project ID - alternative to projectKey"),
+      includeScreenshots: z.boolean().default(true).describe("Include screenshot analysis"),
+      includeLogs: z.boolean().default(true).describe("Include log analysis"),
+      includeArtifacts: z.boolean().default(true).describe("Include all test artifacts"),
+      includePageSource: z.boolean().default(true).describe("Include page source analysis"),
+      includeVideo: z.boolean().default(false).describe("Include video URL"),
+      analyzeSimilarFailures: z.boolean().default(true).describe("Find similar failures in the launch"),
+      format: z.enum(['detailed', 'summary']).default('detailed').describe("Output format: detailed or summary")
+    },
+    async (args) => reportingHandlers.analyzeTestFailureById(args)
   );
 
   // ========== CONNECTION TEST TOOLS ==========

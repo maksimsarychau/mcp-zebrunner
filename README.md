@@ -423,6 +423,47 @@ Once connected, you can use these tools through natural language in your AI assi
 
 ### 📊 Reporting & Analytics
 
+#### **Test Failure Analysis** 🆕 *Game Changer*
+| Tool | Description | Example Usage | Best For |
+|------|-------------|---------------|----------|
+| `analyze_test_failure` | Deep forensic analysis of failed tests with logs, screenshots, error classification, and recommendations. **NEW:** `format: 'jira'` generates ready-to-paste Jira tickets with auto-priority, labels, and clickable 🎥 video links! | `"Analyze test failure 5451420 in launch 120806"` or with `format: 'jira'` for Jira ticket | **QA Engineers, SDETs, Managers** |
+| `detailed_analyze_launch_failures` | 🚀 **Enhanced v4.12.1** Analyze failures WITHOUT linked issues with **Claude-level intelligence** + **Jira format support**. Auto-deep-dive with executive summary, timeline, patterns, priorities. **NEW:** Generate Jira-ready tickets for entire launches! | `"Analyze failures in launch 120806"` or with `format: 'jira'` | **QA Managers, SDETs, Team Leads** |
+
+> ✅ **FIXED in v5.2.4!** **Improved Reliability & Video Links**
+> - **🎥 Video URLs fixed**: Now uses test-sessions API (`/api/reporting/v1/launches/{id}/test-sessions`) for reliable video artifact extraction
+> - **🛡️ Comprehensive error handling**: Gracefully handles missing screenshots/logs (returns empty arrays instead of throwing)
+> - **🚫 No more "no result received" errors**: All API calls have proper try-catch blocks with fallbacks
+> - **🐛 Better debugging**: Enhanced logging when `debug: true` is enabled in config
+> - **📊 Schema updates**: Supports both old and new API structures for backward compatibility
+>
+> 🎫 **NEW in v4.12.1!** **Jira-Ready Ticket Format**
+> - Use `format: 'jira'` to generate ready-to-paste Jira tickets
+> - **Auto-calculated priority** based on stability and impact
+> - **Smart labels**: `test-automation`, `locator-issue`, `flaky-test`, etc.
+> - **Complete Jira markup**: Tables, panels, code blocks, clickable links
+> - **🎥 Prominent video links**: Beautiful panels + links section
+> - **Copy-paste ready**: No manual formatting needed
+> - **Saves 5-10 minutes per ticket** with consistent quality
+
+> 🧠 **Enhanced in v4.11.1!** `detailed_analyze_launch_failures` provides **automatic deep synthesis** like Claude would manually provide:
+> - **🎯 Executive Summary**: Key findings, patterns, and stability indicators
+> - **📅 Timeline Analysis**: When failures first appeared, progression tracking
+> - **🔬 Pattern Analysis**: Groups by root cause with affected tests and stability %
+> - **🎯 Priority-Based Recommendations**: 🔴 HIGH / 🟡 MEDIUM / 🟢 LOW with impact analysis
+> - **📋 Enhanced Test Details**: Full error messages, stack traces, timestamps
+> - **❓ Smart Follow-up Questions**: Guides next investigation steps
+> - **Smart filtering**: Analyzes only tests WITHOUT linked issues by default
+> - Optional AI screenshot analysis for all tests
+> - **No manual follow-up needed** - get complete picture in one call!
+
+#### **Screenshot Analysis & Visual Forensics** 🎯 *Enhanced in v4.11.0*
+| Tool | Description | Example Usage | Best For |
+|------|-------------|---------------|----------|
+| `download_test_screenshot` | Download protected screenshots from Zebrunner with authentication | `"Download screenshot from https://your-workspace.zebrunner.com/files/abc123 for test 5451420"` | **QA Engineers, Automation Engineers** |
+| `analyze_screenshot` | Visual analysis with OCR, UI detection, and Claude Vision | `"Analyze screenshot https://your-workspace.zebrunner.com/files/abc123 with OCR and detailed analysis"` | **QA Engineers, SDETs, Developers** |
+
+> 📸 **Enhanced!** Screenshot analysis now integrated directly into `analyze_test_failure` and `analyze_launch_failures` - no need to call separately! See [Screenshot Analysis Guide](docs/SCREENSHOT_ANALYSIS.md) for details.
+
 #### **Platform & Results Analysis** ⭐ *Critical for Management*
 | Tool | Description | Example Usage | Best For |
 |------|-------------|---------------|----------|
@@ -1039,6 +1080,7 @@ Leverage intelligent validation:
 - **[docs/SUITE_HIERARCHY.md](docs/SUITE_HIERARCHY.md)** - Complete guide to suite hierarchy features
 - **[docs/TEST_CASE_VALIDATION_IMPLEMENTATION.md](docs/TEST_CASE_VALIDATION_IMPLEMENTATION.md)** - Test case validation system details
 - **[docs/ENHANCED_VALIDATION_FEATURES.md](docs/ENHANCED_VALIDATION_FEATURES.md)** - Advanced validation and improvement features
+- **[docs/SCREENSHOT_ANALYSIS.md](docs/SCREENSHOT_ANALYSIS.md)** - 📸 **Screenshot analysis and visual forensics guide** 🆕
 
 [⬆️ Back to top](#-table-of-contents)
 

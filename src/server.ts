@@ -3095,6 +3095,125 @@ async function main() {
   );
 
   server.tool(
+    "analyze_test_failure",
+    "🔍 Deep forensic analysis of failed test including logs, screenshots, error classification, and similar failures",
+    {
+      testId: z.number().int().positive().describe("Test ID (e.g., 5451420)"),
+      testRunId: z.number().int().positive().describe("Test Run ID / Launch ID (e.g., 120806)"),
+      projectKey: z.string().min(1).optional().describe("Project key (e.g., 'MCP') - alternative to projectId"),
+      projectId: z.number().int().positive().optional().describe("Project ID - alternative to projectKey"),
+      includeScreenshots: z.boolean().default(true).describe("Include screenshot links"),
+      includeLogs: z.boolean().default(true).describe("Include log analysis"),
+      includeArtifacts: z.boolean().default(true).describe("Include all test artifacts"),
+      includePageSource: z.boolean().default(true).describe("Include page source analysis"),
+      includeVideo: z.boolean().default(false).describe("Include video URL"),
+      analyzeSimilarFailures: z.boolean().default(true).describe("Find similar failures in the launch"),
+      analyzeScreenshotsWithAI: z.boolean().default(false).describe("Download and analyze screenshots with AI (Claude Vision)"),
+      screenshotAnalysisType: z.enum(['basic', 'detailed']).default('detailed').describe("Screenshot analysis type: basic (metadata+OCR) or detailed (includes Claude Vision)"),
+      format: z.enum(['detailed', 'summary', 'jira']).default('detailed').describe("Output format: detailed, summary, or jira (ready for Jira ticket creation)")
+    },
+    async (args) => {
+      try {
+        debugLog("analyze_test_failure called", args);
+        return await reportingHandlers.analyzeTestFailureById(args);
+      } catch (error: any) {
+        debugLog("Error in analyze_test_failure", { error: error.message, args });
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error analyzing test failure: ${error.message}`
+          }]
+        };
+      }
+    }
+  );
+
+  server.tool(
+    "download_test_screenshot",
+    "📸 Download test screenshot with authentication from Zebrunner",
+    {
+      screenshotUrl: z.string().describe("Screenshot URL (e.g., 'https://your-workspace.zebrunner.com/files/abc123' or '/files/abc123')"),
+      testId: z.number().int().positive().optional().describe("Test ID for context"),
+      projectKey: z.string().min(1).optional().describe("Project key for context"),
+      outputPath: z.string().optional().describe("Custom output path (default: temp directory)"),
+      returnBase64: z.boolean().default(false).describe("Return base64 encoded image")
+    },
+    async (args) => {
+      try {
+        debugLog("download_test_screenshot called", args);
+        return await reportingHandlers.downloadTestScreenshot(args);
+      } catch (error: any) {
+        debugLog("Error in download_test_screenshot", { error: error.message, args });
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error downloading screenshot: ${error.message}`
+          }]
+        };
+      }
+    }
+  );
+
+  server.tool(
+    "analyze_screenshot",
+    "🔍 Analyze test screenshot with OCR and visual analysis - returns image to Claude Vision for detailed analysis",
+    {
+      screenshotUrl: z.string().optional().describe("Screenshot URL to download and analyze"),
+      screenshotPath: z.string().optional().describe("Local path to screenshot file"),
+      testId: z.number().int().positive().optional().describe("Test ID for context"),
+      enableOCR: z.boolean().default(false).describe("Enable OCR text extraction (slower)"),
+      analysisType: z.enum(['basic', 'detailed']).default('detailed').describe("basic=metadata+OCR only, detailed=includes image for Claude Vision"),
+      expectedState: z.string().optional().describe("Expected UI state for comparison")
+    },
+    async (args) => {
+      try {
+        debugLog("analyze_screenshot called", args);
+        return await reportingHandlers.analyzeScreenshotTool(args);
+      } catch (error: any) {
+        debugLog("Error in analyze_screenshot", { error: error.message, args });
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error analyzing screenshot: ${error.message}`
+          }]
+        };
+      }
+    }
+  );
+
+  server.tool(
+    "detailed_analyze_launch_failures",
+    "🚀 Analyze failed tests WITHOUT linked issues in a launch with grouping, statistics, and recommendations. Automatically analyzes all tests if ≤10, otherwise first 10 (use offset/limit for more). Use filterType: 'all' to include tests with issues. Supports pagination and screenshot analysis.",
+    {
+      testRunId: z.number().int().positive().describe("Launch ID / Test Run ID (e.g., 120806)"),
+      projectKey: z.string().min(1).optional().describe("Project key (e.g., 'MCP') - alternative to projectId"),
+      projectId: z.number().int().positive().optional().describe("Project ID - alternative to projectKey"),
+      filterType: z.enum(['all', 'without_issues']).default('without_issues').describe("Filter: 'without_issues' = only tests without linked Jira tickets (DEFAULT), 'all' = all failed tests"),
+      includeScreenshotAnalysis: z.boolean().default(false).describe("Download and analyze screenshots with AI for each test (increases analysis time)"),
+      screenshotAnalysisType: z.enum(['basic', 'detailed']).default('detailed').describe("Screenshot analysis type if enabled"),
+      format: z.enum(['detailed', 'summary', 'jira']).default('summary').describe("Output format: 'detailed' = full analysis, 'summary' = condensed, 'jira' = ready for Jira ticket"),
+      executionMode: z.enum(['sequential', 'parallel', 'batches']).default('sequential').describe("Execution mode: sequential (safe), parallel (fast), or batches (balanced)"),
+      batchSize: z.number().int().positive().default(5).describe("Batch size if executionMode is 'batches' (default: 5)"),
+      offset: z.number().int().min(0).default(0).describe("Pagination offset - start from test N (e.g., 0 for first 10, 10 for next 10)"),
+      limit: z.number().int().positive().default(10).describe("Number of tests to analyze (default: 10, max recommended: 20)")
+    },
+    async (args) => {
+      try {
+        debugLog("analyze_launch_failures called", args);
+        return await reportingHandlers.analyzeLaunchFailures(args);
+      } catch (error: any) {
+        debugLog("Error in analyze_launch_failures", { error: error.message, args });
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error analyzing launch failures: ${error.message}`
+          }]
+        };
+      }
+    }
+  );
+
+  server.tool(
     "get_all_launches_for_project",
     "📋 Get all launches for a project with pagination (uses new reporting API)",
     {
