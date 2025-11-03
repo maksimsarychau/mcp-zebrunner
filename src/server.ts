@@ -3096,7 +3096,7 @@ async function main() {
 
   server.tool(
     "analyze_test_failure",
-    "🔍 Deep forensic analysis of failed test including logs, screenshots, error classification, and similar failures",
+    "🔍 Deep forensic analysis of failed test including logs, screenshots, error classification, and similar failures. 💡 TIP: Can be auto-invoked from Zebrunner test URLs like: https://workspace.zebrunner.com/projects/PROJECT/automation-launches/LAUNCH_ID/tests/TEST_ID",
     {
       testId: z.number().int().positive().describe("Test ID (e.g., 5451420)"),
       testRunId: z.number().int().positive().describe("Test Run ID / Launch ID (e.g., 120806)"),
@@ -3183,7 +3183,7 @@ async function main() {
 
   server.tool(
     "detailed_analyze_launch_failures",
-    "🚀 Analyze failed tests WITHOUT linked issues in a launch with grouping, statistics, and recommendations. Automatically analyzes all tests if ≤10, otherwise first 10 (use offset/limit for more). Use filterType: 'all' to include tests with issues. Supports pagination and screenshot analysis. **NEW:** Jira format with smart grouping - creates combined tickets for similar errors!",
+    "🚀 Analyze failed tests WITHOUT linked issues in a launch with grouping, statistics, and recommendations. Automatically analyzes all tests if ≤10, otherwise first 10 (use offset/limit for more). Use filterType: 'all' to include tests with issues. Supports pagination and screenshot analysis. **NEW:** Jira format with smart grouping - creates combined tickets for similar errors! 💡 TIP: Can be auto-invoked from Zebrunner launch URLs like: https://workspace.zebrunner.com/projects/PROJECT/automation-launches/LAUNCH_ID",
     {
       testRunId: z.number().int().positive().describe("Launch ID / Test Run ID (e.g., 120806)"),
       projectKey: z.string().min(1).optional().describe("Project key (e.g., 'MCP') - alternative to projectId"),
