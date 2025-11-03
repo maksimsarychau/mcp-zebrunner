@@ -125,6 +125,20 @@ export const GetLauncherDetailsInputSchema = z.object({
   format: z.enum(['dto', 'json', 'string']).default('json')
 });
 
+export const AnalyzeTestFailureInputSchema = z.object({
+  testId: z.number().int().positive(),
+  testRunId: z.number().int().positive(), // launchId
+  projectKey: z.string().min(1).optional(),
+  projectId: z.number().int().positive().optional(),
+  includeScreenshots: z.boolean().default(true),
+  includeLogs: z.boolean().default(true),
+  includeArtifacts: z.boolean().default(true),
+  includePageSource: z.boolean().default(true),
+  includeVideo: z.boolean().default(false),
+  analyzeSimilarFailures: z.boolean().default(true),
+  format: z.enum(['detailed', 'summary']).default('detailed')
+});
+
 export const ValidateTestCaseInputSchema = z.object({
   projectKey: z.string().min(1),
   caseKey: z.string().min(1),
@@ -151,6 +165,7 @@ export type GetTestResultsInput = z.infer<typeof GetTestResultsInputSchema>;
 export type FindTestCaseByKeyInput = z.infer<typeof FindTestCaseByKeyInputSchema>;
 export type GetSuiteHierarchyInput = z.infer<typeof GetSuiteHierarchyInputSchema>;
 export type GetLauncherDetailsInput = z.infer<typeof GetLauncherDetailsInputSchema>;
+export type AnalyzeTestFailureInput = z.infer<typeof AnalyzeTestFailureInputSchema>;
 export type ValidateTestCaseInput = z.infer<typeof ValidateTestCaseInputSchema>;
 export type ImproveTestCaseInput = z.infer<typeof ImproveTestCaseInputSchema>;
 

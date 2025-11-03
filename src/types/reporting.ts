@@ -100,24 +100,35 @@ export const ProjectResponseSchema = z.object({
 
 export type ProjectResponse = z.infer<typeof ProjectResponseSchema>;
 
-// Test session response schema
+// Test session response schema - supports both old and new API structures
 export const TestSessionResponseSchema = z.object({
   id: z.number(),
   name: z.string(),
   status: z.string(),
-  startedAt: z.coerce.number(), // timestamp - coerce to handle string or number
-  endedAt: z.coerce.number().optional(), // timestamp - coerce to handle string or number
-  platform: z.string().optional(),
-  platformVersion: z.string().optional(),
-  browser: z.string().optional(),
-  browserVersion: z.string().optional(),
-  device: z.string().optional(),
   sessionId: z.string().optional(),
+  initiatedAt: z.string().optional(), // New API uses ISO string
+  startedAt: z.union([z.coerce.number(), z.string()]).optional(), // timestamp or ISO string
+  endedAt: z.union([z.coerce.number(), z.string()]).optional(), // timestamp or ISO string
+  platform: z.string().optional(), // Old API field
+  platformName: z.string().nullable().optional(), // New API field
+  platformVersion: z.string().nullable().optional(),
+  browser: z.string().optional(), // Old API field
+  browserName: z.string().nullable().optional(), // New API field
+  browserVersion: z.string().nullable().optional(),
+  device: z.string().optional(), // Old API field
+  deviceName: z.string().nullable().optional(), // New API field
   passed: z.coerce.number().optional(),
   failed: z.coerce.number().optional(),
   skipped: z.coerce.number().optional(),
   aborted: z.coerce.number().optional(),
   knownIssue: z.coerce.number().optional(),
+  durationInSeconds: z.number().optional(), // New API field
+  tests: z.array(z.object({ // New API field
+    id: z.number(),
+    name: z.string(),
+    status: z.string(),
+    passedManually: z.boolean()
+  })).optional(),
   artifactReferences: z.array(z.object({
     name: z.string(),
     value: z.string()
@@ -287,6 +298,62 @@ export const TestRunsResponseSchema = z.object({
 });
 
 export type TestRunsResponse = z.infer<typeof TestRunsResponseSchema>;
+
+// Log item schema (from test-execution-logs API)
+export const LogItemSchema = z.object({
+  kind: z.enum(['log', 'screenshot']),
+  level: z.string().optional(), // INFO, WARN, ERROR, etc.
+  instant: z.string(), // ISO timestamp
+  value: z.string() // Log message or screenshot file path
+});
+
+export type LogItem = z.infer<typeof LogItemSchema>;
+
+// Logs and screenshots response
+export const LogsAndScreenshotsResponseSchema = z.object({
+  items: z.array(LogItemSchema),
+  _meta: z.object({
+    nextPageToken: z.string().optional()
+  }).optional()
+});
+
+export type LogsAndScreenshotsResponse = z.infer<typeof LogsAndScreenshotsResponseSchema>;
+
+// JIRA integration schema (from integrations API)
+export const JiraIntegrationConfigSchema = z.object({
+  type: z.string(), // e.g., "CLOUD"
+  url: z.string(), // JIRA base URL
+  username: z.string().optional(),
+  token: z.string().optional(),
+  tokenEncrypted: z.boolean().optional(),
+  xray: z.any().nullable().optional(),
+  zephyrSquad: z.any().nullable().optional(),
+  zephyrScale: z.any().nullable().optional()
+});
+
+export const JiraProjectsMappingSchema = z.object({
+  enabledForAllZebrunnerProjects: z.boolean(),
+  enabledForZebrunnerProjectIds: z.array(z.number()),
+  enabledForAllJiraProjects: z.boolean(),
+  enabledForJiraProjectIds: z.array(z.any())
+});
+
+export const JiraIntegrationSchema = z.object({
+  id: z.number(),
+  enabled: z.boolean(),
+  tool: z.string(), // "JIRA"
+  config: JiraIntegrationConfigSchema,
+  projectsMapping: JiraProjectsMappingSchema
+});
+
+export const JiraIntegrationsResponseSchema = z.object({
+  items: z.array(JiraIntegrationSchema)
+});
+
+export type JiraIntegrationConfig = z.infer<typeof JiraIntegrationConfigSchema>;
+export type JiraProjectsMapping = z.infer<typeof JiraProjectsMappingSchema>;
+export type JiraIntegration = z.infer<typeof JiraIntegrationSchema>;
+export type JiraIntegrationsResponse = z.infer<typeof JiraIntegrationsResponseSchema>;
 
 // Error types for reporting API
 export class ZebrunnerReportingError extends Error {

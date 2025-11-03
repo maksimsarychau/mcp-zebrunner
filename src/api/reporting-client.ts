@@ -19,6 +19,10 @@ import {
   ProjectsLimitResponseSchema,
   LaunchesResponse,
   LaunchesResponseSchema,
+  LogsAndScreenshotsResponse,
+  LogsAndScreenshotsResponseSchema,
+  JiraIntegrationsResponse,
+  JiraIntegrationsResponseSchema,
   ZebrunnerReportingError,
   ZebrunnerReportingAuthError,
   ZebrunnerReportingNotFoundError
@@ -36,6 +40,7 @@ export class ZebrunnerReportingClient {
   private bearerToken: string | null = null;
   private tokenExpiresAt: Date | null = null;
   private projectCache: Map<string, { project: ProjectResponse, timestamp: number }> = new Map();
+  private jiraBaseUrlCache: string | null = null; // Cached JIRA base URL for session
 
   constructor(config: ZebrunnerReportingConfig) {
     this.config = {
@@ -273,6 +278,31 @@ export class ZebrunnerReportingClient {
   }
 
   /**
+   * Get project key by ID
+   */
+  async getProjectKey(projectId: number): Promise<string> {
+    // Check if we have it in cache (reverse lookup)
+    for (const [key, cached] of this.projectCache.entries()) {
+      if (cached.project.id === projectId && Date.now() - cached.timestamp < 5 * 60 * 1000) {
+        return cached.project.key;
+      }
+    }
+
+    // If not in cache, fetch all available projects and find the one
+    const projects = await this.getAvailableProjects();
+    const project = projects.items.find(p => p.id === projectId);
+    
+    if (!project) {
+      throw new ZebrunnerReportingError(`Project with ID ${projectId} not found`);
+    }
+    
+    // Cache it for future use
+    const fullProject = await this.getProject(project.key);
+    
+    return fullProject.key;
+  }
+
+  /**
    * Get test sessions for a launch
    */
   async getTestSessions(launchId: number, projectId: number): Promise<TestSessionsResponse> {
@@ -345,6 +375,121 @@ export class ZebrunnerReportingClient {
       page: 1,
       size: allItems.length
     };
+  }
+
+  /**
+   * Get test logs and screenshots for a specific test run
+   * Uses the test-execution-logs API endpoint
+   */
+  async getTestLogsAndScreenshots(
+    testRunId: number,
+    testId: number,
+    options: {
+      maxPageSize?: number;
+    } = {}
+  ): Promise<LogsAndScreenshotsResponse> {
+    const { maxPageSize = 1000 } = options;
+    const url = `/api/test-execution-logs/v1/test-runs/${testRunId}/tests/${testId}/logs-and-screenshots?maxPageSize=${maxPageSize}`;
+    
+    try {
+      const response = await this.makeAuthenticatedRequest<any>('GET', url);
+      
+      // Handle different response structures
+      const logsData = response.data || response;
+      
+      try {
+        return LogsAndScreenshotsResponseSchema.parse(logsData);
+      } catch (parseError) {
+        if (this.config.debug) {
+          console.warn(`[ZebrunnerReportingClient] Failed to parse logs/screenshots, returning empty: ${parseError}`);
+        }
+        // Return empty but valid response
+        return { items: [] };
+      }
+    } catch (error) {
+      if (this.config.debug) {
+        console.warn(`[ZebrunnerReportingClient] Failed to fetch logs/screenshots: ${error}`);
+      }
+      // Return empty but valid response instead of throwing
+      return { items: [] };
+    }
+  }
+
+  /**
+   * Get test sessions for a specific test to retrieve artifacts (video, logs)
+   */
+  async getTestSessionsForTest(
+    launchId: number,
+    testId: number,
+    projectId: number
+  ): Promise<TestSessionsResponse> {
+    const url = `/api/reporting/v1/launches/${launchId}/test-sessions?testId=${testId}&projectId=${projectId}`;
+    
+    try {
+      const response = await this.makeAuthenticatedRequest<any>('GET', url);
+      const sessionsData = response.data || response;
+      
+      if (this.config.debug) {
+        console.log(`[ZebrunnerReportingClient] Test sessions response for test ${testId}:`, JSON.stringify(sessionsData, null, 2));
+      }
+      
+      try {
+        return TestSessionsResponseSchema.parse(sessionsData);
+      } catch (parseError) {
+        if (this.config.debug) {
+          console.warn(`[ZebrunnerReportingClient] Failed to parse test sessions: ${parseError}`);
+        }
+        // Return empty but valid response
+        return { items: [] };
+      }
+    } catch (error) {
+      if (this.config.debug) {
+        console.warn(`[ZebrunnerReportingClient] Failed to fetch test sessions: ${error}`);
+      }
+      // Return empty but valid response instead of throwing
+      return { items: [] };
+    }
+  }
+
+  /**
+   * Download screenshot file with authentication
+   * @param fileUrl - Relative or absolute URL to screenshot file (e.g., "/files/abc123" or "https://your-workspace.zebrunner.com/files/abc123")
+   * @returns Buffer containing the image data
+   */
+  async downloadScreenshot(fileUrl: string): Promise<Buffer> {
+    try {
+      const bearerToken = await this.getBearerToken();
+      
+      // Construct full URL if relative path provided
+      let fullUrl = fileUrl;
+      if (fileUrl.startsWith('/files/')) {
+        fullUrl = `${this.config.baseUrl}${fileUrl}`;
+      }
+      
+      if (this.config.debug) {
+        console.log(`[ZebrunnerReportingClient] Downloading screenshot: ${fullUrl}`);
+      }
+      
+      const response = await this.http.get(fullUrl, {
+        headers: {
+          'Authorization': `Bearer ${bearerToken}`
+        },
+        responseType: 'arraybuffer'
+      });
+      
+      if (this.config.debug) {
+        console.log(`[ZebrunnerReportingClient] Screenshot downloaded successfully, size: ${response.data.byteLength} bytes`);
+      }
+      
+      return Buffer.from(response.data);
+    } catch (error) {
+      if (this.config.debug) {
+        console.error('[ZebrunnerReportingClient] Screenshot download failed:', error);
+      }
+      throw new ZebrunnerReportingError(
+        `Failed to download screenshot from ${fileUrl}: ${error instanceof Error ? error.message : error}`
+      );
+    }
   }
 
   /**
@@ -593,5 +738,109 @@ export class ZebrunnerReportingClient {
       expiresAt: this.tokenExpiresAt,
       timeToExpiry
     };
+  }
+
+  /**
+   * Fetch JIRA integrations from Zebrunner
+   */
+  async getJiraIntegrations(): Promise<JiraIntegrationsResponse> {
+    try {
+      const response = await this.makeAuthenticatedRequest<any>(
+        'GET',
+        '/api/integrations/v2/integrations/tool:jira'
+      );
+
+      const integrationsData = response.data || response;
+      return JiraIntegrationsResponseSchema.parse(integrationsData);
+    } catch (error) {
+      if (this.config.debug) {
+        console.warn(`[ZebrunnerReportingClient] Failed to fetch JIRA integrations: ${error}`);
+      }
+      // Return empty response on error
+      return { items: [] };
+    }
+  }
+
+  /**
+   * Resolve JIRA base URL with caching
+   * Priority: 
+   * 1. Cached value (session-level cache)
+   * 2. Zebrunner integrations API (match by projectId, fallback to any enabled)
+   * 3. Environment variable (JIRA_BASE_URL)
+   * 4. Placeholder (https://jira.com)
+   */
+  async resolveJiraBaseUrl(projectId?: number): Promise<string> {
+    // Return cached value if available
+    if (this.jiraBaseUrlCache) {
+      return this.jiraBaseUrlCache;
+    }
+
+    try {
+      // Try to fetch from Zebrunner integrations API
+      const integrations = await this.getJiraIntegrations();
+      
+      if (integrations.items.length > 0) {
+        // Filter to enabled JIRA integrations only
+        const enabledIntegrations = integrations.items.filter(
+          (integration) => integration.enabled && integration.tool === 'JIRA'
+        );
+
+        if (enabledIntegrations.length > 0) {
+          let selectedIntegration = enabledIntegrations[0]; // Default to first
+
+          // If projectId provided, try to find matching integration
+          if (projectId) {
+            const projectMatch = enabledIntegrations.find((integration) =>
+              integration.projectsMapping.enabledForZebrunnerProjectIds.includes(projectId)
+            );
+            if (projectMatch) {
+              selectedIntegration = projectMatch;
+            }
+          }
+
+          const jiraUrl = selectedIntegration.config.url;
+          if (jiraUrl) {
+            // Cache and return
+            this.jiraBaseUrlCache = jiraUrl.replace(/\/+$/, ''); // Remove trailing slash
+            if (this.config.debug) {
+              console.log(`[ZebrunnerReportingClient] Resolved JIRA URL from integrations: ${this.jiraBaseUrlCache}`);
+            }
+            return this.jiraBaseUrlCache;
+          }
+        }
+      }
+    } catch (error) {
+      if (this.config.debug) {
+        console.warn(`[ZebrunnerReportingClient] Failed to resolve JIRA URL from integrations: ${error}`);
+      }
+    }
+
+    // Fallback to environment variable
+    const envJiraUrl = process.env.JIRA_BASE_URL;
+    if (envJiraUrl) {
+      this.jiraBaseUrlCache = envJiraUrl.replace(/\/+$/, '');
+      if (this.config.debug) {
+        console.log(`[ZebrunnerReportingClient] Resolved JIRA URL from env var: ${this.jiraBaseUrlCache}`);
+      }
+      return this.jiraBaseUrlCache;
+    }
+
+    // Final fallback to placeholder
+    this.jiraBaseUrlCache = 'https://jira.com';
+    if (this.config.debug) {
+      console.warn(`[ZebrunnerReportingClient] No JIRA URL found, using placeholder: ${this.jiraBaseUrlCache}`);
+    }
+    return this.jiraBaseUrlCache;
+  }
+
+  /**
+   * Build a JIRA issue URL
+   * @param issueKey - JIRA issue key (e.g., "QAS-22939", "APPS-2771")
+   * @param projectId - Optional project ID for project-specific JIRA integration
+   * @returns Full JIRA URL (e.g., "https://your-workspace.atlassian.net/browse/QAS-22939")
+   */
+  async buildJiraUrl(issueKey: string, projectId?: number): Promise<string> {
+    const jiraBaseUrl = await this.resolveJiraBaseUrl(projectId);
+    return `${jiraBaseUrl}/browse/${issueKey}`;
   }
 }
