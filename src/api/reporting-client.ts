@@ -21,6 +21,8 @@ import {
   LaunchesResponseSchema,
   LogsAndScreenshotsResponse,
   LogsAndScreenshotsResponseSchema,
+  JiraIntegrationsResponse,
+  JiraIntegrationsResponseSchema,
   ZebrunnerReportingError,
   ZebrunnerReportingAuthError,
   ZebrunnerReportingNotFoundError
@@ -38,6 +40,7 @@ export class ZebrunnerReportingClient {
   private bearerToken: string | null = null;
   private tokenExpiresAt: Date | null = null;
   private projectCache: Map<string, { project: ProjectResponse, timestamp: number }> = new Map();
+  private jiraBaseUrlCache: string | null = null; // Cached JIRA base URL for session
 
   constructor(config: ZebrunnerReportingConfig) {
     this.config = {
@@ -735,5 +738,109 @@ export class ZebrunnerReportingClient {
       expiresAt: this.tokenExpiresAt,
       timeToExpiry
     };
+  }
+
+  /**
+   * Fetch JIRA integrations from Zebrunner
+   */
+  async getJiraIntegrations(): Promise<JiraIntegrationsResponse> {
+    try {
+      const response = await this.makeAuthenticatedRequest<any>(
+        'GET',
+        '/api/integrations/v2/integrations/tool:jira'
+      );
+
+      const integrationsData = response.data || response;
+      return JiraIntegrationsResponseSchema.parse(integrationsData);
+    } catch (error) {
+      if (this.config.debug) {
+        console.warn(`[ZebrunnerReportingClient] Failed to fetch JIRA integrations: ${error}`);
+      }
+      // Return empty response on error
+      return { items: [] };
+    }
+  }
+
+  /**
+   * Resolve JIRA base URL with caching
+   * Priority: 
+   * 1. Cached value (session-level cache)
+   * 2. Zebrunner integrations API (match by projectId, fallback to any enabled)
+   * 3. Environment variable (JIRA_BASE_URL)
+   * 4. Placeholder (https://jira.com)
+   */
+  async resolveJiraBaseUrl(projectId?: number): Promise<string> {
+    // Return cached value if available
+    if (this.jiraBaseUrlCache) {
+      return this.jiraBaseUrlCache;
+    }
+
+    try {
+      // Try to fetch from Zebrunner integrations API
+      const integrations = await this.getJiraIntegrations();
+      
+      if (integrations.items.length > 0) {
+        // Filter to enabled JIRA integrations only
+        const enabledIntegrations = integrations.items.filter(
+          (integration) => integration.enabled && integration.tool === 'JIRA'
+        );
+
+        if (enabledIntegrations.length > 0) {
+          let selectedIntegration = enabledIntegrations[0]; // Default to first
+
+          // If projectId provided, try to find matching integration
+          if (projectId) {
+            const projectMatch = enabledIntegrations.find((integration) =>
+              integration.projectsMapping.enabledForZebrunnerProjectIds.includes(projectId)
+            );
+            if (projectMatch) {
+              selectedIntegration = projectMatch;
+            }
+          }
+
+          const jiraUrl = selectedIntegration.config.url;
+          if (jiraUrl) {
+            // Cache and return
+            this.jiraBaseUrlCache = jiraUrl.replace(/\/+$/, ''); // Remove trailing slash
+            if (this.config.debug) {
+              console.log(`[ZebrunnerReportingClient] Resolved JIRA URL from integrations: ${this.jiraBaseUrlCache}`);
+            }
+            return this.jiraBaseUrlCache;
+          }
+        }
+      }
+    } catch (error) {
+      if (this.config.debug) {
+        console.warn(`[ZebrunnerReportingClient] Failed to resolve JIRA URL from integrations: ${error}`);
+      }
+    }
+
+    // Fallback to environment variable
+    const envJiraUrl = process.env.JIRA_BASE_URL;
+    if (envJiraUrl) {
+      this.jiraBaseUrlCache = envJiraUrl.replace(/\/+$/, '');
+      if (this.config.debug) {
+        console.log(`[ZebrunnerReportingClient] Resolved JIRA URL from env var: ${this.jiraBaseUrlCache}`);
+      }
+      return this.jiraBaseUrlCache;
+    }
+
+    // Final fallback to placeholder
+    this.jiraBaseUrlCache = 'https://jira.com';
+    if (this.config.debug) {
+      console.warn(`[ZebrunnerReportingClient] No JIRA URL found, using placeholder: ${this.jiraBaseUrlCache}`);
+    }
+    return this.jiraBaseUrlCache;
+  }
+
+  /**
+   * Build a JIRA issue URL
+   * @param issueKey - JIRA issue key (e.g., "QAS-22939", "APPS-2771")
+   * @param projectId - Optional project ID for project-specific JIRA integration
+   * @returns Full JIRA URL (e.g., "https://your-workspace.atlassian.net/browse/QAS-22939")
+   */
+  async buildJiraUrl(issueKey: string, projectId?: number): Promise<string> {
+    const jiraBaseUrl = await this.resolveJiraBaseUrl(projectId);
+    return `${jiraBaseUrl}/browse/${issueKey}`;
   }
 }

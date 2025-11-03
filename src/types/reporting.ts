@@ -319,6 +319,42 @@ export const LogsAndScreenshotsResponseSchema = z.object({
 
 export type LogsAndScreenshotsResponse = z.infer<typeof LogsAndScreenshotsResponseSchema>;
 
+// JIRA integration schema (from integrations API)
+export const JiraIntegrationConfigSchema = z.object({
+  type: z.string(), // e.g., "CLOUD"
+  url: z.string(), // JIRA base URL
+  username: z.string().optional(),
+  token: z.string().optional(),
+  tokenEncrypted: z.boolean().optional(),
+  xray: z.any().nullable().optional(),
+  zephyrSquad: z.any().nullable().optional(),
+  zephyrScale: z.any().nullable().optional()
+});
+
+export const JiraProjectsMappingSchema = z.object({
+  enabledForAllZebrunnerProjects: z.boolean(),
+  enabledForZebrunnerProjectIds: z.array(z.number()),
+  enabledForAllJiraProjects: z.boolean(),
+  enabledForJiraProjectIds: z.array(z.any())
+});
+
+export const JiraIntegrationSchema = z.object({
+  id: z.number(),
+  enabled: z.boolean(),
+  tool: z.string(), // "JIRA"
+  config: JiraIntegrationConfigSchema,
+  projectsMapping: JiraProjectsMappingSchema
+});
+
+export const JiraIntegrationsResponseSchema = z.object({
+  items: z.array(JiraIntegrationSchema)
+});
+
+export type JiraIntegrationConfig = z.infer<typeof JiraIntegrationConfigSchema>;
+export type JiraProjectsMapping = z.infer<typeof JiraProjectsMappingSchema>;
+export type JiraIntegration = z.infer<typeof JiraIntegrationSchema>;
+export type JiraIntegrationsResponse = z.infer<typeof JiraIntegrationsResponseSchema>;
+
 // Error types for reporting API
 export class ZebrunnerReportingError extends Error {
   constructor(

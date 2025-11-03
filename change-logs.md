@@ -1,5 +1,638 @@
 # Change Logs
 
+## v5.4.1
+- **🔗 Smart Test Case ID Detection** - Automatically makes embedded test case IDs in test names clickable
+- **✅ Abbreviated Format Support** - Expands shortened formats like "MCP-2869, 2870, 2871" to full format
+- **📋 Pattern Recognition** - Detects test case IDs anywhere in test names (in parentheses, brackets, or standalone)
+
+**What Changed:**
+
+1. **Embedded Test Case ID Detection** ✅
+   - **Pattern Matching**: Automatically detects test case IDs in test names using regex
+   - **Examples**: 
+     - `Yesterday Nutrients Sharing Test (MCP-2064)` → `Yesterday Nutrients Sharing Test ([MCP-2064](url))`
+     - `My Test [QAS-123]` → `My Test [[QAS-123](url)]`
+     - `Test APPS-456 Something` → `Test [APPS-456](url) Something`
+
+2. **Abbreviated Format Expansion** ✅
+   - **Before**: `MCP-2869, 2870, 2871` (only first ID clickable)
+   - **After**: `[MCP-2869](url), [MCP-2870](url), [MCP-2871](url)` (all clickable)
+   - **Process**: Detects abbreviated pattern → Expands to full format → Makes all IDs clickable
+
+3. **New makeTestCaseIDsClickable() Method** ✅
+   - **Step 1**: Expand abbreviated patterns (e.g., `MCP-2869, 2870` → `MCP-2869, MCP-2870`)
+   - **Step 2**: Detect all full-format test case IDs
+   - **Step 3**: Convert each to clickable markdown link via TCM API
+   - **Fallback**: If URL resolution fails, leaves as plain text
+
+4. **Applied to Launch Analysis** ✅
+   - Integrated into `detailed_analyze_launch_failures` tool
+   - Test names with embedded IDs now automatically display clickable links
+   - Works for both detailed and summary formats
+
+**Technical Implementation:**
+
+```typescript
+/**
+ * Convert embedded test case IDs in text to clickable markdown links
+ * Detects patterns like "MCP-2064", "APPS-1234" and abbreviated lists like "MCP-2869, 2870, 2871"
+ */
+private async makeTestCaseIDsClickable(
+  text: string,
+  projectKey: string,
+  baseUrl: string
+): Promise<string> {
+  // Step 1: Expand abbreviated patterns
+  const abbreviatedPattern = /\b([A-Z]{2,10})-(\d+)(?:\s*,\s*(\d+))+/g;
+  // "MCP-2869, 2870, 2871" → "MCP-2869, MCP-2870, MCP-2871"
+  
+  // Step 2: Detect all full-format test case IDs
+  const testCasePattern = /\b([A-Z]{2,10}-\d+)\b/g;
+  
+  // Step 3: Make each ID clickable
+  for (const testCaseId of matches) {
+    const url = await this.buildTestCaseUrl(testCaseId, projectKey, baseUrl);
+    // Replace with: [MCP-2869](url)
+  }
+}
+
+// Usage in launch analysis
+const clickableTestName = await this.makeTestCaseIDsClickable(
+  result.testName, 
+  resolvedProjectKey!, 
+  baseUrl
+);
+report += `### ${idx + 1}. Test ${result.testId}: ${clickableTestName}\n\n`;
+```
+
+**Pattern Examples:**
+
+| Input | Output |
+|-------|--------|
+| `Test (MCP-2064)` | `Test ([MCP-2064](url))` |
+| `MCP-2869, 2870, 2871` | `[MCP-2869](url), [MCP-2870](url), [MCP-2871](url)` |
+| `Test [QAS-123] Name` | `Test [[QAS-123](url)] Name` |
+| `Multiple APPS-1, 2, 3 IDs` | `Multiple [APPS-1](url), [APPS-2](url), [APPS-3](url) IDs` |
+
+**Regex Patterns:**
+
+```typescript
+// Abbreviated format detection:
+/\b([A-Z]{2,10})-(\d+)(?:\s*,\s*(\d+))+/g
+// Matches: "MCP-2869, 2870, 2871"
+// Captures: projectPrefix="MCP", followed by comma-separated numbers
+
+// Full format detection:
+/\b([A-Z]{2,10}-\d+)\b/g
+// Matches: "MCP-2064", "APPS-1234", "QAS-123"
+// Captures: complete test case ID with project prefix and number
+```
+
+**Files Modified:**
+- `src/handlers/reporting-tools.ts` 
+  - Added `makeTestCaseIDsClickable()` method
+  - Enhanced `buildTestCaseUrl()` to restore fallback logic
+  - Applied clickable conversion to test names in launch analysis
+- `package.json` - Bumped version to 5.4.1
+- `change-logs.md` - Documented the enhancement
+
+**Before:**
+```markdown
+### 1. Test 5454462: Yesterday Nutrients Sharing Test (MCP-2064)
+- **Status:** FAILED
+```
+
+**After:**
+```markdown
+### 1. Test 5454462: Yesterday Nutrients Sharing Test ([MCP-2064](https://your-workspace.zebrunner.com/projects/MCP/test-cases/2134))
+- **Status:** FAILED
+```
+
+---
+
+## v5.4.0
+- **🔗 Smart JIRA URL Resolution** - Automatically fetches correct JIRA base URL from Zebrunner integrations
+- **✅ Project-Aware Matching** - Matches JIRA integration by project ID for multi-project setups
+- **🔄 Fallback Chain** - API → Environment Variable → Placeholder (graceful degradation)
+- **💾 Session Caching** - JIRA URL cached for performance (no repeated API calls)
+- **🌐 Clickable JIRA Links** - All JIRA issue references now link directly to correct JIRA instance
+
+**What Changed:**
+
+1. **JIRA URL Auto-Detection** ✅
+   - **API Source**: Fetches from `/api/integrations/v2/integrations/tool:jira`
+   - **Project Matching**: Prefers integration where `enabledForZebrunnerProjectIds` includes current project
+   - **Fallback Strategy**: Falls back to any enabled JIRA integration if no project match
+   - **Example**: For project MCP (ID=7), uses integration configured for that project
+
+2. **New Environment Variable** ✅
+   - **`JIRA_BASE_URL`**: Optional fallback if API unavailable or for security-restricted environments
+   - **Example**: `JIRA_BASE_URL=https://your-workspace.atlassian.net`
+   - **Priority**: Used only if Zebrunner integrations API fails or returns no results
+
+3. **Central buildJiraUrl() Method** ✅
+   - **Location**: `ZebrunnerReportingClient.buildJiraUrl(issueKey, projectId?)`
+   - **Usage**: Replaces hardcoded "https://jira.com" URLs
+   - **Format**: Returns full URL like `https://your-workspace.atlassian.net/browse/QAS-22939`
+   - **Async**: Resolves URLs dynamically with caching
+
+4. **Updated Issue References Display** ✅
+   - **Before**: `- **JIRA:** QAS-22939` (plain text)
+   - **After**: `- **JIRA:** [QAS-22939](https://your-workspace.atlassian.net/browse/QAS-22939)` (clickable link)
+   - **Mixed Types**: Non-JIRA issue types (GitHub, etc.) remain as plain text
+
+5. **Session-Level Caching** ✅
+   - **Performance**: JIRA URL fetched once per server session
+   - **Cache Key**: Stored in `jiraBaseUrlCache` private field
+   - **Invalidation**: Only cleared when server restarts
+
+**Technical Implementation:**
+
+```typescript
+// New schema in types/reporting.ts
+export const JiraIntegrationSchema = z.object({
+  id: z.number(),
+  enabled: z.boolean(),
+  tool: z.string(),
+  config: z.object({
+    type: z.string(),
+    url: z.string(), // JIRA base URL
+    // ... other fields
+  }),
+  projectsMapping: z.object({
+    enabledForZebrunnerProjectIds: z.array(z.number()),
+    // ... other fields
+  })
+});
+
+// New methods in ZebrunnerReportingClient
+class ZebrunnerReportingClient {
+  private jiraBaseUrlCache: string | null = null;
+
+  async getJiraIntegrations(): Promise<JiraIntegrationsResponse> {
+    // Fetch from /api/integrations/v2/integrations/tool:jira
+  }
+
+  async resolveJiraBaseUrl(projectId?: number): Promise<string> {
+    // Priority:
+    // 1. Cached value (if available)
+    // 2. Zebrunner API (match by projectId, fallback to any enabled)
+    // 3. process.env.JIRA_BASE_URL
+    // 4. Placeholder: https://jira.com
+  }
+
+  async buildJiraUrl(issueKey: string, projectId?: number): Promise<string> {
+    const baseUrl = await this.resolveJiraBaseUrl(projectId);
+    return `${baseUrl}/browse/${issueKey}`;
+  }
+}
+
+// Updated in reporting-tools.ts
+for (const issue of testRun.issueReferences) {
+  if (issue.type === 'JIRA') {
+    const jiraUrl = await this.reportingClient.buildJiraUrl(issue.value, projectId);
+    report += `- **${issue.type}:** [${issue.value}](${jiraUrl})\n`;
+  }
+}
+```
+
+**Resolution Flow:**
+
+```
+┌─────────────────────┐
+│ buildJiraUrl() Call │
+└──────────┬──────────┘
+           │
+           ▼
+   ┌───────────────┐
+   │ Cache Check?  │──Yes──► Return cached URL
+   └───────┬───────┘
+           │ No
+           ▼
+   ┌─────────────────────────┐
+   │ Fetch Integrations API  │
+   └──────────┬──────────────┘
+              │
+              ▼
+      ┌────────────────┐
+      │ Filter Enabled │
+      └───────┬────────┘
+              │
+              ▼
+   ┌────────────────────────┐
+   │ Match by projectId?    │──Yes──► Use matched integration
+   └──────────┬─────────────┘
+              │ No
+              ▼
+   ┌────────────────────────┐
+   │ Use first enabled      │
+   └──────────┬─────────────┘
+              │
+              ▼
+      ┌──────────────┐
+      │ API Failed?  │──Yes──► Check env var
+      └───────┬──────┘
+              │ No
+              ▼
+   ┌────────────────────────┐
+   │ Cache & Return URL     │
+   └────────────────────────┘
+```
+
+**Example Zebrunner Response:**
+
+```json
+{
+  "items": [
+    {
+      "id": 7,
+      "enabled": true,
+      "tool": "JIRA",
+      "config": {
+        "url": "https://your-workspace.atlassian.net"
+      },
+      "projectsMapping": {
+        "enabledForZebrunnerProjectIds": [7]  // MCP project
+      }
+    }
+  ]
+}
+```
+
+**Files Modified:**
+- `src/types/reporting.ts` - Added JIRA integration schemas
+- `src/api/reporting-client.ts` - Added JIRA URL resolution methods
+- `src/handlers/reporting-tools.ts` - Updated issue references to use clickable links
+- `.env` - Added `JIRA_BASE_URL` optional variable
+- `package.json` - Bumped version to 5.4.0
+- `change-logs.md` - Documented the feature
+
+**Environment Variable:**
+```bash
+# Optional: JIRA base URL (if not auto-detected from Zebrunner integrations)
+# Example: JIRA_BASE_URL=https://your-workspace.atlassian.net
+# If not set, will try to fetch from Zebrunner integrations API
+# JIRA_BASE_URL=
+```
+
+---
+
+## v5.3.2
+- **🔧 Fixed Test Case Display in Launch Analysis** - Test cases now show correctly with clickable links
+- **✅ Consistent Format Across Detailed & Summary** - Test cases displayed uniformly in all formats
+
+**What Changed:**
+
+1. **Test Cases Now Visible for Each Test** ✅
+   - **Detailed Format**: Test cases shown right after status line with clickable links
+   - **Summary Format**: Test cases displayed on separate line with emoji 📋
+   - **Format**: `- **Test Cases:** 📋 [MCP-2061](url), [MCP-123](url)`
+
+2. **Fixed Missing Data Flow** ✅
+   - Added `testCases` field to `analysisResults` array
+   - Propagated test cases through all execution modes (sequential, parallel, batches)
+   - Stored test cases in `testDetails` map for easy access
+   - Test cases now available for each individual test in the report
+
+3. **Proper Async Handling** ✅
+   - Converted `forEach` loop to `for` loop to properly handle async test case URL resolution
+   - Each test case URL is resolved via TCM API (as per v5.3.1 implementation)
+   - Parallel resolution with `Promise.all()` for multiple test cases
+
+4. **Display Location** ✅
+   - **Q1 (Detailed)**: Right after status line (Option B) ✅
+   - **Q2 (Summary)**: Separate line in compact view (Option B) ✅
+   - **Q3 (Test Case References)**: Kept at end as quick reference (Option A) ✅
+
+**Implementation Details:**
+
+```typescript
+// Add testCases to analysis results
+analysisResults.push({
+  testId: test.id,
+  testName: test.name,
+  status: test.status,
+  testCases: test.testCases || [],  // NEW: Include test cases
+  analysis,
+  error: null
+});
+
+// Store in testDetails map
+testDetails.set(result.testId, {
+  // ... other fields
+  testCases: result.testCases || [],  // NEW: Store test cases
+  fullAnalysis: textContent
+});
+
+// Display in individual test sections (now using for loop for async)
+for (let idx = 0; idx < analysisResults.length; idx++) {
+  const result = analysisResults[idx];
+  report += `### ${idx + 1}. Test ${result.testId}: ${result.testName}\n\n`;
+  report += `- **Status:** ${result.status}\n`;
+  
+  // NEW: Display test cases right after status
+  if (result.testCases && result.testCases.length > 0) {
+    const testCaseLinks = await Promise.all(result.testCases.map(async (tc: any) => {
+      const tcUrl = await this.buildTestCaseUrl(tc.testCaseId, resolvedProjectKey!, baseUrl);
+      return `[${tc.testCaseId}](${tcUrl})`;
+    }));
+    report += `- **Test Cases:** 📋 ${testCaseLinks.join(', ')}\n`;
+  }
+  // ... rest of test details
+}
+```
+
+**Example Output:**
+
+**Before (v5.3.1):**
+```markdown
+### 1. Test 5454462: Weight Sharing to your-workspace
+- **Status:** FAILED
+- **Error Type:** Assertion
+```
+
+**After (v5.3.2):**
+```markdown
+### 1. Test 5454462: Weight Sharing to your-workspace
+- **Status:** FAILED
+- **Test Cases:** 📋 [MCP-2061](https://your-workspace.zebrunner.com/projects/MCP/test-cases/1971)
+- **Error Type:** Assertion
+```
+
+**Files Modified:**
+- `src/handlers/reporting-tools.ts`
+  - Added `testCases` field to all `analysisResults.push()` calls (sequential, parallel, batches modes)
+  - Added `testCases` to `testDetails.set()` call
+  - Added `baseUrl` constant at beginning of `analyzeLaunchFailures` method
+  - Converted `forEach` to `for` loop for async test case URL resolution
+  - Added test case display logic right after status line
+- `package.json` - Bumped version to 5.3.2
+- `change-logs.md` - Documented the fix
+
+---
+
+## v5.3.1
+- **🔧 Fixed Test Case URL Resolution** - Correct implementation using TCM API
+- **✅ Proper Numeric ID Lookup** - Test case keys now resolved via `getTestCaseByKey()` API
+
+**What Changed:**
+
+1. **Incorrect Implementation Fixed** ❌→✅
+   - **OLD (Wrong)**: Extracted numeric part from testCaseId string (e.g., "MCP-1921" → "1921")
+   - **NEW (Correct)**: Resolves test case key via TCM API to get actual numeric ID
+   - **Example**: "MCP-1075" → API call → numeric ID "1971" → `https://your-workspace.zebrunner.com/projects/MCP/test-cases/1971`
+
+2. **TCM Client Integration** ✅
+   - Injected `EnhancedZebrunnerClient` into `ZebrunnerReportingToolHandlers`
+   - Uses `tcmClient.getTestCaseByKey(projectKey, testCaseId)` to resolve IDs
+   - Returns full test case object with numeric `id` field
+
+3. **Async Method Updates** ✅
+   - `buildTestCaseUrl()` → async, resolves via API
+   - `formatTestCases()` → async, awaits URL building
+   - All call sites updated to await results (forEach → for...of loops)
+
+4. **Graceful Error Handling** ✅
+   - If TCM client not available: falls back to string extraction
+   - If API call fails: catches error and falls back to string extraction
+   - No breaking changes if TCM API is unreachable
+
+**Technical Details:**
+
+```typescript
+// Before (WRONG):
+private buildTestCaseUrl(testCaseId: string, projectKey: string, baseUrl: string): string {
+  const numericId = testCaseId.split('-').pop(); // "MCP-1921" → "1921"
+  return `${baseUrl}/projects/${projectKey}/test-cases/${numericId}`;
+}
+
+// After (CORRECT):
+private async buildTestCaseUrl(testCaseId: string, projectKey: string, baseUrl: string): Promise<string> {
+  try {
+    if (this.tcmClient) {
+      const testCase = await this.tcmClient.getTestCaseByKey(projectKey, testCaseId);
+      return `${baseUrl}/projects/${projectKey}/test-cases/${testCase.id}`; // Actual numeric ID
+    }
+    // Fallback if no TCM client
+    const numericId = testCaseId.split('-').pop();
+    return `${baseUrl}/projects/${projectKey}/test-cases/${numericId}`;
+  } catch (error) {
+    // Fallback on API error
+    const numericId = testCaseId.split('-').pop();
+    return `${baseUrl}/projects/${projectKey}/test-cases/${numericId}`;
+  }
+}
+```
+
+**Files Modified:**
+- `src/handlers/reporting-tools.ts` - Updated `buildTestCaseUrl()`, `formatTestCases()`, and all call sites
+- `src/server.ts` - Injected TCM client into reporting handlers constructor
+- `change-logs.md` - Documented correct implementation
+
+---
+
+## v5.3.0
+- **📋 Test Case Numbers Integration** - Display linked Zebrunner TCM test cases in all reports
+- **🔗 Clickable Test Case Links** - Direct links to test cases in Zebrunner UI
+- **📊 Complete Coverage** - Test cases shown in all formats (detailed, summary, jira)
+
+**New Features:**
+
+1. **Test Case Display in All Formats** ✅
+   - **Detailed Format**: Test cases shown in Executive Summary, Linked Test Cases section, and Quick Access Links
+   - **Summary Format**: Test cases displayed with emoji 📋 and clickable links
+   - **Jira Format (Individual)**: Test cases in summary table + Links section
+   - **Jira Format (Launch)**: Test cases in combined ticket tables with clickable links
+
+2. **Smart Test Case Links** ✅
+   - **URL Format**: `https://your-workspace.zebrunner.com/projects/MCP/test-cases/{numericId}`
+   - **TCM API Resolution**: Uses Zebrunner TCM API to resolve test case keys (e.g., "MCP-82") to numeric IDs
+   - **Multiple Test Cases**: Displays all linked test cases, comma-separated with individual clickable links
+   - **Not Linked Warning**: Shows "⚠️ Not linked to test case" when no test cases are linked
+   - **Graceful Fallback**: If TCM API unavailable, extracts numeric part from key as fallback
+
+3. **Display Locations** ✅
+   - **Executive Summary**: `- **Test Cases:** 📋 [MCP-1921](url), [MCP-82](url)`
+   - **Linked Test Cases Section**: Dedicated section with Type and Status info
+   - **Quick Access Links**: Clickable links for quick navigation
+   - **Jira Summary Table**: `|Test Cases|[MCP-1921|url], [MCP-82|url]|`
+   - **Jira Links Section**: Individual links for each test case
+   - **Combined Jira Tickets**: Table column showing test cases for each test
+
+4. **API Integration** ✅
+   - **Data Source (Test Runs)**: `/api/reporting/v1/launches/{launchId}/tests?projectId={projectId}`
+   - **Schema**: Already supported via `testCases` field in `TestRunResponseSchema`
+   - **Test Case Resolution**: `/test-cases/key:{testCaseId}?projectKey={projectKey}` via TCM client
+   - **Format**: `{ testId, tcmType, testCaseId, resultStatus }` → resolved to `{ id, key, title, ... }`
+
+**Technical Implementation:**
+
+| Component | Implementation |
+|-----------|----------------|
+| **URL Builder** | `async buildTestCaseUrl(testCaseId, projectKey, baseUrl)` - resolves via TCM API |
+| **TCM Resolution** | `tcmClient.getTestCaseByKey(projectKey, testCaseId)` → returns numeric `id` |
+| **Formatter** | `async formatTestCases(testCases, projectKey, baseUrl, format)` - supports markdown & jira |
+| **Link Format (Markdown)** | `[MCP-82](https://...)` |
+| **Link Format (Jira)** | `[MCP-82\|https://...]` |
+| **Multiple Cases** | Comma-separated list of all linked cases with individual resolution |
+| **Error Handling** | Graceful fallback to numeric extraction if API call fails |
+
+**Example Output:**
+
+**Detailed Format:**
+```markdown
+## 📊 Executive Summary
+
+- **Test Name:** loginScreenTest
+- **Status:** ❌ FAILED
+- **Root Cause:** Locator Issue
+- **Confidence:** High
+- **Stability:** 80%
+- **Test Cases:** 📋 [MCP-1921](https://your-workspace.zebrunner.com/projects/MCP/test-cases/1921), [MCP-82](https://your-workspace.zebrunner.com/projects/MCP/test-cases/82)
+- **Bug Status:** ❌ No Bug Linked
+
+## 🔗 Linked Test Cases
+
+- **[MCP-1921](https://...)** (Type: ZEBRUNNER)
+- **[MCP-82](https://...)** (Type: ZEBRUNNER)
+
+## 🔍 Quick Access Links
+
+- **[Test Session](https://...)**
+- **[Launch](https://...)**
+- **[🎥 Test Execution Video](https://...)**
+- **[📋 Test Case MCP-1921](https://...)**
+- **[📋 Test Case MCP-82](https://...)**
+```
+
+**Jira Format:**
+```
+||Field||Value||
+|Test Cases|[MCP-1921|https://...], [MCP-82|https://...]|
+
+h3. Links
+
+* [View Test in Zebrunner|https://...]
+* [View Launch|https://...]
+* [🎥 Test Execution Video|https://...]
+* [📋 Test Case MCP-1921|https://...]
+* [📋 Test Case MCP-82|https://...]
+```
+
+**Combined Jira Ticket:**
+```
+||Test ID||Test Name||Status||Test Cases||Video||
+|5454462|loginScreenTest|FAILED|[MCP-1921|url], [MCP-82|url]|[🎥 Video|url]|
+|5454472|logoutTest|FAILED|[MCP-1953|url]|[🎥 Video|url]|
+```
+
+**Benefits:**
+- ✅ Easy navigation from failure analysis to test cases
+- ✅ Full traceability between automation and TCM
+- ✅ Consistent display across all formats
+- ✅ Supports multiple test cases per automated test
+- ✅ Clear warning when tests aren't linked to cases
+- ✅ Ready for Jira paste with proper markup
+
+## v5.2.6
+- **🎫 Smart Jira Ticket Generation with Error Grouping** - Revolutionary fix for Jira format
+- **🔍 Full Deep Analysis for Jira Format** - No more "Unknown" errors
+- **🤖 Automatic Error Grouping** - Creates combined tickets for similar failures
+
+**Critical Fixes:**
+
+1. **Jira Format Now Works Properly** ✅
+   - **Problem**: `format: 'jira'` in `detailed_analyze_launch_failures` was producing empty "Unknown" results
+   - **Root Cause**: Tool was not calling `analyzeTestFailureById` with deep analysis
+   - **Solution**: New `generateJiraTicketsForLaunch` method that:
+     - Calls `analyzeTestFailureById` with `format: 'jira'` for EACH test
+     - Gets full error messages, classifications, videos, similar failures
+     - Groups tests with similar errors together
+   - **Result**: Complete, rich Jira tickets ready to paste
+
+2. **Smart Error Grouping** ✅
+   - **Individual Tickets**: One test with unique error = one separate ticket
+   - **Combined Tickets**: Multiple tests with same/similar error = one combined ticket
+   - **Example**: If 3 tests fail with "Locator Issue", creates 1 ticket for all 3
+   - **Benefit**: Fix once, resolve multiple failures
+
+3. **New `jiraDetailLevel` Parameter** ✅
+   - **`full`** (default): Comprehensive analysis with deep error classification
+     - Calls `analyzeTestFailureById` for each test
+     - Extracts full error details, root causes, recommendations
+     - Smart grouping based on error similarity
+     - ~30-60 seconds for 7 tests (thorough)
+   - **`basic`**: Fast mode without deep analysis
+     - Uses basic test run data
+     - No individual test analysis calls
+     - Quick Jira tickets (~5-10 seconds)
+     - Less detail but faster
+
+4. **Video + Screenshot Links** ✅
+   - Every test includes video link (if available)
+   - Last screenshot link (if available)
+   - All links properly formatted for Jira markup
+   - Authenticated URLs that work directly
+
+**Technical Implementation:**
+
+| Feature | Implementation |
+|---------|----------------|
+| **Deep Analysis** | `analyzeTestFailureById()` called with `format: 'jira'` for each test |
+| **Error Grouping** | Groups by `errorClassification + first 150 chars of error message` |
+| **Combined Tickets** | Creates table with all affected tests, common error, recommendations |
+| **Individual Tickets** | Full Jira-formatted ticket from `generateJiraTicketForTest()` |
+| **Video Links** | Uses `getVideoUrlForTest()` with test-sessions API |
+| **Progress Updates** | Shows `Progress: 1/7 - Analyzing test...` during analysis |
+
+**New Method:**
+```typescript
+generateJiraTicketsForLaunch({
+  testRunId, launchName, projectKey, projectId,
+  testsToAnalyze, detailLevel, includeScreenshotAnalysis,
+  screenshotAnalysisType, baseUrl
+})
+  → Returns: Grouped Jira tickets (individual or combined based on similarity)
+```
+
+**Example Output Structure:**
+```
+# 🎫 Jira Tickets - Launch Android-Minimal-Acceptance
+
+## Full Analysis - Generating Jira Tickets with Smart Grouping
+Analyzing 7 tests to detect similar failures...
+Progress: 1/7 - Analyzing test 5454462...
+[... progress updates ...]
+✅ Analysis complete. Grouping similar failures...
+
+## 📊 Grouping Summary
+- Total Tests Analyzed: 7
+- Unique Error Patterns: 2
+- Individual Tickets: 1
+- Combined Tickets: 1
+
+## 🎫 Ticket 1: loginScreenTest
+**Type:** Individual Failure
+**Affected Tests:** 1
+### Jira Ticket Content (Copy & Paste)
+[Full Jira markup with error, logs, video, recommendations]
+
+## 🎫 Ticket 2: Multiple Tests - Locator Issue
+**Type:** Combined Failure (Similar Root Cause)
+**Affected Tests:** 6
+### Jira Ticket Content (Copy & Paste)
+[Combined Jira markup with table of all 6 tests, common error, videos for each]
+```
+
+**Benefits:**
+- ✅ No more "Unknown" errors in Jira format
+- ✅ Smart grouping reduces number of tickets to create
+- ✅ Fix one root cause, resolve multiple test failures
+- ✅ Video links for every test
+- ✅ Configurable detail level (fast vs thorough)
+- ✅ Progress updates so you know it's working
+- ✅ Ready-to-paste Jira markup
+
 ## v5.2.5
 - **🔧 Fixed Video URLs & Comprehensive Error Handling** - Major fixes for video retrieval and data handling
 - **📺 New Test Sessions API** - Proper video URL extraction from artifact references

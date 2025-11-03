@@ -79,7 +79,7 @@ const reportingConfig: ZebrunnerReportingConfig = {
 };
 
 const reportingClient = new ZebrunnerReportingClient(reportingConfig);
-const reportingHandlers = new ZebrunnerReportingToolHandlers(reportingClient);
+const reportingHandlers = new ZebrunnerReportingToolHandlers(reportingClient, client);
 
 // === Widget mini-config ===
 const WIDGET_BASE_URL = ZEBRUNNER_URL.replace('/api/public/v1', '');
@@ -2729,7 +2729,7 @@ async function main() {
     "get_test_cases_by_suite_smart",
     "🧠 Smart test case retrieval by suite ID - automatically detects if suite is root suite and uses appropriate filtering with enhanced pagination",
     {
-      project_key: z.string().min(1).describe("Project key (e.g., 'MPC')"),
+      project_key: z.string().min(1).describe("Project key (e.g., 'MCP')"),
       suite_id: z.number().int().positive().describe("Suite ID to get test cases from"),
       include_steps: z.boolean().default(false).describe("Include detailed test steps for first few cases"),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
@@ -3183,7 +3183,7 @@ async function main() {
 
   server.tool(
     "detailed_analyze_launch_failures",
-    "🚀 Analyze failed tests WITHOUT linked issues in a launch with grouping, statistics, and recommendations. Automatically analyzes all tests if ≤10, otherwise first 10 (use offset/limit for more). Use filterType: 'all' to include tests with issues. Supports pagination and screenshot analysis.",
+    "🚀 Analyze failed tests WITHOUT linked issues in a launch with grouping, statistics, and recommendations. Automatically analyzes all tests if ≤10, otherwise first 10 (use offset/limit for more). Use filterType: 'all' to include tests with issues. Supports pagination and screenshot analysis. **NEW:** Jira format with smart grouping - creates combined tickets for similar errors!",
     {
       testRunId: z.number().int().positive().describe("Launch ID / Test Run ID (e.g., 120806)"),
       projectKey: z.string().min(1).optional().describe("Project key (e.g., 'MCP') - alternative to projectId"),
@@ -3191,7 +3191,8 @@ async function main() {
       filterType: z.enum(['all', 'without_issues']).default('without_issues').describe("Filter: 'without_issues' = only tests without linked Jira tickets (DEFAULT), 'all' = all failed tests"),
       includeScreenshotAnalysis: z.boolean().default(false).describe("Download and analyze screenshots with AI for each test (increases analysis time)"),
       screenshotAnalysisType: z.enum(['basic', 'detailed']).default('detailed').describe("Screenshot analysis type if enabled"),
-      format: z.enum(['detailed', 'summary', 'jira']).default('summary').describe("Output format: 'detailed' = full analysis, 'summary' = condensed, 'jira' = ready for Jira ticket"),
+      format: z.enum(['detailed', 'summary', 'jira']).default('summary').describe("Output format: 'detailed' = full analysis, 'summary' = condensed, 'jira' = ready for Jira tickets with smart grouping"),
+      jiraDetailLevel: z.enum(['basic', 'full']).default('full').describe("Jira detail level: 'basic' = fast (no deep analysis), 'full' = comprehensive with deep analysis (DEFAULT, slower but thorough)"),
       executionMode: z.enum(['sequential', 'parallel', 'batches']).default('sequential').describe("Execution mode: sequential (safe), parallel (fast), or batches (balanced)"),
       batchSize: z.number().int().positive().default(5).describe("Batch size if executionMode is 'batches' (default: 5)"),
       offset: z.number().int().min(0).default(0).describe("Pagination offset - start from test N (e.g., 0 for first 10, 10 for next 10)"),

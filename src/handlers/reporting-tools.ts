@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ZebrunnerReportingClient } from "../api/reporting-client.js";
+import { EnhancedZebrunnerClient } from "../api/enhanced-client.js";
 import { FormatProcessor } from "../utils/formatter.js";
 import { GetLauncherDetailsInputSchema } from "../types/api.js";
 
@@ -7,7 +8,10 @@ import { GetLauncherDetailsInputSchema } from "../types/api.js";
  * MCP Tool handlers for Zebrunner Reporting API
  */
 export class ZebrunnerReportingToolHandlers {
-  constructor(private reportingClient: ZebrunnerReportingClient) {}
+  constructor(
+    private reportingClient: ZebrunnerReportingClient,
+    private tcmClient?: EnhancedZebrunnerClient
+  ) {}
 
   /**
    * Get launcher details tool - comprehensive launch information with test sessions
@@ -896,12 +900,14 @@ export class ZebrunnerReportingToolHandlers {
         testId,
         testRunId,
         projectId,
+        projectKey,
         duration,
         stability,
         errorClassification,
         screenshots,
         similarFailures,
-        testSessionUrl
+        testSessionUrl,
+        baseUrl
       });
     }
 
@@ -915,6 +921,15 @@ export class ZebrunnerReportingToolHandlers {
     report += `- **Root Cause:** ${errorClassification.category}\n`;
     report += `- **Confidence:** ${errorClassification.confidence}\n`;
     report += `- **Stability:** ${stability}%\n`;
+    
+    // Test Cases
+    if (testRun.testCases && testRun.testCases.length > 0) {
+      const testCaseLinks = await this.formatTestCases(testRun.testCases, projectKey!, baseUrl, 'markdown');
+      report += `- **Test Cases:** 📋 ${testCaseLinks}\n`;
+    } else {
+      report += `- **Test Cases:** ⚠️ Not linked to test case\n`;
+    }
+    
     report += `- **Bug Status:** ${testRun.issueReferences && testRun.issueReferences.length > 0 ? '✅ Bug Linked' : '❌ No Bug Linked'}\n\n`;
 
     // Test Session Details
@@ -1076,9 +1091,15 @@ export class ZebrunnerReportingToolHandlers {
     report += `## 📋 Bug Report Status\n\n`;
     if (testRun.issueReferences && testRun.issueReferences.length > 0) {
       report += `**Linked Issues:**\n\n`;
-      testRun.issueReferences.forEach((issue: any) => {
-        report += `- **${issue.type}:** ${issue.value}\n`;
-      });
+      for (const issue of testRun.issueReferences) {
+        // Build clickable JIRA URL if it's a JIRA issue
+        if (issue.type === 'JIRA') {
+          const jiraUrl = await this.reportingClient.buildJiraUrl(issue.value, projectId);
+          report += `- **${issue.type}:** [${issue.value}](${jiraUrl})\n`;
+        } else {
+          report += `- **${issue.type}:** ${issue.value}\n`;
+        }
+      }
       report += `\n`;
     } else {
       report += `**Should Create Bug?** Yes\n\n`;
@@ -1090,9 +1111,10 @@ export class ZebrunnerReportingToolHandlers {
     // Test Case Links
     if (testRun.testCases && testRun.testCases.length > 0) {
       report += `## 🔗 Linked Test Cases\n\n`;
-      testRun.testCases.forEach((tc: any) => {
-        report += `- **${tc.testCaseId}** (Status: ${tc.resultStatus || 'Unknown'})\n`;
-      });
+      for (const tc of testRun.testCases) {
+        const tcUrl = await this.buildTestCaseUrl(tc.testCaseId, projectKey!, baseUrl);
+        report += `- **[${tc.testCaseId}](${tcUrl})** (Type: ${tc.tcmType || 'ZEBRUNNER'}${tc.resultStatus ? `, Status: ${tc.resultStatus}` : ''})\n`;
+      }
       report += `\n`;
     }
 
@@ -1116,6 +1138,15 @@ export class ZebrunnerReportingToolHandlers {
     if (screenshots.length > 0) {
       report += `- **[Latest Screenshot](${baseUrl}${screenshots[screenshots.length - 1].url})**\n`;
     }
+    
+    // Test Case Links
+    if (testRun.testCases && testRun.testCases.length > 0) {
+      for (const tc of testRun.testCases) {
+        const tcUrl = await this.buildTestCaseUrl(tc.testCaseId, projectKey!, baseUrl);
+        report += `- **[📋 Test Case ${tc.testCaseId}](${tcUrl})**\n`;
+      }
+    }
+    
     report += `\n`;
 
     report += `---\n\n`;
@@ -1132,24 +1163,28 @@ export class ZebrunnerReportingToolHandlers {
     testId: number;
     testRunId: number;
     projectId: number;
+    projectKey?: string;
     duration: number;
     stability: number;
     errorClassification: any;
     screenshots: any[];
     similarFailures: any[];
     testSessionUrl: string;
+    baseUrl: string;
   }): Promise<string> {
     const {
       testRun,
       testId,
       testRunId,
       projectId,
+      projectKey,
       duration,
       stability,
       errorClassification,
       screenshots,
       similarFailures,
-      testSessionUrl
+      testSessionUrl,
+      baseUrl
     } = params;
 
     let report = `# 🔍 Test Failure Summary: ${testId}\n\n`;
@@ -1157,7 +1192,16 @@ export class ZebrunnerReportingToolHandlers {
     report += `**Status:** ❌ ${testRun.status}\n`;
     report += `**Error Type:** ${errorClassification.category} (${errorClassification.confidence} confidence)\n`;
     report += `**Stability:** ${stability}%\n`;
-    report += `**Duration:** ${Math.floor(duration / 60)}m ${duration % 60}s\n\n`;
+    report += `**Duration:** ${Math.floor(duration / 60)}m ${duration % 60}s\n`;
+    
+    // Test Cases
+    if (testRun.testCases && testRun.testCases.length > 0) {
+      const testCaseLinks = await this.formatTestCases(testRun.testCases, projectKey!, baseUrl, 'markdown');
+      report += `**Test Cases:** 📋 ${testCaseLinks}\n`;
+    } else {
+      report += `**Test Cases:** ⚠️ Not linked to test case\n`;
+    }
+    report += `\n`;
 
     report += `**Error:**\n\`\`\`\n${testRun.message}\n\`\`\`\n\n`;
 
@@ -1520,6 +1564,128 @@ export class ZebrunnerReportingToolHandlers {
   }
 
   /**
+   * Build test case URL from testCaseId
+   * Resolves testCaseId (e.g., "MCP-82") to numeric ID via TCM API
+   * and constructs URL: https://baseUrl/projects/MCP/test-cases/{numericId}
+   */
+  private async buildTestCaseUrl(testCaseId: string, projectKey: string, baseUrl: string): Promise<string> {
+    try {
+      // Use TCM client to resolve test case key to numeric ID
+      if (this.tcmClient) {
+        const testCase = await this.tcmClient.getTestCaseByKey(projectKey, testCaseId);
+        return `${baseUrl}/projects/${projectKey}/test-cases/${testCase.id}`;
+      } else {
+        // Fallback: got to the test case page
+        return `${baseUrl}/projects/${projectKey}/test-cases`;
+      }
+    } catch (error) {
+      // If lookup fails, fallback to extracting numeric part
+      return `${baseUrl}/projects/${projectKey}/test-cases`;
+    }
+  }
+
+  /**
+   * Convert embedded test case IDs in text to clickable markdown links
+   * Detects patterns like "MCP-2064", "APPS-1234" and abbreviated lists like "MCP-2869, 2870, 2871"
+   * @param text - Text containing potential test case IDs (e.g., test names)
+   * @param projectKey - Project key for URL resolution
+   * @param baseUrl - Zebrunner base URL
+   * @returns Text with test case IDs converted to markdown links
+   */
+  private async makeTestCaseIDsClickable(
+    text: string,
+    projectKey: string,
+    baseUrl: string
+  ): Promise<string> {
+    // First, expand abbreviated patterns like "MCP-2869, 2870, 2871" to full format
+    // Pattern: PROJECT-NUMBER followed by comma/space and standalone numbers
+    const abbreviatedPattern = /\b([A-Z]{2,10})-(\d+)(?:\s*,\s*(\d+))+/g;
+    
+    let expandedText = text;
+    const abbreviatedMatches = Array.from(text.matchAll(abbreviatedPattern));
+    
+    // Process abbreviated patterns in reverse order
+    for (let i = abbreviatedMatches.length - 1; i >= 0; i--) {
+      const match = abbreviatedMatches[i];
+      const fullMatch = match[0]; // e.g., "MCP-2869, 2870, 2871"
+      const projectPrefix = match[1]; // e.g., "MCP"
+      const matchIndex = match.index!;
+      
+      // Extract all numbers (first one from the main match, rest from the text)
+      const numbers: string[] = [];
+      const numberPattern = /\b\d+\b/g;
+      const numberMatches = Array.from(fullMatch.matchAll(numberPattern));
+      numberMatches.forEach(m => numbers.push(m[0]));
+      
+      // Build expanded format: "MCP-2869, MCP-2870, MCP-2871"
+      const expandedIDs = numbers.map(num => `${projectPrefix}-${num}`);
+      const expandedFormat = expandedIDs.join(', ');
+      
+      // Replace in text
+      expandedText = expandedText.substring(0, matchIndex) + expandedFormat + expandedText.substring(matchIndex + fullMatch.length);
+    }
+    
+    // Now process all full-format test case IDs (including the ones we just expanded)
+    // Regex pattern to match test case IDs: PROJECTKEY-NUMBER
+    const testCasePattern = /\b([A-Z]{2,10}-\d+)\b/g;
+    
+    const matches = Array.from(expandedText.matchAll(testCasePattern));
+    if (matches.length === 0) {
+      return expandedText; // No test case IDs found
+    }
+
+    let result = expandedText;
+    // Process matches in reverse order to maintain string positions
+    for (let i = matches.length - 1; i >= 0; i--) {
+      const match = matches[i];
+      const testCaseId = match[1]; // e.g., "MCP-2064"
+      const matchIndex = match.index!;
+      
+      try {
+        // Build clickable URL
+        const testCaseUrl = await this.buildTestCaseUrl(testCaseId, projectKey, baseUrl);
+        const clickableLink = `[${testCaseId}](${testCaseUrl})`;
+        
+        // Replace in text
+        result = result.substring(0, matchIndex) + clickableLink + result.substring(matchIndex + testCaseId.length);
+      } catch (error) {
+        // If URL building fails, leave as plain text
+        if (this.reportingClient['config'].debug) {
+          console.warn(`[makeTestCaseIDsClickable] Failed to create link for ${testCaseId}: ${error}`);
+        }
+      }
+    }
+    
+    return result;
+  }
+
+  /**
+   * Format test cases for display
+   * Returns formatted string with test case links
+   */
+  private async formatTestCases(
+    testCases: Array<{ testCaseId: string; tcmType: string }> | undefined,
+    projectKey: string,
+    baseUrl: string,
+    format: 'markdown' | 'jira'
+  ): Promise<string> {
+    if (!testCases || testCases.length === 0) {
+      return '';
+    }
+
+    const links = await Promise.all(testCases.map(async tc => {
+      const url = await this.buildTestCaseUrl(tc.testCaseId, projectKey, baseUrl);
+      if (format === 'jira') {
+        return `[${tc.testCaseId}|${url}]`;
+      } else {
+        return `[${tc.testCaseId}](${url})`;
+      }
+    }));
+
+    return links.join(', ');
+  }
+
+  /**
    * Generate Jira-formatted ticket for a single test failure
    */
   private async generateJiraTicketForTest(params: {
@@ -1586,7 +1752,16 @@ export class ZebrunnerReportingToolHandlers {
     jiraContent += `|Launch ID|${testRunId}|\n`;
     jiraContent += `|Launch Name|${launchName}|\n`;
     jiraContent += `|Stability|${stability}%|\n`;
-    jiraContent += `|Duration|${Math.floor(duration / 60)}m ${duration % 60}s|\n\n`;
+    jiraContent += `|Duration|${Math.floor(duration / 60)}m ${duration % 60}s|\n`;
+    
+    // Test Cases
+    if (testRun.testCases && testRun.testCases.length > 0 && projectKey) {
+      const testCaseLinks = await this.formatTestCases(testRun.testCases, projectKey, baseUrl, 'jira');
+      jiraContent += `|Test Cases|${testCaseLinks}|\n`;
+    } else {
+      jiraContent += `|Test Cases|⚠️ Not linked to test case|\n`;
+    }
+    jiraContent += `\n`;
 
     jiraContent += `h2. Description\n\n`;
     const launchUrl = `${baseUrl}/projects/${projectKey}/automation-launches/${testRunId}`;
@@ -1689,12 +1864,296 @@ export class ZebrunnerReportingToolHandlers {
     if (videoUrl) {
       jiraContent += `* [🎥 Test Execution Video|${videoUrl}]\n`;
     }
+    
+    // Test Case Links
+    if (testRun.testCases && testRun.testCases.length > 0 && projectKey) {
+      for (const tc of testRun.testCases) {
+        const tcUrl = await this.buildTestCaseUrl(tc.testCaseId, projectKey, baseUrl);
+        jiraContent += `* [📋 Test Case ${tc.testCaseId}|${tcUrl}]\n`;
+      }
+    }
     jiraContent += `\n`;
 
     jiraContent += `----\n`;
     jiraContent += `_Generated automatically by MCP Zebrunner Analysis Tool_\n`;
 
     return jiraContent;
+  }
+
+  /**
+   * Generate Jira tickets for launch failures with smart grouping
+   * Creates individual tickets for unique errors, combined tickets for similar errors
+   */
+  private async generateJiraTicketsForLaunch(params: {
+    testRunId: number;
+    launchName: string;
+    projectKey: string;
+    projectId: number;
+    testsToAnalyze: any[];
+    detailLevel: 'basic' | 'full';
+    includeScreenshotAnalysis: boolean;
+    screenshotAnalysisType: 'basic' | 'detailed';
+    baseUrl: string;
+  }) {
+    const {
+      testRunId,
+      launchName,
+      projectKey,
+      projectId,
+      testsToAnalyze,
+      detailLevel,
+      includeScreenshotAnalysis,
+      screenshotAnalysisType,
+      baseUrl
+    } = params;
+
+    let output = `# 🎫 Jira Tickets - Launch ${launchName}\n\n`;
+    output += `Generated: ${new Date().toLocaleString()}\n\n`;
+    output += `---\n\n`;
+
+    // If basic detail level, use simple approach without deep analysis
+    if (detailLevel === 'basic') {
+      output += `## Basic Jira Tickets (One per test)\n\n`;
+      
+      for (let i = 0; i < testsToAnalyze.length; i++) {
+        const test = testsToAnalyze[i];
+        output += `### Ticket ${i + 1}/${testsToAnalyze.length}: Test ${test.id}\n\n`;
+        
+        // Create basic ticket without deep analysis
+        const videoUrl = await this.getVideoUrlForTest(testRunId, test.id, projectId);
+        const testSessionUrl = `${baseUrl}/tests/runs/${testRunId}/results/${test.id}`;
+        const launchUrl = `${baseUrl}/projects/${projectKey}/automation-launches/${testRunId}`;
+        
+        output += `h1. Test Failure: ${test.name}\n\n`;
+        output += `h2. Quick Info\n\n`;
+        output += `*Status:* ${test.status}\n`;
+        output += `*Launch:* [${launchName}|${launchUrl}]\n`;
+        output += `*Test ID:* ${test.id}\n`;
+        
+        // Test Cases
+        if (test.testCases && test.testCases.length > 0) {
+          const testCaseLinks = await Promise.all(test.testCases.map(async (tc: any) => {
+            const tcUrl = await this.buildTestCaseUrl(tc.testCaseId, projectKey, baseUrl);
+            return `[${tc.testCaseId}|${tcUrl}]`;
+          }));
+          output += `*Test Cases:* 📋 ${testCaseLinks.join(', ')}\n`;
+        } else {
+          output += `*Test Cases:* ⚠️ Not linked to test case\n`;
+        }
+        output += `\n`;
+        
+        if (test.message) {
+          output += `h3. Error Message\n\n`;
+          output += `{code}\n${test.message.substring(0, 500)}${test.message.length > 500 ? '...' : ''}\n{code}\n\n`;
+        }
+        
+        output += `h3. Links\n\n`;
+        output += `* [View Test in Zebrunner|${testSessionUrl}]\n`;
+        output += `* [View Launch|${launchUrl}]\n`;
+        if (videoUrl) {
+          output += `* [🎥 Test Execution Video|${videoUrl}]\n`;
+        }
+        
+        // Test Case Links
+        if (test.testCases && test.testCases.length > 0) {
+          for (const tc of test.testCases) {
+            const tcUrl = await this.buildTestCaseUrl(tc.testCaseId, projectKey, baseUrl);
+            output += `* [📋 Test Case ${tc.testCaseId}|${tcUrl}]\n`;
+          }
+        }
+        
+        output += `\n---\n\n`;
+      }
+      
+      return {
+        content: [{
+          type: "text" as const,
+          text: output
+        }]
+      };
+    }
+
+    // FULL detail level - Deep analysis with grouping
+    output += `## Full Analysis - Generating Jira Tickets with Smart Grouping\n\n`;
+    output += `Analyzing ${testsToAnalyze.length} tests to detect similar failures...\n\n`;
+
+    // Step 1: Analyze each test with full details
+    const fullAnalyses: Array<{
+      testId: number;
+      testName: string;
+      status: string;
+      jiraTicket: string;
+      errorMessage: string;
+      errorClassification: string;
+      videoUrl: string | null;
+      screenshotUrl: string | null;
+      testCases: Array<{ testCaseId: string; tcmType: string }>;
+    }> = [];
+
+    for (let i = 0; i < testsToAnalyze.length; i++) {
+      const test = testsToAnalyze[i];
+      try {
+        output += `Progress: ${i + 1}/${testsToAnalyze.length} - Analyzing test ${test.id}...\n`;
+        
+        // Call individual test analysis with Jira format
+        const analysis = await this.analyzeTestFailureById({
+          testId: test.id,
+          testRunId,
+          projectKey,
+          projectId,
+          includeScreenshots: true,
+          includeLogs: true,
+          includeArtifacts: true,
+          includePageSource: false,
+          includeVideo: true,
+          analyzeSimilarFailures: true,
+          analyzeScreenshotsWithAI: includeScreenshotAnalysis,
+          screenshotAnalysisType,
+          format: 'jira'
+        });
+
+        // Extract the Jira ticket text
+        const jiraTicket = analysis.content
+          .filter((c: any) => c.type === 'text')
+          .map((c: any) => c.text)
+          .join('\n');
+
+        // Extract key info for grouping
+        const errorMatch = jiraTicket.match(/\*Category:\* ([^\n]+)/);
+        const errorClassification = errorMatch ? errorMatch[1].trim() : 'Unknown';
+        
+        // Extract error message for grouping
+        const messageMatch = test.message || 'No error message';
+        const errorMessage = messageMatch.substring(0, 200); // First 200 chars for grouping
+        
+        // Get video and screenshot links
+        const videoUrl = await this.getVideoUrlForTest(testRunId, test.id, projectId);
+        const screenshotUrl = null; // We'll add screenshot extraction if needed
+        
+        fullAnalyses.push({
+          testId: test.id,
+          testName: test.name,
+          status: test.status,
+          jiraTicket,
+          errorMessage,
+          errorClassification,
+          videoUrl,
+          screenshotUrl,
+          testCases: test.testCases || []
+        });
+      } catch (error) {
+        output += `⚠️ Error analyzing test ${test.id}: ${error}\n`;
+      }
+    }
+
+    output += `\n✅ Analysis complete. Grouping similar failures...\n\n`;
+    output += `---\n\n`;
+
+    // Step 2: Group by error similarity
+    const errorGroups = new Map<string, typeof fullAnalyses>();
+    
+    fullAnalyses.forEach(analysis => {
+      // Use first 150 chars of error message as grouping key
+      const groupKey = `${analysis.errorClassification}:${analysis.errorMessage.substring(0, 150)}`;
+      
+      if (!errorGroups.has(groupKey)) {
+        errorGroups.set(groupKey, []);
+      }
+      errorGroups.get(groupKey)!.push(analysis);
+    });
+
+    output += `## 📊 Grouping Summary\n\n`;
+    output += `- **Total Tests Analyzed:** ${fullAnalyses.length}\n`;
+    output += `- **Unique Error Patterns:** ${errorGroups.size}\n`;
+    output += `- **Individual Tickets:** ${Array.from(errorGroups.values()).filter(g => g.length === 1).length}\n`;
+    output += `- **Combined Tickets:** ${Array.from(errorGroups.values()).filter(g => g.length > 1).length}\n\n`;
+    output += `---\n\n`;
+
+    // Step 3: Generate tickets based on grouping
+    let ticketNumber = 1;
+    
+    for (const [groupKey, groupTests] of errorGroups.entries()) {
+      if (groupTests.length === 1) {
+        // Individual ticket - just one test with this error
+        const test = groupTests[0];
+        output += `## 🎫 Ticket ${ticketNumber}: ${test.testName}\n\n`;
+        output += `**Type:** Individual Failure\n`;
+        output += `**Affected Tests:** 1\n\n`;
+        output += `### Jira Ticket Content (Copy & Paste)\n\n`;
+        output += `\`\`\`\n`;
+        output += test.jiraTicket;
+        output += `\n\`\`\`\n\n`;
+        output += `---\n\n`;
+      } else {
+        // Combined ticket - multiple tests with similar error
+        output += `## 🎫 Ticket ${ticketNumber}: Multiple Tests - ${groupTests[0].errorClassification}\n\n`;
+        output += `**Type:** Combined Failure (Similar Root Cause)\n`;
+        output += `**Affected Tests:** ${groupTests.length}\n\n`;
+        
+        // Create combined Jira ticket
+        let combinedTicket = `h1. Multiple Test Failures: ${groupTests[0].errorClassification}\n\n`;
+        combinedTicket += `h2. Summary\n\n`;
+        combinedTicket += `*${groupTests.length} tests* are failing with similar errors in launch [${launchName}|${baseUrl}/projects/${projectKey}/automation-launches/${testRunId}].\n\n`;
+        combinedTicket += `||Test ID||Test Name||Status||Test Cases||Video||\n`;
+        
+        for (const test of groupTests) {
+          const videoLink = test.videoUrl ? `[🎥 Video|${test.videoUrl}]` : 'N/A';
+          const testCaseLinks = test.testCases && test.testCases.length > 0
+            ? (await Promise.all(test.testCases.map(async (tc: any) => {
+                const tcUrl = await this.buildTestCaseUrl(tc.testCaseId, projectKey, baseUrl);
+                return `[${tc.testCaseId}|${tcUrl}]`;
+              }))).join(', ')
+            : '⚠️ Not linked';
+          combinedTicket += `|${test.testId}|${test.testName}|${test.status}|${testCaseLinks}|${videoLink}|\n`;
+        }
+        
+        combinedTicket += `\n`;
+        combinedTicket += `h2. Common Error\n\n`;
+        combinedTicket += `*Category:* ${groupTests[0].errorClassification}\n\n`;
+        combinedTicket += `{code}\n${groupTests[0].errorMessage}\n{code}\n\n`;
+        
+        combinedTicket += `h2. Affected Tests Details\n\n`;
+        groupTests.forEach((test, idx) => {
+          combinedTicket += `h3. ${idx + 1}. ${test.testName} (ID: ${test.testId})\n\n`;
+          combinedTicket += `* [View Test|${baseUrl}/tests/runs/${testRunId}/results/${test.testId}]\n`;
+          if (test.videoUrl) {
+            combinedTicket += `* [🎥 Test Video|${test.videoUrl}]\n`;
+          }
+          combinedTicket += `\n`;
+        });
+        
+        combinedTicket += `h2. Recommendations\n\n`;
+        combinedTicket += `# Investigate the common root cause affecting all ${groupTests.length} tests\n`;
+        combinedTicket += `# Check for recent code changes that might have introduced this issue\n`;
+        combinedTicket += `# Review test environment and configuration\n`;
+        combinedTicket += `# Fix once to resolve all ${groupTests.length} failures\n\n`;
+        
+        combinedTicket += `----\n`;
+        combinedTicket += `_Generated automatically by MCP Zebrunner Analysis Tool_\n`;
+        
+        output += `### Jira Ticket Content (Copy & Paste)\n\n`;
+        output += `\`\`\`\n`;
+        output += combinedTicket;
+        output += `\n\`\`\`\n\n`;
+        output += `---\n\n`;
+      }
+      ticketNumber++;
+    }
+
+    output += `\n## ✅ Summary\n\n`;
+    output += `Generated **${ticketNumber - 1} Jira tickets** ready to paste into your Jira instance.\n\n`;
+    output += `**Tips:**\n`;
+    output += `- Copy each ticket content (inside code blocks) and paste directly into Jira\n`;
+    output += `- Jira will automatically format the markup (h1, h2, tables, links, code blocks)\n`;
+    output += `- Combined tickets help you fix multiple tests at once\n`;
+    output += `- Video links are clickable and authenticated\n\n`;
+
+    return {
+      content: [{
+        type: "text" as const,
+        text: output
+      }]
+    };
   }
 
   /**
@@ -1906,6 +2365,7 @@ export class ZebrunnerReportingToolHandlers {
     includeScreenshotAnalysis?: boolean;
     screenshotAnalysisType?: 'basic' | 'detailed';
     format?: 'detailed' | 'summary' | 'jira';
+    jiraDetailLevel?: 'basic' | 'full';
     executionMode?: 'sequential' | 'parallel' | 'batches';
     batchSize?: number;
     offset?: number;
@@ -1919,6 +2379,7 @@ export class ZebrunnerReportingToolHandlers {
       includeScreenshotAnalysis = false,
       screenshotAnalysisType = 'detailed',
       format = 'summary',
+      jiraDetailLevel = 'full',
       executionMode = 'sequential',
       batchSize = 5,
       offset = 0,
@@ -1940,6 +2401,9 @@ export class ZebrunnerReportingToolHandlers {
       if (!resolvedProjectId || !resolvedProjectKey) {
         throw new Error('Either projectKey or projectId must be provided');
       }
+
+      // Base URL for generating links
+      const baseUrl = this.reportingClient['config'].baseUrl;
 
       // Get launch details
       const launch = await this.reportingClient.getLaunch(testRunId, resolvedProjectId);
@@ -2030,6 +2494,7 @@ export class ZebrunnerReportingToolHandlers {
               testId: test.id,
               testName: test.name,
               status: test.status,
+              testCases: test.testCases || [],
               analysis,
               error: null
             });
@@ -2038,6 +2503,7 @@ export class ZebrunnerReportingToolHandlers {
               testId: test.id,
               testName: test.name,
               status: test.status,
+              testCases: test.testCases || [],
               analysis: null,
               error: error instanceof Error ? error.message : String(error)
             });
@@ -2067,6 +2533,7 @@ export class ZebrunnerReportingToolHandlers {
               testId: test.id,
               testName: test.name,
               status: test.status,
+              testCases: test.testCases || [],
               analysis,
               error: null
             };
@@ -2075,6 +2542,7 @@ export class ZebrunnerReportingToolHandlers {
               testId: test.id,
               testName: test.name,
               status: test.status,
+              testCases: test.testCases || [],
               analysis: null,
               error: error instanceof Error ? error.message : String(error)
             };
@@ -2110,6 +2578,7 @@ export class ZebrunnerReportingToolHandlers {
                 testId: test.id,
                 testName: test.name,
                 status: test.status,
+                testCases: test.testCases || [],
                 analysis,
                 error: null
               };
@@ -2118,6 +2587,7 @@ export class ZebrunnerReportingToolHandlers {
                 testId: test.id,
                 testName: test.name,
                 status: test.status,
+                testCases: test.testCases || [],
                 analysis: null,
                 error: error instanceof Error ? error.message : String(error)
               };
@@ -2171,6 +2641,7 @@ export class ZebrunnerReportingToolHandlers {
             stability,
             timestamp,
             stackTrace,
+            testCases: result.testCases || [],
             fullAnalysis: textContent
           });
 
@@ -2446,11 +2917,24 @@ export class ZebrunnerReportingToolHandlers {
       report += `---\n\n`;
       report += `## 📋 Individual Test Analysis\n\n`;
 
-      analysisResults.forEach((result, idx) => {
+      for (let idx = 0; idx < analysisResults.length; idx++) {
+        const result = analysisResults[idx];
         const detail = testDetails.get(result.testId);
         
-        report += `### ${idx + 1}. Test ${result.testId}: ${result.testName}\n\n`;
+        // Make embedded test case IDs in test name clickable
+        const clickableTestName = await this.makeTestCaseIDsClickable(result.testName, resolvedProjectKey!, baseUrl);
+        
+        report += `### ${idx + 1}. Test ${result.testId}: ${clickableTestName}\n\n`;
         report += `- **Status:** ${result.status}\n`;
+        
+        // Display test cases (Q1. Option B - right after status line)
+        if (result.testCases && result.testCases.length > 0) {
+          const testCaseLinks = await Promise.all(result.testCases.map(async (tc: any) => {
+            const tcUrl = await this.buildTestCaseUrl(tc.testCaseId, resolvedProjectKey!, baseUrl);
+            return `[${tc.testCaseId}](${tcUrl})`;
+          }));
+          report += `- **Test Cases:** 📋 ${testCaseLinks.join(', ')}\n`;
+        }
 
         if (result.error) {
           report += `- **Analysis Error:** ${result.error}\n\n`;
@@ -2509,7 +2993,7 @@ export class ZebrunnerReportingToolHandlers {
             }
           }
         }
-      });
+      }
 
       // Pagination info - only show if there are more tests to analyze
       if (totalFailedTests > 10 && offset + actualLimit < totalFailedTests) {
@@ -2536,6 +3020,21 @@ export class ZebrunnerReportingToolHandlers {
         report += `  offset: ${offset + actualLimit}\n`;
         report += `})\n`;
         report += `\`\`\`\n\n`;
+      }
+
+      // Special handling for Jira format
+      if (format === 'jira') {
+        return await this.generateJiraTicketsForLaunch({
+          testRunId,
+          launchName: launch.name || `Launch ${testRunId}`,
+          projectKey: resolvedProjectKey!,
+          projectId: resolvedProjectId!,
+          testsToAnalyze,
+          detailLevel: jiraDetailLevel,
+          includeScreenshotAnalysis,
+          screenshotAnalysisType,
+          baseUrl: this.reportingClient['config'].baseUrl
+        });
       }
 
       return {
