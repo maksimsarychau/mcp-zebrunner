@@ -1,5 +1,70 @@
 # Change Logs
 
+## v5.7.0
+- **🎬 NEW: Test Execution Video Analysis Tool** - Comprehensive video analysis with Claude Vision integration
+- **Video Processing Capabilities:**
+  - Downloads test execution videos from Zebrunner test sessions
+  - Extracts frames at strategic timestamps (3 modes: failure_focused, smart, full_test)
+  - Analyzes 10-30 frames per video depending on extraction mode
+  - Automatic frame resizing and optimization for Claude Vision
+  - OCR text extraction from frames using Tesseract.js
+  - Intelligent frame selection around failure points
+- **Test Case Comparison:**
+  - Fetches test case definitions from TCM
+  - Compares expected steps with executed steps from video/logs
+  - Calculates coverage percentage and identifies skipped/extra steps
+  - Correlates video frames with test case steps
+- **Failure Analysis & Prediction:**
+  - Analyzes failure type, error messages, and stack traces
+  - Predicts if failure is: bug, test_needs_update, infrastructure_issue, or data_issue
+  - Provides confidence scores (0-100%) for predictions
+  - Evidence-based reasoning with multiple data sources (logs, video, test case)
+  - Root cause categorization with supporting evidence
+- **Actionable Recommendations:**
+  - Prioritized action items (high/medium/low priority)
+  - Specific recommendations based on failure type
+  - Bug report templates for developers
+  - Test automation fixes for QA engineers
+- **MCP Integration:**
+  - Returns frames as image content blocks for Claude Vision analysis
+  - Detailed markdown reports with frame thumbnails
+  - Comprehensive metadata (video duration, resolution, platform, device)
+  - Links to test execution, test case, and video recording
+- **New Dependencies:**
+  - `@ffmpeg-installer/ffmpeg` ^1.1.0 - FFmpeg binary for video processing
+  - `@ffprobe-installer/ffprobe` ^1.4.1 - FFprobe for video metadata extraction
+  - `fluent-ffmpeg` ^2.1.3 - Node.js FFmpeg wrapper
+  - `@types/fluent-ffmpeg` ^2.1.24 - TypeScript types for fluent-ffmpeg
+- **New Modules (~2,800 lines of code):**
+  - `src/utils/video-analysis/analyzer.ts` - Main orchestrator
+  - `src/utils/video-analysis/video-downloader.ts` - Video download & metadata
+  - `src/utils/video-analysis/frame-extractor.ts` - FFmpeg frame extraction
+  - `src/utils/video-analysis/test-case-comparator.ts` - Test case comparison
+  - `src/utils/video-analysis/prediction-engine.ts` - AI-driven predictions
+  - `src/utils/video-analysis/types.ts` - Type definitions
+  - `src/types/ffprobe.d.ts` - FFprobe type declarations
+- **Documentation:**
+  - Updated README with video analysis tool usage
+  - Added comprehensive input parameters documentation
+  - Included example outputs and use cases
+- **Use Cases:**
+  - Automated root cause analysis for test failures
+  - Evidence-based bug vs test issue classification
+  - Visual debugging of mobile app test executions
+  - Test case validation and coverage analysis
+  - Failure pattern identification across multiple executions
+- **Performance:**
+  - Smart frame extraction limits token usage
+  - Automatic cleanup of temporary video files
+  - Configurable frame intervals and failure windows
+  - Parallel processing support for multiple frames
+- **Error Handling:**
+  - Graceful degradation if video unavailable
+  - FFmpeg installation validation
+  - Disk space checks before download
+  - Comprehensive error messages and troubleshooting
+- **Backward Compatibility:** ✅ Fully backward compatible, video analysis is opt-in
+
 ## v5.6.4
 - **🔥 CRITICAL FIX: URL Regression** - Fixed all incorrect test URLs from old pattern (`/tests/runs/.../results/...`) to correct pattern (`/projects/{projectKey}/automation-launches/{launchId}/tests/{testId}`)
 - **📊 NEW: Quick Reference Tables** - Added feature-grouped tables for critical and medium failures in `detailed_analyze_launch_failures`

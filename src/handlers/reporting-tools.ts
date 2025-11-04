@@ -2,16 +2,24 @@ import { z } from "zod";
 import { ZebrunnerReportingClient } from "../api/reporting-client.js";
 import { EnhancedZebrunnerClient } from "../api/enhanced-client.js";
 import { FormatProcessor } from "../utils/formatter.js";
-import { GetLauncherDetailsInputSchema } from "../types/api.js";
+import { GetLauncherDetailsInputSchema, AnalyzeTestExecutionVideoInput } from "../types/api.js";
+import { VideoAnalyzer } from "../utils/video-analysis/analyzer.js";
 
 /**
  * MCP Tool handlers for Zebrunner Reporting API
  */
 export class ZebrunnerReportingToolHandlers {
+  private videoAnalyzer: VideoAnalyzer | null = null;
+
   constructor(
     private reportingClient: ZebrunnerReportingClient,
     private tcmClient?: EnhancedZebrunnerClient
-  ) {}
+  ) {
+    // Initialize video analyzer if TCM client is available
+    if (tcmClient) {
+      this.videoAnalyzer = new VideoAnalyzer(reportingClient, tcmClient, false);
+    }
+  }
 
   /**
    * Get launcher details tool - comprehensive launch information with test sessions
@@ -3530,6 +3538,210 @@ export class ZebrunnerReportingToolHandlers {
         content: [{
           type: "text" as const,
           text: `❌ Error analyzing launch failures: ${error.message}`
+        }]
+      };
+    }
+  }
+
+  /**
+   * Analyze test execution video tool - downloads video, extracts frames, compares with test case,
+   * and predicts if failure is a bug or test issue using Claude Vision
+   */
+  async analyzeTestExecutionVideoTool(input: AnalyzeTestExecutionVideoInput): Promise<{
+    content: Array<{ type: "text"; text: string } | { type: "image"; data: string; mimeType: string }>;
+  }> {
+    try {
+      if (!this.videoAnalyzer) {
+        return {
+          content: [{
+            type: "text" as const,
+            text: "❌ Video analysis is not available. TCM client is required for video analysis features."
+          }]
+        };
+      }
+
+      // Run video analysis
+      const result = await this.videoAnalyzer.analyzeTestExecutionVideo(input);
+
+      // Build detailed markdown report
+      const content: Array<{ type: "text"; text: string } | { type: "image"; data: string; mimeType: string }> = [];
+
+      // Header
+      let report = `# 🎬 Test Execution Video Analysis\n\n`;
+      report += `## 📹 Video Metadata\n\n`;
+      report += `- **Session ID**: ${result.videoMetadata.sessionId}\n`;
+      report += `- **Duration**: ${result.videoMetadata.videoDuration}s\n`;
+      report += `- **Resolution**: ${result.videoMetadata.videoResolution}\n`;
+      report += `- **Frames Extracted**: ${result.videoMetadata.extractedFrames}\n`;
+      
+      if (result.videoMetadata.platformName) {
+        report += `- **Platform**: ${result.videoMetadata.platformName}`;
+        if (result.videoMetadata.deviceName) {
+          report += ` (${result.videoMetadata.deviceName})`;
+        }
+        report += `\n`;
+      }
+      
+      report += `- **Status**: ${result.videoMetadata.status || 'COMPLETED'}\n`;
+      report += `- **Video URL**: ${result.links.videoUrl}\n`;
+      report += `\n`;
+
+      // Failure Analysis
+      report += `## ❌ Failure Analysis\n\n`;
+      report += `- **Failure Type**: ${result.failureAnalysis.failureType}\n`;
+      report += `- **Error Message**: \`${result.failureAnalysis.errorMessage}\`\n`;
+      report += `- **Timestamp**: ${result.failureAnalysis.failureTimestamp}\n`;
+      report += `\n`;
+      report += `**Root Cause Analysis**:\n`;
+      report += `- Category: **${result.failureAnalysis.rootCause.category}**\n`;
+      report += `- Confidence: ${result.failureAnalysis.rootCause.confidence}%\n`;
+      report += `- Reasoning: ${result.failureAnalysis.rootCause.reasoning}\n`;
+      report += `\n`;
+
+      if (result.failureAnalysis.stackTrace) {
+        report += `<details>\n<summary>Stack Trace</summary>\n\n\`\`\`\n${result.failureAnalysis.stackTrace}\n\`\`\`\n</details>\n\n`;
+      }
+
+      // Test Case Comparison
+      if (result.testCaseComparison) {
+        const tc = result.testCaseComparison;
+        report += `## 📋 Test Case Comparison\n\n`;
+        report += `- **Test Case**: ${tc.testCaseKey} - ${tc.testCaseTitle}\n`;
+        report += `- **Total Steps**: ${tc.coverageAnalysis.totalSteps}\n`;
+        report += `- **Executed**: ${tc.coverageAnalysis.executedSteps}\n`;
+        report += `- **Coverage**: ${tc.coverageAnalysis.coveragePercentage}%\n`;
+        
+        if (tc.coverageAnalysis.skippedSteps.length > 0) {
+          report += `- **Skipped Steps**: ${tc.coverageAnalysis.skippedSteps.join(', ')}\n`;
+        }
+        
+        if (tc.coverageAnalysis.extraSteps.length > 0) {
+          report += `- **Extra Steps**: ${tc.coverageAnalysis.extraSteps.length} steps executed but not in test case\n`;
+        }
+        report += `\n`;
+
+        // Step-by-step comparison table
+        report += `### Step-by-Step Comparison\n\n`;
+        report += `| Step | Expected Action | Actual Execution | Match | Notes |\n`;
+        report += `|------|----------------|------------------|-------|-------|\n`;
+        
+        for (const step of tc.stepByStepComparison) {
+          const match = step.match ? '✅' : '❌';
+          const notes = step.deviation || (step.videoTimestamp ? `@${step.videoTimestamp}s` : '');
+          report += `| ${step.testCaseStep} | ${step.expectedAction.substring(0, 40)} | ${step.actualExecution.substring(0, 40)} | ${match} | ${notes} |\n`;
+        }
+        report += `\n`;
+      }
+
+      // Prediction
+      report += `## 🔮 Prediction\n\n`;
+      report += `### Verdict: **${result.prediction.verdict}**\n`;
+      report += `**Confidence**: ${result.prediction.confidence}%\n\n`;
+      report += `**Reasoning**: ${result.prediction.reasoning}\n\n`;
+
+      if (result.prediction.evidenceForBug.length > 0) {
+        report += `**Evidence for Bug**:\n`;
+        result.prediction.evidenceForBug.forEach(e => {
+          report += `- ${e}\n`;
+        });
+        report += `\n`;
+      }
+
+      if (result.prediction.evidenceForTestUpdate.length > 0) {
+        report += `**Evidence for Test Update**:\n`;
+        result.prediction.evidenceForTestUpdate.forEach(e => {
+          report += `- ${e}\n`;
+        });
+        report += `\n`;
+      }
+
+      // Recommendations
+      report += `## 💡 Recommendations\n\n`;
+      for (const rec of result.prediction.recommendations) {
+        const priorityEmoji = rec.priority === 'high' ? '🔴' : rec.priority === 'medium' ? '🟡' : '🟢';
+        report += `### ${priorityEmoji} ${rec.description} (${rec.priority} priority)\n\n`;
+        report += `**Action Items**:\n`;
+        rec.actionItems.forEach(item => {
+          report += `- ${item}\n`;
+        });
+        report += `\n`;
+      }
+
+      // Summary
+      report += `## 📊 Summary\n\n`;
+      report += result.summary;
+      report += `\n\n`;
+
+      // Links
+      report += `## 🔗 Links\n\n`;
+      report += `- [Test Execution](${result.links.testUrl})\n`;
+      if (result.links.testCaseUrl) {
+        report += `- [Test Case](${result.links.testCaseUrl})\n`;
+      }
+      report += `- [Video Recording](${result.links.videoUrl})\n`;
+      report += `\n`;
+
+      // Add report text to content
+      content.push({
+        type: "text" as const,
+        text: report
+      });
+
+      // Add frames with images for Claude Vision analysis
+      content.push({
+        type: "text" as const,
+        text: `## 🖼️ Extracted Frames for Analysis\n\n` +
+              `Below are the ${result.frames.length} extracted frames from the test execution video. ` +
+              `Please analyze each frame to help understand the failure.\n\n`
+      });
+
+      for (const frame of result.frames) {
+        if (frame.imageBase64) {
+          // Add frame header
+          let frameText = `### Frame ${frame.frameNumber} (${frame.timestamp}s)\n\n`;
+          
+          if (frame.ocrText) {
+            frameText += `**OCR Text Detected**:\n\`\`\`\n${frame.ocrText.substring(0, 500)}\n\`\`\`\n\n`;
+          }
+          
+          content.push({
+            type: "text" as const,
+            text: frameText
+          });
+
+          // Add image
+          content.push({
+            type: "image" as const,
+            data: frame.imageBase64,
+            mimeType: "image/png"
+          });
+        }
+      }
+
+      // Final prompt for Claude
+      content.push({
+        type: "text" as const,
+        text: `\n\n---\n\n` +
+              `**Please analyze these frames and provide insights on**:\n` +
+              `1. What was happening in the application at each step\n` +
+              `2. Any visual anomalies or errors visible in the UI\n` +
+              `3. Whether the failure appears to be an application bug or test automation issue\n` +
+              `4. Additional context that might help diagnose the root cause\n\n` +
+              `The automated analysis has predicted: **${result.prediction.verdict}** with ${result.prediction.confidence}% confidence.`
+      });
+
+      return { content };
+
+    } catch (error: any) {
+      return {
+        content: [{
+          type: "text" as const,
+          text: `❌ Error analyzing test execution video: ${error.message}\n\n` +
+                `Please ensure:\n` +
+                `1. The test has a video recording available\n` +
+                `2. FFmpeg is installed and accessible\n` +
+                `3. You have sufficient disk space for temporary video files\n\n` +
+                `Error details: ${error.stack || error}`
         }]
       };
     }

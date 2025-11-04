@@ -3182,6 +3182,45 @@ async function main() {
   );
 
   server.tool(
+    "analyze_test_execution_video",
+    "🎬 Download and analyze test execution video with Claude Vision - extracts frames, compares with test case, and predicts if failure is bug or test issue",
+    {
+      testId: z.number().int().positive().describe("Test ID from Zebrunner"),
+      testRunId: z.number().int().positive().describe("Launch ID / Test Run ID"),
+      projectKey: z.string().min(1).optional().describe("Project key (MFPAND, MFPIOS, MFPWEB)"),
+      projectId: z.number().int().positive().optional().describe("Project ID (alternative to projectKey)"),
+      extractionMode: z.enum(['failure_focused', 'full_test', 'smart']).default('smart').describe("Frame extraction mode: failure_focused (10 frames), smart (20 frames), full_test (30 frames)"),
+      frameInterval: z.number().int().positive().default(5).describe("Seconds between frames for full_test mode"),
+      failureWindowSeconds: z.number().int().positive().default(30).describe("Time window around failure (seconds)"),
+      compareWithTestCase: z.boolean().default(true).describe("Compare with test case steps"),
+      testCaseKey: z.string().optional().describe("Override test case key"),
+      includeOCR: z.boolean().default(true).describe("Extract text from frames using OCR"),
+      analyzeSimilarFailures: z.boolean().default(false).describe("Find similar failures (not implemented)"),
+      includeLogCorrelation: z.boolean().default(true).describe("Correlate frames with log timestamps"),
+      format: z.enum(['detailed', 'summary', 'jira']).default('detailed').describe("Output format"),
+      generateVideoReport: z.boolean().default(true).describe("Generate timestamped report")
+    },
+    async (args) => {
+      try {
+        console.error("[DEBUG] analyze_test_execution_video called", JSON.stringify(args));
+        debugLog("analyze_test_execution_video called", args);
+        const result = await reportingHandlers.analyzeTestExecutionVideoTool(args);
+        console.error("[DEBUG] analyze_test_execution_video completed successfully");
+        return result;
+      } catch (error: any) {
+        console.error("[DEBUG] Error in analyze_test_execution_video:", error.message, error.stack);
+        debugLog("Error in analyze_test_execution_video", { error: error.message, args });
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error analyzing test execution video: ${error.message}\n\nPlease ensure:\n1. The test has a video recording\n2. FFmpeg is installed\n3. You have sufficient disk space`
+          }]
+        };
+      }
+    }
+  );
+
+  server.tool(
     "detailed_analyze_launch_failures",
     "🚀 Analyze failed tests WITHOUT linked issues in a launch with grouping, statistics, and recommendations. Automatically analyzes all tests if ≤10, otherwise first 10 (use offset/limit for more). Use filterType: 'all' to include tests with issues. Supports pagination and screenshot analysis. **NEW:** Jira format with smart grouping - creates combined tickets for similar errors! 💡 TIP: Can be auto-invoked from Zebrunner launch URLs like: https://workspace.zebrunner.com/projects/PROJECT/automation-launches/LAUNCH_ID",
     {
