@@ -3187,7 +3187,7 @@ async function main() {
     {
       testId: z.number().int().positive().describe("Test ID from Zebrunner"),
       testRunId: z.number().int().positive().describe("Launch ID / Test Run ID"),
-      projectKey: z.string().min(1).optional().describe("Project key (MFPAND, MFPIOS, MFPWEB)"),
+      projectKey: z.string().min(1).optional().describe("Project key (MCP, etc.)"),
       projectId: z.number().int().positive().optional().describe("Project ID (alternative to projectKey)"),
       extractionMode: z.enum(['failure_focused', 'full_test', 'smart']).default('smart').describe("Frame extraction mode: failure_focused (10 frames), smart (20 frames), full_test (30 frames)"),
       frameInterval: z.number().int().positive().default(5).describe("Seconds between frames for full_test mode"),

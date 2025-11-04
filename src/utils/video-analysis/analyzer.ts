@@ -169,18 +169,59 @@ export class VideoAnalyzer {
       const estimatedFailureTimestamp = Math.max(0, (downloadResult.duration || 0) - 15); // 15s before end
       const failureAnalysis = this.analyzeFailure(test, logItems, frames, estimatedFailureTimestamp);
 
-      // Step 6: Compare with test case (if enabled)
+      // Step 6: Compare with test cases (if enabled) WITH VISUAL VERIFICATION
+      // NEW: Support for MULTIPLE test cases!
       let testCaseComparison = null;
+      let multiTestCaseComparison = null;
+      
       if (params.compareWithTestCase && this.comparator && test.testCases && test.testCases.length > 0) {
-        const testCaseKey = params.testCaseKey || test.testCases[0].testCaseId;
+        // Collect ALL test case keys (not just first one!)
+        const testCaseKeys: string[] = [];
         
-        if (testCaseKey) {
-          testCaseComparison = await this.comparator.compareWithTestCase(
-            testCaseKey,
-            projectKey,
-            logSteps,
-            frames.map(f => ({ timestamp: f.timestamp, action: f.visualAnalysis }))
-          );
+        if (params.testCaseKey) {
+          // User provided specific test case key
+          testCaseKeys.push(params.testCaseKey);
+        } else {
+          // Use all test cases assigned to test
+          for (const tc of test.testCases) {
+            if (tc.testCaseId) {
+              testCaseKeys.push(tc.testCaseId);
+            }
+          }
+        }
+        
+        if (testCaseKeys.length > 0) {
+          if (this.debug) {
+            console.log(`[VideoAnalyzer] Found ${testCaseKeys.length} test case(s): ${testCaseKeys.join(', ')}`);
+          }
+          
+          if (testCaseKeys.length === 1) {
+            // Single test case - use legacy comparison
+            if (this.debug) {
+              console.log(`[VideoAnalyzer] Starting single test case comparison with visual verification (${frames.length} frames)`);
+            }
+            
+            testCaseComparison = await this.comparator.compareWithTestCase(
+              testCaseKeys[0],
+              projectKey,
+              logSteps,
+              frames
+            );
+          } else {
+            // Multiple test cases - use NEW multi-TC comparison
+            if (this.debug) {
+              console.log(`[VideoAnalyzer] Starting MULTI test case comparison with visual verification (${frames.length} frames)`);
+            }
+            
+            const baseUrl = this.reportingClient['config'].baseUrl;
+            multiTestCaseComparison = await this.comparator.compareWithMultipleTestCases(
+              testCaseKeys,
+              projectKey,
+              logSteps,
+              frames,
+              baseUrl  // Pass baseUrl for building clickable TC URLs
+            );
+          }
         }
       }
 
@@ -259,7 +300,8 @@ export class VideoAnalyzer {
         videoMetadata,
         frames,
         executionFlow,
-        testCaseComparison: testCaseComparison || undefined,
+        testCaseComparison: testCaseComparison || undefined,  // Legacy: single test case
+        multiTestCaseComparison: multiTestCaseComparison || undefined,  // NEW: multiple test cases
         failureAnalysis,
         prediction,
         summary,

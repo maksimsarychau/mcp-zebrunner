@@ -3632,8 +3632,104 @@ export class ZebrunnerReportingToolHandlers {
         report += `<details>\n<summary>📋 Full Stack Trace (click to expand)</summary>\n\n\`\`\`\n${result.failureAnalysis.stackTrace.substring(0, 3000)}\n\`\`\`\n</details>\n\n`;
       }
 
-      // Test Case Comparison
-      if (result.testCaseComparison) {
+      // NEW: Multi-Test Case Comparison (for tests with multiple TCs)
+      if (result.multiTestCaseComparison) {
+        const mtc = result.multiTestCaseComparison;
+        
+        report += `## 📊 Test Case Analysis (${mtc.combinedAnalysis.totalTestCases} Test Cases Found)\n\n`;
+        
+        // Summary table
+        report += `### Test Case Summary\n\n`;
+        report += `| Rank | Test Case | Steps | Coverage | Visual Confidence | Match Quality |\n`;
+        report += `|------|-----------|-------|----------|-------------------|---------------|\n`;
+        
+        for (const tc of mtc.testCases) {
+          const rankIcon = tc.rank === 1 ? '⭐' : tc.rank.toString();
+          const qualityIcon = tc.matchQuality === 'excellent' ? '🟢' : 
+                            tc.matchQuality === 'good' ? '🟡' : 
+                            tc.matchQuality === 'moderate' ? '🟠' : '🔴';
+          
+          // Make test case key clickable if URL available
+          const tcDisplay = tc.testCaseUrl 
+            ? `[${tc.testCaseKey}](${tc.testCaseUrl})` 
+            : tc.testCaseKey;
+          
+          report += `| ${rankIcon} | ${tcDisplay} | ${tc.coverageAnalysis.totalSteps} | ${tc.coverageAnalysis.coveragePercentage}% | ${tc.averageVisualConfidence}% | ${qualityIcon} ${tc.matchQuality.charAt(0).toUpperCase() + tc.matchQuality.slice(1)} |\n`;
+        }
+        report += `\n`;
+        
+        // Combined analysis
+        report += `### 📈 Combined Coverage Analysis\n\n`;
+        report += `- **Total Test Cases Analyzed**: ${mtc.combinedAnalysis.totalTestCases}\n`;
+        report += `- **Merged Steps**: ${mtc.combinedAnalysis.totalSteps} (after deduplication)\n`;
+        report += `- **Combined Coverage**: ${mtc.combinedAnalysis.combinedCoverage}%\n`;
+        report += `- **Best Match**: ${mtc.combinedAnalysis.bestMatch.testCaseKey} (${mtc.combinedAnalysis.bestMatch.coverage}%)\n`;
+        report += `  - ${mtc.combinedAnalysis.bestMatch.reasoning}\n`;
+        report += `\n`;
+        
+        // Merged step-by-step comparison
+        report += `### 🎥 Merged Test Case Steps (with Visual Verification)\n\n`;
+        report += `| Step | Source TC | Expected Action | Actual Execution | Match | Visual Confidence | Notes |\n`;
+        report += `|------|-----------|----------------|------------------|-------|-------------------|-------|\n`;
+        
+        for (const step of mtc.stepByStepComparison.slice(0, 20)) { // Limit to first 20 for readability
+          const match = step.match ? '✅' : '❌';
+          
+          // Visual confidence indicator
+          let confidenceIcon = '❓';
+          if (step.visualConfidence === 'high') {
+            confidenceIcon = '🟢';
+          } else if (step.visualConfidence === 'medium') {
+            confidenceIcon = '🟡';
+          } else if (step.visualConfidence === 'low') {
+            confidenceIcon = '🔴';
+          } else {
+            confidenceIcon = '⚪';
+          }
+          
+          // Build notes
+          const notes: string[] = [];
+          if (step.videoTimestamp) {
+            notes.push(`@${step.videoTimestamp}s`);
+          }
+          if (step.deviation) {
+            notes.push(step.deviation.substring(0, 30));
+          }
+          
+          const notesText = notes.join(' | ');
+          
+          // Show full test case key (no abbreviation)
+          const sourceTC = step.sourceTestCase;
+          
+          report += `| ${step.testCaseStep} | ${sourceTC} | ${step.expectedAction.substring(0, 30)} | ${step.actualExecution.substring(0, 30)} | ${match} | ${confidenceIcon} | ${notesText} |\n`;
+        }
+        
+        if (mtc.stepByStepComparison.length > 20) {
+          report += `\n*Showing first 20 of ${mtc.stepByStepComparison.length} merged steps*\n`;
+        }
+        report += `\n`;
+        
+        // Visual verification summary
+        const visualStats = {
+          high: mtc.stepByStepComparison.filter(s => s.visualConfidence === 'high').length,
+          medium: mtc.stepByStepComparison.filter(s => s.visualConfidence === 'medium').length,
+          low: mtc.stepByStepComparison.filter(s => s.visualConfidence === 'low').length,
+          notVerified: mtc.stepByStepComparison.filter(s => s.visualConfidence === 'not_verified').length,
+          discrepancies: mtc.stepByStepComparison.filter(s => s.deviation && s.deviation.includes('⚠️')).length
+        };
+        
+        report += `**Visual Verification Summary (Merged Steps)**:\n`;
+        report += `- 🟢 High Confidence: ${visualStats.high} steps\n`;
+        report += `- 🟡 Medium Confidence: ${visualStats.medium} steps\n`;
+        report += `- 🔴 Low Confidence: ${visualStats.low} steps\n`;
+        report += `- ⚪ Not Verified: ${visualStats.notVerified} steps\n`;
+        if (visualStats.discrepancies > 0) {
+          report += `- ⚠️ **Discrepancies Detected**: ${visualStats.discrepancies} steps with log/video mismatch\n`;
+        }
+        report += `\n`;
+        
+      } else if (result.testCaseComparison) {
+        // Fallback: Single Test Case Comparison (legacy)
         const tc = result.testCaseComparison;
         report += `## 📋 Test Case Comparison\n\n`;
         report += `- **Test Case**: ${tc.testCaseKey} - ${tc.testCaseTitle}\n`;
@@ -3659,15 +3755,56 @@ export class ZebrunnerReportingToolHandlers {
           report += `---\n\n`;
         }
 
-        // Step-by-step comparison table
-        report += `### Step-by-Step Comparison\n\n`;
-        report += `| Step | Expected Action | Actual Execution | Match | Notes |\n`;
-        report += `|------|----------------|------------------|-------|-------|\n`;
+        // Step-by-step comparison table WITH VISUAL VERIFICATION
+        report += `### 🎥 Step-by-Step Comparison (with Visual Verification)\n\n`;
+        report += `| Step | Expected Action | Actual Execution | Match | Visual Confidence | Notes |\n`;
+        report += `|------|----------------|------------------|-------|-------------------|-------|\n`;
         
         for (const step of tc.stepByStepComparison) {
           const match = step.match ? '✅' : '❌';
-          const notes = step.deviation || (step.videoTimestamp ? `@${step.videoTimestamp}s` : '');
-          report += `| ${step.testCaseStep} | ${step.expectedAction.substring(0, 40)} | ${step.actualExecution.substring(0, 40)} | ${match} | ${notes} |\n`;
+          
+          // Visual confidence indicator
+          let confidenceIcon = '❓';
+          if (step.visualConfidence === 'high') {
+            confidenceIcon = '🟢 High';
+          } else if (step.visualConfidence === 'medium') {
+            confidenceIcon = '🟡 Medium';
+          } else if (step.visualConfidence === 'low') {
+            confidenceIcon = '🔴 Low';
+          } else {
+            confidenceIcon = '⚪ Not Verified';
+          }
+          
+          // Build notes with video timestamp and deviation
+          const notes: string[] = [];
+          if (step.videoTimestamp) {
+            notes.push(`@${step.videoTimestamp}s`);
+          }
+          if (step.deviation) {
+            notes.push(step.deviation);
+          }
+          
+          const notesText = notes.join(' | ');
+          report += `| ${step.testCaseStep} | ${step.expectedAction.substring(0, 35)} | ${step.actualExecution.substring(0, 35)} | ${match} | ${confidenceIcon} | ${notesText} |\n`;
+        }
+        report += `\n`;
+        
+        // Summary of visual verification
+        const visualStats = {
+          high: tc.stepByStepComparison.filter(s => s.visualConfidence === 'high').length,
+          medium: tc.stepByStepComparison.filter(s => s.visualConfidence === 'medium').length,
+          low: tc.stepByStepComparison.filter(s => s.visualConfidence === 'low').length,
+          notVerified: tc.stepByStepComparison.filter(s => s.visualConfidence === 'not_verified').length,
+          discrepancies: tc.stepByStepComparison.filter(s => s.deviation && s.deviation.includes('⚠️')).length
+        };
+        
+        report += `**Visual Verification Summary**:\n`;
+        report += `- 🟢 High Confidence: ${visualStats.high} steps\n`;
+        report += `- 🟡 Medium Confidence: ${visualStats.medium} steps\n`;
+        report += `- 🔴 Low Confidence: ${visualStats.low} steps\n`;
+        report += `- ⚪ Not Verified: ${visualStats.notVerified} steps\n`;
+        if (visualStats.discrepancies > 0) {
+          report += `- ⚠️ **Discrepancies Detected**: ${visualStats.discrepancies} steps with log/video mismatch\n`;
         }
         report += `\n`;
       }

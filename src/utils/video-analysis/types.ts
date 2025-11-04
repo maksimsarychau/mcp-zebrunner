@@ -113,6 +113,43 @@ export interface TestCaseComparison {
   };
 }
 
+// Multi-test-case comparison (for tests with multiple TCs assigned)
+export interface MultiTestCaseComparison {
+  // Individual test case analyses
+  testCases: Array<TestCaseComparison & {
+    matchQuality: 'excellent' | 'good' | 'moderate' | 'poor';
+    rank: number; // 1 = best match
+    averageVisualConfidence: number; // 0-100
+    testCaseUrl?: string; // Clickable URL for the test case
+  }>;
+  
+  // Combined/merged analysis
+  combinedAnalysis: {
+    totalTestCases: number;
+    totalSteps: number; // Sum of all TC steps (after deduplication)
+    combinedCoverage: number; // % of automation covered by ALL TCs combined
+    bestMatch: {
+      testCaseKey: string;
+      coverage: number;
+      reasoning: string;
+    };
+    mergedSteps: TestCaseStep[]; // Intelligently merged steps from all TCs
+  };
+  
+  // Step-by-step comparison for merged test cases
+  stepByStepComparison: Array<{
+    testCaseStep: number;
+    expectedAction: string;
+    sourceTestCase: string; // Which TC this step came from
+    actualExecution: string;
+    videoTimestamp?: number;
+    logReference?: string;
+    match: boolean;
+    deviation?: string;
+    visualConfidence?: 'high' | 'medium' | 'low' | 'not_verified';
+  }>;
+}
+
 export interface FailureAnalysis {
   failureTimestamp: string;
   failureVideoTimestamp?: number;
@@ -219,7 +256,8 @@ export interface VideoAnalysisResult {
   videoMetadata: VideoMetadata;
   frames: FrameAnalysis[];
   executionFlow: ExecutionFlow;
-  testCaseComparison?: TestCaseComparison;
+  testCaseComparison?: TestCaseComparison; // Deprecated: use multiTestCaseComparison for multi-TC support
+  multiTestCaseComparison?: MultiTestCaseComparison; // NEW: For tests with multiple test cases
   failureAnalysis: FailureAnalysis;
   prediction: Prediction;
   similarFailures?: SimilarFailure[];

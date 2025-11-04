@@ -1,5 +1,178 @@
 # Change Logs
 
+## v5.9.1 - CRITICAL FIX: Enhanced Step Matching (0% Coverage Bug Fixed)
+- **🐛 CRITICAL BUG FIX: Step Matching Algorithm** - Fixed 0% coverage bug when test cases were actually 100% covered
+  - **Problem**: Tool showed 0% coverage even when test case steps perfectly matched automation
+  - **Root Cause**: Overly strict matching algorithm couldn't handle semantic variations
+  - **Example Failures**:
+    - ❌ "Log in" vs "Click login button" → No match (different action words)
+    - ❌ "Go to More -> Progress" vs "Navigate to More menu, tap Progress" → No match (multi-step)
+    - ❌ "Tap Export information button" vs "Click export_info_btn" → No match (underscore vs space)
+- **✅ FIX 1: Better Synonym Matching** - Recognizes equivalent phrases
+  - `login` = `log in` = `sign in` = `authenticate`
+  - `tap` = `click` = `press` = `select`
+  - `go to` = `navigate` = `open` = `access`
+  - `export` = `download` = `save`
+  - `information` = `info` = `data`
+  - `progress` = `stats` = `statistics`
+  - **Now**: "Log in" ✓ matches "Click login button" (synonym: login ≈ login)
+- **✅ FIX 2: Key Term Extraction** - Extracts important nouns/UI elements
+  - Identifies UI keywords: `button`, `menu`, `screen`, `progress`, `export`, `more`, `diary`, `food`
+  - Extracts quoted text: `"Export My Information"` → `export`, `my`, `information`
+  - Parses arrow notation: `More -> Progress` → `more`, `progress`
+  - **Matching Rule**: 2+ shared key terms = match
+  - **Now**: "Go to More -> Progress" ✓ matches "Navigate More menu, tap Progress" (shared: more, progress)
+- **✅ FIX 3: Fuzzy Action Matching** - Normalizes action verbs to canonical forms
+  - `interact`: click, tap, press, select, touch
+  - `navigate`: go to, navigate, open, access, visit
+  - `login`: log in, login, sign in, signin, authenticate
+  - `input`: enter, type, input, fill, provide
+  - `verify`: verify, check, confirm, validate, assert
+  - **Now**: "Tap Export button" ✓ matches "Click export_info_btn" (both normalize to `interact` action)
+- **✅ FIX 4: UI Element Name Matching** - Extracts button/menu/screen names
+  - Recognizes patterns: `Progress menu`, `Export button`, `More screen`
+  - Handles underscores: `export_info_btn` → `export`, `info`, `btn`
+  - **Matching Rule**: 1+ shared UI element = match
+  - **Now**: "Tap Export information button" ✓ matches "Click export_info_btn" (shared: export, information/info)
+- **✅ FIX 5: Hierarchical Matching Support** - One test step can match multiple automation logs
+  - High-level test case step: "Log in"
+  - Detailed automation logs: "Enter username", "Enter password", "Click submit"
+  - **Now**: All 3 automation logs contribute to matching the "Log in" step
+- **📊 Matching Improvements**:
+  - **Word overlap threshold**: Lowered from 40% → 30% (more forgiving)
+  - **Substring matching**: Requires 60% of expected in executed
+  - **Debug logging**: Detailed matching diagnostics (enable with `debug: true`)
+- **🎯 Impact on Example Test**:
+  - **Before v5.9.1**: 
+    ```
+    Test Case MCP-2107: 0% coverage
+    Test Case MCP-88: 0% coverage
+    Combined Coverage: 0%
+    ```
+  - **After v5.9.1** (Expected):
+    ```
+    Test Case MCP-2107: 75-100% coverage ✓
+    Test Case MCP-88: 75-100% coverage ✓
+    Combined Coverage: 80-100% ✓
+    ```
+- **💡 Why This Matters**:
+  - **Before**: False negatives → Tool incorrectly flags good test cases as having 0% automation coverage
+  - **After**: Accurate coverage → Tool correctly identifies which test case steps are implemented
+  - **Impact**: More reliable test case quality assessment, better documentation analysis, accurate verdicts
+
+## v5.9.0 - Multi-Test Case Analysis with Intelligent Merging (CRITICAL FEATURE)
+- **🔗 NEW: Clickable Test Case Links** - All test case keys in multi-TC report are now clickable
+  - Fetches test case URLs using API (like `analyse_launch_failures` tool)
+  - Works with any project prefix (MCP, DEF, etc.)
+  - Graceful fallback if URL fetch fails
+  - Format: `[MCP-1922](https://zebrunner.com/projects/MCP/test-cases/12345)`
+  - Performance: N API calls for N test cases (acceptable for 2-20 TCs)
+- **🎯 NEW: Multi-Test Case Support** - Analyzes ALL test cases assigned to a test, not just the first one
+  - **Problem Solved**: Previously only analyzed first TC, even when 2-20 TCs assigned to test
+  - **Example**: Test has MCP-1921 (1 step), MCP-1922 (8 steps), MCP-1923 (3 steps)
+    - **Old behavior**: Only analyzed MCP-1921, ignored others
+    - **New behavior**: Analyzes all 3, merges intelligently, shows best match
+- **🔀 Intelligent Step Merging** - Combines steps from multiple TCs with duplicate detection
+  - Normalizes step text to detect duplicates (e.g., "Click Button" == "click button!!!")
+  - Keeps more detailed version when duplicates found
+  - Preserves unique steps from each TC (different parts of test)
+  - **Example**: TC1 has "Login", TC2 has "Login to application" → keeps TC2 (more detailed)
+- **📊 Test Case Ranking & Quality Assessment** - Identifies which TC best documents the automation
+  - **Ranking Criteria**:
+    1. **Coverage %** (primary): Which TC steps match most automation actions?
+    2. **Visual Confidence** (tiebreaker): Which TC has highest visual verification scores?
+  - **Match Quality Scoring**:
+    - 🟢 **Excellent**: ≥70% coverage + ≥70% visual confidence
+    - 🟡 **Good**: ≥50% coverage + ≥50% visual confidence
+    - 🟠 **Moderate**: ≥30% coverage OR ≥40% visual confidence
+    - 🔴 **Poor**: Below thresholds
+- **📈 Combined Coverage Calculation** - Shows how much of automation is covered by ALL TCs together
+  - Individual TC coverage: MCP-1921 (15%), MCP-1922 (65%), MCP-1923 (25%)
+  - Combined coverage: 75% (all 3 TCs together cover 75% of automation)
+  - Identifies gaps: 25% of automation not documented in any TC
+- **📋 New Report Format** - Enhanced summary table + merged step analysis
+  ```
+  ## 📊 Test Case Analysis (3 Test Cases Found)
+  
+  | Rank | Test Case | Steps | Coverage | Visual Confidence | Match Quality |
+  |------|-----------|-------|----------|-------------------|---------------|
+  | ⭐   | [MCP-1922](url) | 8   | 65%     | 72%              | 🟢 Excellent |
+  | 2    | [MCP-1923](url) | 3   | 25%     | 55%              | 🟡 Good      |
+  | 3    | [MCP-1921](url) | 1   | 15%     | 20%              | 🔴 Poor      |
+  
+  Combined Coverage: 12 merged steps covering 75% of automation
+  Best Match: MCP-1922 - Best coverage (65%) with excellent match quality
+  ```
+- **🎥 Merged Step-by-Step Comparison** - Shows which TC each step came from
+  - **Source TC column**: Identifies which test case contributed each step
+  - **Visual verification**: Each merged step still gets confidence scoring
+  - **Discrepancy detection**: Catches log/video mismatches across all TCs
+- **🔍 Smart Duplicate Detection** - Handles overlapping/enhanced TCs gracefully
+  - **Scenario 1**: TC1 and TC2 both describe "Login" → keeps one (more detailed)
+  - **Scenario 2**: TC1 describes steps 1-20, TC2 describes steps 21-40 → keeps both (complementary)
+  - **Scenario 3**: TC1 is old version, TC2 is updated → ranks TC2 higher (better coverage)
+- **💡 Why This Matters**:
+  - **Before**: "MCP-1921 has 1 step but automation has 67 steps - massive discrepancy!"
+    - Tool only saw 1 TC, missed the other 2 TCs with more detailed documentation
+  - **After**: "Combined: 12 steps from 3 TCs covering 75% of automation. Best match: MCP-1922 (65% coverage)"
+    - Tool sees full picture, identifies best documentation, calculates true combined coverage
+  - Catches incomplete test case documentation across suite
+  - Identifies redundant/duplicate TCs
+  - Shows which TCs need updating
+- **🚀 Impact**:
+  - **Test Case Coverage Analysis** now accurate for multi-TC tests
+  - **No more "only first TC" limitation**
+  - **Better test case quality insights** (which TC is best, which need work)
+  - **Handles 20+ test cases** (common for complex feature tests)
+
+## v5.8.0 - Phase 3B: Visual Test Case Verification (MAJOR FEATURE)
+- **🎯 NEW: Visual Frame Matching for Test Case Steps** - AI analyzes video frames to verify if test case actions actually happened
+  - Each test case step is now visually verified against extracted video frames
+  - Searches through frames for visual evidence (UI elements, screen states, OCR text)
+  - Matches test case expectations with actual visual execution
+  - **Example**: Test case says "Click Diary button" → Tool finds frame showing Diary screen at 45s
+- **🟢🟡🔴 NEW: Confidence Scoring with Visual Evidence** - Quantifies how certain we are that a step executed
+  - **🟢 High Confidence** (score ≥5): Strong visual evidence + log confirmation (e.g., button visible in frame + "clicked" in logs)
+  - **🟡 Medium Confidence** (score 3-4): Moderate visual evidence or log only (e.g., screen changed but no explicit log)
+  - **🔴 Low Confidence** (score 1-2): Weak visual evidence, no logs (e.g., similar screen but unclear if action happened)
+  - **⚪ Not Verified**: No frames available or insufficient data
+  - Score calculated from: Visual analysis matches (3pts), OCR text matches (2pts), App state matches (1pt)
+- **⚠️ NEW: Discrepancy Detection - Logs vs Frames Mismatch** - Catches inconsistencies between what was logged and what actually happened
+  - **Case 1**: Action logged but not visible in video → Possible logging error or visual execution failure
+  - **Case 2**: Action visible in video but not logged → Logging gap or missing instrumentation
+  - **Case 3**: Low confidence visual match despite log → Questionable execution, needs verification
+  - **Why This Matters**: Sometimes tests log "success" but visually failed (or vice versa) - this catches those cases
+- **📊 NEW: Enhanced Coverage Table with Visual Verification** - Report now shows:
+  - Visual confidence for each step (🟢 High, 🟡 Medium, 🔴 Low, ⚪ Not Verified)
+  - Video timestamps where actions were detected
+  - Discrepancy warnings highlighted with ⚠️
+  - Visual verification summary: breakdown of confidence levels across all steps
+  - **Example Output**:
+    ```
+    | Step | Expected Action | Actual Execution | Match | Visual Confidence | Notes |
+    |------|----------------|------------------|-------|-------------------|-------|
+    | 1    | Click Diary    | Clicked Diary    | ✅    | 🟢 High          | @45s  |
+    | 2    | Search Food    | Not found in logs| ❌    | 🟡 Medium        | ⚠️ Visible in video but not logged |
+    ```
+- **🎬 NEW: Prioritized Frame Extraction** - Failure frames extracted FIRST, then coverage frames
+  - **Old approach**: Extract frames chronologically (0s, 5s, 10s, ..., 140s, 145s)
+    - Problem: If extraction is slow/interrupted, might miss critical failure frames at end
+  - **New approach**: Extract failure frames (last 30s) first, then fill in coverage
+    - Order: 120s, 125s, 130s, ..., 147s (failure), then 0s, 10s, 20s, ... (coverage)
+    - Ensures most critical frames are captured even if process times out
+  - **Impact**: Reliability improvement for slow networks or large videos
+- **🔍 Smart Frame Analysis for Step Verification** - Extracts key terms and matches them visually
+  - Identifies UI elements (button, menu, search, diary, food, etc.)
+  - Recognizes actions (click, tap, enter, verify, scroll, etc.)
+  - Parses quoted text from test case steps (e.g., "Add Food" button)
+  - Action-specific matching (e.g., "login" → checks for password/username fields in frames)
+- **💡 Phase 3B Benefits**:
+  - **Before**: "Test case says click X, logs say clicked X" → Assumed success (but did it visually work?)
+  - **After**: "Test case says click X, logs say clicked X, video shows X screen appeared" → Verified with confidence score
+  - Catches phantom successes (logged but not executed)
+  - Catches missing logs (executed but not logged)
+  - Provides visual proof for test case coverage claims
+
 ## v5.7.4 - Video-Based Frame Extraction (Critical Architecture Change)
 - **🎯 MAJOR CHANGE: Video Duration is Source of Truth** - Frame extraction now based on actual video length, not test execution time
   - **Key Insight**: Video recording time ≠ test execution time

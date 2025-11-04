@@ -120,6 +120,8 @@ export class FrameExtractor {
 
   /**
    * Select which timestamps to extract based on mode
+   * PRIORITY: Failure frames first (last 30s), then coverage frames
+   * This ensures most critical frames are extracted even if process is slow/interrupted
    */
   private selectTimestamps(
     mode: 'failure_focused' | 'full_test' | 'smart',
@@ -132,7 +134,8 @@ export class FrameExtractor {
       console.error(`[FrameExtractor] selectTimestamps: mode=${mode}, duration=${videoDuration}s, failureTime=${failureTimestamp}s, window=${failureWindowSeconds}s`);
     }
     
-    const timestamps: number[] = [];
+    const failureFrames: number[] = [];
+    const coverageFrames: number[] = [];
 
     switch (mode) {
       case 'failure_focused':
@@ -146,7 +149,7 @@ export class FrameExtractor {
           }
           
           for (let t = start; t <= end; t += 3) {
-            timestamps.push(Math.floor(t));
+            failureFrames.push(Math.floor(t));
           }
         } else {
           // No failure timestamp, extract last 30 seconds
@@ -157,54 +160,63 @@ export class FrameExtractor {
           }
           
           for (let t = start; t <= videoDuration; t += 3) {
-            timestamps.push(Math.floor(t));
+            failureFrames.push(Math.floor(t));
           }
         }
         break;
 
       case 'full_test':
         // Extract ~30 frames evenly throughout test
+        // For full_test, all frames are coverage frames
         for (let t = 0; t <= videoDuration; t += frameInterval) {
-          timestamps.push(Math.floor(t));
+          coverageFrames.push(Math.floor(t));
         }
         break;
 
       case 'smart':
-        // Extract ~20 frames at strategic points
-        // Start (2 frames)
-        timestamps.push(0, 2);
-        
-        // Middle sections (12 frames)
-        const middlePoints = 12;
-        for (let i = 1; i <= middlePoints; i++) {
-          const t = (videoDuration * i) / (middlePoints + 1);
-          timestamps.push(Math.floor(t));
+        // PRIORITY 1: Failure frames (last 30s) - extract these FIRST
+        const failureStart = Math.max(0, videoDuration - 30);
+        for (let t = failureStart; t <= videoDuration; t += 3) {
+          failureFrames.push(Math.floor(t));
         }
         
-        // Failure area if available (6 frames)
-        if (failureTimestamp !== undefined) {
-          const start = Math.max(0, failureTimestamp - 15);
-          for (let i = 0; i < 6; i++) {
-            const t = start + (i * 3);
-            if (t <= videoDuration) {
-              timestamps.push(Math.floor(t));
-            }
+        if (this.debug) {
+          console.error(`[FrameExtractor] smart mode: PRIORITY 1 (failure): ${failureFrames.length} frames from last 30s`);
+        }
+        
+        // PRIORITY 2: Coverage frames - start and middle sections
+        // Start (2 frames)
+        coverageFrames.push(0, 2);
+        
+        // Middle sections (evenly distributed, avoiding failure area)
+        const middlePoints = 10;
+        const middleEnd = Math.max(0, videoDuration - 35); // Stop before failure area
+        for (let i = 1; i <= middlePoints; i++) {
+          const t = (middleEnd * i) / (middlePoints + 1);
+          if (t < failureStart - 5) { // Avoid overlap with failure frames
+            coverageFrames.push(Math.floor(t));
           }
-        } else {
-          // End section (6 frames)
-          const start = Math.max(0, videoDuration - 15);
-          for (let t = start; t <= videoDuration; t += 3) {
-            timestamps.push(Math.floor(t));
-          }
+        }
+        
+        if (this.debug) {
+          console.error(`[FrameExtractor] smart mode: PRIORITY 2 (coverage): ${coverageFrames.length} frames from start/middle`);
         }
         break;
     }
 
-    // Remove duplicates and sort
-    const uniqueTimestamps = [...new Set(timestamps)].sort((a, b) => a - b);
+    // CRITICAL: Prioritize failure frames first, then coverage frames
+    // This ensures if extraction is slow/interrupted, we get failure frames
+    const prioritizedTimestamps = [
+      ...new Set(failureFrames), // Remove duplicates from failure frames
+      ...new Set(coverageFrames.filter(t => !failureFrames.includes(t))) // Add coverage frames not in failure
+    ];
     
-    // Limit to max 30 frames
-    return uniqueTimestamps.slice(0, 30);
+    if (this.debug) {
+      console.error(`[FrameExtractor] Final timestamp order (PRIORITY: failure first): ${prioritizedTimestamps.slice(0, 5).join(', ')} ... ${prioritizedTimestamps.slice(-5).join(', ')} (total: ${prioritizedTimestamps.length})`);
+    }
+    
+    // Limit to max 30 frames (failure frames are already included first)
+    return prioritizedTimestamps.slice(0, 30);
   }
 
   /**
