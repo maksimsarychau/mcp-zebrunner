@@ -1,5 +1,175 @@
 # Change Logs
 
+## v5.5.0
+- **🔗 Smart URL-Based Analysis** - Claude automatically detects and analyzes Zebrunner URLs
+- **✨ Natural Language Parsing** - Just paste a URL, Claude handles the rest
+- **🚀 Optimal Defaults** - Auto-enables videos, screenshots, and AI analysis
+- **🎯 Multi-URL Support** - Analyze multiple tests/launches in one request
+
+**What Changed:**
+
+1. **AI-Level URL Detection** ✅
+   - **Pattern Recognition**: Claude automatically detects Zebrunner test and launch URLs
+   - **Auto-Extraction**: Parses `projectKey`, `testRunId`, and `testId` from URLs
+   - **Smart Routing**: Calls `analyze_test_failure` for test URLs, `detailed_analyze_launch_failures` for launch URLs
+   - **No Manual Setup**: Works out of the box with existing MCP configuration
+
+2. **Supported URL Patterns** ✅
+
+   **Test URLs:**
+   ```
+   https://workspace.zebrunner.com/projects/PROJECT/automation-launches/LAUNCH_ID/tests/TEST_ID
+   ```
+   - Automatically calls `analyze_test_failure`
+   - Extracts: `projectKey`, `testRunId`, `testId`
+   - Default params: All diagnostics enabled, videos, screenshots, AI analysis
+
+   **Launch URLs:**
+   ```
+   https://workspace.zebrunner.com/projects/PROJECT/automation-launches/LAUNCH_ID
+   ```
+   - Automatically calls `detailed_analyze_launch_failures`
+   - Extracts: `projectKey`, `testRunId`
+   - Default params: Screenshot analysis enabled, comprehensive reporting
+
+3. **Natural Language Overrides** ✅
+   - **"without screenshots"** → Sets `analyzeScreenshotsWithAI: false`
+   - **"in jira format"** → Sets `format: "jira"`
+   - **"quick analysis"** → Sets `format: "summary"`, `screenshotAnalysisType: "basic"`
+   - **"compare these"** → Analyzes multiple URLs and compares results
+
+4. **Multi-URL Processing** ✅
+   - Paste multiple URLs in one request
+   - Claude analyzes all sequentially
+   - Results can be compared or aggregated
+   - Useful for comparing similar failures across tests
+
+5. **Cross-Workspace Support** ✅
+   - URLs from different workspaces show warning
+   - Analysis still attempted with configured credentials
+   - Helpful for multi-environment setups
+
+**Usage Examples:**
+
+```markdown
+# Single Test Analysis
+User: "Analyze https://your-workspace.zebrunner.com/projects/MCP/automation-launches/120911/tests/5455386"
+
+Claude automatically:
+- Detects test URL pattern
+- Extracts: projectKey=MCP, testRunId=120911, testId=5455386
+- Calls analyze_test_failure with all defaults enabled
+- Returns comprehensive failure analysis with videos and screenshots
+
+# Launch Analysis
+User: "Check https://your-workspace.zebrunner.com/projects/MCP/automation-launches/120911"
+
+Claude automatically:
+- Detects launch URL pattern  
+- Extracts: projectKey=MCP, testRunId=120911
+- Calls detailed_analyze_launch_failures
+- Returns analysis of all failed tests without linked issues
+
+# With Overrides
+User: "Generate JIRA ticket for https://...url... without screenshots"
+
+Claude:
+- Detects URL and extracts parameters
+- Applies override: format="jira", analyzeScreenshotsWithAI=false
+- Generates JIRA-ready report
+
+# Multiple URLs
+User: "Compare these failures:
+https://.../tests/5455386
+https://.../tests/5455390"
+
+Claude:
+- Analyzes both tests sequentially
+- Compares error patterns, classifications, similarities
+- Provides unified comparison report
+```
+
+**Default Parameters Applied:**
+
+When Claude detects a URL, these parameters are automatically used:
+
+**For Test URLs** (`analyze_test_failure`):
+```typescript
+{
+  projectKey: "<extracted>",
+  testRunId: <extracted>,
+  testId: <extracted>,
+  includeVideo: true,
+  analyzeScreenshotsWithAI: true,
+  includeLogs: true,
+  includeScreenshots: true,
+  includeArtifacts: true,
+  analyzeSimilarFailures: true,
+  screenshotAnalysisType: "detailed",
+  format: "detailed"
+}
+```
+
+**For Launch URLs** (`detailed_analyze_launch_failures`):
+```typescript
+{
+  projectKey: "<extracted>",
+  testRunId: <extracted>,
+  filterType: "without_issues",
+  includeScreenshotAnalysis: true,
+  screenshotAnalysisType: "detailed",
+  format: "summary",
+  executionMode: "sequential"
+}
+```
+
+**URL Pattern Reference:**
+
+```
+https://your-workspace.zebrunner.com/projects/MCP/automation-launches/120911/tests/5455386
+       ├──────────────────┤ ├─────┤                    ├─────┤       ├──────┤
+       Workspace           Project                     Launch        Test
+       (validated)         (projectKey)                (testRunId)   (testId)
+```
+
+**Documentation Added:**
+
+✅ **README.md**
+  - New section: "Method 3: Smart URL-Based Analysis"
+  - Detailed URL pattern documentation
+  - Usage examples and pro tips
+  - Advanced override examples
+  - Table of Contents updated
+
+✅ **Tool Descriptions**
+  - `analyze_test_failure` - Added URL hint
+  - `detailed_analyze_launch_failures` - Added URL hint
+  - Both tools now mention auto-invocation capability
+
+**Files Modified:**
+- `README.md` - Added comprehensive URL-based analysis documentation (Section 5.3)
+- `src/server.ts` - Updated tool descriptions to hint at URL auto-detection capability
+- `package.json` - Bumped version to 5.5.0
+- `change-logs.md` - Documented the feature with examples
+
+**Why This Matters:**
+
+🎯 **Faster Workflow**: Copy-paste URLs directly from Zebrunner UI - no manual ID extraction  
+🧠 **Smarter AI**: Claude understands context and intent from URLs  
+⚡ **Optimal Settings**: Automatic use of recommended analysis parameters  
+🔄 **Flexible**: Natural language overrides work seamlessly  
+📊 **Batch-Friendly**: Analyze multiple URLs in one conversation  
+
+**Pro Tips:**
+
+1. Copy URLs directly from Zebrunner browser tabs
+2. Paste multiple URLs for batch analysis and comparison
+3. Add natural language hints to customize analysis
+4. Works great with "why did this fail?" style questions
+5. Combine with format requests for instant JIRA tickets
+
+---
+
 ## v5.4.1
 - **🔗 Smart Test Case ID Detection** - Automatically makes embedded test case IDs in test names clickable
 - **✅ Abbreviated Format Support** - Expands shortened formats like "MCP-2869, 2870, 2871" to full format
@@ -9,7 +179,7 @@
 
 1. **Embedded Test Case ID Detection** ✅
    - **Pattern Matching**: Automatically detects test case IDs in test names using regex
-   - **Examples**: 
+   - **Examples**:
      - `Yesterday Nutrients Sharing Test (MCP-2064)` → `Yesterday Nutrients Sharing Test ([MCP-2064](url))`
      - `My Test [QAS-123]` → `My Test [[QAS-123](url)]`
      - `Test APPS-456 Something` → `Test [APPS-456](url) Something`
@@ -45,10 +215,10 @@ private async makeTestCaseIDsClickable(
   // Step 1: Expand abbreviated patterns
   const abbreviatedPattern = /\b([A-Z]{2,10})-(\d+)(?:\s*,\s*(\d+))+/g;
   // "MCP-2869, 2870, 2871" → "MCP-2869, MCP-2870, MCP-2871"
-  
+
   // Step 2: Detect all full-format test case IDs
   const testCasePattern = /\b([A-Z]{2,10}-\d+)\b/g;
-  
+
   // Step 3: Make each ID clickable
   for (const testCaseId of matches) {
     const url = await this.buildTestCaseUrl(testCaseId, projectKey, baseUrl);
@@ -58,8 +228,8 @@ private async makeTestCaseIDsClickable(
 
 // Usage in launch analysis
 const clickableTestName = await this.makeTestCaseIDsClickable(
-  result.testName, 
-  resolvedProjectKey!, 
+  result.testName,
+  resolvedProjectKey!,
   baseUrl
 );
 report += `### ${idx + 1}. Test ${result.testId}: ${clickableTestName}\n\n`;
@@ -89,7 +259,7 @@ report += `### ${idx + 1}. Test ${result.testId}: ${clickableTestName}\n\n`;
 ```
 
 **Files Modified:**
-- `src/handlers/reporting-tools.ts` 
+- `src/handlers/reporting-tools.ts`
   - Added `makeTestCaseIDsClickable()` method
   - Enhanced `buildTestCaseUrl()` to restore fallback logic
   - Applied clickable conversion to test names in launch analysis
@@ -329,7 +499,7 @@ for (let idx = 0; idx < analysisResults.length; idx++) {
   const result = analysisResults[idx];
   report += `### ${idx + 1}. Test ${result.testId}: ${result.testName}\n\n`;
   report += `- **Status:** ${result.status}\n`;
-  
+
   // NEW: Display test cases right after status
   if (result.testCases && result.testCases.length > 0) {
     const testCaseLinks = await Promise.all(result.testCases.map(async (tc: any) => {
@@ -906,7 +1076,7 @@ detailed_analyze_launch_failures({
 
 **New Features**: Enhanced screenshot analysis in test failures + comprehensive launch-wide failure analysis
 
-**Problem Solved**: 
+**Problem Solved**:
 1. Screenshot analysis required manual tool invocation
 2. No way to analyze all failures in a launch at once
 3. Manual grouping of similar failures
@@ -1171,9 +1341,9 @@ get_launch_test_summary({ projectKey: "MCP", launchId: 119783, limit: 10 })
 get_launch_test_summary({ projectKey: "MCP", launchId: 119783, summaryOnly: true })
 
 // Get first 5 with full details
-get_launch_test_summary({ 
-  projectKey: "MCP", 
-  launchId: 119783, 
+get_launch_test_summary({
+  projectKey: "MCP",
+  launchId: 119783,
   limit: 5,
   includeLabels: true,
   includeTestCases: true
@@ -1190,7 +1360,7 @@ get_launch_test_summary({
 
 **Issue:** The `get_launch_details` tool was failing due to API data type mismatches in Zod schemas.
 
-**Root Cause:** 
+**Root Cause:**
 - API sometimes returns numeric fields (timestamps, test counts) as strings instead of numbers
 - Zod schemas were strictly typed as `z.number()`, causing validation failures
 
@@ -1199,13 +1369,13 @@ get_launch_test_summary({
    - `LaunchResponseSchema`: timestamps (`startedAt`, `endedAt`), test counts, elapsed time
    - `TestSessionResponseSchema`: timestamps and test counts
    - `LaunchListItemSchema`: timestamps and test counts
-   
+
 2. **Added support for Test Runs endpoint**:
    - Created `TestRunResponseSchema` and `TestRunsResponseSchema` for individual test executions
-   - Added `getTestRuns()` method to `ZebrunnerReportingClient` 
+   - Added `getTestRuns()` method to `ZebrunnerReportingClient`
    - Endpoint: `/api/reporting/v1/launches/{launchId}/tests?projectId={projectId}`
    - Updated `getLauncherDetails()` handler to fetch test runs data with fallback to test sessions
-   
+
 3. **Benefits:**
    - Handles both string and numeric data types gracefully
    - Provides detailed test execution results (test runs) instead of just test sessions

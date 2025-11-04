@@ -17,6 +17,9 @@ A **Model Context Protocol (MCP)** server that integrates with **Zebrunner Test 
 3. [📋 Prerequisites](#-prerequisites)
 4. [🚀 Quick Start Guide](#-quick-start-guide)
 5. [🔧 Usage Methods](#-usage-methods)
+   - 5.1. [Method 1: Use with Claude Desktop/Code](#method-1-use-with-claude-desktopcode-recommended)
+   - 5.2. [Method 2: Run as standalone server](#method-2-run-as-standalone-server)
+   - 5.3. [Method 3: Smart URL-Based Analysis 🚀](#method-3-smart-url-based-analysis-)
 6. [🛠️ Available Tools](#️-available-tools)
    - 6.1. [📋 Test Case Management](#-test-case-management)
    - 6.2. [🌳 Test Suite Hierarchy & Organization](#-test-suite-hierarchy--organization)
@@ -339,6 +342,136 @@ npm run dev
 ```bash
 npm start
 ```
+
+### Method 3: Smart URL-Based Analysis 🚀
+
+**NEW in v5.4.1+**: Claude can automatically detect Zebrunner URLs and analyze them with optimal settings!
+
+Just paste a Zebrunner URL in your conversation, and Claude will automatically:
+- Parse the URL to extract project, launch, and test IDs
+- Call the appropriate analysis tool
+- Use recommended settings (videos, screenshots, AI analysis enabled)
+
+#### 📋 Supported URL Patterns
+
+**1. Test Analysis URLs**
+```
+https://your-workspace.zebrunner.com/projects/PROJECT/automation-launches/LAUNCH_ID/tests/TEST_ID
+```
+
+**What happens:**
+- Claude automatically calls `analyze_test_failure`
+- Extracts: `projectKey`, `testRunId` (launch ID), `testId`
+- Enables: `includeVideo: true`, `analyzeScreenshotsWithAI: true`, all diagnostics
+
+**Example:**
+```
+User: "Analyze https://your-workspace.zebrunner.com/projects/MCP/automation-launches/120911/tests/5455386"
+
+Claude automatically calls:
+{
+  projectKey: "MCP",
+  testRunId: 120911,
+  testId: 5455386,
+  includeVideo: true,
+  analyzeScreenshotsWithAI: true,
+  includeLogs: true,
+  includeScreenshots: true,
+  analyzeSimilarFailures: true,
+  screenshotAnalysisType: "detailed",
+  format: "detailed"
+}
+```
+
+**2. Launch Analysis URLs**
+```
+https://your-workspace.zebrunner.com/projects/PROJECT/automation-launches/LAUNCH_ID
+```
+
+**What happens:**
+- Claude automatically calls `detailed_analyze_launch_failures`
+- Extracts: `projectKey`, `testRunId` (launch ID)
+- Enables: `includeScreenshotAnalysis: true`, comprehensive analysis
+
+**Example:**
+```
+User: "Analyze https://your-workspace.zebrunner.com/projects/MCP/automation-launches/120911"
+
+Claude automatically calls:
+{
+  projectKey: "MCP",
+  testRunId: 120911,
+  filterType: "without_issues",
+  includeScreenshotAnalysis: true,
+  screenshotAnalysisType: "detailed",
+  format: "summary",
+  executionMode: "sequential"
+}
+```
+
+#### ✨ Advanced Usage
+
+**Override Default Settings**
+
+Claude understands natural language overrides:
+
+```
+User: "Analyze https://...url... but without screenshots"
+→ Claude sets: analyzeScreenshotsWithAI: false
+
+User: "Analyze https://...url... in jira format"
+→ Claude sets: format: "jira"
+
+User: "Quick analysis of https://...url..."
+→ Claude sets: format: "summary", screenshotAnalysisType: "basic"
+```
+
+**Multiple URLs**
+
+Analyze multiple tests/launches in one request:
+
+```
+User: "Compare these failures:
+https://your-workspace.zebrunner.com/projects/MCP/automation-launches/120911/tests/5455386
+https://your-workspace.zebrunner.com/projects/MCP/automation-launches/120911/tests/5455390"
+
+→ Claude analyzes both sequentially and compares results
+```
+
+**Cross-Workspace Support**
+
+⚠️ URLs from different workspaces will show a warning but still attempt analysis:
+
+```
+User: "Analyze https://other-workspace.zebrunner.com/..."
+→ Claude warns: "URL is from 'other-workspace.zebrunner.com' but configured workspace is 'your-workspace.zebrunner.com'"
+→ Proceeds with analysis using available credentials
+```
+
+#### 📖 URL Pattern Reference
+
+| Component | Example | Extracted As | Used In Tool |
+|-----------|---------|--------------|--------------|
+| Workspace | `your-workspace.zebrunner.com` | Validation only | N/A |
+| Project Key | `MCP` | `projectKey` | All tools |
+| Launch ID | `120911` | `testRunId` | All tools |
+| Test ID | `5455386` | `testId` | `analyze_test_failure` only |
+
+#### 🎯 Why Use URL-Based Analysis?
+
+✅ **Faster**: No need to manually specify IDs  
+✅ **Convenient**: Copy-paste URLs directly from Zebrunner UI  
+✅ **Optimized**: Automatic use of recommended settings  
+✅ **Smart**: Claude detects intent and adjusts parameters  
+✅ **Flexible**: Natural language overrides work seamlessly  
+
+#### 💡 Pro Tips
+
+1. **Direct from Zebrunner**: Copy URL directly from your browser while viewing a test/launch
+2. **Batch Analysis**: Paste multiple URLs separated by newlines
+3. **Custom Settings**: Add natural language instructions to override defaults
+4. **Quick Checks**: URLs work great for quick "what happened here?" questions
+5. **Reports**: Combine with format requests: "Generate JIRA ticket for https://...url..."
 
 [⬆️ Back to top](#-table-of-contents)
 

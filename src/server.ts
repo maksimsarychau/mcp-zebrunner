@@ -15,17 +15,17 @@ import { TestGenerator } from "./utils/test-generator.js";
 import { getClickableLinkConfig, generateTestCaseLink, addTestCaseWebUrl, generateSuiteLink, addSuiteWebUrl } from "./utils/clickable-links.js";
 import { ZebrunnerConfig } from "./types/api.js";
 import { ZebrunnerReportingConfig } from "./types/reporting.js";
-import { 
-  ZebrunnerTestCase, 
-  ZebrunnerTestSuite, 
+import {
+  ZebrunnerTestCase,
+  ZebrunnerTestSuite,
   ZebrunnerTestExecutionItem,
   ZebrunnerTestRun,
-  ZebrunnerTestResultResponse 
+  ZebrunnerTestResultResponse
 } from "./types/core.js";
 
 /**
  * Unified Zebrunner MCP Server
- * 
+ *
  * Features:
  * - All enhanced functionality from analysis document
  * - Improved error handling to avoid 400/404 errors
@@ -149,7 +149,7 @@ async function resolveProjectId(project: string | number): Promise<{ projectId: 
 
   // First try hardcoded aliases for backward compatibility
   const projectKey = PROJECT_ALIASES[project] || project;
-  
+
   try {
     const projectId = await reportingClient.getProjectId(projectKey);
     return { projectId };
@@ -157,35 +157,35 @@ async function resolveProjectId(project: string | number): Promise<{ projectId: 
     // If not found, try dynamic discovery
     try {
       const availableProjects = await reportingClient.getAvailableProjects();
-      
+
       // Look for exact match
-      const exactMatch = availableProjects.items.find(p => 
-        p.key.toLowerCase() === project.toLowerCase() || 
+      const exactMatch = availableProjects.items.find(p =>
+        p.key.toLowerCase() === project.toLowerCase() ||
         p.name.toLowerCase() === project.toLowerCase()
       );
-      
+
       if (exactMatch) {
         return { projectId: exactMatch.id };
       }
-      
+
       // Generate suggestions for similar projects
       const suggestions = availableProjects.items
-        .filter(p => 
+        .filter(p =>
           p.key.toLowerCase().includes(project.toLowerCase()) ||
           p.name.toLowerCase().includes(project.toLowerCase())
         )
         .slice(0, 5) // Limit to 5 suggestions
         .map(p => `"${p.key}" (${p.name})`)
         .join(', ');
-      
+
       const allProjects = availableProjects.items
         .map(p => `"${p.key}" (${p.name})`)
         .join(', ');
-      
-      const suggestionText = suggestions 
+
+      const suggestionText = suggestions
         ? `\n\n💡 Did you mean: ${suggestions}?\n\n📋 Available projects: ${allProjects}`
         : `\n\n📋 Available projects: ${allProjects}`;
-      
+
       throw new Error(`Project "${project}" not found.${suggestionText}`);
     } catch (discoveryError) {
       // If dynamic discovery also fails, throw original error with suggestion to use get_available_projects
@@ -272,47 +272,47 @@ function buildParamsConfig(opts: {
 
 /** Enhanced markdown rendering with debug info */
 async function renderTestCaseMarkdown(
-  testCase: ZebrunnerTestCase, 
+  testCase: ZebrunnerTestCase,
   includeDebugInfo: boolean = false,
   includeSuiteHierarchy: boolean = false,
   projectKey?: string,
   clickableLinkConfig?: any
 ): Promise<string> {
   let markdown = FormatProcessor.formatTestCaseMarkdown(testCase);
-  
+
   // Add clickable links to test case key if enabled
   if (clickableLinkConfig?.includeClickableLinks && projectKey) {
     const testCaseLink = generateTestCaseLink(
-      projectKey, 
-      testCase.key || `tc-${testCase.id}`, 
-      testCase.id, 
-      clickableLinkConfig.baseWebUrl, 
+      projectKey,
+      testCase.key || `tc-${testCase.id}`,
+      testCase.id,
+      clickableLinkConfig.baseWebUrl,
       clickableLinkConfig
     );
     // Replace the test case key in the markdown with clickable link
     const keyPattern = new RegExp(`\\b${testCase.key || `tc-${testCase.id}`}\\b`, 'g');
     markdown = markdown.replace(keyPattern, testCaseLink);
   }
-  
+
   // Add suite hierarchy information if available
   if (includeSuiteHierarchy && (testCase.featureSuiteId || testCase.rootSuiteId)) {
     markdown += `\n## 📁 Suite Hierarchy\n\n`;
-    
+
     if (testCase.rootSuiteId) {
       markdown += `- **Root Suite ID**: ${testCase.rootSuiteId}\n`;
     }
-    
+
     if (testCase.featureSuiteId) {
       markdown += `- **Feature Suite ID**: ${testCase.featureSuiteId}\n`;
     }
-    
+
     if (testCase.testSuite?.id) {
       markdown += `- **Test Suite ID**: ${testCase.testSuite.id}\n`;
       if (testCase.testSuite.name || testCase.testSuite.title) {
         markdown += `- **Test Suite Name**: ${testCase.testSuite.name || testCase.testSuite.title}\n`;
       }
     }
-    
+
     // Try to get hierarchy path with names if client is available
     if (projectKey && testCase.featureSuiteId) {
       try {
@@ -326,7 +326,7 @@ async function renderTestCaseMarkdown(
       }
     }
   }
-  
+
   if (includeDebugInfo && DEBUG_MODE) {
     markdown += `\n\n---\n## Debug Information\n\n`;
     markdown += `- **Retrieved At**: ${new Date().toISOString()}\n`;
@@ -338,15 +338,15 @@ async function renderTestCaseMarkdown(
       markdown += `- **Root Suite ID**: ${testCase.rootSuiteId || 'Not available'}\n`;
     }
   }
-  
+
   return markdown;
 }
 
 /** Perform comprehensive test coverage analysis */
 async function performCoverageAnalysis(
-  testCase: any, 
-  implementationContext: string, 
-  analysisScope: string, 
+  testCase: any,
+  implementationContext: string,
+  analysisScope: string,
   includeRecommendations: boolean
 ): Promise<any> {
   try {
@@ -354,7 +354,7 @@ async function performCoverageAnalysis(
     let rulesParser: RulesParser | null = null;
     let rules: any = null;
     let detectedFramework: any = null;
-    
+
     if (ENABLE_RULES_ENGINE) {
       try {
         rulesParser = RulesParser.getInstance();
@@ -397,12 +397,12 @@ async function performCoverageAnalysis(
   // Analyze each test step (with or without rules context)
   if (testCase.steps && testCase.steps.length > 0) {
     analysis.coverage.stepsCoverage = testCase.steps.map((step: any, index: number) => {
-      const stepAnalysis = ENABLE_RULES_ENGINE 
+      const stepAnalysis = ENABLE_RULES_ENGINE
         ? analyzeStepCoverage(step, implementationContext, rules, detectedFramework)
         : analyzeStepCoverage(step, implementationContext);
-      
+
       // Determine step characteristics for rules validation
-      const isUI = stepAnalysis.action.toLowerCase().includes('tap') || 
+      const isUI = stepAnalysis.action.toLowerCase().includes('tap') ||
                    stepAnalysis.action.toLowerCase().includes('click') ||
                    stepAnalysis.action.toLowerCase().includes('screen');
       const isAPI = stepAnalysis.action.toLowerCase().includes('api') ||
@@ -460,7 +460,7 @@ async function performCoverageAnalysis(
   }
 
   return analysis;
-  
+
   } catch (error: any) {
     debugLog("Error in performCoverageAnalysis", { error: error.message, stack: error.stack });
     // Return a minimal analysis object to prevent complete failure
@@ -533,7 +533,7 @@ function extractImplementationElements(context: string): any {
 function analyzeStepCoverage(step: any, implementationContext: string, rules?: any, detectedFramework?: any): any {
   const action = step.action || '';
   const expectedResult = step.expectedResult || '';
-  
+
   const analysis = {
     coverage: 0,
     matches: [] as string[],
@@ -544,9 +544,9 @@ function analyzeStepCoverage(step: any, implementationContext: string, rules?: a
   // Extract keywords and analyze matches
   const actionKeywords = extractKeywords(action);
   const implementationKeywords = extractKeywords(implementationContext);
-  
-  const actionMatches = actionKeywords.filter(keyword => 
-    implementationKeywords.some(implKeyword => 
+
+  const actionMatches = actionKeywords.filter(keyword =>
+    implementationKeywords.some(implKeyword =>
       implKeyword.toLowerCase().includes(keyword.toLowerCase())
     )
   );
@@ -576,9 +576,9 @@ function analyzeStepCoverage(step: any, implementationContext: string, rules?: a
 /** Extract meaningful keywords from text */
 function extractKeywords(text: string): string[] {
   if (!text) return [];
-  
+
   const stopWords = ['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'user'];
-  
+
   return text
     .toLowerCase()
     .replace(/[^\w\s]/g, ' ')
@@ -613,7 +613,7 @@ function generateCoverageRecommendations(analysis: any, rules?: any, detectedFra
 /** Format coverage analysis output */
 async function formatCoverageAnalysis(analysis: any, outputFormat: string, filePath?: string, clickableLinkConfig?: any): Promise<any> {
   const chatResponse = generateChatResponse(analysis, clickableLinkConfig);
-  
+
   return {
     chatResponse,
     markdownContent: outputFormat.includes('markdown') ? chatResponse : '',
@@ -625,44 +625,44 @@ async function formatCoverageAnalysis(analysis: any, outputFormat: string, fileP
 function generateChatResponse(analysis: any, clickableLinkConfig?: any): string {
   const testCase = analysis.testCase;
   const coverage = analysis.coverage;
-  
+
   let response = `# 🔍 Test Coverage Analysis: ${testCase.key}\n\n`;
-  
+
   // Add clickable link to test case if enabled
   if (clickableLinkConfig?.includeClickableLinks) {
     const testCaseLink = generateTestCaseLink(
-      testCase.projectKey || testCase.project_key, 
-      testCase.key, 
-      testCase.id, 
-      clickableLinkConfig.baseWebUrl, 
+      testCase.projectKey || testCase.project_key,
+      testCase.key,
+      testCase.id,
+      clickableLinkConfig.baseWebUrl,
       clickableLinkConfig
     );
     response += `**Test Case**: ${testCaseLink} - ${testCase.title}\n`;
   } else {
     response += `**Test Case**: ${testCase.title}\n`;
   }
-  
+
   response += `**Overall Score**: ${coverage.overallScore}%\n\n`;
-  
+
   if (coverage.stepsCoverage.length > 0) {
     response += `## 📋 Step Analysis\n\n`;
     coverage.stepsCoverage.forEach((step: any) => {
       const coveragePercent = Math.round(step.coverage * 100);
       const indicator = coveragePercent >= 70 ? '✅' : coveragePercent >= 40 ? '⚠️' : '❌';
-      
+
       response += `### ${indicator} Step ${step.stepNumber} (${coveragePercent}%)\n`;
       response += `**Action**: ${step.action}\n`;
       response += `**Expected**: ${step.expectedResult}\n\n`;
     });
   }
-  
+
   if (analysis.recommendations.length > 0) {
     response += `## 💡 Recommendations\n\n`;
     analysis.recommendations.forEach((rec: string) => {
       response += `${rec}\n\n`;
     });
   }
-  
+
   return response;
 }
 
@@ -673,12 +673,12 @@ function generateCodeComments(analysis: any): string {
 
 async function main() {
   const server = new McpServer(
-    { 
-      name: "mcp-zebrunner", 
+    {
+      name: "mcp-zebrunner",
       version: "3.1.0",
       description: "Unified Zebrunner MCP Server with comprehensive features, improved error handling, and new Reporting API support"
     },
-    { 
+    {
       capabilities: {
         tools: {}
       }
@@ -708,11 +708,11 @@ async function main() {
     },
     async (args) => {
       const { project_key, project_id, format, include_hierarchy, page, size, page_token, include_clickable_links } = args;
-      
+
       try {
         // Get clickable links configuration
         const clickableLinkConfig = getClickableLinkConfig(include_clickable_links, ZEBRUNNER_URL);
-        
+
         // Runtime validation for configured MAX_PAGE_SIZE
         if (size > MAX_PAGE_SIZE) {
           return {
@@ -724,7 +724,7 @@ async function main() {
         }
 
         debugLog("Listing test suites", { project_key, project_id, format, include_hierarchy, page, size, page_token });
-        
+
         if (!project_key && !project_id) {
           throw new Error('Either project_key or project_id must be provided');
         }
@@ -737,20 +737,20 @@ async function main() {
         };
 
         const suites = await client.getTestSuites(project_key || '', searchParams);
-        
+
         if (!validateApiResponse(suites, 'array')) {
           throw new Error('Invalid API response format');
         }
 
         let processedSuites = suites.items || suites;
-        
+
         if (include_hierarchy) {
           debugLog("Processing hierarchy for suites", { count: processedSuites.length });
           processedSuites = HierarchyProcessor.enrichSuitesWithHierarchy(processedSuites);
         }
 
         // Add clickable links to suites if enabled
-        const enhancedSuites = processedSuites.map((suite: any) => 
+        const enhancedSuites = processedSuites.map((suite: any) =>
           addSuiteWebUrl(suite, project_key, clickableLinkConfig.baseWebUrl, clickableLinkConfig)
         );
 
@@ -767,7 +767,7 @@ async function main() {
         };
 
         const formattedData = FormatProcessor.format(response, format);
-        
+
         return {
           content: [{
             type: "text" as const,
@@ -810,17 +810,17 @@ async function main() {
           }]
         };
       }
-      
+
       const { project_key, case_key, format, include_debug, include_suite_hierarchy, include_clickable_links } = resolvedArgs;
-      
+
       try {
         debugLog("Getting test case by key", { project_key, case_key, format, include_suite_hierarchy, include_clickable_links });
-        
+
         // Get clickable links configuration
         const clickableLinkConfig = getClickableLinkConfig(include_clickable_links, ZEBRUNNER_URL);
-        
+
         const testCase = await client.getTestCaseByKey(project_key, case_key, { includeSuiteHierarchy: include_suite_hierarchy });
-        
+
         if (!testCase) {
           throw new Error(`Test case ${case_key} not found`);
         }
@@ -838,7 +838,7 @@ async function main() {
         // Add webUrl for JSON/DTO formats if clickable links enabled
         const enhancedTestCase = addTestCaseWebUrl(testCase, project_key, clickableLinkConfig.baseWebUrl, clickableLinkConfig);
         const formattedData = FormatProcessor.format(enhancedTestCase, format);
-        
+
         return {
           content: [{
             type: "text" as const,
@@ -872,7 +872,7 @@ async function main() {
     },
     async (args) => {
       const { project_key, root_suite_id, include_root, format, page, size } = args;
-      
+
       // Runtime validation for configured MAX_PAGE_SIZE
       if (size > MAX_PAGE_SIZE) {
         return {
@@ -882,10 +882,10 @@ async function main() {
           }]
         };
       }
-      
+
       try {
         debugLog("Getting all subsuites from root", args);
-        
+
         // Get all suites for the project
         const allSuites = await client.getAllTestSuites(project_key, {
           maxResults: 10000,
@@ -904,10 +904,10 @@ async function main() {
 
         // Get all descendants
         const descendants = HierarchyProcessor.getSuiteDescendants(root_suite_id, allSuites);
-        
+
         // Combine root + descendants if include_root is true
         let allSubsuites = include_root ? [rootSuite, ...descendants] : descendants;
-        
+
         // Sort by ID for consistent ordering
         allSubsuites.sort((a, b) => a.id - b.id);
 
@@ -933,7 +933,7 @@ async function main() {
         };
 
         const formattedData = FormatProcessor.format(responseData, format);
-        
+
         return {
           content: [{
             type: "text" as const,
@@ -979,22 +979,22 @@ async function main() {
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI")
     },
     async (args) => {
-      const { 
-        project_key, 
-        suite_id, 
-        root_suite_id, 
-        include_steps, 
+      const {
+        project_key,
+        suite_id,
+        root_suite_id,
+        include_steps,
         automation_states,
         created_after,
         created_before,
         modified_after,
         modified_before,
-        format, 
-        page, 
+        format,
+        page,
         size,
         include_clickable_links
       } = args;
-      
+
       // Runtime validation for configured MAX_PAGE_SIZE
       if (size > MAX_PAGE_SIZE) {
         return {
@@ -1004,10 +1004,10 @@ async function main() {
           }]
         };
       }
-      
+
       try {
         debugLog("Getting advanced test cases with enhanced filtering", args);
-        
+
         const searchParams = {
           page,
           size,
@@ -1021,17 +1021,17 @@ async function main() {
         };
 
         const response = await client.getTestCases(project_key, searchParams);
-        
+
         if (!validateApiResponse(response, 'array')) {
           throw new Error('Invalid API response format');
         }
 
         let processedCases = response.items || response;
-        
+
         // If include_steps is true, fetch detailed info for first few cases
         if (include_steps && processedCases.length > 0) {
           debugLog("Fetching detailed steps for test cases", { count: Math.min(5, processedCases.length) });
-          
+
           const casesToFetch = processedCases.slice(0, 5).filter((tc): tc is (typeof tc & { key: string }) => Boolean(tc?.key));
 
           const detailedCases = await Promise.allSettled(
@@ -1067,12 +1067,12 @@ async function main() {
         const responseData = {
           items: processedCases,
           _meta: response._meta, // Use corrected metadata from enhanced client
-          _notice: response._meta?.totalElements === 10 && response._meta?.hasNext === undefined ? 
+          _notice: response._meta?.totalElements === 10 && response._meta?.hasNext === undefined ?
             "⚠️  Note: Zebrunner API has known limitations with pagination and suite filtering. Results may be limited to available test cases." : undefined
         };
-        
+
         const formattedData = FormatProcessor.format(responseData, format);
-        
+
         return {
           content: [{
             type: "text" as const,
@@ -1103,13 +1103,13 @@ async function main() {
     },
     async (args) => {
       const { project_key, root_suite_id, max_depth, format, include_clickable_links } = args;
-      
+
       try {
         debugLog("Building suite hierarchy", args);
-        
+
         // Get clickable links configuration
         const clickableLinkConfig = getClickableLinkConfig(include_clickable_links, ZEBRUNNER_URL);
-        
+
         const allSuites = await client.getAllTestSuites(project_key, {
           maxResults: 5000, // Reasonable limit for hierarchy processing
           onProgress: (count, page) => debugLog(`Fetching suites: ${count} items (page ${page})`)
@@ -1129,7 +1129,7 @@ async function main() {
 
         // Build hierarchical tree
         const hierarchyTree = HierarchyProcessor.buildSuiteTree(suitesToProcess);
-        
+
         // Limit depth with proper typing and add clickable links
         const limitDepth = (suites: ZebrunnerTestSuite[], currentDepth: number): ZebrunnerTestSuite[] => {
           if (currentDepth >= max_depth) {
@@ -1144,7 +1144,7 @@ async function main() {
 
         const limitedTree = limitDepth(hierarchyTree, 0);
         const formattedData = FormatProcessor.format(limitedTree, format);
-        
+
         return {
           content: [{
             type: "text" as const,
@@ -1182,13 +1182,13 @@ async function main() {
     },
     async (args) => {
       const { project_key, automation_states, suite_id, created_after, format, page, size, include_clickable_links } = args;
-      
+
       try {
         debugLog("Getting test cases by automation state", args);
-        
+
         // Get clickable links configuration
         const clickableLinkConfig = getClickableLinkConfig(include_clickable_links, ZEBRUNNER_URL);
-        
+
         const searchParams = {
           page,
           size,
@@ -1198,15 +1198,15 @@ async function main() {
         };
 
         const response = await client.getTestCases(project_key, searchParams);
-        
+
         if (!validateApiResponse(response, 'array')) {
           throw new Error('Invalid API response format');
         }
 
         let processedCases = response.items || response;
-        
+
         // Add automation state info to the output
-        const automationStateInfo = Array.isArray(automation_states) 
+        const automationStateInfo = Array.isArray(automation_states)
           ? automation_states.join(', ')
           : automation_states;
 
@@ -1229,32 +1229,32 @@ async function main() {
             processedCases.forEach((testCase: any, index: number) => {
               const num = page * size + index + 1;
               const testCaseDisplay = generateTestCaseLink(
-                project_key, 
-                testCase.key || 'N/A', 
-                testCase.id, 
-                clickableLinkConfig.baseWebUrl, 
+                project_key,
+                testCase.key || 'N/A',
+                testCase.id,
+                clickableLinkConfig.baseWebUrl,
                 clickableLinkConfig
               );
               markdown += `### ${num}. ${testCaseDisplay} - ${testCase.title || 'Untitled'}\n\n`;
-              
+
               if (testCase.automationState) {
-                const stateIcon = testCase.automationState.name === 'Automated' ? '⚙️' : 
+                const stateIcon = testCase.automationState.name === 'Automated' ? '⚙️' :
                                 testCase.automationState.name === 'To Be Automated' ? '👤' : '🖐️';
                 markdown += `**Automation State:** ${stateIcon} ${testCase.automationState.name}\n`;
               }
-              
+
               if (testCase.priority) {
                 markdown += `**Priority:** ${testCase.priority.name}\n`;
               }
-              
+
               if (testCase.createdAt) {
                 markdown += `**Created:** ${new Date(testCase.createdAt).toLocaleDateString()}\n`;
               }
-              
+
               if (testCase.description) {
                 markdown += `**Description:** ${testCase.description.substring(0, 200)}${testCase.description.length > 200 ? '...' : ''}\n`;
               }
-              
+
               markdown += `\n`;
             });
           }
@@ -1268,10 +1268,10 @@ async function main() {
         }
 
         // For other formats, return structured data
-        const enhancedTestCases = processedCases.map((tc: any) => 
+        const enhancedTestCases = processedCases.map((tc: any) =>
           addTestCaseWebUrl(tc, project_key, clickableLinkConfig.baseWebUrl, clickableLinkConfig)
         );
-        
+
         const result = {
           project_key,
           automation_states: automationStateInfo,
@@ -1297,10 +1297,10 @@ async function main() {
             processedCases.forEach((testCase: any, index: number) => {
               const num = page * size + index + 1;
               const testCaseDisplay = generateTestCaseLink(
-                project_key, 
-                testCase.key || 'N/A', 
-                testCase.id, 
-                clickableLinkConfig.baseWebUrl, 
+                project_key,
+                testCase.key || 'N/A',
+                testCase.id,
+                clickableLinkConfig.baseWebUrl,
                 clickableLinkConfig
               );
               output += `${num}. ${testCaseDisplay} - ${testCase.title || 'Untitled'}\n`;
@@ -1351,25 +1351,25 @@ async function main() {
     async (args) => {
       try {
         debugLog("Getting automation states", args);
-        
+
         // Resolve project ID using the same logic as other tools
         const { projectId } = await resolveProjectId(args.project);
-        
+
         // Get automation states using the reporting client
         const automationStates = await reportingClient.getAutomationStates(projectId);
-        
+
         if (args.format === 'markdown') {
           let markdown = `# Automation States for Project ${args.project}\n\n`;
           markdown += `**Project ID:** ${projectId}\n`;
           markdown += `**Total States:** ${automationStates.length}\n\n`;
-          
+
           markdown += `## Available Automation States\n\n`;
           automationStates.forEach((state, index) => {
-            const icon = state.name === 'Automated' ? '⚙️' : 
+            const icon = state.name === 'Automated' ? '⚙️' :
                         state.name === 'To Be Automated' ? '👤' : '🖐️';
             markdown += `${index + 1}. **${icon} ${state.name}** (ID: ${state.id})\n`;
           });
-          
+
           markdown += `\n## Usage Examples\n\n`;
           markdown += `### Filter by Name:\n`;
           markdown += `\`\`\`\n`;
@@ -1378,7 +1378,7 @@ async function main() {
           markdown += `  automation_states: "Not Automated"\n`;
           markdown += `)\n`;
           markdown += `\`\`\`\n\n`;
-          
+
           markdown += `### Filter by ID:\n`;
           markdown += `\`\`\`\n`;
           markdown += `get_test_cases_by_automation_state(\n`;
@@ -1386,7 +1386,7 @@ async function main() {
           markdown += `  automation_states: ${automationStates[0]?.id || 10}\n`;
           markdown += `)\n`;
           markdown += `\`\`\`\n\n`;
-          
+
           markdown += `### Filter by Multiple States:\n`;
           markdown += `\`\`\`\n`;
           markdown += `get_test_cases_by_automation_state(\n`;
@@ -1394,7 +1394,7 @@ async function main() {
           markdown += `  automation_states: ["Not Automated", "To Be Automated"]\n`;
           markdown += `)\n`;
           markdown += `\`\`\`\n`;
-          
+
           return {
             content: [{
               type: "text" as const,
@@ -1402,7 +1402,7 @@ async function main() {
             }]
           };
         }
-        
+
         // JSON format
         const result = {
           project: args.project,
@@ -1414,14 +1414,14 @@ async function main() {
             return acc;
           }, {} as Record<string, number>)
         };
-        
+
         return {
           content: [{
             type: "text" as const,
             text: JSON.stringify(result, null, 2)
           }]
         };
-        
+
       } catch (error: any) {
         debugLog("Error getting automation states", { error: error.message, args });
         return {
@@ -1448,23 +1448,23 @@ async function main() {
     },
     async (args) => {
       const { project_key, title, max_page_size, page_token, get_all, format, include_clickable_links } = args;
-      
+
       try {
         debugLog("Getting test case by title", args);
-        
+
         // Get clickable links configuration
         const clickableLinkConfig = getClickableLinkConfig(include_clickable_links, ZEBRUNNER_URL);
-        
+
         // Build RQL filter for title search using partial match
         // Properly escape backslashes first, then quotes to prevent injection
         const escapedTitle = title.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
         const filter = `title~="${escapedTitle}"`;
-        
+
         if (get_all) {
           // Get all pages
           const allTestCases: any[] = [];
           let currentPageToken = page_token;
-          
+
           do {
             const searchParams = {
               size: max_page_size,
@@ -1473,14 +1473,14 @@ async function main() {
             };
 
             const response = await client.getTestCases(project_key, searchParams);
-            
+
             if (!validateApiResponse(response, 'array')) {
               throw new Error('Invalid API response format');
             }
 
             const pageItems = response.items || response;
             allTestCases.push(...pageItems);
-            
+
             // Check for next page
             currentPageToken = response._meta?.nextPageToken;
           } while (currentPageToken);
@@ -1488,7 +1488,7 @@ async function main() {
           // Add clickable links if requested
           let processedCases = allTestCases;
           if (include_clickable_links && clickableLinkConfig.includeClickableLinks) {
-            processedCases = processedCases.map(testCase => 
+            processedCases = processedCases.map(testCase =>
               addTestCaseWebUrl(testCase, project_key, clickableLinkConfig.baseWebUrl, clickableLinkConfig)
             );
           }
@@ -1496,7 +1496,7 @@ async function main() {
           const formattedData = FormatProcessor.format(processedCases, format);
           const resultText = typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2);
           const summary = `Found ${processedCases.length} test case(s) total matching title "${title}"`;
-          
+
           return {
             content: [{
               type: "text" as const,
@@ -1512,30 +1512,30 @@ async function main() {
           };
 
           const response = await client.getTestCases(project_key, searchParams);
-          
+
           if (!validateApiResponse(response, 'array')) {
             throw new Error('Invalid API response format');
           }
 
           let processedCases = response.items || response;
-          
+
           // Add clickable links if requested
           if (include_clickable_links && clickableLinkConfig.includeClickableLinks) {
-            processedCases = processedCases.map(testCase => 
+            processedCases = processedCases.map(testCase =>
               addTestCaseWebUrl(testCase, project_key, clickableLinkConfig.baseWebUrl, clickableLinkConfig)
             );
           }
 
           const formattedData = FormatProcessor.format(processedCases, format);
           const resultText = typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2);
-          
+
           const summary = `Found ${processedCases.length} test case(s) on this page matching title "${title}"`;
           let paginationInfo = '';
-          
+
           if (response._meta?.nextPageToken) {
             paginationInfo = `\n\n📄 **Pagination:** Use page_token="${response._meta.nextPageToken}" to get next page, or set get_all=true to retrieve all results.`;
           }
-          
+
           return {
             content: [{
               type: "text" as const,
@@ -1575,70 +1575,70 @@ async function main() {
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI")
     },
     async (args) => {
-      const { 
-        project_key, 
-        test_suite_id, 
-        created_after, 
-        created_before, 
-        last_modified_after, 
-        last_modified_before, 
+      const {
+        project_key,
+        test_suite_id,
+        created_after,
+        created_before,
+        last_modified_after,
+        last_modified_before,
         priority_id,
         automation_state_id,
         max_page_size,
         page_token,
         get_all,
-        format, 
-        include_clickable_links 
+        format,
+        include_clickable_links
       } = args;
-      
+
       try {
         debugLog("Getting test cases by filter", args);
-        
+
         // Get clickable links configuration
         const clickableLinkConfig = getClickableLinkConfig(include_clickable_links, ZEBRUNNER_URL);
-        
+
         // Build RQL filter from provided parameters
         const filters: string[] = [];
-        
+
         if (test_suite_id) {
           filters.push(`testSuite.id = ${test_suite_id}`);
         }
-        
+
         if (created_after) {
           filters.push(`createdAt >= '${created_after}'`);
         }
-        
+
         if (created_before) {
           filters.push(`createdAt <= '${created_before}'`);
         }
-        
+
         if (last_modified_after) {
           filters.push(`lastModifiedAt >= '${last_modified_after}'`);
         }
-        
+
         if (last_modified_before) {
           filters.push(`lastModifiedAt <= '${last_modified_before}'`);
         }
-        
+
         if (priority_id) {
           filters.push(`priority.id = ${priority_id}`);
         }
-        
+
         if (automation_state_id) {
           filters.push(`automationState.id = ${automation_state_id}`);
         }
-        
+
         if (filters.length === 0) {
           throw new Error('At least one filter parameter must be provided');
         }
-        
+
         const filter = filters.join(' AND ');
-        
+
         if (get_all) {
           // Get all pages
           const allTestCases: any[] = [];
           let currentPageToken = page_token;
-          
+
           do {
             const searchParams = {
               size: max_page_size,
@@ -1647,14 +1647,14 @@ async function main() {
             };
 
             const response = await client.getTestCases(project_key, searchParams);
-            
+
             if (!validateApiResponse(response, 'array')) {
               throw new Error('Invalid API response format');
             }
 
             const pageItems = response.items || response;
             allTestCases.push(...pageItems);
-            
+
             // Check for next page
             currentPageToken = response._meta?.nextPageToken;
           } while (currentPageToken);
@@ -1662,7 +1662,7 @@ async function main() {
           // Add clickable links if requested
           let processedCases = allTestCases;
           if (include_clickable_links && clickableLinkConfig.includeClickableLinks) {
-            processedCases = processedCases.map(testCase => 
+            processedCases = processedCases.map(testCase =>
               addTestCaseWebUrl(testCase, project_key, clickableLinkConfig.baseWebUrl, clickableLinkConfig)
             );
           }
@@ -1671,7 +1671,7 @@ async function main() {
           const resultText = typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2);
           const summary = `Found ${processedCases.length} test case(s) total matching the specified filters`;
           const filterSummary = `Applied filters: ${filter}`;
-          
+
           return {
             content: [{
               type: "text" as const,
@@ -1687,31 +1687,31 @@ async function main() {
           };
 
           const response = await client.getTestCases(project_key, searchParams);
-          
+
           if (!validateApiResponse(response, 'array')) {
             throw new Error('Invalid API response format');
           }
 
           let processedCases = response.items || response;
-          
+
           // Add clickable links if requested
           if (include_clickable_links && clickableLinkConfig.includeClickableLinks) {
-            processedCases = processedCases.map(testCase => 
+            processedCases = processedCases.map(testCase =>
               addTestCaseWebUrl(testCase, project_key, clickableLinkConfig.baseWebUrl, clickableLinkConfig)
             );
           }
 
           const formattedData = FormatProcessor.format(processedCases, format);
           const resultText = typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2);
-          
+
           const summary = `Found ${processedCases.length} test case(s) on this page matching the specified filters`;
           const filterSummary = `Applied filters: ${filter}`;
           let paginationInfo = '';
-          
+
           if (response._meta?.nextPageToken) {
             paginationInfo = `\n\n📄 **Pagination:** Use page_token="${response._meta.nextPageToken}" to get next page, or set get_all=true to retrieve all results.`;
           }
-          
+
           return {
             content: [{
               type: "text" as const,
@@ -1742,28 +1742,28 @@ async function main() {
     async (args) => {
       try {
         debugLog("Getting automation priorities", args);
-        
+
         // Resolve project ID using the same logic as other tools
         const { projectId } = await resolveProjectId(args.project);
-        
+
         // Get priorities using the reporting client
         const priorities = await reportingClient.getPriorities(projectId);
-        
+
         if (args.format === 'markdown') {
           let markdown = `# Priorities for Project ${args.project}\n\n`;
           markdown += `**Project ID:** ${projectId}\n`;
           markdown += `**Total Priorities:** ${priorities.length}\n\n`;
-          
+
           markdown += `## Available Priorities\n\n`;
           priorities.forEach((priority, index) => {
-            const icon = priority.name === 'High' ? '🔴' : 
-                        priority.name === 'Medium' ? '🟡' : 
+            const icon = priority.name === 'High' ? '🔴' :
+                        priority.name === 'Medium' ? '🟡' :
                         priority.name === 'Low' ? '🟢' :
                         priority.name === 'Trivial' ? '⚪' :
                         priority.name === 'Critical' ? '❗' : '⚪';
             markdown += `${index + 1}. **${icon} ${priority.name}** (ID: ${priority.id})\n`;
           });
-          
+
           markdown += `\n## Usage Examples\n\n`;
           markdown += `### Filter by Priority ID:\n`;
           markdown += `\`\`\`\n`;
@@ -1772,7 +1772,7 @@ async function main() {
           markdown += `  priority_id: ${priorities[0]?.id || 15}\n`;
           markdown += `)\n`;
           markdown += `\`\`\`\n`;
-          
+
           return {
             content: [{
               type: "text" as const,
@@ -1780,7 +1780,7 @@ async function main() {
             }]
           };
         }
-        
+
         // JSON format
         const result = {
           project: args.project,
@@ -1792,14 +1792,14 @@ async function main() {
             return acc;
           }, {} as Record<string, number>)
         };
-        
+
         return {
           content: [{
             type: "text" as const,
             text: JSON.stringify(result, null, 2)
           }]
         };
-        
+
       } catch (error: any) {
         debugLog("Error getting automation priorities", { error: error.message, args });
         return {
@@ -1841,32 +1841,32 @@ async function main() {
         // Auto-detect project key if not provided
         const resolvedArgs = FormatProcessor.resolveProjectKey(args);
         const { project_key, case_key, implementation_context, analysis_scope, output_format, include_recommendations, include_suite_hierarchy, file_path, include_clickable_links } = resolvedArgs;
-        
+
         debugLog("Analyzing test coverage", { project_key, case_key, analysis_scope, output_format, include_suite_hierarchy, include_clickable_links });
-        
+
         // Get clickable links configuration
         const clickableLinkConfig = getClickableLinkConfig(include_clickable_links, ZEBRUNNER_URL);
-        
+
         // Get the detailed test case
         const testCase = await client.getTestCaseByKey(project_key, case_key, { includeSuiteHierarchy: include_suite_hierarchy });
-        
+
         if (!testCase) {
           throw new Error(`Test case ${case_key} not found in project ${project_key}`);
         }
 
         // Perform coverage analysis
         const analysisResult = await performCoverageAnalysis(testCase, implementation_context, analysis_scope, include_recommendations);
-        
+
         // Format output based on requested format
         const outputs = await formatCoverageAnalysis(analysisResult, output_format, file_path, clickableLinkConfig);
-        
+
         return {
           content: [{
             type: "text" as const,
             text: outputs.chatResponse
           }]
         };
-        
+
       } catch (error: any) {
         debugLog("Error analyzing test coverage", { error: error.message, args });
         return {
@@ -1901,25 +1901,25 @@ async function main() {
       try {
         // Auto-detect project key if not provided
         const resolvedArgs = FormatProcessor.resolveProjectKey(args);
-        const { 
-          project_key, 
-          case_key, 
-          implementation_context, 
-          target_framework, 
-          output_format, 
+        const {
+          project_key,
+          case_key,
+          implementation_context,
+          target_framework,
+          output_format,
           include_setup_teardown,
           include_assertions_templates,
           generate_page_objects,
           include_data_providers,
           include_suite_hierarchy,
-          file_path 
+          file_path
         } = resolvedArgs;
-        
+
         debugLog("Generating draft test", { project_key, case_key, target_framework, output_format, include_suite_hierarchy });
-        
+
         // Get the detailed test case
         const testCase = await client.getTestCaseByKey(project_key, case_key, { includeSuiteHierarchy: include_suite_hierarchy });
-        
+
         if (!testCase) {
           throw new Error(`Test case ${case_key} not found in project ${project_key}`);
         }
@@ -1936,7 +1936,7 @@ async function main() {
 
         // Initialize test generator
         const testGenerator = new TestGenerator();
-        
+
         // Generate test with options
         const generatedTest = await testGenerator.generateTest(testCase, implementation_context, {
           framework: target_framework === 'auto' ? undefined : target_framework,
@@ -1949,36 +1949,36 @@ async function main() {
 
         // Format response based on output format
         let responseText = '';
-        
+
         if (output_format === 'code' || output_format === 'all') {
           responseText += `# 🧪 Generated Test Code\n\n`;
           responseText += `**Framework Detected**: ${generatedTest.framework}\n`;
           responseText += `**Quality Score**: ${generatedTest.qualityScore}%\n\n`;
-          
+
           if (generatedTest.imports.length > 0) {
             responseText += `## Imports\n\`\`\`${generatedTest.framework.includes('java') ? 'java' : 'javascript'}\n`;
             responseText += generatedTest.imports.join('\n') + '\n\`\`\`\n\n';
           }
-          
+
           responseText += `## Test Code\n\`\`\`${generatedTest.framework.includes('java') ? 'java' : 'javascript'}\n`;
           responseText += generatedTest.testCode + '\n\`\`\`\n\n';
-          
+
           if (generatedTest.setupCode) {
             responseText += `## Setup Code\n\`\`\`${generatedTest.framework.includes('java') ? 'java' : 'javascript'}\n`;
             responseText += generatedTest.setupCode + '\n\`\`\`\n\n';
           }
-          
+
           if (generatedTest.pageObjectCode) {
             responseText += `## Page Object\n\`\`\`${generatedTest.framework.includes('java') ? 'java' : 'javascript'}\n`;
             responseText += generatedTest.pageObjectCode + '\n\`\`\`\n\n';
           }
-          
+
           if (generatedTest.dataProviderCode) {
             responseText += `## Data Provider\n\`\`\`${generatedTest.framework.includes('java') ? 'java' : 'javascript'}\n`;
             responseText += generatedTest.dataProviderCode + '\n\`\`\`\n\n';
           }
         }
-        
+
         if (generatedTest.recommendations.length > 0) {
           responseText += `## 💡 Recommendations\n`;
           generatedTest.recommendations.forEach(rec => {
@@ -1986,7 +1986,7 @@ async function main() {
           });
           responseText += '\n';
         }
-        
+
         // Add rules information if available
         try {
           const rulesParser = RulesParser.getInstance();
@@ -1998,7 +1998,7 @@ async function main() {
         } catch (error) {
           // Ignore rules file errors
         }
-        
+
         responseText += `---\n`;
         responseText += `*Generated by MCP Zebrunner Server with enhanced rules engine*`;
 
@@ -2008,13 +2008,13 @@ async function main() {
             text: responseText
           }]
         };
-        
+
       } catch (error: any) {
         debugLog("Error generating draft test", { error: error.message, stack: error.stack, args });
-        
+
         let errorMessage = `❌ Error generating draft test for ${args.case_key}`;
         let troubleshootingTips = '';
-        
+
         // Handle specific error types
         if (error.message?.includes('500') || error.message?.includes('Internal server error')) {
           errorMessage += ': Internal server error occurred';
@@ -2027,7 +2027,7 @@ async function main() {
 
 💡 **Tips for Better Results:**
 - Provide actual code snippets from your test files
-- Include file paths to existing test implementations  
+- Include file paths to existing test implementations
 - Mention specific testing frameworks you're using
 - Add details about page objects or test data structures`;
         } else if (error.message?.includes('not found')) {
@@ -2052,7 +2052,7 @@ async function main() {
 2. **Framework Detection**: Try specifying target_framework explicitly
 3. **Test Case Validity**: Ensure the test case has sufficient detail and steps`;
         }
-        
+
         return {
           content: [{
             type: "text" as const,
@@ -2082,41 +2082,41 @@ async function main() {
       try {
         // Auto-detect project key if not provided
         const resolvedArgs = FormatProcessor.resolveProjectKey(args);
-        const { 
-          project_key, 
-          case_key, 
-          implementation_context, 
-          analysis_scope, 
-          output_format, 
+        const {
+          project_key,
+          case_key,
+          implementation_context,
+          analysis_scope,
+          output_format,
           include_recommendations,
           validate_against_rules,
           show_framework_detection,
           include_suite_hierarchy,
-          file_path 
+          file_path
         } = resolvedArgs;
-        
+
         debugLog("Enhanced coverage analysis", { project_key, case_key, analysis_scope, validate_against_rules, include_suite_hierarchy });
-        
+
         // Get the detailed test case
         const testCase = await client.getTestCaseByKey(project_key, case_key, { includeSuiteHierarchy: include_suite_hierarchy });
-        
+
         if (!testCase) {
           throw new Error(`Test case ${case_key} not found in project ${project_key}`);
         }
 
         // Perform enhanced coverage analysis
         const analysisResult = await performCoverageAnalysis(testCase, implementation_context, analysis_scope, include_recommendations);
-        
+
         // Format enhanced output
         let responseText = `# 🔍 Enhanced Test Coverage Analysis: ${case_key}\n\n`;
-        
+
         // Test case information
         responseText += `## 📋 Test Case Details\n`;
         responseText += `- **Key**: ${testCase.key}\n`;
         responseText += `- **Title**: ${testCase.title}\n`;
         responseText += `- **Priority**: ${testCase.priority?.name || 'Not set'}\n`;
         responseText += `- **Automation State**: ${testCase.automationState?.name || 'Not set'}\n\n`;
-        
+
         // Framework detection (only if rules engine is enabled)
         if (show_framework_detection && ENABLE_RULES_ENGINE) {
           try {
@@ -2139,13 +2139,13 @@ async function main() {
           responseText += `- **Status**: Disabled (ENABLE_RULES_ENGINE=false)\n`;
           responseText += `- **Note**: Enable rules engine for framework detection\n\n`;
         }
-        
+
         // Coverage summary
         responseText += `## 📊 Coverage Summary\n`;
         responseText += `- **Overall Score**: ${analysisResult.coverage.overallScore}%\n`;
         responseText += `- **Total Steps**: ${analysisResult.coverage.stepsCoverage.length}\n`;
         responseText += `- **Covered Steps**: ${analysisResult.coverage.stepsCoverage.filter((s: any) => s.coverage > 0.5).length}\n`;
-        
+
         // Rules validation (only if rules engine is enabled)
         if (validate_against_rules && ENABLE_RULES_ENGINE && analysisResult.rulesValidation) {
           responseText += `- **Rules Validation**: ${analysisResult.rulesValidation.passed ? '✅ Passed' : '❌ Failed'}\n`;
@@ -2156,7 +2156,7 @@ async function main() {
           responseText += `- **Rules Validation**: Disabled (ENABLE_RULES_ENGINE=false)\n`;
         }
         responseText += '\n';
-        
+
         // Step-by-step analysis
         responseText += `## 🔄 Step Analysis\n`;
         analysisResult.coverage.stepsCoverage.forEach((step: any) => {
@@ -2164,27 +2164,27 @@ async function main() {
           responseText += `### ${icon} Step ${step.stepNumber} (${Math.round(step.coverage * 100)}%)\n`;
           responseText += `**Action**: ${step.action}\n`;
           responseText += `**Expected**: ${step.expectedResult}\n`;
-          
+
           if (step.implementationMatches.length > 0) {
             responseText += `**Matches**: ${step.implementationMatches.join(', ')}\n`;
           }
-          
+
           if (step.missingElements.length > 0) {
             responseText += `**Missing**: ${step.missingElements.join(', ')}\n`;
           }
-          
+
           if (step.rulesViolations && step.rulesViolations.length > 0) {
             responseText += `**Rules Violations**: ${step.rulesViolations.join(', ')}\n`;
           }
-          
+
           responseText += '\n';
         });
-        
+
         // Rules validation details
         if (validate_against_rules && analysisResult.rulesValidation) {
           responseText += `## ⚖️ Rules Validation\n`;
           responseText += `**Status**: ${analysisResult.rulesValidation.passed ? '✅ Passed' : '❌ Failed'}\n\n`;
-          
+
           if (analysisResult.rulesValidation.violations.length > 0) {
             responseText += `### ❌ Violations\n`;
             analysisResult.rulesValidation.violations.forEach((violation: string) => {
@@ -2192,7 +2192,7 @@ async function main() {
             });
             responseText += '\n';
           }
-          
+
           if (analysisResult.rulesValidation.recommendations.length > 0) {
             responseText += `### 💡 Rules Recommendations\n`;
             analysisResult.rulesValidation.recommendations.forEach((rec: string) => {
@@ -2201,7 +2201,7 @@ async function main() {
             responseText += '\n';
           }
         }
-        
+
         // General recommendations
         if (include_recommendations && analysisResult.recommendations.length > 0) {
           responseText += `## 💡 Improvement Recommendations\n`;
@@ -2210,13 +2210,13 @@ async function main() {
           });
           responseText += '\n';
         }
-        
+
         // Configuration info
         responseText += `## ⚙️ Configuration\n`;
         responseText += `- **Rules Engine**: ${ENABLE_RULES_ENGINE ? 'Enabled' : 'Disabled'}\n`;
         responseText += `- **Analysis Scope**: ${analysis_scope}\n`;
         responseText += `- **Rules Validation**: ${validate_against_rules ? 'Enabled' : 'Disabled'}\n`;
-        
+
         if (ENABLE_RULES_ENGINE) {
           try {
             const rulesParser = RulesParser.getInstance();
@@ -2227,7 +2227,7 @@ async function main() {
           }
         }
         responseText += '\n';
-        
+
         responseText += `---\n`;
         responseText += `*Enhanced analysis powered by configurable rules engine*`;
 
@@ -2237,10 +2237,10 @@ async function main() {
             text: responseText
           }]
         };
-        
+
       } catch (error: any) {
-        debugLog("Error in enhanced coverage analysis", { 
-          error: error.message, 
+        debugLog("Error in enhanced coverage analysis", {
+          error: error.message,
           stack: error.stack?.split('\n').slice(0, 5).join('\n'),
           args: {
             project_key: args.project_key,
@@ -2248,9 +2248,9 @@ async function main() {
             analysis_scope: args.analysis_scope
           }
         });
-        
+
         let errorDetails = `❌ Error in enhanced coverage analysis for ${args.case_key}: ${error.message}`;
-        
+
         // Add specific troubleshooting information
         if (error.message.includes('not found')) {
           errorDetails += `\n\n🔍 **Troubleshooting:**\n- Verify the test case key "${args.case_key}" exists in project "${args.project_key || 'auto-detected'}"\n- Check your Zebrunner API credentials and permissions`;
@@ -2259,9 +2259,9 @@ async function main() {
         } else if (error.message.includes('rules') || error.message.includes('RulesParser')) {
           errorDetails += `\n\n🔍 **Troubleshooting:**\n- Rules engine error detected\n- Set ENABLE_RULES_ENGINE=false to disable rules validation\n- Check if rules configuration files are accessible`;
         }
-        
+
         errorDetails += `\n\n**Configuration:**\n- Rules Engine: ${process.env.ENABLE_RULES_ENGINE || 'undefined'}\n- Debug Mode: ${process.env.DEBUG || 'false'}`;
-        
+
         return {
           content: [{
             type: "text" as const,
@@ -2307,7 +2307,7 @@ async function main() {
         });
 
         const formattedResult = FormatProcessor.format(result, format as any);
-        
+
         return {
           content: [{
             type: "text" as const,
@@ -2354,7 +2354,7 @@ async function main() {
           });
 
           allSuites.push(...result.items);
-          
+
           // Check if we have more pages (simple heuristic: if we got less than pageSize, we're done)
           hasMore = result.items.length === pageSize;
           page++;
@@ -2375,7 +2375,7 @@ async function main() {
         console.error(`Found ${processedSuites.length} suites.`);
 
         const formattedResult = FormatProcessor.format(processedSuites, format as any);
-        
+
         return {
           content: [{
             type: "text" as const,
@@ -2418,7 +2418,7 @@ async function main() {
         console.error(`Found ${rootSuites.length} root suites out of ${allSuites.length} total suites.`);
 
         const formattedResult = FormatProcessor.format(rootSuites, format as any);
-        
+
         return {
           content: [{
             type: "text" as const,
@@ -2460,8 +2460,8 @@ async function main() {
         // Get all suites from project using comprehensive method
         debugLog("Fetching all suites using getAllTestSuites method", { project_key, suite_id });
         const allSuites = await client.getAllTestSuites(project_key);
-        
-        debugLog("Fetched suites", { 
+
+        debugLog("Fetched suites", {
           totalSuites: allSuites.length,
           searchingSuiteId: suite_id,
           sampleSuiteIds: allSuites.slice(0, 5).map(s => s.id)
@@ -2480,7 +2480,7 @@ async function main() {
           // Enhance with hierarchy information
           const processedSuites = HierarchyProcessor.setRootParentsToSuites(allSuites);
           const enhancedSuite = processedSuites.find(s => s.id === suite_id) || suite;
-          
+
           // Add clickable links if enabled
           const suiteWithLinks = addSuiteWebUrl(enhancedSuite, project_key, clickableLinkConfig.baseWebUrl, clickableLinkConfig);
 
@@ -2493,7 +2493,7 @@ async function main() {
           console.error(`Description: ${enhancedSuite.description || ''}`);
 
           const formattedResult = FormatProcessor.format(suiteWithLinks, format as any);
-          
+
           return {
             content: [{
               type: "text" as const,
@@ -2555,32 +2555,32 @@ async function main() {
           allTestCases.push(...result.items);
           pageToken = result._meta?.nextPageToken;
           pageCount++;
-          
+
           // Apply max_results limit for performance
           if (allTestCases.length >= max_results) {
             allTestCases = allTestCases.slice(0, max_results);
             debugLog(`Limiting results to ${max_results} test cases for performance`);
             break;
           }
-          
-          debugLog("Fetched test cases page", { 
-            pageCount, 
-            currentPageSize: result.items.length, 
+
+          debugLog("Fetched test cases page", {
+            pageCount,
+            currentPageSize: result.items.length,
             totalSoFar: allTestCases.length,
             hasNextPage: !!pageToken
           });
-          
+
         } while (pageToken && pageCount < maxPages);
 
         console.error(`Found ${allTestCases.length} testcases.`);
 
         // Add clickable links to test cases if enabled
-        const enhancedTestCases = allTestCases.map((tc: any) => 
+        const enhancedTestCases = allTestCases.map((tc: any) =>
           addTestCaseWebUrl(tc, project_key, clickableLinkConfig.baseWebUrl, clickableLinkConfig)
         );
 
         const formattedResult = FormatProcessor.format(enhancedTestCases, format as any);
-        
+
         return {
           content: [{
             type: "text" as const,
@@ -2628,7 +2628,7 @@ async function main() {
           allTestCases.push(...result.items);
           pageToken = result._meta?.nextPageToken;
           pageCount++;
-          
+
         } while (pageToken && pageCount < maxPages);
 
         // Get all suites for hierarchy processing using comprehensive method
@@ -2651,7 +2651,7 @@ async function main() {
         console.error(`Added ${enrichedTestCases.length} test cases with root suite IDs.`);
 
         const formattedResult = FormatProcessor.format(enrichedTestCases, format as any);
-        
+
         return {
           content: [{
             type: "text" as const,
@@ -2705,7 +2705,7 @@ async function main() {
         console.error(`Suite ${suite_id} has root suite ID: ${rootId}`);
 
         const formattedResult = FormatProcessor.format(result, format as any);
-        
+
         return {
           content: [{
             type: "text" as const,
@@ -2747,7 +2747,7 @@ async function main() {
         // Step 1: Get all suites to determine hierarchy
         debugLog("Fetching all suites for hierarchy analysis", { project_key, suite_id });
         const allSuites = await client.getAllTestSuites(project_key);
-        
+
         // Step 2: Find the suite and determine if it's a root suite
         const targetSuite = allSuites.find(s => s.id === suite_id);
         if (!targetSuite) {
@@ -2763,33 +2763,33 @@ async function main() {
         const processedSuites = HierarchyProcessor.setRootParentsToSuites(allSuites);
         const rootId = HierarchyProcessor.getRootId(processedSuites, suite_id);
         const isRootSuite = rootId === suite_id;
-        
+
         // Step 4: Check if this suite has children (regardless of being root or not)
         const hasChildren = processedSuites.some(s => s.parentSuiteId === suite_id);
-        
-        debugLog("Suite hierarchy analysis", { 
-          suite_id, 
-          rootId, 
+
+        debugLog("Suite hierarchy analysis", {
+          suite_id,
+          rootId,
           isRootSuite,
           hasChildren,
-          suiteName: targetSuite.name || targetSuite.title 
+          suiteName: targetSuite.name || targetSuite.title
         });
 
         // Step 5: Get test cases using appropriate method
         let testCases: any[];
         let filterDescription: string;
-        
+
         if ((isRootSuite || hasChildren) && include_sub_suites) {
           // For root suites OR suites with children, use the enhanced filtering approach
           if (get_all) {
             // Count child suites for summary
-            const childSuites = processedSuites.filter(s => 
+            const childSuites = processedSuites.filter(s =>
               isRootSuite ? s.rootSuiteId === suite_id : s.parentSuiteId === suite_id
             );
             const childSuitesWithTestCases = childSuites.length;
-            
+
             debugLog(`Processing ${isRootSuite ? 'root' : 'parent'} suite with ${childSuitesWithTestCases} sub-suites`, { suite_id, childSuitesWithTestCases });
-            
+
             if (isRootSuite) {
               // Use existing root suite logic
               testCases = await client.getTestCasesByRootSuiteWithFilter(project_key, suite_id, processedSuites);
@@ -2797,29 +2797,29 @@ async function main() {
             } else {
               // New logic for parent suites that aren't root suites
               const childSuiteIds: number[] = [suite_id]; // Include parent suite itself
-              
+
               // Find ALL descendants recursively (not just direct children)
               function findAllDescendants(parentId: number, processedSuites: any[]): number[] {
                 const descendants: number[] = [];
                 const directChildren = processedSuites.filter(s => s.parentSuiteId === parentId);
-                
+
                 for (const child of directChildren) {
                   descendants.push(child.id);
                   // Recursively find descendants of this child
                   const childDescendants = findAllDescendants(child.id, processedSuites);
                   descendants.push(...childDescendants);
                 }
-                
+
                 return descendants;
               }
-              
+
               const allDescendants = findAllDescendants(suite_id, processedSuites);
               childSuiteIds.push(...allDescendants);
-              
-              debugLog(`Found ${allDescendants.length} total descendants for parent suite ${suite_id}`, { 
-                descendants: allDescendants 
+
+              debugLog(`Found ${allDescendants.length} total descendants for parent suite ${suite_id}`, {
+                descendants: allDescendants
               });
-              
+
               const filter = `testSuite.id IN [${childSuiteIds.join(',')}]`;
               testCases = await client.getAllTestCases(project_key, { filter });
               filterDescription = `parent suite ${suite_id} with ${allDescendants.length} descendants (all levels) - all results`;
@@ -2827,7 +2827,7 @@ async function main() {
           } else {
             // Get paginated results with filter for root/parent suites
             const childSuiteIds: number[] = [suite_id]; // Include suite itself
-            
+
             // Find all child suites using processed suites (recursive for parent suites)
             if (isRootSuite) {
               // For root suites, use existing logic
@@ -2841,28 +2841,28 @@ async function main() {
               function findAllDescendants(parentId: number, processedSuites: any[]): number[] {
                 const descendants: number[] = [];
                 const directChildren = processedSuites.filter(s => s.parentSuiteId === parentId);
-                
+
                 for (const child of directChildren) {
                   descendants.push(child.id);
                   // Recursively find descendants of this child
                   const childDescendants = findAllDescendants(child.id, processedSuites);
                   descendants.push(...childDescendants);
                 }
-                
+
                 return descendants;
               }
-              
+
               const allDescendants = findAllDescendants(suite_id, processedSuites);
               childSuiteIds.push(...allDescendants);
             }
-            
+
             const filter = `testSuite.id IN [${childSuiteIds.join(',')}]`;
             const response = await client.getTestCases(project_key, {
               filter,
               page,
               size
             });
-            
+
             testCases = response.items;
             filterDescription = `${isRootSuite ? 'root' : 'parent'} suite ${suite_id} with filter (${childSuiteIds.length - 1} child suites) - page ${page + 1}`;
           }
@@ -2897,15 +2897,15 @@ async function main() {
             function countAllDescendants(parentId: number, processedSuites: any[]): number {
               let count = 0;
               const directChildren = processedSuites.filter(s => s.parentSuiteId === parentId);
-              
+
               for (const child of directChildren) {
                 count++;
                 count += countAllDescendants(child.id, processedSuites);
               }
-              
+
               return count;
             }
-            
+
             const totalDescendants = countAllDescendants(suite_id, processedSuites);
             summaryInfo = `\n📊 Summary: Processed ${totalDescendants} descendants (all levels) from parent suite ${suite_id}`;
           }
@@ -2914,7 +2914,7 @@ async function main() {
         // Step 6: Include detailed steps if requested (limit to first 5 for performance)
         if (include_steps && testCases.length > 0) {
           debugLog("Fetching detailed steps for test cases", { count: Math.min(5, testCases.length) });
-          
+
           const casesToFetch = testCases.slice(0, 5).filter((tc): tc is (typeof tc & { key: string }) => Boolean(tc?.key));
 
           const detailedCases = await Promise.allSettled(
@@ -2975,17 +2975,17 @@ async function main() {
         };
 
         const formattedData = FormatProcessor.format(result, format);
-        
+
         // Add helpful summary message
         let summaryMessage = `✅ Found ${testCases.length} test cases from ${filterDescription}${summaryInfo}\n` +
           `📊 Suite: "${targetSuite.name || targetSuite.title}" (ID: ${suite_id})\n` +
           `🎯 Filter method: ${isRootSuite ? 'Root suite filtering with child suites' : hasChildren && include_sub_suites ? 'Parent suite filtering with child suites' : 'Direct suite filtering'} (filter-based)\n` +
           `🔄 Results: ${get_all ? 'All results' : `Page ${page + 1} (size: ${size})`}\n`;
-        
+
         if (include_steps) {
           summaryMessage += `📝 Detailed steps included for first ${Math.min(5, testCases.length)} cases\n`;
         }
-        
+
         summaryMessage += `\n${typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2)}`;
 
         return {
@@ -3096,7 +3096,7 @@ async function main() {
 
   server.tool(
     "analyze_test_failure",
-    "🔍 Deep forensic analysis of failed test including logs, screenshots, error classification, and similar failures",
+    "🔍 Deep forensic analysis of failed test including logs, screenshots, error classification, and similar failures. 💡 TIP: Can be auto-invoked from Zebrunner test URLs like: https://workspace.zebrunner.com/projects/PROJECT/automation-launches/LAUNCH_ID/tests/TEST_ID",
     {
       testId: z.number().int().positive().describe("Test ID (e.g., 5451420)"),
       testRunId: z.number().int().positive().describe("Test Run ID / Launch ID (e.g., 120806)"),
@@ -3183,7 +3183,7 @@ async function main() {
 
   server.tool(
     "detailed_analyze_launch_failures",
-    "🚀 Analyze failed tests WITHOUT linked issues in a launch with grouping, statistics, and recommendations. Automatically analyzes all tests if ≤10, otherwise first 10 (use offset/limit for more). Use filterType: 'all' to include tests with issues. Supports pagination and screenshot analysis. **NEW:** Jira format with smart grouping - creates combined tickets for similar errors!",
+    "🚀 Analyze failed tests WITHOUT linked issues in a launch with grouping, statistics, and recommendations. Automatically analyzes all tests if ≤10, otherwise first 10 (use offset/limit for more). Use filterType: 'all' to include tests with issues. Supports pagination and screenshot analysis. **NEW:** Jira format with smart grouping - creates combined tickets for similar errors! 💡 TIP: Can be auto-invoked from Zebrunner launch URLs like: https://workspace.zebrunner.com/projects/PROJECT/automation-launches/LAUNCH_ID",
     {
       testRunId: z.number().int().positive().describe("Launch ID / Test Run ID (e.g., 120806)"),
       projectKey: z.string().min(1).optional().describe("Project key (e.g., 'MCP') - alternative to projectId"),
@@ -3226,16 +3226,16 @@ async function main() {
     async (args) => {
       try {
         debugLog("get_all_launches_for_project called", args);
-        
+
         // Resolve project ID using the same logic as other tools
         const { projectId } = await resolveProjectId(args.project);
-        
+
         // Get launches using the new API method
         const launchesData = await reportingClient.getLaunches(projectId, {
           page: args.page,
           pageSize: args.pageSize
         });
-        
+
         if (args.format === 'raw') {
           return {
             content: [{
@@ -3244,10 +3244,10 @@ async function main() {
             }]
           };
         }
-        
+
         // Formatted output
         const { items, _meta } = launchesData;
-        
+
         if (items.length === 0) {
           return {
             content: [{
@@ -3256,56 +3256,56 @@ async function main() {
             }]
           };
         }
-        
+
         let output = `📋 **Launches for Project ${args.project}**\n\n`;
         output += `**Pagination:** Page ${args.page} of ${_meta.totalPages} (${_meta.total} total launches)\n\n`;
-        
+
         items.forEach((launch: any, index: number) => {
           const number = (args.page - 1) * args.pageSize + index + 1;
           output += `**${number}. ${launch.name}** (ID: ${launch.id})\n`;
           output += `   📊 Status: ${launch.status}\n`;
-          
+
           if (launch.milestone) {
             output += `   🎯 Milestone: ${launch.milestone.name}\n`;
           }
-          
+
           if (launch.buildNumber) {
             output += `   🔨 Build: ${launch.buildNumber}\n`;
           }
-          
+
           if (launch.startedAt) {
             output += `   ⏰ Started: ${new Date(launch.startedAt).toLocaleString()}\n`;
           }
-          
+
           if (launch.finishedAt) {
             output += `   ✅ Finished: ${new Date(launch.finishedAt).toLocaleString()}\n`;
           }
-          
+
           if (launch.duration) {
             const durationMin = Math.round(launch.duration / 60000);
             output += `   ⏱️ Duration: ${durationMin} minutes\n`;
           }
-          
+
           // Test results summary
           const total = launch.total || 0;
           const passed = launch.passed || 0;
           const failed = launch.failed || 0;
           const skipped = launch.skipped || 0;
-          
+
           if (total > 0) {
             output += `   📈 Results: ${passed} passed, ${failed} failed, ${skipped} skipped (${total} total)\n`;
           }
-          
+
           output += '\n';
         });
-        
+
         return {
           content: [{
             type: "text" as const,
             text: output.trim()
           }]
         };
-        
+
       } catch (error: any) {
         debugLog("Error in get_all_launches_for_project", { error: error.message, args });
         return {
@@ -3332,7 +3332,7 @@ async function main() {
     async (args) => {
       try {
         debugLog("get_all_launches_with_filter called", args);
-        
+
         // Validate that at least one filter is provided
         if (!args.milestone && !args.query) {
           return {
@@ -3342,10 +3342,10 @@ async function main() {
             }]
           };
         }
-        
+
         // Resolve project ID using the same logic as other tools
         const { projectId } = await resolveProjectId(args.project);
-        
+
         // Get launches using the new API method with filters
         const launchesData = await reportingClient.getLaunches(projectId, {
           page: args.page,
@@ -3353,7 +3353,7 @@ async function main() {
           milestone: args.milestone,
           query: args.query
         });
-        
+
         if (args.format === 'raw') {
           return {
             content: [{
@@ -3362,10 +3362,10 @@ async function main() {
             }]
           };
         }
-        
+
         // Formatted output
         const { items, _meta } = launchesData;
-        
+
         // Build filter description
         let filterDesc = '';
         if (args.milestone && args.query) {
@@ -3375,7 +3375,7 @@ async function main() {
         } else if (args.query) {
           filterDesc = `query "${args.query}"`;
         }
-        
+
         if (items.length === 0) {
           return {
             content: [{
@@ -3384,57 +3384,57 @@ async function main() {
             }]
           };
         }
-        
+
         let output = `🔍 **Filtered Launches for Project ${args.project}**\n\n`;
         output += `**Filter:** ${filterDesc}\n`;
         output += `**Pagination:** Page ${args.page} of ${_meta.totalPages} (${_meta.total} total launches)\n\n`;
-        
+
         items.forEach((launch: any, index: number) => {
           const number = (args.page - 1) * args.pageSize + index + 1;
           output += `**${number}. ${launch.name}** (ID: ${launch.id})\n`;
           output += `   📊 Status: ${launch.status}\n`;
-          
+
           if (launch.milestone) {
             output += `   🎯 Milestone: ${launch.milestone.name}\n`;
           }
-          
+
           if (launch.buildNumber) {
             output += `   🔨 Build: ${launch.buildNumber}\n`;
           }
-          
+
           if (launch.startedAt) {
             output += `   ⏰ Started: ${new Date(launch.startedAt).toLocaleString()}\n`;
           }
-          
+
           if (launch.finishedAt) {
             output += `   ✅ Finished: ${new Date(launch.finishedAt).toLocaleString()}\n`;
           }
-          
+
           if (launch.duration) {
             const durationMin = Math.round(launch.duration / 60000);
             output += `   ⏱️ Duration: ${durationMin} minutes\n`;
           }
-          
+
           // Test results summary
           const total = launch.total || 0;
           const passed = launch.passed || 0;
           const failed = launch.failed || 0;
           const skipped = launch.skipped || 0;
-          
+
           if (total > 0) {
             output += `   📈 Results: ${passed} passed, ${failed} failed, ${skipped} skipped (${total} total)\n`;
           }
-          
+
           output += '\n';
         });
-        
+
         return {
           content: [{
             type: "text" as const,
             text: output.trim()
           }]
         };
-        
+
       } catch (error: any) {
         debugLog("Error in get_all_launches_with_filter", { error: error.message, args });
         return {
@@ -3510,7 +3510,7 @@ async function main() {
     async (args) => {
       try {
         debugLog("get_platform_results_by_period called", args);
-        
+
         // Resolve project ID with enhanced discovery and suggestions
         const { projectId } = await resolveProjectId(args.project);
 
@@ -3552,11 +3552,11 @@ async function main() {
         };
       } catch (error: any) {
         debugLog("Error in get_platform_results_by_period", { error: error.message, args });
-        return { 
-          content: [{ 
-            type: "text" as const, 
-            text: `❌ Error getting platform results: ${error?.message || error}` 
-          }] 
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error getting platform results: ${error?.message || error}`
+          }]
         };
       }
     }
@@ -3593,7 +3593,7 @@ async function main() {
     async (args) => {
       try {
         debugLog("get_top_bugs called", args);
-        
+
         // Resolve project ID with enhanced discovery and suggestions
         const { projectId } = await resolveProjectId(args.project);
 
@@ -3626,11 +3626,11 @@ async function main() {
         // Parse the widget response which contains HTML in DEFECT field
         const parseDefectHtml = (html: string) => {
           if (!html) return { key: "N/A", title: "", existingLink: null };
-          
+
           // Extract ticket ID from href or text content
           const hrefMatch = html.match(/href="([^"]*\/browse\/([^"]+))"/);
           const textMatch = html.match(/>([^<]+)</);
-          
+
           if (hrefMatch && hrefMatch[2]) {
             return {
               key: hrefMatch[2], // Ticket ID like "POW-5130"
@@ -3638,7 +3638,7 @@ async function main() {
               existingLink: hrefMatch[1]
             };
           }
-          
+
           // Handle "TO REVIEW" case or other non-ticket entries
           const cleanText = textMatch ? textMatch[1] : html.replace(/<[^>]*>/g, '');
           return {
@@ -3667,13 +3667,13 @@ async function main() {
             const defectInfo = parseDefectHtml(row.DEFECT || "");
             const failureInfo = parseFailures(row.FAILURES || "0 of 0");
             const percentage = parseFloat(row["%"] || "0");
-            
+
             // Use existing link from HTML or construct new one
             let link = defectInfo.existingLink;
             if (args.issueUrlPattern && defectInfo.key !== "N/A" && !link) {
               link = args.issueUrlPattern.replace("{key}", defectInfo.key);
             }
-            
+
             return {
               key: defectInfo.key,
               title: defectInfo.title,
@@ -3715,11 +3715,11 @@ async function main() {
         };
       } catch (error: any) {
         debugLog("Error in get_top_bugs", { error: error.message, args });
-        return { 
-          content: [{ 
-            type: "text" as const, 
-            text: `❌ Error getting top bugs: ${error?.message || error}` 
-          }] 
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error getting top bugs: ${error?.message || error}`
+          }]
         };
       }
     }
@@ -3748,7 +3748,7 @@ async function main() {
     async (args) => {
       try {
         debugLog("get_project_milestones called", args);
-        
+
         // Resolve project ID with enhanced discovery and suggestions
         const { projectId } = await resolveProjectId(args.project);
 
@@ -3774,15 +3774,15 @@ async function main() {
           if (!milestone.dueDate || milestone.completed) {
             return false; // No due date or already completed = not overdue
           }
-          
+
           // Get current date in user's timezone
           const now = new Date();
           const dueDate = new Date(milestone.dueDate);
-          
+
           // Compare dates using UTC to avoid timezone issues (ignore time, just check if due date has passed)
           const nowDateOnly = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
           const dueDateOnly = new Date(Date.UTC(dueDate.getUTCFullYear(), dueDate.getUTCMonth(), dueDate.getUTCDate()));
-          
+
           return dueDateOnly < nowDateOnly;
         };
 
@@ -3790,12 +3790,12 @@ async function main() {
         let filteredItems = milestonesData.items;
         if (args.status === "incomplete") {
           // Show only incomplete milestones that are NOT overdue
-          filteredItems = milestonesData.items.filter(milestone => 
+          filteredItems = milestonesData.items.filter(milestone =>
             !milestone.completed && !isOverdue(milestone)
           );
         } else if (args.status === "overdue") {
           // Show only overdue milestones (incomplete but past due date)
-          filteredItems = milestonesData.items.filter(milestone => 
+          filteredItems = milestonesData.items.filter(milestone =>
             !milestone.completed && isOverdue(milestone)
           );
         }
@@ -3812,8 +3812,8 @@ async function main() {
 
         if (DEBUG_MODE) {
           console.error("get_project_milestones ok", {
-            projectId, 
-            page: args.page, 
+            projectId,
+            page: args.page,
             pageSize: args.pageSize,
             status: args.status,
             totalElements: filteredMilestonesData._meta.total,
@@ -3827,9 +3827,9 @@ async function main() {
         } else {
           // Format the data for better readability
           const milestones = filteredMilestonesData.items.map(milestone => {
-            const isOverdueFlag = !milestone.completed && milestone.dueDate && 
+            const isOverdueFlag = !milestone.completed && milestone.dueDate &&
               new Date(milestone.dueDate) < new Date();
-            
+
             return {
               name: milestone.name,
               completed: milestone.completed,
@@ -3860,11 +3860,11 @@ async function main() {
         };
       } catch (error: any) {
         debugLog("Error in get_project_milestones", { error: error.message, args });
-        return { 
-          content: [{ 
-            type: "text" as const, 
-            text: `❌ Error getting project milestones: ${error?.message || error}` 
-          }] 
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error getting project milestones: ${error?.message || error}`
+          }]
         };
       }
     }
@@ -3887,7 +3887,7 @@ async function main() {
     async (args) => {
       try {
         debugLog("get_available_projects called", args);
-        
+
         // Get projects data
         const projectsData = await reportingClient.getAvailableProjects({
           starred: args.starred,
@@ -3944,9 +3944,9 @@ async function main() {
               totalProjects: projectsData.items.length,
               starred: args.starred,
               publiclyAccessible: args.publiclyAccessible,
-              ...(paginationInfo && { 
+              ...(paginationInfo && {
                 systemLimit: paginationInfo.data.limit,
-                systemTotal: paginationInfo.data.currentTotal 
+                systemTotal: paginationInfo.data.currentTotal
               })
             },
             projects: projects,
@@ -3955,7 +3955,7 @@ async function main() {
               note: "Use 'key' field for project parameter in other tools",
               examples: [
                 "project: \"android\" (for Android app)",
-                "project: \"ios\" (for iOS app)", 
+                "project: \"ios\" (for iOS app)",
                 "project: \"web\" (for Web app)"
               ]
             }
@@ -3967,11 +3967,11 @@ async function main() {
         };
       } catch (error: any) {
         debugLog("Error in get_available_projects", { error: error.message, args });
-        return { 
-          content: [{ 
-            type: "text" as const, 
-            text: `❌ Error getting available projects: ${error?.message || error}` 
-          }] 
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error getting available projects: ${error?.message || error}`
+          }]
         };
       }
     }
@@ -3994,22 +3994,22 @@ async function main() {
     async (args) => {
       try {
         debugLog("validate_test_case called", args);
-        
+
         // Import handlers here to avoid circular dependencies
         const { ZebrunnerToolHandlers } = await import("./handlers/tools.js");
         // Create a basic client instance for validation since enhanced client has different interface
         const { ZebrunnerApiClient } = await import("./api/client.js");
         const basicClient = new ZebrunnerApiClient(config);
         const toolHandlers = new ZebrunnerToolHandlers(basicClient);
-        
+
         return await toolHandlers.validateTestCase(args);
       } catch (error: any) {
         debugLog("Error in validate_test_case", { error: error.message, args });
-        return { 
-          content: [{ 
-            type: "text" as const, 
-            text: `❌ Error validating test case: ${error?.message || error}` 
-          }] 
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error validating test case: ${error?.message || error}`
+          }]
         };
       }
     }
@@ -4030,22 +4030,22 @@ async function main() {
     async (args) => {
       try {
         debugLog("improve_test_case called", args);
-        
+
         // Import handlers here to avoid circular dependencies
         const { ZebrunnerToolHandlers } = await import("./handlers/tools.js");
         // Create a basic client instance for improvement since enhanced client has different interface
         const { ZebrunnerApiClient } = await import("./api/client.js");
         const basicClient = new ZebrunnerApiClient(config);
         const toolHandlers = new ZebrunnerToolHandlers(basicClient);
-        
+
         return await toolHandlers.improveTestCase(args);
       } catch (error: any) {
         debugLog("Error in improve_test_case", { error: error.message, args });
-        return { 
-          content: [{ 
-            type: "text" as const, 
-            text: `❌ Error improving test case: ${error?.message || error}` 
-          }] 
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error improving test case: ${error?.message || error}`
+          }]
         };
       }
     }
@@ -4085,10 +4085,10 @@ async function main() {
 
         // Resolve project using dynamic resolution (same as Reporting API tools)
         const { projectId, suggestions } = await resolveProjectId(args.project);
-        
+
         // For Public API, we need the project key, not the project ID
         // First check if it's a known alias, otherwise treat as direct project key
-        const projectKey = typeof args.project === 'string' 
+        const projectKey = typeof args.project === 'string'
           ? (PROJECT_ALIASES[args.project] || args.project)
           : undefined;
 
@@ -4098,15 +4098,15 @@ async function main() {
 
         // Build filter expression using Resource Query Language
         const filters: string[] = [];
-        
+
         if (args.nameFilter) {
           filters.push(`title ~= '${args.nameFilter.replace(/'/g, "\\'")}'`);
         }
-        
+
         // Handle milestone filtering - need to convert name to ID if necessary
         if (args.milestoneFilter !== undefined) {
           let milestoneId: number;
-          
+
           if (typeof args.milestoneFilter === 'number') {
             // Already an ID
             milestoneId = args.milestoneFilter;
@@ -4118,7 +4118,7 @@ async function main() {
                 pageSize: 100,
                 completed: 'all' // Get all milestones to find the one we need
               });
-              
+
               const milestone = milestonesData.items.find((m: any) => m.name === args.milestoneFilter);
               if (!milestone) {
                 throw new Error(`Milestone '${args.milestoneFilter}' not found. Use get_project_milestones to see available milestones.`);
@@ -4128,16 +4128,16 @@ async function main() {
               throw new Error(`Failed to lookup milestone '${args.milestoneFilter}': ${error.message}`);
             }
           }
-          
+
           filters.push(`milestone.id = ${milestoneId}`);
         }
-        
+
         if (args.buildNumberFilter) {
           // Search in configurations.optionName for build numbers (this is where build info is typically stored)
           // Also search in title and description as fallback
           filters.push(`(configurations.optionName ~= '${args.buildNumberFilter.replace(/'/g, "\\'")}' OR title ~= '${args.buildNumberFilter.replace(/'/g, "\\'")}' OR description ~= '${args.buildNumberFilter.replace(/'/g, "\\'")}')`);
         }
-        
+
         if (args.closedFilter !== undefined) {
           filters.push(`closed = ${args.closedFilter}`);
         }
@@ -4176,7 +4176,7 @@ async function main() {
             closed: run.closed,
             createdBy: `${run.createdBy.username} (${run.createdBy.email})`,
             createdAt: run.createdAt,
-            testCasesSummary: run.executionSummaries.map((summary: any) => 
+            testCasesSummary: run.executionSummaries.map((summary: any) =>
               `${summary.status.name}: ${summary.testCasesCount}`
             ).join(', ') || 'No test cases'
           }));
@@ -4207,11 +4207,11 @@ async function main() {
         };
       } catch (error: any) {
         debugLog("Error in list_test_runs", { error: error.message, args });
-        return { 
-          content: [{ 
-            type: "text" as const, 
-            text: `❌ Error listing test runs: ${error?.message || error}` 
-          }] 
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error listing test runs: ${error?.message || error}`
+          }]
         };
       }
     }
@@ -4235,10 +4235,10 @@ async function main() {
 
         // Resolve project using dynamic resolution (same as Reporting API tools)
         const { projectId, suggestions } = await resolveProjectId(args.project);
-        
+
         // For Public API, we need the project key, not the project ID
         // First check if it's a known alias, otherwise treat as direct project key
-        const projectKey = typeof args.project === 'string' 
+        const projectKey = typeof args.project === 'string'
           ? (PROJECT_ALIASES[args.project] || args.project)
           : undefined;
 
@@ -4316,11 +4316,11 @@ async function main() {
         };
       } catch (error: any) {
         debugLog("Error in get_test_run_by_id", { error: error.message, args });
-        return { 
-          content: [{ 
-            type: "text" as const, 
-            text: `❌ Error getting test run: ${error?.message || error}` 
-          }] 
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error getting test run: ${error?.message || error}`
+          }]
         };
       }
     }
@@ -4344,10 +4344,10 @@ async function main() {
 
         // Resolve project using dynamic resolution (same as Reporting API tools)
         const { projectId, suggestions } = await resolveProjectId(args.project);
-        
+
         // For Public API, we need the project key, not the project ID
         // First check if it's a known alias, otherwise treat as direct project key
-        const projectKey = typeof args.project === 'string' 
+        const projectKey = typeof args.project === 'string'
           ? (PROJECT_ALIASES[args.project] || args.project)
           : undefined;
 
@@ -4389,7 +4389,7 @@ async function main() {
                 id: item.result.issue.id,
                 display: `${item.result.issue.type}: ${item.result.issue.id}`
               } : null,
-              executionTime: item.result.executionTimeInMillis ? 
+              executionTime: item.result.executionTimeInMillis ?
                 `${item.result.executionTimeInMillis}ms` : null,
               executionType: item.result.executionType,
               attachments: item.result.attachments.length
@@ -4422,11 +4422,11 @@ async function main() {
         };
       } catch (error: any) {
         debugLog("Error in list_test_run_test_cases", { error: error.message, args });
-        return { 
-          content: [{ 
-            type: "text" as const, 
-            text: `❌ Error listing test run test cases: ${error?.message || error}` 
-          }] 
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error listing test run test cases: ${error?.message || error}`
+          }]
         };
       }
     }
@@ -4444,7 +4444,7 @@ async function main() {
     },
     async (args) => {
       debugLog("get_test_run_result_statuses called", args);
-      
+
       try {
         // Resolve project using dynamic resolution (same as other tools)
         const { projectId, suggestions } = await resolveProjectId(args.project);
@@ -4470,12 +4470,12 @@ async function main() {
         // Formatted output
         const statuses = response.items;
         let result = `📊 **Result Statuses for Project ${projectKey}**\n\n`;
-        
+
         if (statuses.length === 0) {
           result += "No result statuses found.\n";
         } else {
           result += `Found ${statuses.length} result status${statuses.length === 1 ? '' : 'es'}:\n\n`;
-          
+
           statuses.forEach((status: any) => {
             result += `**${status.name}** (ID: ${status.id})\n`;
             if (status.aliases) {
@@ -4495,11 +4495,11 @@ async function main() {
         };
       } catch (error: any) {
         debugLog("Error in get_test_run_result_statuses", { error: error.message, args });
-        return { 
-          content: [{ 
-            type: "text" as const, 
-            text: `❌ Error getting result statuses: ${error?.message || error}` 
-          }] 
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error getting result statuses: ${error?.message || error}`
+          }]
         };
       }
     }
@@ -4515,7 +4515,7 @@ async function main() {
     },
     async (args) => {
       debugLog("get_test_run_configuration_groups called", args);
-      
+
       try {
         // Resolve project using dynamic resolution (same as other tools)
         const { projectId, suggestions } = await resolveProjectId(args.project);
@@ -4541,12 +4541,12 @@ async function main() {
         // Formatted output
         const groups = response.items;
         let result = `⚙️ **Configuration Groups for Project ${projectKey}**\n\n`;
-        
+
         if (groups.length === 0) {
           result += "No configuration groups found.\n";
         } else {
           result += `Found ${groups.length} configuration group${groups.length === 1 ? '' : 's'}:\n\n`;
-          
+
           groups.forEach((group: any) => {
             result += `**${group.name}** (ID: ${group.id})\n`;
             if (group.options && group.options.length > 0) {
@@ -4566,18 +4566,18 @@ async function main() {
         };
       } catch (error: any) {
         debugLog("Error in get_test_run_configuration_groups", { error: error.message, args });
-        return { 
-          content: [{ 
-            type: "text" as const, 
-            text: `❌ Error getting configuration groups: ${error?.message || error}` 
-          }] 
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error getting configuration groups: ${error?.message || error}`
+          }]
         };
       }
     }
   );
 
   // ========== DUPLICATE ANALYSIS TOOL ==========
-  
+
   server.tool(
     "analyze_test_cases_duplicates",
     "🔍 Analyze test cases for duplicates and group similar ones by step similarity (80-90%)",
@@ -4593,20 +4593,20 @@ async function main() {
     async (args) => {
       try {
         const { project_key, suite_id, test_case_keys, similarity_threshold, format, include_similarity_matrix, include_clickable_links } = args;
-        
+
         debugLog("analyze_test_cases_duplicates called", { args });
-        
+
         // Import the analyzer
         const { TestCaseDuplicateAnalyzer } = await import('./utils/duplicate-analyzer.js');
         const analyzer = new TestCaseDuplicateAnalyzer(similarity_threshold);
-        
+
         let testCases: ZebrunnerTestCase[] = [];
-        
+
         // Get test cases either from suite or specific keys
         if (test_case_keys && test_case_keys.length > 0) {
           // Get specific test cases by keys
           debugLog("Getting test cases by keys", { keys: test_case_keys });
-          
+
           for (const caseKey of test_case_keys) {
             try {
               const testCase = await client.getTestCaseByKey(project_key, caseKey, {
@@ -4622,11 +4622,11 @@ async function main() {
         } else if (suite_id) {
           // Get test cases from specific suite (including child suites for root suites)
           debugLog("Getting test cases from suite using hierarchy-aware method", { suite_id });
-          
+
           try {
             // Use getAllTCMTestCasesBySuiteId which handles root suite hierarchies
             const shortTestCases = await client.getAllTCMTestCasesBySuiteId(project_key, suite_id, true); // basedOnRootSuites = true
-            
+
             if (shortTestCases && shortTestCases.length > 0) {
               // Fetch detailed test cases with steps
               const detailedTestCases: ZebrunnerTestCase[] = [];
@@ -4656,18 +4656,18 @@ async function main() {
         } else {
           // Get all test cases from project
           debugLog("Getting all test cases from project", { project_key });
-          
+
           try {
             const response = await client.getTestCases(project_key, {
               page: 0,
               size: 1000 // Large size to get many cases
             });
-            
+
             if (response?.items) {
               // Fetch detailed test cases with steps (limit to first 50 for performance)
               const detailedTestCases: ZebrunnerTestCase[] = [];
               const limitedItems = response.items.slice(0, 50); // Limit for performance
-              
+
               for (const testCase of limitedItems) {
                 try {
                   const detailed = await client.getTestCaseByKey(project_key, testCase.key || `tc-${testCase.id}`, {
@@ -4692,7 +4692,7 @@ async function main() {
             };
           }
         }
-        
+
         if (testCases.length === 0) {
           return {
             content: [{
@@ -4701,7 +4701,7 @@ async function main() {
             }]
           };
         }
-        
+
         if (testCases.length < 2) {
           return {
             content: [{
@@ -4710,20 +4710,20 @@ async function main() {
             }]
           };
         }
-        
+
         debugLog(`Analyzing ${testCases.length} test cases for duplicates`);
-        
+
         // Get clickable links configuration
         const clickableLinkConfig = getClickableLinkConfig(include_clickable_links, ZEBRUNNER_URL);
-        
+
         // Perform duplicate analysis
         const result = analyzer.analyzeDuplicates(testCases, project_key, suite_id);
-        
-        debugLog("Duplicate analysis completed", { 
+
+        debugLog("Duplicate analysis completed", {
           clustersFound: result.clustersFound,
           duplicateTestCases: result.potentialSavings.duplicateTestCases
         });
-        
+
         // Format output
         if (format === 'dto' || format === 'json') {
           // Add webUrl fields to test cases if clickable links are enabled
@@ -4731,12 +4731,12 @@ async function main() {
             ...result,
             clusters: result.clusters.map((cluster: any) => ({
               ...cluster,
-              testCases: cluster.testCases.map((tc: any) => 
+              testCases: cluster.testCases.map((tc: any) =>
                 addTestCaseWebUrl(tc, project_key, clickableLinkConfig.baseWebUrl, clickableLinkConfig)
               )
             }))
           };
-          
+
           return {
             content: [{
               type: "text" as const,
@@ -4744,7 +4744,7 @@ async function main() {
             }]
           };
         }
-        
+
         if (format === 'string') {
           let output = `Duplicate Analysis Results\n`;
           output += `Project: ${result.projectKey}\n`;
@@ -4752,7 +4752,7 @@ async function main() {
           output += `Total Test Cases: ${result.totalTestCases}\n`;
           output += `Clusters Found: ${result.clustersFound}\n`;
           output += `Potential Savings: ${result.potentialSavings.duplicateTestCases} duplicates (${result.potentialSavings.estimatedTimeReduction})\n\n`;
-          
+
           result.clusters.forEach((cluster: any, index: number) => {
             output += `Cluster ${index + 1} (${cluster.averageSimilarity}% similarity):\n`;
             cluster.testCases.forEach((tc: any) => {
@@ -4764,7 +4764,7 @@ async function main() {
             output += `  Recommended Base: ${baseTestCaseDisplay} (${cluster.recommendedBase.reason})\n`;
             output += `  Strategy: ${cluster.mergingStrategy}\n\n`;
           });
-          
+
           return {
             content: [{
               type: "text" as const,
@@ -4772,28 +4772,28 @@ async function main() {
             }]
           };
         }
-        
+
         // Markdown format (default)
         let markdown = `# 🔍 Test Case Duplicate Analysis\n\n`;
         markdown += `**Project:** ${result.projectKey}\n`;
         if (result.suiteId) markdown += `**Suite ID:** ${result.suiteId}\n`;
         markdown += `**Total Test Cases Analyzed:** ${result.totalTestCases}\n`;
         markdown += `**Similarity Threshold:** ${similarity_threshold}%\n\n`;
-        
+
         markdown += `## 📊 Summary\n\n`;
         markdown += `- **Clusters Found:** ${result.clustersFound}\n`;
         markdown += `- **Duplicate Test Cases:** ${result.potentialSavings.duplicateTestCases}\n`;
         markdown += `- **Estimated Time Reduction:** ${result.potentialSavings.estimatedTimeReduction}\n\n`;
-        
+
         if (result.clustersFound === 0) {
           markdown += `✅ **No duplicates found** above ${similarity_threshold}% similarity threshold.\n\n`;
           markdown += `Consider lowering the threshold or checking if test cases have detailed steps.\n`;
         } else {
           markdown += `## 🗂️ Duplicate Clusters\n\n`;
-          
+
           result.clusters.forEach((cluster: any, index: number) => {
             markdown += `### Cluster ${index + 1}: ${cluster.averageSimilarity}% Average Similarity\n\n`;
-            
+
             // Test cases table
             markdown += `| Test Case | Title | Automation | Steps |\n`;
             markdown += `|-----------|-------|------------|-------|\n`;
@@ -4802,7 +4802,7 @@ async function main() {
               markdown += `| **${testCaseDisplay}** | ${tc.title} | ${tc.automationState} | ${tc.stepCount} |\n`;
             });
             markdown += `\n`;
-            
+
             // Automation mix
             const { manual, automated, mixed } = cluster.automationMix;
             markdown += `**Automation Mix:** `;
@@ -4810,7 +4810,7 @@ async function main() {
             if (manual > 0) markdown += `${manual} Manual `;
             if (mixed > 0) markdown += `${mixed} Mixed `;
             markdown += `\n\n`;
-            
+
             // Shared logic
             if (cluster.sharedLogicSummary) {
               markdown += `**Shared Steps:**\n`;
@@ -4823,27 +4823,27 @@ async function main() {
               }
               markdown += `\n`;
             }
-            
+
             // Recommendations
             markdown += `**💡 Recommendations:**\n`;
             const baseTestCaseDisplay = generateTestCaseLink(project_key, cluster.recommendedBase.testCaseKey, undefined, clickableLinkConfig.baseWebUrl, clickableLinkConfig);
             markdown += `- **Base Test Case:** ${baseTestCaseDisplay}\n`;
             markdown += `- **Reason:** ${cluster.recommendedBase.reason}\n`;
             markdown += `- **Strategy:** ${cluster.mergingStrategy}\n\n`;
-            
+
             markdown += `---\n\n`;
           });
-          
+
           // Include similarity matrix if requested
           if (include_similarity_matrix && result.similarityMatrix && result.similarityMatrix.length > 0) {
             markdown += `## 📈 Similarity Matrix\n\n`;
             markdown += `| Test Case 1 | Test Case 2 | Similarity | Pattern Type | Shared Steps | Summary |\n`;
             markdown += `|-------------|-------------|------------|--------------|--------------|----------|\n`;
-            
+
             result.similarityMatrix.slice(0, 20).forEach((sim: any) => { // Limit to top 20
               const summary = sim.sharedStepsSummary.slice(0, 2).join(', ');
               const patternType = sim.patternType || 'other';
-              const patternEmoji = patternType === 'user_type' ? '👤' : 
+              const patternEmoji = patternType === 'user_type' ? '👤' :
                                  patternType === 'theme' ? '🎨' :
                                  patternType === 'entry_point' ? '🚪' :
                                  patternType === 'component' ? '🧩' :
@@ -4852,14 +4852,14 @@ async function main() {
               const testCase2Display = generateTestCaseLink(project_key, sim.testCase2Key, undefined, clickableLinkConfig.baseWebUrl, clickableLinkConfig);
               markdown += `| ${testCase1Display} | ${testCase2Display} | ${sim.similarityPercentage}% | ${patternEmoji} ${patternType} | ${sim.sharedSteps}/${Math.max(sim.totalSteps1, sim.totalSteps2)} | ${summary} |\n`;
             });
-            
+
             if (result.similarityMatrix.length > 20) {
               markdown += `\n*Showing top 20 similarities out of ${result.similarityMatrix.length} total pairs*\n`;
             }
             markdown += `\n`;
           }
         }
-        
+
         markdown += `## 🎯 Next Steps\n\n`;
         if (result.clustersFound > 0) {
           markdown += `1. **Review each cluster** to confirm similarity assessment\n`;
@@ -4872,30 +4872,30 @@ async function main() {
           markdown += `2. **Ensure test cases have detailed steps** for better analysis\n`;
           markdown += `3. **Review test case titles** for potential duplicates\n\n`;
         }
-        
+
         markdown += `*Analysis completed with ${similarity_threshold}% similarity threshold*\n`;
-        
+
         return {
           content: [{
             type: "text" as const,
             text: markdown
           }]
         };
-        
+
       } catch (error: any) {
         debugLog("Error in analyze_test_cases_duplicates", { error: error.message, args });
-        return { 
-          content: [{ 
-            type: "text" as const, 
-            text: `❌ Error analyzing test case duplicates: ${error?.message || error}` 
-          }] 
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error analyzing test case duplicates: ${error?.message || error}`
+          }]
         };
       }
     }
   );
 
   // ========== SEMANTIC DUPLICATE ANALYSIS TOOL ==========
-  
+
   server.tool(
     "analyze_test_cases_duplicates_semantic",
     "🧠 Advanced semantic duplicate analysis using LLM-powered step clustering and two-phase analysis",
@@ -4915,26 +4915,26 @@ async function main() {
     },
     async (args) => {
       try {
-        const { 
-          project_key, 
-          suite_id, 
-          test_case_keys, 
+        const {
+          project_key,
+          suite_id,
+          test_case_keys,
           similarity_threshold,
           step_clustering_threshold,
           analysis_mode,
           use_step_clustering,
           use_medoid_selection,
           include_semantic_insights,
-          format, 
+          format,
           include_similarity_matrix,
-          include_clickable_links 
+          include_clickable_links
         } = args;
-        
+
         debugLog("analyze_test_cases_duplicates_semantic called", { args });
-        
+
         // Import the semantic analyzer
         const { SemanticDuplicateAnalyzer } = await import('./utils/semantic-duplicate-analyzer.js');
-        
+
         const options = {
           stepClusteringThreshold: step_clustering_threshold / 100,
           testCaseClusteringThreshold: similarity_threshold / 100,
@@ -4942,15 +4942,15 @@ async function main() {
           useMedoidSelection: use_medoid_selection,
           includeSemanticPatterns: include_semantic_insights
         };
-        
+
         const analyzer = new SemanticDuplicateAnalyzer(similarity_threshold, options);
-        
+
         let testCases: ZebrunnerTestCase[] = [];
-        
+
         // Get test cases (same logic as basic analyzer)
         if (test_case_keys && test_case_keys.length > 0) {
           debugLog("Getting test cases by keys", { keys: test_case_keys });
-          
+
           for (const caseKey of test_case_keys) {
             try {
               const testCase = await client.getTestCaseByKey(project_key, caseKey, {
@@ -4966,11 +4966,11 @@ async function main() {
         } else if (suite_id) {
           // Get test cases from specific suite (including child suites for root suites)
           debugLog("Getting test cases from suite using hierarchy-aware method", { suite_id });
-          
+
           try {
             // Use getAllTCMTestCasesBySuiteId which handles root suite hierarchies
             const shortTestCases = await client.getAllTCMTestCasesBySuiteId(project_key, suite_id, true); // basedOnRootSuites = true
-            
+
             if (shortTestCases && shortTestCases.length > 0) {
               // Fetch detailed test cases with steps
               const detailedTestCases: ZebrunnerTestCase[] = [];
@@ -4999,17 +4999,17 @@ async function main() {
           }
         } else {
           debugLog("Getting all test cases from project", { project_key });
-          
+
           try {
             const response = await client.getTestCases(project_key, {
               page: 0,
               size: 1000
             });
-            
+
             if (response?.items) {
               const detailedTestCases: ZebrunnerTestCase[] = [];
               const limitedItems = response.items.slice(0, 50); // Limit for performance
-              
+
               for (const testCase of limitedItems) {
                 try {
                   const detailed = await client.getTestCaseByKey(project_key, testCase.key || `tc-${testCase.id}`, {
@@ -5034,7 +5034,7 @@ async function main() {
             };
           }
         }
-        
+
         if (testCases.length === 0) {
           return {
             content: [{
@@ -5043,7 +5043,7 @@ async function main() {
             }]
           };
         }
-        
+
         if (testCases.length < 2) {
           return {
             content: [{
@@ -5052,15 +5052,15 @@ async function main() {
             }]
           };
         }
-        
+
         debugLog(`Analyzing ${testCases.length} test cases with semantic analysis`);
-        
+
         // Get clickable links configuration
         const clickableLinkConfig = getClickableLinkConfig(include_clickable_links, ZEBRUNNER_URL);
-        
+
         // Create LLM analysis function if semantic mode is enabled
         let llmAnalysisFunction: ((prompt: string) => Promise<string>) | undefined;
-        
+
         if (analysis_mode === 'semantic' || analysis_mode === 'hybrid') {
           // Note: In a real MCP environment, this would be provided by the host (Claude)
           // For now, we'll use a placeholder that indicates LLM analysis is requested
@@ -5069,21 +5069,21 @@ async function main() {
             throw new Error("LLM analysis requires host support - please use this tool in Claude Desktop/Code for full semantic analysis");
           };
         }
-        
+
         // Perform semantic analysis
         const result = await analyzer.analyzeSemanticDuplicates(
-          testCases, 
-          project_key, 
+          testCases,
+          project_key,
           suite_id,
           llmAnalysisFunction
         );
-        
-        debugLog("Semantic analysis completed", { 
+
+        debugLog("Semantic analysis completed", {
           clustersFound: result.clustersFound,
           stepClusters: result.stepClusters?.length || 0,
           analysisMode: result.analysisMode
         });
-        
+
         // Format output
         if (format === 'dto' || format === 'json') {
           // Add webUrl fields to test cases if clickable links are enabled
@@ -5091,12 +5091,12 @@ async function main() {
             ...result,
             semanticClusters: result.semanticClusters?.map((cluster: any) => ({
               ...cluster,
-              testCases: cluster.testCases.map((tc: any) => 
+              testCases: cluster.testCases.map((tc: any) =>
                 addTestCaseWebUrl(tc, project_key, clickableLinkConfig.baseWebUrl, clickableLinkConfig)
               )
             }))
           };
-          
+
           return {
             content: [{
               type: "text" as const,
@@ -5104,7 +5104,7 @@ async function main() {
             }]
           };
         }
-        
+
         if (format === 'string') {
           let output = `Semantic Duplicate Analysis Results\n`;
           output += `Project: ${result.projectKey}\n`;
@@ -5114,7 +5114,7 @@ async function main() {
           output += `Step Clusters: ${result.stepClusters?.length || 0}\n`;
           output += `Test Case Clusters: ${result.clustersFound}\n`;
           output += `Potential Savings: ${result.potentialSavings.duplicateTestCases} duplicates (${result.potentialSavings.estimatedTimeReduction})\n\n`;
-          
+
           if (result.semanticClusters) {
             result.semanticClusters.forEach((cluster: any, index: number) => {
               output += `Cluster ${index + 1} (${cluster.averageSimilarity}% similarity, ${cluster.clusterType}):\n`;
@@ -5127,7 +5127,7 @@ async function main() {
               output += `  Strategy: ${cluster.mergingStrategy}\n\n`;
             });
           }
-          
+
           return {
             content: [{
               type: "text" as const,
@@ -5135,7 +5135,7 @@ async function main() {
             }]
           };
         }
-        
+
         // Markdown format (default)
         let markdown = `# 🧠 Semantic Test Case Duplicate Analysis\n\n`;
         markdown += `**Project:** ${result.projectKey}\n`;
@@ -5144,36 +5144,36 @@ async function main() {
         markdown += `**Analysis Mode:** ${result.analysisMode}\n`;
         markdown += `**Step Clustering Threshold:** ${step_clustering_threshold}%\n`;
         markdown += `**Test Case Similarity Threshold:** ${similarity_threshold}%\n\n`;
-        
+
         markdown += `## 📊 Analysis Summary\n\n`;
         markdown += `- **Step Clusters Created:** ${result.stepClusters?.length || 0}\n`;
         markdown += `- **Test Case Clusters Found:** ${result.clustersFound}\n`;
         markdown += `- **Duplicate Test Cases:** ${result.potentialSavings.duplicateTestCases}\n`;
         markdown += `- **Estimated Time Reduction:** ${result.potentialSavings.estimatedTimeReduction}\n\n`;
-        
+
         // Step clusters summary
         if (result.stepClusters && result.stepClusters.length > 0) {
           markdown += `## 🗂️ Step Clusters (Top 10)\n\n`;
           markdown += `| Cluster | Representative Step | Frequency | Summary |\n`;
           markdown += `|---------|-------------------|-----------|----------|\n`;
-          
+
           result.stepClusters.slice(0, 10).forEach((cluster: any) => {
             markdown += `| ${cluster.id} | ${cluster.representativeStep} | ${cluster.frequency} | ${cluster.semanticSummary} |\n`;
           });
           markdown += `\n`;
         }
-        
+
         if (result.clustersFound === 0) {
           markdown += `✅ **No duplicates found** above ${similarity_threshold}% similarity threshold.\n\n`;
           markdown += `Consider lowering the threshold or checking if test cases have detailed steps.\n`;
         } else {
           markdown += `## 🧩 Semantic Test Case Clusters\n\n`;
-          
+
           const clusters = result.semanticClusters || result.clusters;
           clusters.forEach((cluster: any, index: number) => {
             const clusterType = cluster.clusterType ? ` (${cluster.clusterType})` : '';
             markdown += `### Cluster ${index + 1}: ${cluster.averageSimilarity}% Similarity${clusterType}\n\n`;
-            
+
             // Test cases table
             markdown += `| Test Case | Title | Automation | Steps |\n`;
             markdown += `|-----------|-------|------------|-------|\n`;
@@ -5183,7 +5183,7 @@ async function main() {
               markdown += `| **${testCaseDisplay}**${isMediad} | ${tc.title} | ${tc.automationState} | ${tc.stepCount} |\n`;
             });
             markdown += `\n`;
-            
+
             // Automation mix and semantic info
             const { manual, automated, mixed } = cluster.automationMix;
             markdown += `**Automation Mix:** `;
@@ -5191,11 +5191,11 @@ async function main() {
             if (manual > 0) markdown += `${manual} Manual `;
             if (mixed > 0) markdown += `${mixed} Mixed `;
             markdown += `\n\n`;
-            
+
             if (cluster.semanticCoherence) {
               markdown += `**Semantic Coherence:** ${cluster.semanticCoherence}%\n`;
             }
-            
+
             // Shared logic
             if (cluster.sharedLogicSummary) {
               markdown += `**Shared Steps:**\n`;
@@ -5208,7 +5208,7 @@ async function main() {
               }
               markdown += `\n`;
             }
-            
+
             // Recommendations
             markdown += `**💡 Recommendations:**\n`;
             const representativeTestCase = cluster.medoidTestCase || cluster.recommendedBase?.testCaseKey;
@@ -5218,15 +5218,15 @@ async function main() {
               markdown += `- **Selection Reason:** ${cluster.recommendedBase.reason}\n`;
             }
             markdown += `- **Consolidation Strategy:** ${cluster.mergingStrategy}\n\n`;
-            
+
             markdown += `---\n\n`;
           });
         }
-        
+
         // Semantic insights
         if (result.semanticInsights && include_semantic_insights) {
           markdown += `## 🔍 Semantic Insights\n\n`;
-          
+
           if (result.semanticInsights.commonStepPatterns.length > 0) {
             markdown += `### Common Step Patterns\n`;
             result.semanticInsights.commonStepPatterns.forEach((pattern: string) => {
@@ -5234,7 +5234,7 @@ async function main() {
             });
             markdown += `\n`;
           }
-          
+
           if (result.semanticInsights.discoveredWorkflows.length > 0) {
             markdown += `### Discovered Workflows\n`;
             result.semanticInsights.discoveredWorkflows.forEach((workflow: string) => {
@@ -5242,7 +5242,7 @@ async function main() {
             });
             markdown += `\n`;
           }
-          
+
           if (result.semanticInsights.automationOpportunities.length > 0) {
             markdown += `### Automation Opportunities\n`;
             result.semanticInsights.automationOpportunities.forEach((opportunity: string) => {
@@ -5251,36 +5251,36 @@ async function main() {
             markdown += `\n`;
           }
         }
-        
+
         // Include similarity matrix if requested
         if (include_similarity_matrix && result.similarityMatrix && result.similarityMatrix.length > 0) {
           markdown += `## 📈 Semantic Similarity Matrix\n\n`;
           markdown += `| Test Case 1 | Test Case 2 | Overall | Step Clusters | Semantic | Pattern Type |\n`;
           markdown += `|-------------|-------------|---------|---------------|----------|-------------|\n`;
-          
+
           result.similarityMatrix.slice(0, 20).forEach((sim: any) => {
             const patternType = sim.patternType || 'other';
-            const patternEmoji = patternType === 'user_type' ? '👤' : 
+            const patternEmoji = patternType === 'user_type' ? '👤' :
                                patternType === 'theme' ? '🎨' :
                                patternType === 'entry_point' ? '🚪' :
                                patternType === 'component' ? '🧩' :
                                patternType === 'permission' ? '🔐' : '❓';
-            
+
             const stepClusterSim = sim.stepClusterOverlap || 'N/A';
             const semanticConf = sim.semanticConfidence || 'N/A';
-            
+
             const testCase1Display = generateTestCaseLink(project_key, sim.testCase1Key, undefined, clickableLinkConfig.baseWebUrl, clickableLinkConfig);
             const testCase2Display = generateTestCaseLink(project_key, sim.testCase2Key, undefined, clickableLinkConfig.baseWebUrl, clickableLinkConfig);
-            
+
             markdown += `| ${testCase1Display} | ${testCase2Display} | ${sim.similarityPercentage}% | ${stepClusterSim}% | ${semanticConf}% | ${patternEmoji} ${patternType} |\n`;
           });
-          
+
           if (result.similarityMatrix.length > 20) {
             markdown += `\n*Showing top 20 similarities out of ${result.similarityMatrix.length} total pairs*\n`;
           }
           markdown += `\n`;
         }
-        
+
         markdown += `## 🎯 Next Steps\n\n`;
         if (result.clustersFound > 0) {
           markdown += `1. **Review semantic clusters** - medoid test cases (🎯) are most representative\n`;
@@ -5293,27 +5293,27 @@ async function main() {
           markdown += `2. **Review step clustering results** for optimization opportunities\n`;
           markdown += `3. **Check semantic insights** for workflow improvements\n\n`;
         }
-        
+
         if (analysis_mode === 'basic' || result.analysisMode === 'hybrid') {
           markdown += `💡 **Tip:** For full semantic analysis with LLM-powered insights, use this tool in Claude Desktop/Code.\n\n`;
         }
-        
+
         markdown += `*Semantic analysis completed with ${step_clustering_threshold}% step clustering and ${similarity_threshold}% test case similarity thresholds*\n`;
-        
+
         return {
           content: [{
             type: "text" as const,
             text: markdown
           }]
         };
-        
+
       } catch (error: any) {
         debugLog("Error in analyze_test_cases_duplicates_semantic", { error: error.message, args });
-        return { 
-          content: [{ 
-            type: "text" as const, 
-            text: `❌ Error in semantic duplicate analysis: ${error?.message || error}` 
-          }] 
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error in semantic duplicate analysis: ${error?.message || error}`
+          }]
         };
       }
     }
@@ -5323,10 +5323,10 @@ async function main() {
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  
+
   // Always print startup message for tests and debugging
   console.error("✅ Zebrunner Unified MCP Server started successfully");
-  
+
   if (DEBUG_MODE) {
     console.error(`🔍 Debug mode: ${DEBUG_MODE}`);
     console.error(`🌐 Zebrunner URL: ${ZEBRUNNER_URL}`);
