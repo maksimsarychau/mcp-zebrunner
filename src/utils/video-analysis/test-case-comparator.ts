@@ -56,12 +56,20 @@ export class TestCaseComparator {
         videoTimestamps
       );
 
+      // Assess test case quality (is it outdated/incomplete?)
+      const testCaseQuality = this.assessTestCaseQuality(
+        testCaseSteps,
+        executedSteps,
+        coverageAnalysis
+      );
+
       return {
         testCaseKey,
         testCaseTitle: testCase.name,
         testCaseSteps,
         coverageAnalysis,
-        stepByStepComparison
+        stepByStepComparison,
+        testCaseQuality
       };
 
     } catch (error) {
@@ -302,6 +310,168 @@ export class TestCaseComparator {
     const overlap = intersection.length / union.length;
 
     return overlap >= 0.4; // 40% word overlap threshold
+  }
+
+  /**
+   * Assess test case quality - determine if test case describes what automation does
+   * Focus: Semantic coverage, not step count ratio (automation can have 100x more steps - that's normal!)
+   */
+  private assessTestCaseQuality(
+    testCaseSteps: TestCaseStep[],
+    executedSteps: LogStep[],
+    coverageAnalysis: any
+  ): {
+    isOutdated: boolean;
+    confidence: number;
+    reasoning: string;
+    recommendation: string;
+  } {
+    const tcStepCount = testCaseSteps.length;
+    const execStepCount = executedSteps.length;
+    const coveragePercentage = coverageAnalysis.coveragePercentage;
+
+    // Analyze semantic coverage: do test case steps describe what automation does?
+    const semanticAnalysis = this.analyzeSemanticCoverage(testCaseSteps, executedSteps);
+
+    // Red flags for test case quality issues:
+    const redFlags = {
+      // Test case is just placeholder text or no meaningful steps
+      placeholderSteps: testCaseSteps.some(step => 
+        step.expectedAction.toLowerCase().includes('no steps') ||
+        step.expectedAction.toLowerCase().includes('undefined') ||
+        step.expectedAction.trim().length < 10
+      ),
+      
+      // Test case steps don't match any automation actions (semantic mismatch)
+      semanticMismatch: semanticAnalysis.matchedSteps < testCaseSteps.length * 0.5,
+      
+      // Automation performs actions not described anywhere in test case
+      hasUndocumentedActions: semanticAnalysis.undocumentedActionTypes.length > 0,
+      
+      // Test case is extremely vague (very short, no specifics)
+      veryVague: testCaseSteps.length === 1 && testCaseSteps[0].expectedAction.length < 30,
+    };
+
+    const undocumentedCount = semanticAnalysis.undocumentedActionTypes.length;
+
+    // Note: It's NORMAL for automation to have many more steps than test case
+    // (e.g., test case: "Login" → automation: 15 steps to implement login)
+    // This is NOT a quality issue!
+
+    // Build assessment
+    let isOutdated = false;
+    let confidence = 0;
+    let reasoning = '';
+    let recommendation = '';
+
+    if (redFlags.placeholderSteps) {
+      isOutdated = true;
+      confidence = 95;
+      reasoning = `Test case contains placeholder text or no meaningful steps. Test case needs to be properly documented.`;
+      recommendation = `🔴 **HIGH PRIORITY**: Add actual test case steps describing the expected behavior and actions.`;
+    } else if (redFlags.semanticMismatch && undocumentedCount >= 3) {
+      isOutdated = true;
+      confidence = 70;
+      reasoning = `Test case describes "${testCaseSteps.map(s => s.expectedAction.substring(0, 30)).join(', ')}" but automation performs undocumented actions: ${semanticAnalysis.undocumentedActionTypes.slice(0, 3).join(', ')}. `;
+      reasoning += `The test case may not accurately describe what the automation does.`;
+      recommendation = `🟡 **MEDIUM PRIORITY**: Review if test case accurately describes automation behavior. Consider updating test case to include: ${semanticAnalysis.undocumentedActionTypes.slice(0, 3).join(', ')}.`;
+    } else if (redFlags.veryVague && undocumentedCount > 0) {
+      isOutdated = true;
+      confidence = 60;
+      reasoning = `Test case has only 1 very brief step: "${testCaseSteps[0].expectedAction}". While automation has ${execStepCount} steps, test case should provide more context about expected behavior.`;
+      recommendation = `🟡 **MEDIUM PRIORITY**: Expand test case to describe key expected outcomes and main user flows (can still be high-level, but needs more detail than "${testCaseSteps[0].expectedAction.substring(0, 40)}").`;
+    } else {
+      // Test case is OK - it describes what automation does (even if at high level)
+      isOutdated = false;
+      confidence = 80;
+      reasoning = `Test case provides adequate high-level description of automation behavior. `;
+      reasoning += `Note: Automation has ${execStepCount} detailed steps vs ${tcStepCount} test case step(s) - this is normal and expected. `;
+      reasoning += `Test cases are high-level descriptions; automation is detailed implementation.`;
+      recommendation = `✅ Test case documentation is adequate. Focus on investigating the actual test failure root cause (likely an automation issue, not documentation).`;
+    }
+
+    if (this.debug) {
+      console.log(`[TestCaseComparator] Quality Assessment: isOutdated=${isOutdated}, confidence=${confidence}%, semanticMatch=${semanticAnalysis.matchedSteps}/${tcStepCount}`);
+    }
+
+    return {
+      isOutdated,
+      confidence,
+      reasoning,
+      recommendation
+    };
+  }
+
+  /**
+   * Analyze if test case steps semantically describe what automation does
+   */
+  private analyzeSemanticCoverage(
+    testCaseSteps: TestCaseStep[],
+    executedSteps: LogStep[]
+  ): {
+    matchedSteps: number;
+    undocumentedActionTypes: string[];
+  } {
+    // Extract action types from executed steps
+    const automationActions = new Set<string>();
+    for (const execStep of executedSteps) {
+      const action = execStep.action.toLowerCase();
+      
+      // Categorize actions
+      if (action.includes('login') || action.includes('sign in')) automationActions.add('login');
+      if (action.includes('click') || action.includes('tap')) automationActions.add('UI interactions');
+      if (action.includes('enter') || action.includes('type') || action.includes('input')) automationActions.add('text input');
+      if (action.includes('verify') || action.includes('check') || action.includes('assert')) automationActions.add('verification');
+      if (action.includes('navigate') || action.includes('open')) automationActions.add('navigation');
+      if (action.includes('search')) automationActions.add('search');
+      if (action.includes('select') || action.includes('choose')) automationActions.add('selection');
+      if (action.includes('scroll') || action.includes('swipe')) automationActions.add('scrolling');
+      if (action.includes('wait') || action.includes('loading')) automationActions.add('waiting');
+      if (action.includes('close') || action.includes('dismiss')) automationActions.add('dismiss/close');
+    }
+
+    // Check which test case steps are covered by automation actions
+    let matchedSteps = 0;
+    for (const tcStep of testCaseSteps) {
+      const stepText = tcStep.expectedAction.toLowerCase();
+      
+      // Check if any automation action type is mentioned in test case step
+      for (const actionType of automationActions) {
+        if (stepText.includes(actionType) || this.semanticMatch(stepText, actionType)) {
+          matchedSteps++;
+          automationActions.delete(actionType); // Remove matched action
+          break;
+        }
+      }
+    }
+
+    // Remaining actions are not documented in test case
+    const undocumentedActionTypes = Array.from(automationActions);
+
+    return {
+      matchedSteps,
+      undocumentedActionTypes
+    };
+  }
+
+  /**
+   * Check if two terms are semantically related
+   */
+  private semanticMatch(text: string, actionType: string): boolean {
+    const synonyms: { [key: string]: string[] } = {
+      'login': ['sign in', 'authenticate', 'log in', 'credentials'],
+      'navigation': ['open', 'go to', 'navigate', 'access', 'menu'],
+      'search': ['find', 'look for', 'query'],
+      'UI interactions': ['click', 'tap', 'press', 'button', 'select'],
+      'text input': ['enter', 'type', 'input', 'fill', 'provide'],
+      'verification': ['verify', 'check', 'confirm', 'see', 'expect', 'assert'],
+      'selection': ['choose', 'pick', 'select'],
+      'scrolling': ['scroll', 'swipe', 'move'],
+      'dismiss/close': ['close', 'dismiss', 'exit', 'cancel']
+    };
+
+    const relatedTerms = synonyms[actionType] || [];
+    return relatedTerms.some(term => text.includes(term));
   }
 }
 

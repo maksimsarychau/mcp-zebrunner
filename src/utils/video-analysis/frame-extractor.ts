@@ -58,55 +58,55 @@ export class FrameExtractor {
       }
 
       // Extract frames at each timestamp
-      const extractedFrames: ExtractedFrame[] = [];
-
-      for (let i = 0; i < timestamps.length; i++) {
-        const timestamp = timestamps[i];
-        
+      // Extract frames in parallel (3-5x faster than sequential)
+      const extractionPromises = timestamps.map(async (timestamp, index) => {
         try {
-          const framePath = await this.extractFrameAt(videoPath, timestamp, i + 1);
-          
-          if (framePath) {
-            extractedFrames.push({
-              timestamp,
-              frameNumber: i + 1,
-              localPath: framePath
-            });
-          }
+          const framePath = await this.extractFrameAt(videoPath, timestamp, index + 1);
+          return {
+            timestamp,
+            frameNumber: index + 1,
+            localPath: framePath
+          };
         } catch (error) {
           if (this.debug) {
             console.warn(`[FrameExtractor] Failed to extract frame at ${timestamp}s:`, error);
           }
+          return null;
         }
-      }
+      });
+
+      // Wait for all extractions to complete
+      const extractionResults = await Promise.all(extractionPromises);
+      const extractedFrames: ExtractedFrame[] = extractionResults.filter((f): f is ExtractedFrame => f !== null);
 
       if (this.debug) {
-        console.log(`[FrameExtractor] Successfully extracted ${extractedFrames.length} frames`);
+        console.error(`[FrameExtractor] ✅ Successfully extracted ${extractedFrames.length}/${timestamps.length} frames in parallel`);
       }
 
-      // Process each frame (resize, base64 encode, OCR)
-      const frameAnalyses: FrameAnalysis[] = [];
-
-      for (const frame of extractedFrames) {
+      // Process frames in parallel (resize, base64 encode, OCR)
+      const processingPromises = extractedFrames.map(async (frame) => {
         try {
-          const analysis = await this.processFrame(frame, includeOCR);
-          frameAnalyses.push(analysis);
+          return await this.processFrame(frame, includeOCR);
         } catch (error) {
           if (this.debug) {
             console.warn(`[FrameExtractor] Failed to process frame ${frame.frameNumber}:`, error);
           }
           
-          // Add placeholder analysis
-          frameAnalyses.push({
+          // Return placeholder analysis on error
+          return {
             timestamp: frame.timestamp,
             frameNumber: frame.frameNumber,
+            framePath: frame.localPath,
             visualAnalysis: 'Frame processing failed',
             detectedElements: [],
             appState: 'Unknown',
             anomaliesDetected: []
-          });
+          };
         }
-      }
+      });
+
+      // Wait for all processing to complete
+      const frameAnalyses = await Promise.all(processingPromises);
 
       return frameAnalyses;
 
@@ -128,6 +128,10 @@ export class FrameExtractor {
     failureWindowSeconds: number = 30,
     frameInterval: number = 5
   ): number[] {
+    if (this.debug) {
+      console.error(`[FrameExtractor] selectTimestamps: mode=${mode}, duration=${videoDuration}s, failureTime=${failureTimestamp}s, window=${failureWindowSeconds}s`);
+    }
+    
     const timestamps: number[] = [];
 
     switch (mode) {
@@ -137,12 +141,21 @@ export class FrameExtractor {
           const start = Math.max(0, failureTimestamp - failureWindowSeconds);
           const end = Math.min(videoDuration, failureTimestamp + 5);
           
+          if (this.debug) {
+            console.error(`[FrameExtractor] failure_focused: start=${start}s, end=${end}s`);
+          }
+          
           for (let t = start; t <= end; t += 3) {
             timestamps.push(Math.floor(t));
           }
         } else {
           // No failure timestamp, extract last 30 seconds
           const start = Math.max(0, videoDuration - 30);
+          
+          if (this.debug) {
+            console.error(`[FrameExtractor] failure_focused (no failure time): extracting last 30s from ${start}s to ${videoDuration}s`);
+          }
+          
           for (let t = start; t <= videoDuration; t += 3) {
             timestamps.push(Math.floor(t));
           }
@@ -206,20 +219,42 @@ export class FrameExtractor {
       const filename = `frame-${frameNumber}-t${timestamp}.png`;
       const outputPath = path.join(this.tempDir, filename);
 
-      ffmpeg(videoPath)
+      let stderrOutput = '';
+
+      const command = ffmpeg(videoPath)
         .seekInput(timestamp)
         .frames(1)
         .output(outputPath)
         .on('end', () => {
+          // Validate that the file was actually created
+          if (!fs.existsSync(outputPath)) {
+            reject(new Error(`Frame file not created: ${outputPath}`));
+            return;
+          }
+
+          const stats = fs.statSync(outputPath);
+          if (stats.size === 0) {
+            reject(new Error(`Frame file is empty: ${outputPath}`));
+            return;
+          }
+
           if (this.debug) {
-            console.log(`[FrameExtractor] Extracted frame ${frameNumber} at ${timestamp}s`);
+            console.error(`[FrameExtractor] ✅ Extracted frame ${frameNumber} at ${timestamp}s (${stats.size} bytes)`);
           }
           resolve(outputPath);
         })
-        .on('error', (err) => {
-          reject(new Error(`FFmpeg error: ${err.message}`));
+        .on('error', (err, stdout, stderr) => {
+          stderrOutput = stderr || err.message;
+          console.error(`[FrameExtractor] ❌ FFmpeg error at timestamp ${timestamp}s:`, stderrOutput);
+          reject(new Error(`FFmpeg failed at ${timestamp}s: ${stderrOutput.substring(0, 500)}`));
         })
-        .run();
+        .on('stderr', (stderrLine) => {
+          if (this.debug) {
+            console.error(`[FFmpeg stderr]: ${stderrLine}`);
+          }
+        });
+
+      command.run();
     });
   }
 
@@ -262,6 +297,7 @@ export class FrameExtractor {
       return {
         timestamp: frame.timestamp,
         frameNumber: frame.frameNumber,
+        framePath: frame.localPath, // Include the file path for file:// links
         imageBase64: base64,
         ocrText,
         visualAnalysis: '', // Will be filled by Claude Vision

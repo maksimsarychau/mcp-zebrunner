@@ -26,6 +26,7 @@ export interface VideoMetadata {
   platformName?: string;
   deviceName?: string;
   status?: string;
+  frameExtractionError?: string; // Error message if frame extraction failed
 }
 
 export interface ExtractedFrame {
@@ -38,7 +39,8 @@ export interface ExtractedFrame {
 export interface FrameAnalysis {
   timestamp: number;
   frameNumber: number;
-  imageBase64?: string;
+  framePath?: string; // Local file path to the frame (for file:// links)
+  imageBase64?: string; // Base64 data (optional, not included in MCP responses to avoid size limits)
   ocrText?: string;
   visualAnalysis: string;
   detectedElements: string[];
@@ -99,7 +101,16 @@ export interface TestCaseComparison {
     logReference?: string;
     match: boolean;
     deviation?: string;
+    visualConfidence?: 'high' | 'medium' | 'low' | 'not_verified'; // Visual verification from frames
   }>;
+  
+  // Test case quality assessment
+  testCaseQuality: {
+    isOutdated: boolean; // True if test case has minimal steps but automation is detailed
+    confidence: number; // Confidence that automation is correct (0-100)
+    reasoning: string;
+    recommendation: string; // What to do about it
+  };
 }
 
 export interface FailureAnalysis {
@@ -141,9 +152,27 @@ export interface Prediction {
 
 export interface SimilarFailure {
   testId: number;
+  testRunId: number;
   testName: string;
+  failureMessage: string;
+  timestamp: string;
   similarity: number;
   commonPatterns: string[];
+}
+
+export interface HistoricalTrends {
+  testName: string;
+  totalRuns: number;
+  passedRuns: number;
+  failedRuns: number;
+  passRate: number;
+  stabilityScore: number;
+  isFlaky: boolean;
+  consecutiveFailures: number;
+  last10Runs: ('✅' | '❌')[];
+  firstFailureDate?: string;
+  lastPassedDate?: string;
+  classification: 'STABLE' | 'FLAKY' | 'CONSISTENTLY_FAILING' | 'RECENTLY_BROKEN';
 }
 
 export interface VideoAnalysisParams {
@@ -162,8 +191,10 @@ export interface VideoAnalysisParams {
   testCaseKey?: string;
   
   // Analysis Depth
+  analysisDepth: 'quick_text_only' | 'standard' | 'detailed';
   includeOCR: boolean;
   analyzeSimilarFailures: boolean;
+  includeHistoricalTrends: boolean;
   includeLogCorrelation: boolean;
   
   // Output Format
@@ -192,6 +223,7 @@ export interface VideoAnalysisResult {
   failureAnalysis: FailureAnalysis;
   prediction: Prediction;
   similarFailures?: SimilarFailure[];
+  historicalTrends?: HistoricalTrends;
   summary: string;
   links: AnalysisLinks;
 }

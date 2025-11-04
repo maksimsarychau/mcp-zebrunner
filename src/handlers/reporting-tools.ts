@@ -3574,6 +3574,15 @@ export class ZebrunnerReportingToolHandlers {
       report += `- **Resolution**: ${result.videoMetadata.videoResolution}\n`;
       report += `- **Frames Extracted**: ${result.videoMetadata.extractedFrames}\n`;
       
+      // Show frame extraction error prominently if present
+      if (result.videoMetadata.frameExtractionError) {
+        report += `\n⚠️ **Frame Extraction Issue**: ${result.videoMetadata.frameExtractionError}\n\n`;
+        
+        if (result.videoMetadata.extractedFrames === 0) {
+          report += `**Note**: Analysis will proceed with text-only mode (logs and stack trace analysis). This is often sufficient for diagnosing test failures.\n\n`;
+        }
+      }
+      
       if (result.videoMetadata.platformName) {
         report += `- **Platform**: ${result.videoMetadata.platformName}`;
         if (result.videoMetadata.deviceName) {
@@ -3591,15 +3600,36 @@ export class ZebrunnerReportingToolHandlers {
       report += `- **Failure Type**: ${result.failureAnalysis.failureType}\n`;
       report += `- **Error Message**: \`${result.failureAnalysis.errorMessage}\`\n`;
       report += `- **Timestamp**: ${result.failureAnalysis.failureTimestamp}\n`;
+      
+      if (result.failureAnalysis.failureVideoTimestamp !== undefined) {
+        report += `- **Video Timestamp**: ${result.failureAnalysis.failureVideoTimestamp}s\n`;
+      }
+      
       report += `\n`;
       report += `**Root Cause Analysis**:\n`;
       report += `- Category: **${result.failureAnalysis.rootCause.category}**\n`;
       report += `- Confidence: ${result.failureAnalysis.rootCause.confidence}%\n`;
       report += `- Reasoning: ${result.failureAnalysis.rootCause.reasoning}\n`;
+      
+      if (result.failureAnalysis.rootCause.evidence.length > 0) {
+        report += `\n**Evidence**:\n`;
+        for (const evidence of result.failureAnalysis.rootCause.evidence) {
+          report += `- ${evidence}\n`;
+        }
+      }
+      
+      // Show failure frames if available
+      if (result.failureAnalysis.failureFrames && result.failureAnalysis.failureFrames.length > 0) {
+        report += `\n**📸 Visual Context (Frames near failure)**:\n`;
+        for (const frame of result.failureAnalysis.failureFrames) {
+          report += `- **Frame @ ${frame.timestamp}s**: ${frame.visualState}\n`;
+        }
+      }
+      
       report += `\n`;
 
       if (result.failureAnalysis.stackTrace) {
-        report += `<details>\n<summary>Stack Trace</summary>\n\n\`\`\`\n${result.failureAnalysis.stackTrace}\n\`\`\`\n</details>\n\n`;
+        report += `<details>\n<summary>📋 Full Stack Trace (click to expand)</summary>\n\n\`\`\`\n${result.failureAnalysis.stackTrace.substring(0, 3000)}\n\`\`\`\n</details>\n\n`;
       }
 
       // Test Case Comparison
@@ -3619,6 +3649,15 @@ export class ZebrunnerReportingToolHandlers {
           report += `- **Extra Steps**: ${tc.coverageAnalysis.extraSteps.length} steps executed but not in test case\n`;
         }
         report += `\n`;
+
+        // Test case quality assessment (show prominently if outdated)
+        if (tc.testCaseQuality.isOutdated) {
+          report += `### ⚠️ Test Case Documentation Issue Detected\n\n`;
+          report += `**Assessment**: Test case documentation appears **outdated/incomplete** (${tc.testCaseQuality.confidence}% confidence)\n\n`;
+          report += `**Analysis**: ${tc.testCaseQuality.reasoning}\n\n`;
+          report += `**Recommendation**: ${tc.testCaseQuality.recommendation}\n\n`;
+          report += `---\n\n`;
+        }
 
         // Step-by-step comparison table
         report += `### Step-by-Step Comparison\n\n`;
@@ -3687,48 +3726,55 @@ export class ZebrunnerReportingToolHandlers {
         text: report
       });
 
-      // Add frames with images for Claude Vision analysis
-      content.push({
-        type: "text" as const,
-        text: `## 🖼️ Extracted Frames for Analysis\n\n` +
-              `Below are the ${result.frames.length} extracted frames from the test execution video. ` +
-              `Please analyze each frame to help understand the failure.\n\n`
-      });
+      // Add frames as clickable file:// links (avoiding 1MB MCP response limit)
+      if (result.frames.length > 0) {
+        content.push({
+          type: "text" as const,
+          text: `## 🖼️ Extracted Frames for Analysis\n\n` +
+                `${result.frames.length} frames were extracted from the test execution video. ` +
+                `Click the links below to view each frame:\n\n`
+        });
 
-      for (const frame of result.frames) {
-        if (frame.imageBase64) {
-          // Add frame header
-          let frameText = `### Frame ${frame.frameNumber} (${frame.timestamp}s)\n\n`;
-          
-          if (frame.ocrText) {
-            frameText += `**OCR Text Detected**:\n\`\`\`\n${frame.ocrText.substring(0, 500)}\n\`\`\`\n\n`;
+        let framesText = '';
+        for (const frame of result.frames) {
+          if (frame.framePath) {
+            framesText += `### Frame ${frame.frameNumber} @ ${frame.timestamp}s\n`;
+            framesText += `📷 [View Frame](file://${frame.framePath})\n\n`;
+            
+            if (frame.ocrText && frame.ocrText.length > 0) {
+              framesText += `**OCR Text Detected**:\n\`\`\`\n${frame.ocrText.substring(0, 300)}${frame.ocrText.length > 300 ? '...' : ''}\n\`\`\`\n\n`;
+            }
           }
-          
-          content.push({
-            type: "text" as const,
-            text: frameText
-          });
-
-          // Add image
-          content.push({
-            type: "image" as const,
-            data: frame.imageBase64,
-            mimeType: "image/png"
-          });
         }
+        
+        content.push({
+          type: "text" as const,
+          text: framesText
+        });
+      } else {
+        content.push({
+          type: "text" as const,
+          text: `## ⚠️ No Frames Extracted\n\n` +
+                `Frame extraction did not produce any frames. This could indicate:\n` +
+                `- Video format issues\n` +
+                `- FFmpeg extraction errors\n` +
+                `- Video file corruption\n\n` +
+                `Check the error logs for more details.\n\n`
+        });
       }
 
-      // Final prompt for Claude
-      content.push({
-        type: "text" as const,
-        text: `\n\n---\n\n` +
-              `**Please analyze these frames and provide insights on**:\n` +
-              `1. What was happening in the application at each step\n` +
-              `2. Any visual anomalies or errors visible in the UI\n` +
-              `3. Whether the failure appears to be an application bug or test automation issue\n` +
-              `4. Additional context that might help diagnose the root cause\n\n` +
-              `The automated analysis has predicted: **${result.prediction.verdict}** with ${result.prediction.confidence}% confidence.`
-      });
+      // Final analysis summary
+      if (result.frames.length > 0) {
+        content.push({
+          type: "text" as const,
+          text: `\n\n---\n\n` +
+                `**📊 Analysis Summary**\n\n` +
+                `- **Frames Extracted**: ${result.frames.length}\n` +
+                `- **Video Duration**: ${result.videoMetadata.videoDuration}s\n` +
+                `- **Prediction**: **${result.prediction.verdict}** (${result.prediction.confidence}% confidence)\n\n` +
+                `💡 **Tip**: Click the frame links above to visually inspect what happened during the test execution.`
+        });
+      }
 
       return { content };
 

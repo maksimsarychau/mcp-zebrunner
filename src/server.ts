@@ -3183,7 +3183,7 @@ async function main() {
 
   server.tool(
     "analyze_test_execution_video",
-    "🎬 Download and analyze test execution video with Claude Vision - extracts frames, compares with test case, and predicts if failure is bug or test issue",
+    "🎬 Download and analyze test execution video with Claude Vision - extracts frames, compares with test case, and predicts if failure is bug or test issue. NEW: Analysis depth modes (quick/standard/detailed), parallel frame extraction, similar failures search, and historical trends analysis!",
     {
       testId: z.number().int().positive().describe("Test ID from Zebrunner"),
       testRunId: z.number().int().positive().describe("Launch ID / Test Run ID"),
@@ -3194,8 +3194,10 @@ async function main() {
       failureWindowSeconds: z.number().int().positive().default(30).describe("Time window around failure (seconds)"),
       compareWithTestCase: z.boolean().default(true).describe("Compare with test case steps"),
       testCaseKey: z.string().optional().describe("Override test case key"),
-      includeOCR: z.boolean().default(true).describe("Extract text from frames using OCR"),
-      analyzeSimilarFailures: z.boolean().default(false).describe("Find similar failures (not implemented)"),
+      analysisDepth: z.enum(['quick_text_only', 'standard', 'detailed']).default('standard').describe("Analysis depth: quick_text_only (no frames, ~10-20s), standard (8-12 frames for failure+coverage, ~30-60s), detailed (20-30 frames with OCR, ~60-120s)"),
+      includeOCR: z.boolean().default(false).describe("Extract text from frames using OCR (slow, adds 2-3s per frame)"),
+      analyzeSimilarFailures: z.boolean().default(true).describe("Find similar failures in project (last 30 days, top 10)"),
+      includeHistoricalTrends: z.boolean().default(true).describe("Analyze test stability and flakiness (last 30 runs)"),
       includeLogCorrelation: z.boolean().default(true).describe("Correlate frames with log timestamps"),
       format: z.enum(['detailed', 'summary', 'jira']).default('detailed').describe("Output format"),
       generateVideoReport: z.boolean().default(true).describe("Generate timestamped report")

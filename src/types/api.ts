@@ -247,7 +247,7 @@ export class ZebrunnerRateLimitError extends ZebrunnerApiError {
 export const AnalyzeTestExecutionVideoInputSchema = z.object({
   testId: z.number().int().positive().describe("Test ID from Zebrunner"),
   testRunId: z.number().int().positive().describe("Launch ID / Test Run ID"),
-  projectKey: z.string().min(1).optional().describe("Project key (MFPAND, MFPIOS, MFPWEB)"),
+  projectKey: z.string().min(1).optional().describe("Project key (MCP, etc.)"),
   projectId: z.number().int().positive().optional().describe("Project ID (alternative to projectKey)"),
 
   // Video Analysis Options
@@ -265,10 +265,14 @@ export const AnalyzeTestExecutionVideoInputSchema = z.object({
     .describe("Override test case key if different from test metadata"),
 
   // Analysis Depth
-  includeOCR: z.boolean().default(true)
-    .describe("Extract text from frames using OCR"),
-  analyzeSimilarFailures: z.boolean().default(false)
-    .describe("Find similar failures in launch (not yet implemented)"),
+  analysisDepth: z.enum(['quick_text_only', 'standard', 'detailed']).default('standard')
+    .describe("Analysis depth: quick_text_only (no frames, ~10-20s), standard (8-12 frames for failure+coverage, ~30-60s), detailed (20-30 frames with OCR, ~60-120s)"),
+  includeOCR: z.boolean().default(false)
+    .describe("Extract text from frames using OCR (slow, adds 2-3s per frame)"),
+  analyzeSimilarFailures: z.boolean().default(true)
+    .describe("Find similar failures in project (last 30 days, top 10)"),
+  includeHistoricalTrends: z.boolean().default(true)
+    .describe("Analyze test stability and flakiness (last 30 runs)"),
   includeLogCorrelation: z.boolean().default(true)
     .describe("Correlate frames with log timestamps"),
 

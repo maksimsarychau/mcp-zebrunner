@@ -1,5 +1,160 @@
 # Change Logs
 
+## v5.7.4 - Video-Based Frame Extraction (Critical Architecture Change)
+- **🎯 MAJOR CHANGE: Video Duration is Source of Truth** - Frame extraction now based on actual video length, not test execution time
+  - **Key Insight**: Video recording time ≠ test execution time
+    - Video may start late (after test begins)
+    - Video may end early (before test completes)
+    - Video may be trimmed, edited, or have recording gaps
+    - Test execution (278s) vs Video duration (147s) can differ significantly
+  - **New Strategy**: Extract frames throughout video + extra frames in last 30 seconds
+    - Frames distributed across entire video (not just around calculated "failure point")
+    - Extra frames in last 30 seconds where failures typically occur
+    - Test start/finish times used as **hints only** (not for frame timestamps)
+- **🔧 FIXED: Invalid Timestamp Calculations** - Eliminated reliance on test execution timing
+  - **Old approach** (wrong): Calculate failure time from `test.finishTime - test.startTime` → 278s (beyond video!)
+  - **New approach** (correct): Estimate failure at video end (last 15-30s) + extract frames throughout
+  - Removed broken `calculateFailureTimestampInVideo()` logic
+  - Frame extraction now always uses valid timestamps (0 to videoDuration)
+- **📊 Smart Distributed Frame Extraction** - Optimal coverage of video content
+  - **Start frames** (0-10s): Capture app initialization, login states
+  - **Middle frames** (evenly distributed): Track test flow progression
+  - **End frames** (last 30-60s): Focus on failure point (where most failures occur)
+  - Configurable via `analysisDepth`: quick_text_only (0 frames), standard (8-12 frames), detailed (20-30 frames)
+- **💡 Why This Matters**:
+  - **Before**: 0 frames extracted (timestamp 278s > video 147s = FFmpeg fails silently)
+  - **After**: 8-30 frames extracted throughout video, including failure area
+  - Visual investigation can now actually see what happened during test execution
+
+## v5.7.3 - Semantic Analysis & Visual Element Investigation
+- **🎯 NEW: Semantic Test Case Quality Assessment** - AI analyzes if test case logically describes what automation does
+  - **Key Philosophy**: Having 67 automation steps vs 1 test case step is **NORMAL** (test cases are high-level, automation is detailed)
+  - **What We Analyze**: Does test case semantically describe automation behavior? Not step count!
+  - **Semantic Coverage Analysis**:
+    - Extracts action types from automation (login, search, UI interactions, verification, etc.)
+    - Matches automation actions to test case descriptions using AI semantic analysis
+    - Identifies undocumented action types (automation does X but test case never mentions it)
+    - Uses synonym matching (e.g., "sign in" matches "login", "tap" matches "click")
+  - **Red Flags Detected**:
+    - Placeholder text ("No steps defined", "Undefined")
+    - Semantic mismatch (test case describes A but automation does B)
+    - Very vague steps with no meaningful description
+    - Major automation behaviors not mentioned in test case at all
+  - **NOT Considered a Problem**: Many automation steps vs few test case steps (that's expected!)
+  - **Actionable Recommendations**: Prioritizes updating test case documentation over investigating automation bugs
+  - **Example Output (Good Test Case)**:
+    ```markdown
+    ✅ Test case provides adequate high-level description of automation behavior.
+    Note: Automation has 67 detailed steps vs 1 test case step - this is normal 
+    and expected. Test cases are high-level descriptions; automation is detailed 
+    implementation. Focus on investigating the actual test failure root cause.
+    ```
+  - **Example Output (Bad Test Case - Semantic Mismatch)**:
+    ```markdown
+    ⚠️ Test Case Documentation Issue Detected
+    Assessment: Test case documentation appears outdated/incomplete (70% confidence)
+    Analysis: Test case describes "Login, Navigate to Profile" but automation
+              performs undocumented actions: search, verification, text input.
+              The test case may not accurately describe what the automation does.
+    Recommendation: 🟡 MEDIUM PRIORITY: Review if test case accurately describes
+                    automation behavior. Consider adding search and verification steps.
+    ```
+- **🔄 Analysis Depth Mode Improvements**
+  - Renamed `quick` → `quick_text_only` (more explicit about no-frames mode)
+  - **Minimum Frame Requirement**: Visual modes now enforce minimum 5 frames
+  - **Updated Modes**:
+    - `quick_text_only`: No frames, fastest (~10-20s)
+    - `standard`: 8-12 frames (failure + coverage), no OCR (~30-60s) - **DEFAULT**
+    - `detailed`: 20-30 frames with smart selection + OCR (~60-120s)
+  - **Smart Frame Allocation**: Frames prioritized for failure diagnosis, then coverage verification
+- **🔍 NEW: Visual Element Investigation for "Element Not Found" Failures**
+  - **Deep Frame Analysis**: When locator fails, tool investigates video frames to determine WHY
+  - **Scenarios Detected**:
+    - **Loading State**: App still loading when locator executed → Timing issue
+    - **Modal/Popup Overlay**: Element obscured by modal, popup, or dialog
+    - **Element Visible but Locator Wrong**: Button/field exists in UI but locator fails → Locator needs update
+    - **App Error**: Application error preventing element from rendering → Possible app bug
+    - **Wrong Screen**: Element doesn't exist on current screen → Navigation issue or UI redesign
+  - **Actionable Diagnostics**: Provides specific recommendations (e.g., "Add explicit wait for loading", "Update XPath locator", "Dismiss modal first")
+  - **Example Output**:
+    ```markdown
+    🔍 Element "Add Food" visible in UI but locator failed
+    Recommendation: Update locator strategy or check if element attributes changed
+    
+    Visual diagnosis: Element "Add Food" appears to be visible in frames, but 
+    locator (xpath=//*[@id='add_food']) failed. This suggests the locator 
+    strategy may be incorrect or the element structure changed.
+    ```
+- **📊 Enhanced Coverage Verification**
+  - Added `visualConfidence` field to step-by-step comparison (high/medium/low/not_verified)
+  - Prepared infrastructure for visual frame-to-test-case-step matching (Phase 3B)
+  - Test case quality assessment integrated into prediction logic
+
+## v5.7.2 - Intelligent Stack Trace Parsing & Diagnostic Improvements
+- **🎯 MAJOR IMPROVEMENT: Comprehensive Stack Trace Parsing** - Extracts real failure causes instead of framework noise
+  - **Priority-based Analysis**: Stack trace → Visual frames → Test case comparison
+  - **Pattern Extraction**: Automatically detects:
+    - Test failure messages (TEST [...] FAILED lines)
+    - Element locators (XPath, ID, CSS selectors)
+    - Failing methods and classes
+    - Exception types (AssertionError, NoSuchElementException, etc.)
+  - **Framework Noise Filtering**: Ignores irrelevant messages like "retry_interval is too low"
+  - **Visual Frame Correlation**: Finds and displays the 3 closest frames to failure timestamp
+  - **Enhanced Root Cause Analysis**: Uses locator info, failing method, and visual state for better predictions
+- **🚀 Performance Optimizations (Phase 3A)**
+  - **Analysis Depth Modes**: Choose speed vs detail trade-off
+    - `quick`: No frames, text-only analysis (~10-20s)
+    - `standard`: 5-10 frames, no OCR (~30-60s) - **DEFAULT**
+    - `detailed`: 15-30 frames, OCR enabled (~60-120s)
+  - **Parallel Frame Extraction**: 3-5x faster using Promise.all for concurrent extraction
+  - **OCR Optional by Default**: Disabled by default (saves 2-3s per frame), can be enabled when needed
+  - **Dynamic Frame Limits**: Automatically adjusts frame count based on analysis depth
+- **📊 Enhanced Failure Reporting**
+  - Shows element locator that failed (e.g., `xpath=//*[@id='add_food']`)
+  - Displays failing method (e.g., `DiaryPage.clickAddFoodItem`)
+  - Lists evidence from multiple sources (stack trace, frames, logs)
+  - Includes visual context with 3 frames closest to failure timestamp
+  - Collapsible stack trace section to keep reports clean
+- **🔧 Improved Error Classification**
+  - `Element Not Found` - Locator failed to find element (test issue)
+  - `Stale Element` - Element found but became stale (synchronization issue)
+  - `Timeout` - Wait condition timeout (test or environment issue)
+  - `Application Crash` - App crashed (definite app bug)
+  - `Assertion Failed` - Expected vs actual mismatch (app or test issue)
+  - `Network Error` - Connectivity issues (environment)
+- **🔍 Enhanced Diagnostics for Frame Extraction**
+  - **Visible Error Messages**: Frame extraction failures now displayed prominently in reports
+  - **Detailed Logging**: Comprehensive stderr output for debugging FFmpeg issues
+  - **Timestamp Details**: Shows selected timestamps and extraction parameters
+  - **Failure Reasons**: Clear explanation when 0 frames are extracted
+  - **Graceful Degradation**: Analysis continues with text-only mode when frames fail
+  - **User Guidance**: Helpful notes about what to check when frames don't extract
+
+## v5.7.1 - Critical Fixes
+- **🐛 FIXED: 1MB MCP Response Limit** - Resolved issue where video analysis tool would fail with "Tool result is too large" error
+  - Changed frame delivery from embedded base64 images to file:// links
+  - Frames are now saved to disk and provided as clickable links
+  - Reduces response size from ~5-10MB to ~50KB for typical analysis
+  - Users can click links to view frames in their preferred image viewer
+- **🐛 FIXED: Silent Frame Extraction Failures** - Added comprehensive FFmpeg error logging and validation
+  - FFmpeg stderr output is now captured and logged
+  - Frame files are validated (existence and size) after extraction
+  - Detailed error messages show exact FFmpeg failure reasons
+  - Better debugging for video format incompatibilities
+- **✨ IMPROVED: Graceful Degradation** - Video analysis now continues even if frame extraction fails
+  - Frame extraction failures no longer crash the entire analysis
+  - Tool falls back to text-only analysis (logs, test case comparison, predictions)
+  - Clear warning messages when frames cannot be extracted
+  - Users still get valuable insights from logs and test case analysis
+- **🔧 FIXED: Tesseract.js Logger Error** - Resolved crash when OCR was enabled
+  - Fixed `logger is not a function` error in tesseract.js
+  - Proper conditional logger configuration based on debug mode
+  - OCR now works reliably for text extraction from frames
+- **📝 IMPROVED: Error Messages** - Enhanced error reporting throughout video analysis pipeline
+  - Specific error messages for each failure point
+  - Actionable troubleshooting steps in error responses
+  - Better distinction between video download, extraction, and analysis errors
+
 ## v5.7.0
 - **🎬 NEW: Test Execution Video Analysis Tool** - Comprehensive video analysis with Claude Vision integration
 - **Video Processing Capabilities:**
