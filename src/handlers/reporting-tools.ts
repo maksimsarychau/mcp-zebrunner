@@ -204,11 +204,19 @@ export class ZebrunnerReportingToolHandlers {
         resolvedProjectId = await this.reportingClient.getProjectId(projectKey);
       }
 
+      // Get launch details and project key for URL generation
+      const launch = await this.reportingClient.getLaunch(launchId, resolvedProjectId!);
+      const resolvedProjectKey = projectKey || await this.reportingClient.getProjectKey(resolvedProjectId!);
+      const baseUrl = this.reportingClient['config'].baseUrl;
+      
+      // Build launch URL
+      const launchUrl = `${baseUrl}/projects/${resolvedProjectKey}/automation-launches/${launchId}`;
+      
       // Fetch ALL test runs (auto-paginated)
       const testRuns = await this.reportingClient.getAllTestRuns(launchId, resolvedProjectId!);
       
       // Extract essential fields only (configurable to exclude heavy arrays)
-      const lightweightTests = testRuns.items.map(test => {
+      const lightweightTests = await Promise.all(testRuns.items.map(async test => {
         const baseTest: any = {
           id: test.id,
           name: test.name,
@@ -223,8 +231,25 @@ export class ZebrunnerReportingToolHandlers {
           testClass: test.testClass || 'Unknown',
           owner: test.owner,
           stability: test.stability !== undefined ? Math.round((test.stability || 0) * 100) : 0, // Convert to percentage
-          maintainerId: test.maintainerId
+          maintainerId: test.maintainerId,
+          testUrl: `${baseUrl}/projects/${resolvedProjectKey}/automation-launches/${launchId}/tests/${test.id}`
         };
+        
+        // Add clickable JIRA issue references with resolved URLs
+        if (test.issueReferences && test.issueReferences.length > 0) {
+          baseTest.issueReferencesWithUrls = await Promise.all(
+            test.issueReferences.map(async (issue: any) => {
+              if (issue.type === 'JIRA') {
+                const jiraUrl = await this.reportingClient.buildJiraUrl(issue.value, resolvedProjectId);
+                return {
+                  ...issue,
+                  url: jiraUrl
+                };
+              }
+              return issue;
+            })
+          );
+        }
         
         // Optionally include labels (can be large)
         if (includeLabels) {
@@ -237,7 +262,7 @@ export class ZebrunnerReportingToolHandlers {
         }
         
         return baseTest;
-      });
+      }));
 
       // Apply filters
       let filteredTests = lightweightTests;
@@ -371,28 +396,41 @@ export class ZebrunnerReportingToolHandlers {
       const result: any = {
         launchId,
         projectId: resolvedProjectId,
+        projectKey: resolvedProjectKey,
+        launchName: launch.name,
+        launchUrl,
+        launchStatus: launch.status,
+        launchBuild: launch.build,
+        launchEnvironment: launch.environment,
+        launchPlatform: launch.platform,
+        launchStartedAt: launch.startedAt,
+        launchEndedAt: launch.endedAt,
         summary: stats,
         
         // Always include top 20 most unstable tests (lightweight)
         top20MostUnstableTests: filteredTests.slice(0, 20).map(t => ({
+          id: t.id,
           name: t.name,
           stability: t.stability,
           status: t.status,
           testClass: t.testClass,
           knownIssue: t.knownIssue,
           durationSeconds: t.durationSeconds,
-          issueReferences: t.issueReferences
+          issueReferences: t.issueReferencesWithUrls || t.issueReferences,
+          testUrl: t.testUrl
         })),
         
         // Tests with issues
         testsWithIssues: filteredTests
           .filter(t => t.issueReferences.length > 0)
           .map(t => ({
+            id: t.id,
             name: t.name,
             status: t.status,
-            issues: t.issueReferences,
+            issues: t.issueReferencesWithUrls || t.issueReferences,
             stability: t.stability,
-            testClass: t.testClass
+            testClass: t.testClass,
+            testUrl: t.testUrl
           }))
       };
       
@@ -891,7 +929,7 @@ export class ZebrunnerReportingToolHandlers {
     const stability = testRun.stability ? Math.round(testRun.stability * 100) : 0;
 
     // Build Zebrunner UI links
-    const testSessionUrl = `${baseUrl}/tests/runs/${testRunId}/results/${testId}`;
+    const testSessionUrl = `${baseUrl}/projects/${projectKey}/automation-launches/${testRunId}/tests/${testId}`;
     const launchUrl = `${baseUrl}/projects/${projectKey}/automation-launches/${testRunId}`;
 
     if (format === 'summary') {
@@ -934,13 +972,67 @@ export class ZebrunnerReportingToolHandlers {
 
     // Test Session Details
     report += `## 🧪 Test Session Details\n\n`;
-    report += `- **Test ID:** ${testId}\n`;
-    report += `- **Launch ID:** ${testRunId}\n`;
+    report += `- **Test ID:** [${testId}](${testSessionUrl})\n`;
+    report += `- **Launch ID:** [${testRunId}](${launchUrl})\n`;
     report += `- **Test Class:** ${testRun.testClass || 'Unknown'}\n`;
     report += `- **Duration:** ${Math.floor(duration / 60)}m ${duration % 60}s\n`;
     report += `- **Started:** ${new Date(testRun.startTime).toISOString()}\n`;
     report += `- **Finished:** ${testRun.finishTime ? new Date(testRun.finishTime).toISOString() : 'N/A'}\n`;
     report += `- **Owner:** ${testRun.owner || 'Unknown'}\n\n`;
+
+    // Test Execution Sessions (Videos & Screenshots)
+    // Sessions are sorted: FAILED first, then newest within each status
+    const sessions = await this.getAllSessionsWithArtifacts(testRunId, testId, projectId);
+    if (sessions.length > 0) {
+      report += `## 📹 Test Execution Sessions\n\n`;
+      report += `**Total Sessions:** ${sessions.length}`;
+      
+      // Group sessions by status for summary
+      const failedSessions = sessions.filter(s => s.status === 'FAILED' || s.status === 'ABORTED');
+      const passedSessions = sessions.filter(s => s.status !== 'FAILED' && s.status !== 'ABORTED');
+      
+      if (failedSessions.length > 0 && passedSessions.length > 0) {
+        report += ` (${failedSessions.length} failed, ${passedSessions.length} passed)`;
+      }
+      report += `\n\n`;
+      
+      for (let i = 0; i < sessions.length; i++) {
+        const session = sessions[i];
+        const sessionNumber = i + 1;
+        const isFailed = session.status === 'FAILED' || session.status === 'ABORTED';
+        const isPassed = session.status === 'PASSED';
+        
+        // Status indicator emoji
+        const statusEmoji = isFailed ? '❌' : (isPassed ? '✅' : '⚠️');
+        const sessionType = i === 0 ? 'Latest Execution' : `Execution ${sessionNumber}`;
+        
+        report += `### ${statusEmoji} ${sessionType} - ${session.status}\n\n`;
+        report += `- **Device:** ${session.device}\n`;
+        report += `- **Platform:** ${session.platform}\n`;
+        report += `- **Duration:** ${session.duration}\n`;
+        report += `- **Started:** ${session.startedAt}\n\n`;
+        
+        // Display videos with clickable links
+        if (session.videos.length > 0) {
+          report += `**Videos:**\n\n`;
+          session.videos.forEach((video, vidIdx) => {
+            const videoLabel = session.videos.length > 1 ? `Video ${vidIdx + 1}` : 'Test Execution Video';
+            report += `${session.videos.length > 1 ? `${vidIdx + 1}. ` : ''}🎥 [${videoLabel}](${video.url})\n`;
+          });
+          report += `\n`;
+        }
+        
+        // Display all screenshots with clickable links (for detailed format)
+        if (session.screenshots.length > 0) {
+          report += `**Screenshots:** ${session.screenshots.length} available\n\n`;
+          session.screenshots.forEach((screenshot, scrIdx) => {
+            const screenshotNumber = scrIdx + 1;
+            report += `${screenshotNumber}. 🖼️ [Screenshot ${screenshotNumber}](${screenshot.url})\n`;
+          });
+          report += `\n`;
+        }
+      }
+    }
 
     // Failure Information
     report += `## 🚨 Failure Information\n\n`;
@@ -991,16 +1083,33 @@ export class ZebrunnerReportingToolHandlers {
       }
     }
 
-    // Screenshots with optional AI analysis
-    if (screenshots.length > 0) {
-      report += `## 📸 Screenshots\n\n`;
-      report += `**Total Screenshots:** ${screenshots.length}\n\n`;
+    // Screenshots with optional AI analysis (from test sessions)
+    // Collect all screenshots from all sessions
+    const allSessionScreenshots: Array<{ url: string; sessionName: string }> = [];
+    for (const session of sessions) {
+      for (const screenshot of session.screenshots) {
+        allSessionScreenshots.push({
+          url: screenshot.url,
+          sessionName: session.name
+        });
+      }
+    }
+    
+    // Use latest screenshot from latest session for AI analysis
+    const latestScreenshot = sessions.length > 0 && sessions[0].screenshots.length > 0 
+      ? sessions[0].screenshots[sessions[0].screenshots.length - 1] 
+      : null;
       
-      const latestScreenshot = screenshots[screenshots.length - 1];
-      if (latestScreenshot) {
+    if (latestScreenshot || screenshots.length > 0) {
+      report += `## 📸 Screenshot Analysis\n\n`;
+      
+      // Use screenshot from session if available, otherwise fall back to old screenshots array
+      const screenshotForAnalysis = latestScreenshot || screenshots[screenshots.length - 1];
+      
+      if (screenshotForAnalysis) {
         report += `### Latest Screenshot Before Failure\n\n`;
-        report += `- **Timestamp:** ${new Date(latestScreenshot.timestamp).toLocaleTimeString()}\n`;
-        report += `- **URL:** [View Screenshot](${baseUrl}${latestScreenshot.url})\n\n`;
+        const screenshotUrl = latestScreenshot ? latestScreenshot.url : `${baseUrl}${screenshotForAnalysis.url}`;
+        report += `- **URL:** [View Screenshot](${screenshotUrl})\n\n`;
         
         // AI-powered screenshot analysis if requested
         if (analyzeScreenshotsWithAI) {
@@ -1011,7 +1120,7 @@ export class ZebrunnerReportingToolHandlers {
             report += `*Analyzing screenshot with ${screenshotAnalysisType} analysis...*\n\n`;
             
             const screenshotAnalysisResult = await this.analyzeScreenshotTool({
-              screenshotUrl: `${baseUrl}${latestScreenshot.url}`,
+              screenshotUrl: screenshotUrl,
               testId: testId,
               enableOCR,
               analysisType: screenshotAnalysisType,
@@ -1043,13 +1152,10 @@ export class ZebrunnerReportingToolHandlers {
           report += `- UI element detection\n\n`;
         }
       }
-
-      if (screenshots.length > 1) {
-        report += `### All Screenshots\n\n`;
-        screenshots.slice(-5).forEach((screenshot, idx) => {
-          report += `${idx + 1}. [Screenshot at ${new Date(screenshot.timestamp).toLocaleTimeString()}](${baseUrl}${screenshot.url})\n`;
-        });
-        report += `\n`;
+      
+      // Note about all screenshots being in the Sessions section
+      if (sessions.length > 0 && allSessionScreenshots.length > 1) {
+        report += `💡 **Note:** All ${allSessionScreenshots.length} screenshots are available in the "Test Execution Sessions" section above.\n\n`;
       }
     }
 
@@ -1126,18 +1232,8 @@ export class ZebrunnerReportingToolHandlers {
 
     // Quick Access Links
     report += `## 🔍 Quick Access Links\n\n`;
-    report += `- **[Test Session](${testSessionUrl})**\n`;
-    report += `- **[Launch](${launchUrl})**\n`;
-    
-    // Video link with prominent emoji
-    const videoUrl = await this.getVideoUrlForTest(testRunId, testId, projectId);
-    if (videoUrl) {
-      report += `- **[🎥 Test Execution Video](${videoUrl})**\n`;
-    }
-    
-    if (screenshots.length > 0) {
-      report += `- **[Latest Screenshot](${baseUrl}${screenshots[screenshots.length - 1].url})**\n`;
-    }
+    report += `- **[🔗 Test Session](${testSessionUrl})**\n`;
+    report += `- **[🚀 Launch](${launchUrl})**\n`;
     
     // Test Case Links
     if (testRun.testCases && testRun.testCases.length > 0) {
@@ -1145,6 +1241,11 @@ export class ZebrunnerReportingToolHandlers {
         const tcUrl = await this.buildTestCaseUrl(tc.testCaseId, projectKey!, baseUrl);
         report += `- **[📋 Test Case ${tc.testCaseId}](${tcUrl})**\n`;
       }
+    }
+    
+    // Videos and screenshots links are now in the Test Execution Sessions section
+    if (sessions.length > 0) {
+      report += `\n💡 **Tip:** Videos and screenshots are available in the "Test Execution Sessions" section above.\n`;
     }
     
     report += `\n`;
@@ -1189,7 +1290,14 @@ export class ZebrunnerReportingToolHandlers {
 
     let report = `# 🔍 Test Failure Summary: ${testId}\n\n`;
     report += `**Test:** ${testRun.name}\n`;
+    report += `**Test ID:** [${testId}](${testSessionUrl})\n`;
     report += `**Status:** ❌ ${testRun.status}\n`;
+    
+    // Add suite/test class
+    if (testRun.testClass) {
+      report += `**Suite/Test Class:** ${testRun.testClass}\n`;
+    }
+    
     report += `**Error Type:** ${errorClassification.category} (${errorClassification.confidence} confidence)\n`;
     report += `**Stability:** ${stability}%\n`;
     report += `**Duration:** ${Math.floor(duration / 60)}m ${duration % 60}s\n`;
@@ -1205,21 +1313,34 @@ export class ZebrunnerReportingToolHandlers {
 
     report += `**Error:**\n\`\`\`\n${testRun.message}\n\`\`\`\n\n`;
 
-    // Video link
-    const videoUrl = await this.getVideoUrlForTest(testRunId, testId, projectId);
-    if (videoUrl) {
-      report += `**🎥 Video:** [Watch Test Execution](${videoUrl})\n`;
-    }
-    
-    if (screenshots.length > 0) {
-      report += `**Screenshots:** ${screenshots.length} available\n`;
+    // Get latest session for summary format
+    const sessions = await this.getAllSessionsWithArtifacts(testRunId, testId, projectId);
+    if (sessions.length > 0) {
+      const latestSession = sessions[0];
+      
+      // Video link from latest session
+      if (latestSession.videos.length > 0) {
+        report += `**🎥 Video:** [Watch Test Execution](${latestSession.videos[0].url})\n`;
+      }
+      
+      // Last screenshot from latest session
+      if (latestSession.screenshots.length > 0) {
+        const lastScreenshot = latestSession.screenshots[latestSession.screenshots.length - 1];
+        report += `**📸 Screenshot:** [View Last Screenshot](${lastScreenshot.url})\n`;
+      }
+      
+      // Show session count if multiple
+      if (sessions.length > 1) {
+        report += `**📹 Sessions:** ${sessions.length} test executions recorded\n`;
+      }
     }
 
     if (similarFailures.length > 0) {
       report += `**Similar Failures:** ${similarFailures.length} found in this launch\n`;
     }
 
-    report += `\n**[View Full Details](${testSessionUrl})**\n`;
+    const launchUrl = `${baseUrl}/projects/${projectKey}/automation-launches/${testRunId}`;
+    report += `\n**[View Test Details](${testSessionUrl})** | **[View Launch](${launchUrl})**\n`;
 
     return report;
   }
@@ -1529,29 +1650,149 @@ export class ZebrunnerReportingToolHandlers {
   }
 
   /**
-   * Get video URL from test sessions artifacts
-   * Returns the Zebrunner proxy URL (no redirect resolution needed)
+   * Get all test sessions with their artifacts (videos, screenshots)
+   * Returns sessions sorted by status (FAILED first) then by date (newest first within each status)
+   * Only includes sessions with valid artifacts (videos or screenshots)
    */
-  private async getVideoUrlForTest(testRunId: number, testId: number, projectId: number): Promise<string | null> {
+  private async getAllSessionsWithArtifacts(
+    testRunId: number, 
+    testId: number, 
+    projectId: number
+  ): Promise<Array<{
+    sessionId: string;
+    name: string;
+    status: string;
+    device: string;
+    platform: string;
+    duration: string;
+    startedAt: string;
+    startedAtTimestamp: number;
+    videos: Array<{ name: string; url: string; description?: string }>;
+    screenshots: Array<{ name: string; url: string; description?: string }>;
+  }>> {
     try {
       const sessions = await this.reportingClient.getTestSessionsForTest(testRunId, testId, projectId);
       
       if (!sessions.items || sessions.items.length === 0) {
+        return [];
+      }
+      
+      const baseUrl = this.reportingClient['config'].baseUrl;
+      const processedSessions: Array<any> = [];
+      
+      // Process each session (newest first)
+      for (const session of sessions.items) {
+        const videos: Array<{ name: string; url: string; description?: string }> = [];
+        const screenshots: Array<{ name: string; url: string; description?: string }> = [];
+        
+        // Extract video artifacts (only those with descriptions)
+        if (session.artifactReferences) {
+          for (const artifact of session.artifactReferences) {
+            if (artifact.name === 'Video' && artifact.value) {
+              // Only include videos with non-empty description or no description field
+              // (We filter by checking if there's meaningful data)
+              const videoUrl = `${baseUrl}/${artifact.value}`;
+              videos.push({
+                name: artifact.name,
+                url: videoUrl,
+                description: (artifact as any).description
+              });
+            } else if (artifact.name.includes('Screenshot') || artifact.name.includes('screenshot')) {
+              const screenshotUrl = artifact.value.startsWith('http') 
+                ? artifact.value 
+                : `${baseUrl}${artifact.value}`;
+              screenshots.push({
+                name: artifact.name,
+                url: screenshotUrl,
+                description: (artifact as any).description
+              });
+            }
+          }
+        }
+        
+        // Only include sessions that have at least one video or screenshot
+        if (videos.length > 0 || screenshots.length > 0) {
+          const device = session.deviceName || session.device || 'Unknown Device';
+          const platform = session.platformName || session.platform || 'Unknown Platform';
+          const platformVersion = session.platformVersion ? ` ${session.platformVersion}` : '';
+          
+          // Calculate duration
+          let duration = 'Unknown';
+          if (session.durationInSeconds) {
+            const mins = Math.floor(session.durationInSeconds / 60);
+            const secs = session.durationInSeconds % 60;
+            duration = `${mins}m ${secs}s`;
+          }
+          
+          // Format start time and get timestamp
+          let startedAt = 'Unknown';
+          let startedAtTimestamp = 0;
+          if (session.initiatedAt) {
+            const date = new Date(session.initiatedAt);
+            startedAt = date.toLocaleString();
+            startedAtTimestamp = date.getTime();
+          } else if (session.startedAt) {
+            const timestamp = typeof session.startedAt === 'number' 
+              ? session.startedAt 
+              : parseInt(session.startedAt);
+            startedAt = new Date(timestamp).toLocaleString();
+            startedAtTimestamp = timestamp;
+          }
+          
+          processedSessions.push({
+            sessionId: session.sessionId || session.id.toString(),
+            name: session.name,
+            status: session.status,
+            device,
+            platform: `${platform}${platformVersion}`,
+            duration,
+            startedAt,
+            startedAtTimestamp,
+            videos,
+            screenshots
+          });
+        }
+      }
+      
+      // Sort sessions: FAILED first, then PASSED/others, newest first within each group
+      processedSessions.sort((a, b) => {
+        // First priority: FAILED status comes first
+        const aIsFailed = a.status === 'FAILED' || a.status === 'ABORTED';
+        const bIsFailed = b.status === 'FAILED' || b.status === 'ABORTED';
+        
+        if (aIsFailed && !bIsFailed) return -1;
+        if (!aIsFailed && bIsFailed) return 1;
+        
+        // Second priority: within same status group, newest first
+        return b.startedAtTimestamp - a.startedAtTimestamp;
+      });
+      
+      return processedSessions;
+    } catch (error) {
+      if (this.reportingClient['config'].debug) {
+        console.warn(`[getAllSessionsWithArtifacts] Failed to get sessions: ${error}`);
+      }
+      return [];
+    }
+  }
+
+  /**
+   * Get video URL from test sessions artifacts
+   * Returns the first valid video URL from the newest session
+   * @deprecated Use getAllSessionsWithArtifacts() for complete session data
+   */
+  private async getVideoUrlForTest(testRunId: number, testId: number, projectId: number): Promise<string | null> {
+    try {
+      const sessions = await this.getAllSessionsWithArtifacts(testRunId, testId, projectId);
+      
+      if (sessions.length === 0) {
         return null;
       }
       
-      // Get the first session (usually there's only one per test)
-      const session = sessions.items[0];
-      
-      // Find video artifact reference
-      const videoArtifact = session.artifactReferences?.find(
-        (ref: any) => ref.name === 'Video'
-      );
-      
-      if (videoArtifact && videoArtifact.value) {
-        // Construct full URL from relative path
-        const baseUrl = this.reportingClient['config'].baseUrl;
-        return `${baseUrl}/${videoArtifact.value}`;
+      // Get first video from the newest session
+      const firstSession = sessions[0];
+      if (firstSession.videos.length > 0) {
+        return firstSession.videos[0].url;
       }
       
       return null;
@@ -1744,13 +1985,23 @@ export class ZebrunnerReportingToolHandlers {
     if (stability < 50 && stability > 0) labels.push('flaky-test');
     if (similarFailures.length > 0) labels.push('pattern-failure');
 
+    // Build URLs
+    const testUrl = `${baseUrl}/projects/${projectKey}/automation-launches/${testRunId}/tests/${testId}`;
+    const launchUrl = `${baseUrl}/projects/${projectKey}/automation-launches/${testRunId}`;
+    
     let jiraContent = `h1. ${title}\n\n`;
     jiraContent += `||Field||Value||\n`;
     jiraContent += `|Priority|${priority}|\n`;
     jiraContent += `|Labels|${labels.join(', ')}|\n`;
-    jiraContent += `|Test ID|${testId}|\n`;
-    jiraContent += `|Launch ID|${testRunId}|\n`;
-    jiraContent += `|Launch Name|${launchName}|\n`;
+    jiraContent += `|Test ID|[${testId}|${testUrl}]|\n`;
+    jiraContent += `|Launch ID|[${testRunId}|${launchUrl}]|\n`;
+    jiraContent += `|Launch Name|[${launchName}|${launchUrl}]|\n`;
+    
+    // Add suite/test class
+    if (testRun.testClass) {
+      jiraContent += `|Test Suite/Class|${testRun.testClass}|\n`;
+    }
+    
     jiraContent += `|Stability|${stability}%|\n`;
     jiraContent += `|Duration|${Math.floor(duration / 60)}m ${duration % 60}s|\n`;
     
@@ -1764,7 +2015,6 @@ export class ZebrunnerReportingToolHandlers {
     jiraContent += `\n`;
 
     jiraContent += `h2. Description\n\n`;
-    const launchUrl = `${baseUrl}/projects/${projectKey}/automation-launches/${testRunId}`;
     jiraContent += `Test *${testRun.name}* is failing in launch [${launchName}|${launchUrl}] with *${errorClassification.category}*.\n\n`;
 
     // Video Recording - Prominent placement
@@ -1812,7 +2062,7 @@ export class ZebrunnerReportingToolHandlers {
         jiraContent += `*[${log.level}]* ${new Date(log.timestamp).toLocaleString()}:\n`;
         jiraContent += `{code}\n${log.message.substring(0, 300)}${log.message.length > 300 ? '\n...' : ''}\n{code}\n\n`;
       });
-      jiraContent += `[View all logs|${baseUrl}/tests/runs/${testRunId}/results/${testId}]\n\n`;
+      jiraContent += `[View all logs|${testUrl}]\n\n`;
     }
 
     // Screenshots
@@ -1838,7 +2088,8 @@ export class ZebrunnerReportingToolHandlers {
       jiraContent += `{warning}This test is part of a failure pattern affecting *${similarFailures.length + 1} tests* in this launch.{warning}\n\n`;
       jiraContent += `*Other affected tests:*\n`;
       similarFailures.slice(0, 5).forEach((failure: any) => {
-        jiraContent += `* [Test ${failure.testId}|${baseUrl}/tests/runs/${testRunId}/results/${failure.testId}]: ${failure.testName} (${failure.stability}% stability)\n`;
+        const failureTestUrl = `${baseUrl}/projects/${projectKey}/automation-launches/${testRunId}/tests/${failure.testId}`;
+        jiraContent += `* [Test ${failure.testId}|${failureTestUrl}]: ${failure.testName} (${failure.stability}% stability)\n`;
       });
       if (similarFailures.length > 5) {
         jiraContent += `* ... and ${similarFailures.length - 5} more\n`;
@@ -1859,7 +2110,7 @@ export class ZebrunnerReportingToolHandlers {
 
     // Links
     jiraContent += `h3. Links\n\n`;
-    jiraContent += `* [View Test in Zebrunner|${baseUrl}/tests/runs/${testRunId}/results/${testId}]\n`;
+    jiraContent += `* [View Test in Zebrunner|${testUrl}]\n`;
     jiraContent += `* [View Launch|${launchUrl}]\n`;
     if (videoUrl) {
       jiraContent += `* [🎥 Test Execution Video|${videoUrl}]\n`;
@@ -1921,7 +2172,7 @@ export class ZebrunnerReportingToolHandlers {
         
         // Create basic ticket without deep analysis
         const videoUrl = await this.getVideoUrlForTest(testRunId, test.id, projectId);
-        const testSessionUrl = `${baseUrl}/tests/runs/${testRunId}/results/${test.id}`;
+        const testSessionUrl = `${baseUrl}/projects/${projectKey}/automation-launches/${testRunId}/tests/${test.id}`;
         const launchUrl = `${baseUrl}/projects/${projectKey}/automation-launches/${testRunId}`;
         
         output += `h1. Test Failure: ${test.name}\n\n`;
@@ -2114,8 +2365,9 @@ export class ZebrunnerReportingToolHandlers {
         
         combinedTicket += `h2. Affected Tests Details\n\n`;
         groupTests.forEach((test, idx) => {
+          const groupTestUrl = `${baseUrl}/projects/${projectKey}/automation-launches/${testRunId}/tests/${test.testId}`;
           combinedTicket += `h3. ${idx + 1}. ${test.testName} (ID: ${test.testId})\n\n`;
-          combinedTicket += `* [View Test|${baseUrl}/tests/runs/${testRunId}/results/${test.testId}]\n`;
+          combinedTicket += `* [View Test|${groupTestUrl}]\n`;
           if (test.videoUrl) {
             combinedTicket += `* [🎥 Test Video|${test.videoUrl}]\n`;
           }
@@ -2254,7 +2506,8 @@ export class ZebrunnerReportingToolHandlers {
         if (testsInCategory.length > 0) {
           jiraContent += `*Affected Tests:*\n`;
           testsInCategory.forEach((test: any) => {
-            jiraContent += `* [Test ${test.testId}|${baseUrl}/tests/runs/${testRunId}/results/${test.testId}]: ${test.testName} (${test.stability}% stability)\n`;
+            const categoryTestUrl = `${baseUrl}/projects/${projectKey}/automation-launches/${testRunId}/tests/${test.testId}`;
+            jiraContent += `* [Test ${test.testId}|${categoryTestUrl}]: ${test.testName} (${test.stability}% stability)\n`;
           });
           jiraContent += `\n`;
           
@@ -2325,7 +2578,8 @@ export class ZebrunnerReportingToolHandlers {
     analysisResults.forEach((result: any, idx: number) => {
       const detail = testDetails.get(result.testId);
       if (detail) {
-        jiraContent += `h4. ${idx + 1}. [Test ${result.testId}|${baseUrl}/tests/runs/${testRunId}/results/${result.testId}]: ${result.testName}\n\n`;
+        const detailTestUrl = `${baseUrl}/projects/${projectKey}/automation-launches/${testRunId}/tests/${result.testId}`;
+        jiraContent += `h4. ${idx + 1}. [Test ${result.testId}|${detailTestUrl}]: ${result.testName}\n\n`;
         jiraContent += `* *Status:* ${result.status}\n`;
         jiraContent += `* *Error Type:* ${detail.classification}\n`;
         jiraContent += `* *Stability:* ${detail.stability}% ${detail.stability < 50 ? '(!)' : detail.stability < 80 ? '(/)' : '(+)'}\n`;
@@ -2433,10 +2687,89 @@ export class ZebrunnerReportingToolHandlers {
       const testsToAnalyze = failedTests.slice(offset, offset + effectiveLimit);
       const actualLimit = testsToAnalyze.length;
 
+      // Build launch URL
+      const launchUrl = `${baseUrl}/projects/${resolvedProjectKey}/automation-launches/${testRunId}`;
+      
+      // Build suite URL if available
+      let suiteUrl: string | null = null;
+      if (launch.testSuite && launch.testSuite.id) {
+        suiteUrl = `${baseUrl}/projects/${resolvedProjectKey}/test-suites/${launch.testSuite.id}`;
+      }
+      
+      // Collect unique devices from actual test sessions
+      const uniqueDevices = new Set<string>();
+      for (const test of testsToAnalyze) {
+        try {
+          const sessions = await this.reportingClient.getTestSessionsForTest(testRunId, test.id, resolvedProjectId!);
+          if (sessions.items) {
+            for (const session of sessions.items) {
+              const device = session.deviceName || session.device;
+              if (device && device !== 'Unknown Device') {
+                uniqueDevices.add(device);
+              }
+            }
+          }
+        } catch (error) {
+          // Silently continue if we can't get sessions for a test
+        }
+      }
+      const devicesArray = Array.from(uniqueDevices);
+      
       let report = `# 🔍 Launch Failure Analysis Report\n\n`;
-      report += `**Launch ID:** ${testRunId}\n`;
-      report += `**Launch Name:** ${launch.name || 'N/A'}\n`;
-      report += `**Analysis Date:** ${new Date().toLocaleString()}\n\n`;
+      report += `## 🚀 Launch Information\n\n`;
+      report += `- **Launch:** [${launch.name || 'N/A'}](${launchUrl})\n`;
+      report += `- **Launch ID:** [${testRunId}](${launchUrl})\n`;
+      report += `- **Project:** ${resolvedProjectKey}\n`;
+      report += `- **Status:** ${launch.status || 'N/A'}\n`;
+      
+      // Suite information
+      if (launch.testSuite) {
+        if (suiteUrl) {
+          report += `- **Test Suite:** [${launch.testSuite.name}](${suiteUrl})\n`;
+        } else {
+          report += `- **Test Suite:** ${launch.testSuite.name}\n`;
+        }
+      }
+      
+      // Build with potential link (if it's a URL)
+      if (launch.build) {
+        // Check if build looks like a URL or file path
+        if (launch.build.startsWith('http://') || launch.build.startsWith('https://')) {
+          report += `- **Build:** [${launch.build}](${launch.build})\n`;
+        } else {
+          report += `- **Build:** ${launch.build}\n`;
+        }
+      }
+      
+      if (launch.environment) {
+        report += `- **Environment:** ${launch.environment}\n`;
+      }
+      if (launch.platform) {
+        report += `- **Platform:** ${launch.platform}\n`;
+      }
+      
+      // Show devices collected from actual test executions
+      if (devicesArray.length > 0) {
+        report += `- **Devices:** ${devicesArray.join(', ')}\n`;
+      }
+      
+      // Calculate durations
+      if (launch.startedAt && launch.endedAt) {
+        const startTime = typeof launch.startedAt === 'number' ? launch.startedAt : new Date(launch.startedAt).getTime();
+        const endTime = typeof launch.endedAt === 'number' ? launch.endedAt : new Date(launch.endedAt).getTime();
+        const durationMs = endTime - startTime;
+        const durationMins = Math.floor(durationMs / 60000);
+        const durationSecs = Math.floor((durationMs % 60000) / 1000);
+        report += `- **Duration:** ${durationMins}m ${durationSecs}s\n`;
+        report += `- **Started:** ${new Date(startTime).toLocaleString()}\n`;
+        report += `- **Finished:** ${new Date(endTime).toLocaleString()}\n`;
+      }
+      
+      if (launch.user?.username) {
+        report += `- **Owner:** ${launch.user.username}\n`;
+      }
+      
+      report += `- **Analysis Date:** ${new Date().toLocaleString()}\n\n`;
       report += `---\n\n`;
 
       // Statistics
@@ -2713,6 +3046,132 @@ export class ZebrunnerReportingToolHandlers {
       
       report += `\n`;
 
+      // Quick Reference Tables - Grouped by Feature Area and Priority
+      report += `---\n\n`;
+      
+      // Group tests by stability priority
+      const criticalTests = Array.from(testDetails.values()).filter((t: any) => t.stability <= 30);
+      const mediumTests = Array.from(testDetails.values()).filter((t: any) => t.stability > 30 && t.stability <= 70);
+      const lowTests = Array.from(testDetails.values()).filter((t: any) => t.stability > 70);
+
+      // Helper function to extract feature area from test name
+      const extractFeatureArea = (testName: string): string => {
+        // Look for patterns like "[ Feature Name ]:" at the start
+        const bracketMatch = testName.match(/^\[\s*([^\]]+)\s*\]/);
+        if (bracketMatch) {
+          return bracketMatch[1].trim();
+        }
+        
+        // Extract from camelCase or common patterns
+        if (testName.toLowerCase().includes('search') || testName.toLowerCase().includes('quicklog')) {
+          return 'Search & Quick Log';
+        }
+        if (testName.toLowerCase().includes('notification')) {
+          return 'Notifications';
+        }
+        if (testName.toLowerCase().includes('meal')) {
+          return 'Meal Management';
+        }
+        if (testName.toLowerCase().includes('message')) {
+          return 'Messages';
+        }
+        if (testName.toLowerCase().includes('goal')) {
+          return 'Goals';
+        }
+        if (testName.toLowerCase().includes('dashboard')) {
+          return 'Dashboard';
+        }
+        if (testName.toLowerCase().includes('premium')) {
+          return 'Premium Features';
+        }
+        if (testName.toLowerCase().includes('export')) {
+          return 'Export';
+        }
+        
+        return 'Other';
+      };
+
+      // Generate Quick Reference Tables for Critical Tests
+      if (criticalTests.length > 0) {
+        report += `## 🔴 Priority 1 - Critical Failures (0-30% Stability)\n\n`;
+        
+        // Group critical tests by feature area
+        const criticalByFeature = new Map<string, any[]>();
+        criticalTests.forEach((test: any) => {
+          const feature = extractFeatureArea(test.testName);
+          if (!criticalByFeature.has(feature)) {
+            criticalByFeature.set(feature, []);
+          }
+          criticalByFeature.get(feature)!.push(test);
+        });
+
+        // Generate table for each feature area
+        for (const [feature, tests] of Array.from(criticalByFeature.entries()).sort((a, b) => b[1].length - a[1].length)) {
+          const subtitle = tests.length > 1 ? 'Complete Breakdown' : 'Critical Issue';
+          report += `### ${feature} - ${subtitle}\n\n`;
+          report += `| Test | Stability | Issue | Evidence |\n`;
+          report += `|------|-----------|-------|----------|\n`;
+          
+          for (const test of tests.sort((a, b) => a.stability - b.stability)) {
+            const testUrl = `${baseUrl}/projects/${resolvedProjectKey}/automation-launches/${testRunId}/tests/${test.testId}`;
+            const testNameShort = test.testName.replace(/^\[[^\]]+\]\s*:\s*/, '').replace(/\s*-\s*\w+$/, '');
+            const issueShort = test.rootCause !== 'Unknown' 
+              ? test.rootCause.substring(0, 80) 
+              : test.errorMsg.substring(0, 80);
+            
+            // Get video URL for evidence
+            const sessions = await this.getAllSessionsWithArtifacts(testRunId, test.testId, resolvedProjectId!);
+            const videoLink = sessions.length > 0 && sessions[0].videos.length > 0 
+              ? `[Video](${sessions[0].videos[0].url})` 
+              : 'N/A';
+            
+            report += `| [${testNameShort}](${testUrl}) | ${test.stability}% | ${issueShort} | ${videoLink} |\n`;
+          }
+          report += `\n`;
+        }
+      }
+
+      // Generate Quick Reference Tables for Medium Priority Tests
+      if (mediumTests.length > 0 && mediumTests.length <= 10) {
+        report += `## 🟡 Priority 2 - Medium Failures (31-70% Stability)\n\n`;
+        
+        // Group medium tests by feature area
+        const mediumByFeature = new Map<string, any[]>();
+        mediumTests.forEach((test: any) => {
+          const feature = extractFeatureArea(test.testName);
+          if (!mediumByFeature.has(feature)) {
+            mediumByFeature.set(feature, []);
+          }
+          mediumByFeature.get(feature)!.push(test);
+        });
+
+        // Generate table for each feature area
+        for (const [feature, tests] of Array.from(mediumByFeature.entries()).sort((a, b) => b[1].length - a[1].length)) {
+          report += `### ${feature}\n\n`;
+          report += `| Test | Stability | Issue | Evidence |\n`;
+          report += `|------|-----------|-------|----------|\n`;
+          
+          for (const test of tests.sort((a, b) => a.stability - b.stability)) {
+            const testUrl = `${baseUrl}/projects/${resolvedProjectKey}/automation-launches/${testRunId}/tests/${test.testId}`;
+            const testNameShort = test.testName.replace(/^\[[^\]]+\]\s*:\s*/, '').replace(/\s*-\s*\w+$/, '');
+            const issueShort = test.rootCause !== 'Unknown' 
+              ? test.rootCause.substring(0, 80) 
+              : test.errorMsg.substring(0, 80);
+            
+            // Get video URL for evidence
+            const sessions = await this.getAllSessionsWithArtifacts(testRunId, test.testId, resolvedProjectId!);
+            const videoLink = sessions.length > 0 && sessions[0].videos.length > 0 
+              ? `[Video](${sessions[0].videos[0].url})` 
+              : 'N/A';
+            
+            report += `| [${testNameShort}](${testUrl}) | ${test.stability}% | ${issueShort} | ${videoLink} |\n`;
+          }
+          report += `\n`;
+        }
+      }
+
+      report += `---\n\n`;
+
       // Timeline Analysis
       if (timelineData.length > 0) {
         report += `## 📅 Timeline Analysis\n\n`;
@@ -2810,9 +3269,11 @@ export class ZebrunnerReportingToolHandlers {
             report += `### Group ${groupNum}: ${tests.length} tests with similar error\n\n`;
             report += `**Error snippet:** \`${errorMsg.substring(0, 80)}...\`\n\n`;
             report += `**Affected tests:**\n`;
-            tests.forEach(test => {
-              report += `- Test ${test.testId}: ${test.testName}\n`;
-            });
+            for (const test of tests) {
+              const testUrl = `${baseUrl}/projects/${resolvedProjectKey}/automation-launches/${testRunId}/tests/${test.testId}`;
+              const clickableTestName = await this.makeTestCaseIDsClickable(test.testName, resolvedProjectKey!, baseUrl);
+              report += `- [Test ${test.testId}](${testUrl}): [${clickableTestName}](${testUrl})\n`;
+            }
             report += `\n`;
             groupNum++;
           }
@@ -2859,31 +3320,40 @@ export class ZebrunnerReportingToolHandlers {
 
         if (highPriority.length > 0) {
           report += `### 🔴 HIGH Priority (Affects Multiple Tests)\n\n`;
-          highPriority.forEach(([rec, data], idx) => {
-            report += `**${idx + 1}. ${rec.replace(/^\d+\.\s*/, '')}**\n`;
+          for (let i = 0; i < highPriority.length; i++) {
+            const [rec, data] = highPriority[i];
+            report += `**${i + 1}. ${rec.replace(/^\d+\.\s*/, '')}**\n`;
             report += `   - **Impact:** ${data.count} test${data.count > 1 ? 's' : ''} affected\n`;
             report += `   - **Category:** ${data.classification}\n`;
             report += `   - **Tests:**\n`;
-            data.tests.slice(0, 5).forEach(t => {
+            for (const t of data.tests.slice(0, 5)) {
               const detail = testDetails.get(t.testId);
-              report += `     - Test ${t.testId}: ${t.testName} (${detail?.stability || 0}% stability)\n`;
-            });
+              const testUrl = `${baseUrl}/projects/${resolvedProjectKey}/automation-launches/${testRunId}/tests/${t.testId}`;
+              const clickableTestName = await this.makeTestCaseIDsClickable(t.testName, resolvedProjectKey!, baseUrl);
+              report += `     - [Test ${t.testId}](${testUrl}): [${clickableTestName}](${testUrl}) (${detail?.stability || 0}% stability)\n`;
+            }
             if (data.tests.length > 5) {
               report += `     - ... and ${data.tests.length - 5} more tests\n`;
             }
             report += `\n`;
-          });
+          }
         }
 
         if (mediumPriority.length > 0) {
           report += `### 🟡 MEDIUM Priority (Affects 2+ Tests)\n\n`;
-          mediumPriority.slice(0, 3).forEach(([rec, data], idx) => {
-            report += `**${idx + 1}. ${rec.replace(/^\d+\.\s*/, '')}**\n`;
+          const mediumToShow = mediumPriority.slice(0, 3);
+          for (let i = 0; i < mediumToShow.length; i++) {
+            const [rec, data] = mediumToShow[i];
+            report += `**${i + 1}. ${rec.replace(/^\d+\.\s*/, '')}**\n`;
             report += `   - **Impact:** ${data.count} tests\n`;
             report += `   - **Category:** ${data.classification}\n`;
-            report += `   - **Tests:** ${data.tests.map(t => `Test ${t.testId}`).join(', ')}\n`;
+            const testLinks = await Promise.all(data.tests.map(async (t: any) => {
+              const testUrl = `${baseUrl}/projects/${resolvedProjectKey}/automation-launches/${testRunId}/tests/${t.testId}`;
+              return `[Test ${t.testId}](${testUrl})`;
+            }));
+            report += `   - **Tests:** ${testLinks.join(', ')}\n`;
             report += `\n`;
-          });
+          }
         }
 
         if (lowPriority.length > 0) {
@@ -2921,11 +3391,22 @@ export class ZebrunnerReportingToolHandlers {
         const result = analysisResults[idx];
         const detail = testDetails.get(result.testId);
         
+        // Build test URL
+        const testUrl = `${baseUrl}/projects/${resolvedProjectKey}/automation-launches/${testRunId}/tests/${result.testId}`;
+        
         // Make embedded test case IDs in test name clickable
         const clickableTestName = await this.makeTestCaseIDsClickable(result.testName, resolvedProjectKey!, baseUrl);
         
-        report += `### ${idx + 1}. Test ${result.testId}: ${clickableTestName}\n\n`;
+        // Header with clickable test name and ID
+        report += `### ${idx + 1}. [${clickableTestName}](${testUrl})\n\n`;
+        report += `- **Test ID:** [${result.testId}](${testUrl})\n`;
         report += `- **Status:** ${result.status}\n`;
+        
+        // Get test details to find suite information
+        const testRun = testsToAnalyze.find(t => t.id === result.testId);
+        if (testRun && testRun.testClass) {
+          report += `- **Suite/Test Class:** ${testRun.testClass}\n`;
+        }
         
         // Display test cases (Q1. Option B - right after status line)
         if (result.testCases && result.testCases.length > 0) {

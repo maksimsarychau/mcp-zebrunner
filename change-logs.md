@@ -1,5 +1,346 @@
 # Change Logs
 
+## v5.6.4
+- **🔥 CRITICAL FIX: URL Regression** - Fixed all incorrect test URLs from old pattern (`/tests/runs/.../results/...`) to correct pattern (`/projects/{projectKey}/automation-launches/{launchId}/tests/{testId}`)
+- **📊 NEW: Quick Reference Tables** - Added feature-grouped tables for critical and medium failures in `detailed_analyze_launch_failures`
+  - Tests automatically grouped by feature area (Search & Quick Log, Notifications, Meal Management, etc.)
+  - Clean markdown tables with: Test (clickable), Stability %, Issue description, Evidence (video link)
+  - Priority-based sections: 🔴 Critical (0-30%), 🟡 Medium (31-70%)
+  - Perfect for sharing in Slack or team communications
+- **🔧 Fixed URLs in All Formats**:
+  - ✅ Individual test analysis (`analyze_test_failure`)
+  - ✅ Launch-wide analysis (`detailed_analyze_launch_failures`)
+  - ✅ JIRA format tickets
+  - ✅ Summary reports
+  - ✅ All links, recommendations, and similar failures sections
+
+## v5.6.3
+- **🔥 MAJOR: Fixed Session Handling & Clickable Links in All Formats**
+- Enhanced `detailed_analyze_launch_failures` with comprehensive improvements:
+  - **Session Sorting:** Failed sessions now display first, followed by successful ones (newest first within each status)
+  - **Accurate Session Matching:** Videos and screenshots are correctly matched per session, not mixed between different executions
+  - **Suite Information:** Test suite/test class now displayed in all formats (detailed, summary, jira)
+  - **Device Collection:** Actual devices collected from test sessions (not inaccurate launch metadata)
+  - **Clickable URLs:** All test names, test IDs, videos, screenshots, test cases, and launch links are now clickable
+  - **Build Links:** If build field contains a URL, it's now clickable
+  - **Enhanced Launch Header:** Displays test suite, collected devices from actual executions, and all metadata
+- Updated `analyze_test_failure` tool:
+  - Sessions displayed with status indicators (❌ FAILED, ✅ PASSED, ⚠️ OTHER)
+  - Multiple test execution sessions shown with proper status grouping
+  - Suite/test class information added to executive summary
+  - All URLs are clickable (test, launch, test cases, videos, screenshots)
+- Updated JIRA format:
+  - Test ID, Launch ID, and Launch Name are clickable links
+  - Suite/Test Class field added to ticket metadata
+  - All test references in the ticket body are clickable
+- Fixed summary format:
+  - Test ID is now a clickable link
+  - Suite/Test Class displayed
+  - All artifact links properly formatted
+- Comprehensive URL linking throughout all report sections:
+  - Individual test analysis: clickable test names and IDs
+  - Similar failure groups: clickable test links
+  - Recommendations: clickable test links with stability info
+  - Timeline analysis: all test references are clickable
+
+
+## v5.6.1
+- **🔗 Clickable URLs in Summary Reports** - All launch, test, and JIRA issue references now include clickable URLs
+- **📊 Enhanced Launch Test Summary** - Added launch details and URLs to `get_launch_test_summary` output
+- **✨ Smart JIRA URL Resolution** - JIRA tickets in summaries now link to actual JIRA instances
+
+**What Changed:**
+
+1. **Launch Information in Summary** ✅
+   - Added `launchName`, `launchUrl`, `launchStatus`, `launchBuild`, `launchEnvironment`, `launchPlatform`
+   - Added `launchStartedAt`, `launchEndedAt` timestamps
+   - Launch name and ID are now clickable links
+
+2. **Test URLs in All Test Lists** ✅
+   - Every test now includes `testUrl` field
+   - Direct links to test details in Zebrunner UI
+   - Format: `https://workspace.zebrunner.com/projects/PROJECT/automation-launches/LAUNCH_ID/tests/TEST_ID`
+
+3. **JIRA Issue URLs** ✅
+   - All issue references now include resolved JIRA URLs
+   - New field: `issueReferencesWithUrls` with full URL for each JIRA ticket
+   - Uses `buildJiraUrl()` to resolve from Zebrunner integrations
+   - Format: `[TICKET-123](https://your-jira.atlassian.net/browse/TICKET-123)`
+
+4. **Enhanced Test Collections** ✅
+   - `top20MostUnstableTests` - Now includes `testUrl` and resolved JIRA URLs
+   - `testsWithIssues` - Now includes `testUrl` and `issueReferencesWithUrls`
+   - All test objects in results include clickable links
+
+**API Response Structure:**
+
+```json
+{
+  "launchId": 120906,
+  "projectId": 7,
+  "projectKey": "MCP",
+  "launchName": "Android-Minimal-Acceptance",
+  "launchUrl": "https://your-workspace.zebrunner.com/projects/MCP/automation-launches/120906",
+  "launchStatus": "FAILED",
+  "launchBuild": "your-workspace-develop-46975-qaRelease.apk",
+  "summary": { ... },
+  "top20MostUnstableTests": [
+    {
+      "id": 5455325,
+      "name": "searchFoodQuickLogSectionTest",
+      "stability": 10,
+      "status": "FAILED",
+      "testUrl": "https://your-workspace.zebrunner.com/projects/MCP/automation-launches/120906/tests/5455325",
+      "issueReferences": [
+        {
+          "type": "JIRA",
+          "value": "QAT-27990",
+          "url": "https://your-workspace.atlassian.net/browse/QAT-27990"
+        }
+      ]
+    }
+  ],
+  "testsWithIssues": [
+    {
+      "id": 5455330,
+      "name": "createMealFromDiaryWithExistingFoodsTest",
+      "status": "FAILED",
+      "testUrl": "https://your-workspace.zebrunner.com/projects/MCP/automation-launches/120906/tests/5455330",
+      "issues": [
+        {
+          "type": "JIRA",
+          "value": "QAT-27990",
+          "url": "https://your-workspace.atlassian.net/browse/QAT-27990"
+        }
+      ],
+      "stability": 0,
+      "testClass": "MealsTest"
+    }
+  ]
+}
+```
+
+**Impact:**
+
+When Claude formats this data into a summary, all references are now clickable:
+
+**Before v5.6.1:**
+```
+Test: quickLogBestMatchesFoodTest
+Known issue: QAT-27990
+```
+
+**After v5.6.1:**
+```
+Test: [quickLogBestMatchesFoodTest](https://your-workspace.zebrunner.com/.../tests/5455325)
+Known issue: [QAT-27990](https://your-workspace.atlassian.net/browse/QAT-27990)
+```
+
+**Files Modified:**
+- `src/handlers/reporting-tools.ts`:
+  - Enhanced `getLaunchTestSummary()` to fetch launch details and build URLs
+  - Added `testUrl` to all test objects
+  - Added `issueReferencesWithUrls` with resolved JIRA URLs
+  - Added launch metadata fields to result object
+- `package.json` - Bumped version to 5.6.1
+- `change-logs.md` - Documented changes
+
+**Benefits:**
+
+✅ **One-Click Navigation**: Direct access to tests and JIRA tickets from summaries  
+✅ **Better UX**: No need to manually construct URLs  
+✅ **Consistent Linking**: All tools now use the same URL generation logic  
+✅ **Cross-Platform**: Works in any Markdown viewer (Cursor, VS Code, web browsers)  
+
+---
+
+## v5.6.0
+- **📹 Multiple Test Sessions Support** - Display all test execution sessions with videos and screenshots
+- **🔗 Enhanced Launch Details** - Comprehensive launch information at the top of failure analysis reports
+- **🖼️ Smart Screenshot Display** - Summary shows last screenshot, detailed shows all screenshots per session
+- **✨ All URLs Clickable** - Launch, test, test case, video, and screenshot URLs are now clickable links
+- **🎯 Session-Based Artifacts** - Videos and screenshots organized by test execution session
+
+**What Changed:**
+
+1. **Multiple Test Sessions Display** ✅
+   - **New Method**: `getAllSessionsWithArtifacts()` retrieves all test sessions with their artifacts
+   - **Newest First**: Sessions sorted by execution time (newest to oldest)
+   - **Filter Invalid Sessions**: Only shows sessions with valid videos or screenshots
+   - **Structured Data**: Each session includes device, platform, duration, timestamps, videos, and screenshots
+
+2. **Enhanced Test Session Section** ✅
+   ```markdown
+   ## 📹 Test Execution Sessions
+   
+   **Total Sessions:** 2
+   
+   ### 📹 Session 1 (Latest)
+   - **Device:** Pixel 8 Pro
+   - **Platform:** Android 15
+   - **Duration:** 4m 1s
+   - **Started:** November 3, 2025 at 7:22:57 PM
+   - **Status:** FAILED
+   
+   **Videos:**
+   🎥 [Watch Test Execution Video](https://...direct-link...)
+   
+   **Screenshots:** 5 available
+   1. 🖼️ [Screenshot 1](https://...link...)
+   2. 🖼️ [Screenshot 2](https://...link...)
+   ...
+   
+   ### 📼 Session 2
+   - **Device:** Galaxy S21
+   - **Platform:** Android 14
+   ...
+   ```
+
+3. **Enhanced Launch Header** ✅
+   - **Detailed Information**: Launch name, ID, project, status, environment, platform, build
+   - **Clickable Launch URL**: Direct link to launch in Zebrunner UI
+   - **Duration Calculation**: Automatically calculates and displays launch duration
+   - **Timestamps**: Shows start and end times in local format
+   - **Owner Information**: Displays launch owner/uploader
+
+   **Example:**
+   ```markdown
+   ## 🚀 Launch Information
+   
+   - **Launch:** [Android-Minimal-Acceptance](https://...launch-url...)
+   - **Launch ID:** [120906](https://...launch-url...)
+   - **Project:** MCP
+   - **Status:** FAILED
+   - **Environment:** production
+   - **Platform:** Android
+   - **Build:** 1.23.45
+   - **Duration:** 15m 23s
+   - **Started:** November 3, 2025 at 7:00:00 PM
+   - **Finished:** November 3, 2025 at 7:15:23 PM
+   - **Owner:** john.doe
+   ```
+
+4. **Smart Screenshot Display** ✅
+   - **Summary Format**: Shows only the last screenshot from the latest session
+   - **Detailed Format**: Shows all screenshots from all sessions (organized by session)
+   - **AI Analysis**: Uses the latest screenshot from the latest session for AI-powered analysis
+   - **Session Count**: Indicates if multiple test executions were recorded
+
+5. **All URLs Clickable** ✅
+   - **Launch URLs**: `[Launch Name](https://...)`
+   - **Test URLs**: `[Test ID](https://...)`
+   - **Test Case URLs**: `[MCP-123](https://...)`
+   - **Video URLs**: `[🎥 Watch Test Execution Video](https://...)`
+   - **Screenshot URLs**: `[🖼️ Screenshot N](https://...)`
+   - **Jira Issue URLs**: `[QAS-456](https://...)`
+
+6. **Video Artifact Filtering** ✅
+   - **Description-Based**: Only shows videos with non-empty descriptions
+   - **Multiple Videos**: Supports multiple videos per session
+   - **Direct Links**: Uses Zebrunner proxy URLs (authenticated, no redirect needed)
+   - **Fallback Support**: Gracefully handles sessions without videos
+
+**Technical Implementation:**
+
+```typescript
+// New method structure
+private async getAllSessionsWithArtifacts(
+  testRunId: number, 
+  testId: number, 
+  projectId: number
+): Promise<Array<{
+  sessionId: string;
+  name: string;
+  status: string;
+  device: string;
+  platform: string;
+  duration: string;
+  startedAt: string;
+  videos: Array<{ name: string; url: string; description?: string }>;
+  screenshots: Array<{ name: string; url: string; description?: string }>;
+}>>
+```
+
+**Key Features:**
+
+📹 **Multi-Session Support**
+- Handles tests with 1, 2, or more test execution sessions
+- Each session displayed with complete context (device, platform, time)
+- Videos and screenshots properly attributed to their session
+
+🔗 **Comprehensive Linking**
+- Every entity (launch, test, test case, artifact) is now a clickable link
+- Direct navigation to Zebrunner UI for detailed inspection
+- Test cases resolve to actual numeric IDs via TCM API
+
+🎯 **Intelligent Filtering**
+- Skips sessions without any valid artifacts (videos/screenshots)
+- Filters out video artifacts without descriptions
+- Shows only relevant, actionable information
+
+⚡ **Performance Optimized**
+- Single API call retrieves all sessions for a test
+- Efficient processing and filtering
+- Graceful error handling with fallbacks
+
+**Usage Examples:**
+
+```typescript
+// Analyze test with URL - automatically gets all sessions
+"Analyze https://your-workspace.zebrunner.com/projects/MCP/automation-launches/120906/tests/5455325"
+
+// Result includes all sessions:
+## 📹 Test Execution Sessions
+**Total Sessions:** 2
+
+### 📹 Session 1 (Latest)
+- Device: Pixel 8 Pro
+- 🎥 [Watch Video](https://...)
+- 5 screenshots available
+
+### 📼 Session 2
+- Device: Galaxy S21
+- 🎥 [Watch Video](https://...)
+- 3 screenshots available
+```
+
+**Bug Fixes:**
+
+✅ **Fixed Video URL Issues**
+- Previously showed only first session video
+- Now shows all videos from all sessions with descriptions
+- Correctly filters artifacts by name and description
+
+✅ **Fixed Screenshot Organization**
+- Screenshots now properly grouped by session
+- Latest screenshot correctly identified for AI analysis
+- All screenshots accessible with clickable links
+
+✅ **Fixed Launch Header**
+- Added comprehensive launch details (was minimal before)
+- Fixed property names (`build` not `buildNumber`, `endedAt` not `finishedAt`, `user.username` not `owner`)
+- Made launch name and ID clickable
+
+**Files Modified:**
+- `src/handlers/reporting-tools.ts`:
+  - Added `getAllSessionsWithArtifacts()` method
+  - Updated `getVideoUrlForTest()` to use new method (deprecated)
+  - Enhanced `generateFailureAnalysisReport()` with sessions section
+  - Enhanced `generateSummaryReport()` with latest session data
+  - Enhanced `analyzeLaunchFailures()` with detailed launch header
+  - Made all URLs clickable throughout reports
+- `package.json` - Bumped version to 5.6.0
+- `change-logs.md` - Documented all changes
+
+**Migration Notes:**
+
+🔄 **Backward Compatible**: All existing tool calls continue to work
+📊 **Enhanced Output**: Reports now include more detailed session information
+🎥 **Better Video Links**: Videos are now correctly attributed to their sessions
+🖼️ **Organized Screenshots**: Screenshots grouped by session for clarity
+
+---
+
 ## v5.5.0
 - **🔗 Smart URL-Based Analysis** - Claude automatically detects and analyzes Zebrunner URLs
 - **✨ Natural Language Parsing** - Just paste a URL, Claude handles the rest
