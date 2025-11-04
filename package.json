@@ -1,6 +1,6 @@
 {
   "name": "mcp-zebrunner",
-  "version": "5.5.0",
+  "version": "5.6.4",
   "private": true,
   "type": "module",
   "description": "MCP server (stdio) for Zebrunner TCM API (read-only)",
@@ -10,7 +10,8 @@
     "dev:with-reporting": "tsx watch src/server-with-reporting.ts",
     "build": "tsc -p tsconfig.json",
     "deploy": "node scripts/increment-version.js && tsc -p tsconfig.json",
-    "release": "node scripts/increment-version.js && tsc -p tsconfig.json && tsc --noEmit && tsx tests/test-runner.ts all",
+    "release": "tsc -p tsconfig.json && tsc --noEmit && tsx tests/test-runner.ts all",
+    "release:with-increment": "node scripts/increment-version.js && tsc -p tsconfig.json && tsc --noEmit && tsx tests/test-runner.ts all",
     "increment": "node scripts/increment-version.js",
     "start": "node dist/server.js",
     "start:with-reporting": "node dist/server-with-reporting.js",

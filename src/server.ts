@@ -3108,7 +3108,7 @@ async function main() {
       includePageSource: z.boolean().default(true).describe("Include page source analysis"),
       includeVideo: z.boolean().default(false).describe("Include video URL"),
       analyzeSimilarFailures: z.boolean().default(true).describe("Find similar failures in the launch"),
-      analyzeScreenshotsWithAI: z.boolean().default(false).describe("Download and analyze screenshots with AI (Claude Vision)"),
+      analyzeScreenshotsWithAI: z.boolean().default(true).describe("Download and analyze screenshots with AI (Claude Vision)"),
       screenshotAnalysisType: z.enum(['basic', 'detailed']).default('detailed').describe("Screenshot analysis type: basic (metadata+OCR) or detailed (includes Claude Vision)"),
       format: z.enum(['detailed', 'summary', 'jira']).default('detailed').describe("Output format: detailed, summary, or jira (ready for Jira ticket creation)")
     },
