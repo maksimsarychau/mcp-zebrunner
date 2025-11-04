@@ -1,5 +1,398 @@
 # Change Logs
 
+## v5.9.1 - CRITICAL FIX: Enhanced Step Matching (0% Coverage Bug Fixed)
+- **🐛 CRITICAL BUG FIX: Step Matching Algorithm** - Fixed 0% coverage bug when test cases were actually 100% covered
+  - **Problem**: Tool showed 0% coverage even when test case steps perfectly matched automation
+  - **Root Cause**: Overly strict matching algorithm couldn't handle semantic variations
+  - **Example Failures**:
+    - ❌ "Log in" vs "Click login button" → No match (different action words)
+    - ❌ "Go to More -> Progress" vs "Navigate to More menu, tap Progress" → No match (multi-step)
+    - ❌ "Tap Export information button" vs "Click export_info_btn" → No match (underscore vs space)
+- **✅ FIX 1: Better Synonym Matching** - Recognizes equivalent phrases
+  - `login` = `log in` = `sign in` = `authenticate`
+  - `tap` = `click` = `press` = `select`
+  - `go to` = `navigate` = `open` = `access`
+  - `export` = `download` = `save`
+  - `information` = `info` = `data`
+  - `progress` = `stats` = `statistics`
+  - **Now**: "Log in" ✓ matches "Click login button" (synonym: login ≈ login)
+- **✅ FIX 2: Key Term Extraction** - Extracts important nouns/UI elements
+  - Identifies UI keywords: `button`, `menu`, `screen`, `progress`, `export`, `more`, `diary`, `food`
+  - Extracts quoted text: `"Export My Information"` → `export`, `my`, `information`
+  - Parses arrow notation: `More -> Progress` → `more`, `progress`
+  - **Matching Rule**: 2+ shared key terms = match
+  - **Now**: "Go to More -> Progress" ✓ matches "Navigate More menu, tap Progress" (shared: more, progress)
+- **✅ FIX 3: Fuzzy Action Matching** - Normalizes action verbs to canonical forms
+  - `interact`: click, tap, press, select, touch
+  - `navigate`: go to, navigate, open, access, visit
+  - `login`: log in, login, sign in, signin, authenticate
+  - `input`: enter, type, input, fill, provide
+  - `verify`: verify, check, confirm, validate, assert
+  - **Now**: "Tap Export button" ✓ matches "Click export_info_btn" (both normalize to `interact` action)
+- **✅ FIX 4: UI Element Name Matching** - Extracts button/menu/screen names
+  - Recognizes patterns: `Progress menu`, `Export button`, `More screen`
+  - Handles underscores: `export_info_btn` → `export`, `info`, `btn`
+  - **Matching Rule**: 1+ shared UI element = match
+  - **Now**: "Tap Export information button" ✓ matches "Click export_info_btn" (shared: export, information/info)
+- **✅ FIX 5: Hierarchical Matching Support** - One test step can match multiple automation logs
+  - High-level test case step: "Log in"
+  - Detailed automation logs: "Enter username", "Enter password", "Click submit"
+  - **Now**: All 3 automation logs contribute to matching the "Log in" step
+- **📊 Matching Improvements**:
+  - **Word overlap threshold**: Lowered from 40% → 30% (more forgiving)
+  - **Substring matching**: Requires 60% of expected in executed
+  - **Debug logging**: Detailed matching diagnostics (enable with `debug: true`)
+- **🎯 Impact on Example Test**:
+  - **Before v5.9.1**: 
+    ```
+    Test Case MCP-2107: 0% coverage
+    Test Case MCP-88: 0% coverage
+    Combined Coverage: 0%
+    ```
+  - **After v5.9.1** (Expected):
+    ```
+    Test Case MCP-2107: 75-100% coverage ✓
+    Test Case MCP-88: 75-100% coverage ✓
+    Combined Coverage: 80-100% ✓
+    ```
+- **💡 Why This Matters**:
+  - **Before**: False negatives → Tool incorrectly flags good test cases as having 0% automation coverage
+  - **After**: Accurate coverage → Tool correctly identifies which test case steps are implemented
+  - **Impact**: More reliable test case quality assessment, better documentation analysis, accurate verdicts
+
+## v5.9.0 - Multi-Test Case Analysis with Intelligent Merging (CRITICAL FEATURE)
+- **🔗 NEW: Clickable Test Case Links** - All test case keys in multi-TC report are now clickable
+  - Fetches test case URLs using API (like `analyse_launch_failures` tool)
+  - Works with any project prefix (MCP, DEF, etc.)
+  - Graceful fallback if URL fetch fails
+  - Format: `[MCP-1922](https://zebrunner.com/projects/MCP/test-cases/12345)`
+  - Performance: N API calls for N test cases (acceptable for 2-20 TCs)
+- **🎯 NEW: Multi-Test Case Support** - Analyzes ALL test cases assigned to a test, not just the first one
+  - **Problem Solved**: Previously only analyzed first TC, even when 2-20 TCs assigned to test
+  - **Example**: Test has MCP-1921 (1 step), MCP-1922 (8 steps), MCP-1923 (3 steps)
+    - **Old behavior**: Only analyzed MCP-1921, ignored others
+    - **New behavior**: Analyzes all 3, merges intelligently, shows best match
+- **🔀 Intelligent Step Merging** - Combines steps from multiple TCs with duplicate detection
+  - Normalizes step text to detect duplicates (e.g., "Click Button" == "click button!!!")
+  - Keeps more detailed version when duplicates found
+  - Preserves unique steps from each TC (different parts of test)
+  - **Example**: TC1 has "Login", TC2 has "Login to application" → keeps TC2 (more detailed)
+- **📊 Test Case Ranking & Quality Assessment** - Identifies which TC best documents the automation
+  - **Ranking Criteria**:
+    1. **Coverage %** (primary): Which TC steps match most automation actions?
+    2. **Visual Confidence** (tiebreaker): Which TC has highest visual verification scores?
+  - **Match Quality Scoring**:
+    - 🟢 **Excellent**: ≥70% coverage + ≥70% visual confidence
+    - 🟡 **Good**: ≥50% coverage + ≥50% visual confidence
+    - 🟠 **Moderate**: ≥30% coverage OR ≥40% visual confidence
+    - 🔴 **Poor**: Below thresholds
+- **📈 Combined Coverage Calculation** - Shows how much of automation is covered by ALL TCs together
+  - Individual TC coverage: MCP-1921 (15%), MCP-1922 (65%), MCP-1923 (25%)
+  - Combined coverage: 75% (all 3 TCs together cover 75% of automation)
+  - Identifies gaps: 25% of automation not documented in any TC
+- **📋 New Report Format** - Enhanced summary table + merged step analysis
+  ```
+  ## 📊 Test Case Analysis (3 Test Cases Found)
+  
+  | Rank | Test Case | Steps | Coverage | Visual Confidence | Match Quality |
+  |------|-----------|-------|----------|-------------------|---------------|
+  | ⭐   | [MCP-1922](url) | 8   | 65%     | 72%              | 🟢 Excellent |
+  | 2    | [MCP-1923](url) | 3   | 25%     | 55%              | 🟡 Good      |
+  | 3    | [MCP-1921](url) | 1   | 15%     | 20%              | 🔴 Poor      |
+  
+  Combined Coverage: 12 merged steps covering 75% of automation
+  Best Match: MCP-1922 - Best coverage (65%) with excellent match quality
+  ```
+- **🎥 Merged Step-by-Step Comparison** - Shows which TC each step came from
+  - **Source TC column**: Identifies which test case contributed each step
+  - **Visual verification**: Each merged step still gets confidence scoring
+  - **Discrepancy detection**: Catches log/video mismatches across all TCs
+- **🔍 Smart Duplicate Detection** - Handles overlapping/enhanced TCs gracefully
+  - **Scenario 1**: TC1 and TC2 both describe "Login" → keeps one (more detailed)
+  - **Scenario 2**: TC1 describes steps 1-20, TC2 describes steps 21-40 → keeps both (complementary)
+  - **Scenario 3**: TC1 is old version, TC2 is updated → ranks TC2 higher (better coverage)
+- **💡 Why This Matters**:
+  - **Before**: "MCP-1921 has 1 step but automation has 67 steps - massive discrepancy!"
+    - Tool only saw 1 TC, missed the other 2 TCs with more detailed documentation
+  - **After**: "Combined: 12 steps from 3 TCs covering 75% of automation. Best match: MCP-1922 (65% coverage)"
+    - Tool sees full picture, identifies best documentation, calculates true combined coverage
+  - Catches incomplete test case documentation across suite
+  - Identifies redundant/duplicate TCs
+  - Shows which TCs need updating
+- **🚀 Impact**:
+  - **Test Case Coverage Analysis** now accurate for multi-TC tests
+  - **No more "only first TC" limitation**
+  - **Better test case quality insights** (which TC is best, which need work)
+  - **Handles 20+ test cases** (common for complex feature tests)
+
+## v5.8.0 - Phase 3B: Visual Test Case Verification (MAJOR FEATURE)
+- **🎯 NEW: Visual Frame Matching for Test Case Steps** - AI analyzes video frames to verify if test case actions actually happened
+  - Each test case step is now visually verified against extracted video frames
+  - Searches through frames for visual evidence (UI elements, screen states, OCR text)
+  - Matches test case expectations with actual visual execution
+  - **Example**: Test case says "Click Diary button" → Tool finds frame showing Diary screen at 45s
+- **🟢🟡🔴 NEW: Confidence Scoring with Visual Evidence** - Quantifies how certain we are that a step executed
+  - **🟢 High Confidence** (score ≥5): Strong visual evidence + log confirmation (e.g., button visible in frame + "clicked" in logs)
+  - **🟡 Medium Confidence** (score 3-4): Moderate visual evidence or log only (e.g., screen changed but no explicit log)
+  - **🔴 Low Confidence** (score 1-2): Weak visual evidence, no logs (e.g., similar screen but unclear if action happened)
+  - **⚪ Not Verified**: No frames available or insufficient data
+  - Score calculated from: Visual analysis matches (3pts), OCR text matches (2pts), App state matches (1pt)
+- **⚠️ NEW: Discrepancy Detection - Logs vs Frames Mismatch** - Catches inconsistencies between what was logged and what actually happened
+  - **Case 1**: Action logged but not visible in video → Possible logging error or visual execution failure
+  - **Case 2**: Action visible in video but not logged → Logging gap or missing instrumentation
+  - **Case 3**: Low confidence visual match despite log → Questionable execution, needs verification
+  - **Why This Matters**: Sometimes tests log "success" but visually failed (or vice versa) - this catches those cases
+- **📊 NEW: Enhanced Coverage Table with Visual Verification** - Report now shows:
+  - Visual confidence for each step (🟢 High, 🟡 Medium, 🔴 Low, ⚪ Not Verified)
+  - Video timestamps where actions were detected
+  - Discrepancy warnings highlighted with ⚠️
+  - Visual verification summary: breakdown of confidence levels across all steps
+  - **Example Output**:
+    ```
+    | Step | Expected Action | Actual Execution | Match | Visual Confidence | Notes |
+    |------|----------------|------------------|-------|-------------------|-------|
+    | 1    | Click Diary    | Clicked Diary    | ✅    | 🟢 High          | @45s  |
+    | 2    | Search Food    | Not found in logs| ❌    | 🟡 Medium        | ⚠️ Visible in video but not logged |
+    ```
+- **🎬 NEW: Prioritized Frame Extraction** - Failure frames extracted FIRST, then coverage frames
+  - **Old approach**: Extract frames chronologically (0s, 5s, 10s, ..., 140s, 145s)
+    - Problem: If extraction is slow/interrupted, might miss critical failure frames at end
+  - **New approach**: Extract failure frames (last 30s) first, then fill in coverage
+    - Order: 120s, 125s, 130s, ..., 147s (failure), then 0s, 10s, 20s, ... (coverage)
+    - Ensures most critical frames are captured even if process times out
+  - **Impact**: Reliability improvement for slow networks or large videos
+- **🔍 Smart Frame Analysis for Step Verification** - Extracts key terms and matches them visually
+  - Identifies UI elements (button, menu, search, diary, food, etc.)
+  - Recognizes actions (click, tap, enter, verify, scroll, etc.)
+  - Parses quoted text from test case steps (e.g., "Add Food" button)
+  - Action-specific matching (e.g., "login" → checks for password/username fields in frames)
+- **💡 Phase 3B Benefits**:
+  - **Before**: "Test case says click X, logs say clicked X" → Assumed success (but did it visually work?)
+  - **After**: "Test case says click X, logs say clicked X, video shows X screen appeared" → Verified with confidence score
+  - Catches phantom successes (logged but not executed)
+  - Catches missing logs (executed but not logged)
+  - Provides visual proof for test case coverage claims
+
+## v5.7.4 - Video-Based Frame Extraction (Critical Architecture Change)
+- **🎯 MAJOR CHANGE: Video Duration is Source of Truth** - Frame extraction now based on actual video length, not test execution time
+  - **Key Insight**: Video recording time ≠ test execution time
+    - Video may start late (after test begins)
+    - Video may end early (before test completes)
+    - Video may be trimmed, edited, or have recording gaps
+    - Test execution (278s) vs Video duration (147s) can differ significantly
+  - **New Strategy**: Extract frames throughout video + extra frames in last 30 seconds
+    - Frames distributed across entire video (not just around calculated "failure point")
+    - Extra frames in last 30 seconds where failures typically occur
+    - Test start/finish times used as **hints only** (not for frame timestamps)
+- **🔧 FIXED: Invalid Timestamp Calculations** - Eliminated reliance on test execution timing
+  - **Old approach** (wrong): Calculate failure time from `test.finishTime - test.startTime` → 278s (beyond video!)
+  - **New approach** (correct): Estimate failure at video end (last 15-30s) + extract frames throughout
+  - Removed broken `calculateFailureTimestampInVideo()` logic
+  - Frame extraction now always uses valid timestamps (0 to videoDuration)
+- **📊 Smart Distributed Frame Extraction** - Optimal coverage of video content
+  - **Start frames** (0-10s): Capture app initialization, login states
+  - **Middle frames** (evenly distributed): Track test flow progression
+  - **End frames** (last 30-60s): Focus on failure point (where most failures occur)
+  - Configurable via `analysisDepth`: quick_text_only (0 frames), standard (8-12 frames), detailed (20-30 frames)
+- **💡 Why This Matters**:
+  - **Before**: 0 frames extracted (timestamp 278s > video 147s = FFmpeg fails silently)
+  - **After**: 8-30 frames extracted throughout video, including failure area
+  - Visual investigation can now actually see what happened during test execution
+
+## v5.7.3 - Semantic Analysis & Visual Element Investigation
+- **🎯 NEW: Semantic Test Case Quality Assessment** - AI analyzes if test case logically describes what automation does
+  - **Key Philosophy**: Having 67 automation steps vs 1 test case step is **NORMAL** (test cases are high-level, automation is detailed)
+  - **What We Analyze**: Does test case semantically describe automation behavior? Not step count!
+  - **Semantic Coverage Analysis**:
+    - Extracts action types from automation (login, search, UI interactions, verification, etc.)
+    - Matches automation actions to test case descriptions using AI semantic analysis
+    - Identifies undocumented action types (automation does X but test case never mentions it)
+    - Uses synonym matching (e.g., "sign in" matches "login", "tap" matches "click")
+  - **Red Flags Detected**:
+    - Placeholder text ("No steps defined", "Undefined")
+    - Semantic mismatch (test case describes A but automation does B)
+    - Very vague steps with no meaningful description
+    - Major automation behaviors not mentioned in test case at all
+  - **NOT Considered a Problem**: Many automation steps vs few test case steps (that's expected!)
+  - **Actionable Recommendations**: Prioritizes updating test case documentation over investigating automation bugs
+  - **Example Output (Good Test Case)**:
+    ```markdown
+    ✅ Test case provides adequate high-level description of automation behavior.
+    Note: Automation has 67 detailed steps vs 1 test case step - this is normal 
+    and expected. Test cases are high-level descriptions; automation is detailed 
+    implementation. Focus on investigating the actual test failure root cause.
+    ```
+  - **Example Output (Bad Test Case - Semantic Mismatch)**:
+    ```markdown
+    ⚠️ Test Case Documentation Issue Detected
+    Assessment: Test case documentation appears outdated/incomplete (70% confidence)
+    Analysis: Test case describes "Login, Navigate to Profile" but automation
+              performs undocumented actions: search, verification, text input.
+              The test case may not accurately describe what the automation does.
+    Recommendation: 🟡 MEDIUM PRIORITY: Review if test case accurately describes
+                    automation behavior. Consider adding search and verification steps.
+    ```
+- **🔄 Analysis Depth Mode Improvements**
+  - Renamed `quick` → `quick_text_only` (more explicit about no-frames mode)
+  - **Minimum Frame Requirement**: Visual modes now enforce minimum 5 frames
+  - **Updated Modes**:
+    - `quick_text_only`: No frames, fastest (~10-20s)
+    - `standard`: 8-12 frames (failure + coverage), no OCR (~30-60s) - **DEFAULT**
+    - `detailed`: 20-30 frames with smart selection + OCR (~60-120s)
+  - **Smart Frame Allocation**: Frames prioritized for failure diagnosis, then coverage verification
+- **🔍 NEW: Visual Element Investigation for "Element Not Found" Failures**
+  - **Deep Frame Analysis**: When locator fails, tool investigates video frames to determine WHY
+  - **Scenarios Detected**:
+    - **Loading State**: App still loading when locator executed → Timing issue
+    - **Modal/Popup Overlay**: Element obscured by modal, popup, or dialog
+    - **Element Visible but Locator Wrong**: Button/field exists in UI but locator fails → Locator needs update
+    - **App Error**: Application error preventing element from rendering → Possible app bug
+    - **Wrong Screen**: Element doesn't exist on current screen → Navigation issue or UI redesign
+  - **Actionable Diagnostics**: Provides specific recommendations (e.g., "Add explicit wait for loading", "Update XPath locator", "Dismiss modal first")
+  - **Example Output**:
+    ```markdown
+    🔍 Element "Add Food" visible in UI but locator failed
+    Recommendation: Update locator strategy or check if element attributes changed
+    
+    Visual diagnosis: Element "Add Food" appears to be visible in frames, but 
+    locator (xpath=//*[@id='add_food']) failed. This suggests the locator 
+    strategy may be incorrect or the element structure changed.
+    ```
+- **📊 Enhanced Coverage Verification**
+  - Added `visualConfidence` field to step-by-step comparison (high/medium/low/not_verified)
+  - Prepared infrastructure for visual frame-to-test-case-step matching (Phase 3B)
+  - Test case quality assessment integrated into prediction logic
+
+## v5.7.2 - Intelligent Stack Trace Parsing & Diagnostic Improvements
+- **🎯 MAJOR IMPROVEMENT: Comprehensive Stack Trace Parsing** - Extracts real failure causes instead of framework noise
+  - **Priority-based Analysis**: Stack trace → Visual frames → Test case comparison
+  - **Pattern Extraction**: Automatically detects:
+    - Test failure messages (TEST [...] FAILED lines)
+    - Element locators (XPath, ID, CSS selectors)
+    - Failing methods and classes
+    - Exception types (AssertionError, NoSuchElementException, etc.)
+  - **Framework Noise Filtering**: Ignores irrelevant messages like "retry_interval is too low"
+  - **Visual Frame Correlation**: Finds and displays the 3 closest frames to failure timestamp
+  - **Enhanced Root Cause Analysis**: Uses locator info, failing method, and visual state for better predictions
+- **🚀 Performance Optimizations (Phase 3A)**
+  - **Analysis Depth Modes**: Choose speed vs detail trade-off
+    - `quick`: No frames, text-only analysis (~10-20s)
+    - `standard`: 5-10 frames, no OCR (~30-60s) - **DEFAULT**
+    - `detailed`: 15-30 frames, OCR enabled (~60-120s)
+  - **Parallel Frame Extraction**: 3-5x faster using Promise.all for concurrent extraction
+  - **OCR Optional by Default**: Disabled by default (saves 2-3s per frame), can be enabled when needed
+  - **Dynamic Frame Limits**: Automatically adjusts frame count based on analysis depth
+- **📊 Enhanced Failure Reporting**
+  - Shows element locator that failed (e.g., `xpath=//*[@id='add_food']`)
+  - Displays failing method (e.g., `DiaryPage.clickAddFoodItem`)
+  - Lists evidence from multiple sources (stack trace, frames, logs)
+  - Includes visual context with 3 frames closest to failure timestamp
+  - Collapsible stack trace section to keep reports clean
+- **🔧 Improved Error Classification**
+  - `Element Not Found` - Locator failed to find element (test issue)
+  - `Stale Element` - Element found but became stale (synchronization issue)
+  - `Timeout` - Wait condition timeout (test or environment issue)
+  - `Application Crash` - App crashed (definite app bug)
+  - `Assertion Failed` - Expected vs actual mismatch (app or test issue)
+  - `Network Error` - Connectivity issues (environment)
+- **🔍 Enhanced Diagnostics for Frame Extraction**
+  - **Visible Error Messages**: Frame extraction failures now displayed prominently in reports
+  - **Detailed Logging**: Comprehensive stderr output for debugging FFmpeg issues
+  - **Timestamp Details**: Shows selected timestamps and extraction parameters
+  - **Failure Reasons**: Clear explanation when 0 frames are extracted
+  - **Graceful Degradation**: Analysis continues with text-only mode when frames fail
+  - **User Guidance**: Helpful notes about what to check when frames don't extract
+
+## v5.7.1 - Critical Fixes
+- **🐛 FIXED: 1MB MCP Response Limit** - Resolved issue where video analysis tool would fail with "Tool result is too large" error
+  - Changed frame delivery from embedded base64 images to file:// links
+  - Frames are now saved to disk and provided as clickable links
+  - Reduces response size from ~5-10MB to ~50KB for typical analysis
+  - Users can click links to view frames in their preferred image viewer
+- **🐛 FIXED: Silent Frame Extraction Failures** - Added comprehensive FFmpeg error logging and validation
+  - FFmpeg stderr output is now captured and logged
+  - Frame files are validated (existence and size) after extraction
+  - Detailed error messages show exact FFmpeg failure reasons
+  - Better debugging for video format incompatibilities
+- **✨ IMPROVED: Graceful Degradation** - Video analysis now continues even if frame extraction fails
+  - Frame extraction failures no longer crash the entire analysis
+  - Tool falls back to text-only analysis (logs, test case comparison, predictions)
+  - Clear warning messages when frames cannot be extracted
+  - Users still get valuable insights from logs and test case analysis
+- **🔧 FIXED: Tesseract.js Logger Error** - Resolved crash when OCR was enabled
+  - Fixed `logger is not a function` error in tesseract.js
+  - Proper conditional logger configuration based on debug mode
+  - OCR now works reliably for text extraction from frames
+- **📝 IMPROVED: Error Messages** - Enhanced error reporting throughout video analysis pipeline
+  - Specific error messages for each failure point
+  - Actionable troubleshooting steps in error responses
+  - Better distinction between video download, extraction, and analysis errors
+
+## v5.7.0
+- **🎬 NEW: Test Execution Video Analysis Tool** - Comprehensive video analysis with Claude Vision integration
+- **Video Processing Capabilities:**
+  - Downloads test execution videos from Zebrunner test sessions
+  - Extracts frames at strategic timestamps (3 modes: failure_focused, smart, full_test)
+  - Analyzes 10-30 frames per video depending on extraction mode
+  - Automatic frame resizing and optimization for Claude Vision
+  - OCR text extraction from frames using Tesseract.js
+  - Intelligent frame selection around failure points
+- **Test Case Comparison:**
+  - Fetches test case definitions from TCM
+  - Compares expected steps with executed steps from video/logs
+  - Calculates coverage percentage and identifies skipped/extra steps
+  - Correlates video frames with test case steps
+- **Failure Analysis & Prediction:**
+  - Analyzes failure type, error messages, and stack traces
+  - Predicts if failure is: bug, test_needs_update, infrastructure_issue, or data_issue
+  - Provides confidence scores (0-100%) for predictions
+  - Evidence-based reasoning with multiple data sources (logs, video, test case)
+  - Root cause categorization with supporting evidence
+- **Actionable Recommendations:**
+  - Prioritized action items (high/medium/low priority)
+  - Specific recommendations based on failure type
+  - Bug report templates for developers
+  - Test automation fixes for QA engineers
+- **MCP Integration:**
+  - Returns frames as image content blocks for Claude Vision analysis
+  - Detailed markdown reports with frame thumbnails
+  - Comprehensive metadata (video duration, resolution, platform, device)
+  - Links to test execution, test case, and video recording
+- **New Dependencies:**
+  - `@ffmpeg-installer/ffmpeg` ^1.1.0 - FFmpeg binary for video processing
+  - `@ffprobe-installer/ffprobe` ^1.4.1 - FFprobe for video metadata extraction
+  - `fluent-ffmpeg` ^2.1.3 - Node.js FFmpeg wrapper
+  - `@types/fluent-ffmpeg` ^2.1.24 - TypeScript types for fluent-ffmpeg
+- **New Modules (~2,800 lines of code):**
+  - `src/utils/video-analysis/analyzer.ts` - Main orchestrator
+  - `src/utils/video-analysis/video-downloader.ts` - Video download & metadata
+  - `src/utils/video-analysis/frame-extractor.ts` - FFmpeg frame extraction
+  - `src/utils/video-analysis/test-case-comparator.ts` - Test case comparison
+  - `src/utils/video-analysis/prediction-engine.ts` - AI-driven predictions
+  - `src/utils/video-analysis/types.ts` - Type definitions
+  - `src/types/ffprobe.d.ts` - FFprobe type declarations
+- **Documentation:**
+  - Updated README with video analysis tool usage
+  - Added comprehensive input parameters documentation
+  - Included example outputs and use cases
+- **Use Cases:**
+  - Automated root cause analysis for test failures
+  - Evidence-based bug vs test issue classification
+  - Visual debugging of mobile app test executions
+  - Test case validation and coverage analysis
+  - Failure pattern identification across multiple executions
+- **Performance:**
+  - Smart frame extraction limits token usage
+  - Automatic cleanup of temporary video files
+  - Configurable frame intervals and failure windows
+  - Parallel processing support for multiple frames
+- **Error Handling:**
+  - Graceful degradation if video unavailable
+  - FFmpeg installation validation
+  - Disk space checks before download
+  - Comprehensive error messages and troubleshooting
+- **Backward Compatibility:** ✅ Fully backward compatible, video analysis is opt-in
+
 ## v5.6.4
 - **🔥 CRITICAL FIX: URL Regression** - Fixed all incorrect test URLs from old pattern (`/tests/runs/.../results/...`) to correct pattern (`/projects/{projectKey}/automation-launches/{launchId}/tests/{testId}`)
 - **📊 NEW: Quick Reference Tables** - Added feature-grouped tables for critical and medium failures in `detailed_analyze_launch_failures`

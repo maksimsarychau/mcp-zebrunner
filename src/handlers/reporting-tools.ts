@@ -2,16 +2,24 @@ import { z } from "zod";
 import { ZebrunnerReportingClient } from "../api/reporting-client.js";
 import { EnhancedZebrunnerClient } from "../api/enhanced-client.js";
 import { FormatProcessor } from "../utils/formatter.js";
-import { GetLauncherDetailsInputSchema } from "../types/api.js";
+import { GetLauncherDetailsInputSchema, AnalyzeTestExecutionVideoInput } from "../types/api.js";
+import { VideoAnalyzer } from "../utils/video-analysis/analyzer.js";
 
 /**
  * MCP Tool handlers for Zebrunner Reporting API
  */
 export class ZebrunnerReportingToolHandlers {
+  private videoAnalyzer: VideoAnalyzer | null = null;
+
   constructor(
     private reportingClient: ZebrunnerReportingClient,
     private tcmClient?: EnhancedZebrunnerClient
-  ) {}
+  ) {
+    // Initialize video analyzer if TCM client is available
+    if (tcmClient) {
+      this.videoAnalyzer = new VideoAnalyzer(reportingClient, tcmClient, false);
+    }
+  }
 
   /**
    * Get launcher details tool - comprehensive launch information with test sessions
@@ -3530,6 +3538,393 @@ export class ZebrunnerReportingToolHandlers {
         content: [{
           type: "text" as const,
           text: `❌ Error analyzing launch failures: ${error.message}`
+        }]
+      };
+    }
+  }
+
+  /**
+   * Analyze test execution video tool - downloads video, extracts frames, compares with test case,
+   * and predicts if failure is a bug or test issue using Claude Vision
+   */
+  async analyzeTestExecutionVideoTool(input: AnalyzeTestExecutionVideoInput): Promise<{
+    content: Array<{ type: "text"; text: string } | { type: "image"; data: string; mimeType: string }>;
+  }> {
+    try {
+      if (!this.videoAnalyzer) {
+        return {
+          content: [{
+            type: "text" as const,
+            text: "❌ Video analysis is not available. TCM client is required for video analysis features."
+          }]
+        };
+      }
+
+      // Run video analysis
+      const result = await this.videoAnalyzer.analyzeTestExecutionVideo(input);
+
+      // Build detailed markdown report
+      const content: Array<{ type: "text"; text: string } | { type: "image"; data: string; mimeType: string }> = [];
+
+      // Header
+      let report = `# 🎬 Test Execution Video Analysis\n\n`;
+      report += `## 📹 Video Metadata\n\n`;
+      report += `- **Session ID**: ${result.videoMetadata.sessionId}\n`;
+      report += `- **Duration**: ${result.videoMetadata.videoDuration}s\n`;
+      report += `- **Resolution**: ${result.videoMetadata.videoResolution}\n`;
+      report += `- **Frames Extracted**: ${result.videoMetadata.extractedFrames}\n`;
+      
+      // Show frame extraction error prominently if present
+      if (result.videoMetadata.frameExtractionError) {
+        report += `\n⚠️ **Frame Extraction Issue**: ${result.videoMetadata.frameExtractionError}\n\n`;
+        
+        if (result.videoMetadata.extractedFrames === 0) {
+          report += `**Note**: Analysis will proceed with text-only mode (logs and stack trace analysis). This is often sufficient for diagnosing test failures.\n\n`;
+        }
+      }
+      
+      if (result.videoMetadata.platformName) {
+        report += `- **Platform**: ${result.videoMetadata.platformName}`;
+        if (result.videoMetadata.deviceName) {
+          report += ` (${result.videoMetadata.deviceName})`;
+        }
+        report += `\n`;
+      }
+      
+      report += `- **Status**: ${result.videoMetadata.status || 'COMPLETED'}\n`;
+      report += `- **Video URL**: ${result.links.videoUrl}\n`;
+      report += `\n`;
+
+      // Failure Analysis
+      report += `## ❌ Failure Analysis\n\n`;
+      report += `- **Failure Type**: ${result.failureAnalysis.failureType}\n`;
+      report += `- **Error Message**: \`${result.failureAnalysis.errorMessage}\`\n`;
+      report += `- **Timestamp**: ${result.failureAnalysis.failureTimestamp}\n`;
+      
+      if (result.failureAnalysis.failureVideoTimestamp !== undefined) {
+        report += `- **Video Timestamp**: ${result.failureAnalysis.failureVideoTimestamp}s\n`;
+      }
+      
+      report += `\n`;
+      report += `**Root Cause Analysis**:\n`;
+      report += `- Category: **${result.failureAnalysis.rootCause.category}**\n`;
+      report += `- Confidence: ${result.failureAnalysis.rootCause.confidence}%\n`;
+      report += `- Reasoning: ${result.failureAnalysis.rootCause.reasoning}\n`;
+      
+      if (result.failureAnalysis.rootCause.evidence.length > 0) {
+        report += `\n**Evidence**:\n`;
+        for (const evidence of result.failureAnalysis.rootCause.evidence) {
+          report += `- ${evidence}\n`;
+        }
+      }
+      
+      // Show failure frames if available
+      if (result.failureAnalysis.failureFrames && result.failureAnalysis.failureFrames.length > 0) {
+        report += `\n**📸 Visual Context (Frames near failure)**:\n`;
+        for (const frame of result.failureAnalysis.failureFrames) {
+          report += `- **Frame @ ${frame.timestamp}s**: ${frame.visualState}\n`;
+        }
+      }
+      
+      report += `\n`;
+
+      if (result.failureAnalysis.stackTrace) {
+        report += `<details>\n<summary>📋 Full Stack Trace (click to expand)</summary>\n\n\`\`\`\n${result.failureAnalysis.stackTrace.substring(0, 3000)}\n\`\`\`\n</details>\n\n`;
+      }
+
+      // NEW: Multi-Test Case Comparison (for tests with multiple TCs)
+      if (result.multiTestCaseComparison) {
+        const mtc = result.multiTestCaseComparison;
+        
+        report += `## 📊 Test Case Analysis (${mtc.combinedAnalysis.totalTestCases} Test Cases Found)\n\n`;
+        
+        // Summary table
+        report += `### Test Case Summary\n\n`;
+        report += `| Rank | Test Case | Steps | Coverage | Visual Confidence | Match Quality |\n`;
+        report += `|------|-----------|-------|----------|-------------------|---------------|\n`;
+        
+        for (const tc of mtc.testCases) {
+          const rankIcon = tc.rank === 1 ? '⭐' : tc.rank.toString();
+          const qualityIcon = tc.matchQuality === 'excellent' ? '🟢' : 
+                            tc.matchQuality === 'good' ? '🟡' : 
+                            tc.matchQuality === 'moderate' ? '🟠' : '🔴';
+          
+          // Make test case key clickable if URL available
+          const tcDisplay = tc.testCaseUrl 
+            ? `[${tc.testCaseKey}](${tc.testCaseUrl})` 
+            : tc.testCaseKey;
+          
+          report += `| ${rankIcon} | ${tcDisplay} | ${tc.coverageAnalysis.totalSteps} | ${tc.coverageAnalysis.coveragePercentage}% | ${tc.averageVisualConfidence}% | ${qualityIcon} ${tc.matchQuality.charAt(0).toUpperCase() + tc.matchQuality.slice(1)} |\n`;
+        }
+        report += `\n`;
+        
+        // Combined analysis
+        report += `### 📈 Combined Coverage Analysis\n\n`;
+        report += `- **Total Test Cases Analyzed**: ${mtc.combinedAnalysis.totalTestCases}\n`;
+        report += `- **Merged Steps**: ${mtc.combinedAnalysis.totalSteps} (after deduplication)\n`;
+        report += `- **Combined Coverage**: ${mtc.combinedAnalysis.combinedCoverage}%\n`;
+        report += `- **Best Match**: ${mtc.combinedAnalysis.bestMatch.testCaseKey} (${mtc.combinedAnalysis.bestMatch.coverage}%)\n`;
+        report += `  - ${mtc.combinedAnalysis.bestMatch.reasoning}\n`;
+        report += `\n`;
+        
+        // Merged step-by-step comparison
+        report += `### 🎥 Merged Test Case Steps (with Visual Verification)\n\n`;
+        report += `| Step | Source TC | Expected Action | Actual Execution | Match | Visual Confidence | Notes |\n`;
+        report += `|------|-----------|----------------|------------------|-------|-------------------|-------|\n`;
+        
+        for (const step of mtc.stepByStepComparison.slice(0, 20)) { // Limit to first 20 for readability
+          const match = step.match ? '✅' : '❌';
+          
+          // Visual confidence indicator
+          let confidenceIcon = '❓';
+          if (step.visualConfidence === 'high') {
+            confidenceIcon = '🟢';
+          } else if (step.visualConfidence === 'medium') {
+            confidenceIcon = '🟡';
+          } else if (step.visualConfidence === 'low') {
+            confidenceIcon = '🔴';
+          } else {
+            confidenceIcon = '⚪';
+          }
+          
+          // Build notes
+          const notes: string[] = [];
+          if (step.videoTimestamp) {
+            notes.push(`@${step.videoTimestamp}s`);
+          }
+          if (step.deviation) {
+            notes.push(step.deviation.substring(0, 30));
+          }
+          
+          const notesText = notes.join(' | ');
+          
+          // Show full test case key (no abbreviation)
+          const sourceTC = step.sourceTestCase;
+          
+          report += `| ${step.testCaseStep} | ${sourceTC} | ${step.expectedAction.substring(0, 30)} | ${step.actualExecution.substring(0, 30)} | ${match} | ${confidenceIcon} | ${notesText} |\n`;
+        }
+        
+        if (mtc.stepByStepComparison.length > 20) {
+          report += `\n*Showing first 20 of ${mtc.stepByStepComparison.length} merged steps*\n`;
+        }
+        report += `\n`;
+        
+        // Visual verification summary
+        const visualStats = {
+          high: mtc.stepByStepComparison.filter(s => s.visualConfidence === 'high').length,
+          medium: mtc.stepByStepComparison.filter(s => s.visualConfidence === 'medium').length,
+          low: mtc.stepByStepComparison.filter(s => s.visualConfidence === 'low').length,
+          notVerified: mtc.stepByStepComparison.filter(s => s.visualConfidence === 'not_verified').length,
+          discrepancies: mtc.stepByStepComparison.filter(s => s.deviation && s.deviation.includes('⚠️')).length
+        };
+        
+        report += `**Visual Verification Summary (Merged Steps)**:\n`;
+        report += `- 🟢 High Confidence: ${visualStats.high} steps\n`;
+        report += `- 🟡 Medium Confidence: ${visualStats.medium} steps\n`;
+        report += `- 🔴 Low Confidence: ${visualStats.low} steps\n`;
+        report += `- ⚪ Not Verified: ${visualStats.notVerified} steps\n`;
+        if (visualStats.discrepancies > 0) {
+          report += `- ⚠️ **Discrepancies Detected**: ${visualStats.discrepancies} steps with log/video mismatch\n`;
+        }
+        report += `\n`;
+        
+      } else if (result.testCaseComparison) {
+        // Fallback: Single Test Case Comparison (legacy)
+        const tc = result.testCaseComparison;
+        report += `## 📋 Test Case Comparison\n\n`;
+        report += `- **Test Case**: ${tc.testCaseKey} - ${tc.testCaseTitle}\n`;
+        report += `- **Total Steps**: ${tc.coverageAnalysis.totalSteps}\n`;
+        report += `- **Executed**: ${tc.coverageAnalysis.executedSteps}\n`;
+        report += `- **Coverage**: ${tc.coverageAnalysis.coveragePercentage}%\n`;
+        
+        if (tc.coverageAnalysis.skippedSteps.length > 0) {
+          report += `- **Skipped Steps**: ${tc.coverageAnalysis.skippedSteps.join(', ')}\n`;
+        }
+        
+        if (tc.coverageAnalysis.extraSteps.length > 0) {
+          report += `- **Extra Steps**: ${tc.coverageAnalysis.extraSteps.length} steps executed but not in test case\n`;
+        }
+        report += `\n`;
+
+        // Test case quality assessment (show prominently if outdated)
+        if (tc.testCaseQuality.isOutdated) {
+          report += `### ⚠️ Test Case Documentation Issue Detected\n\n`;
+          report += `**Assessment**: Test case documentation appears **outdated/incomplete** (${tc.testCaseQuality.confidence}% confidence)\n\n`;
+          report += `**Analysis**: ${tc.testCaseQuality.reasoning}\n\n`;
+          report += `**Recommendation**: ${tc.testCaseQuality.recommendation}\n\n`;
+          report += `---\n\n`;
+        }
+
+        // Step-by-step comparison table WITH VISUAL VERIFICATION
+        report += `### 🎥 Step-by-Step Comparison (with Visual Verification)\n\n`;
+        report += `| Step | Expected Action | Actual Execution | Match | Visual Confidence | Notes |\n`;
+        report += `|------|----------------|------------------|-------|-------------------|-------|\n`;
+        
+        for (const step of tc.stepByStepComparison) {
+          const match = step.match ? '✅' : '❌';
+          
+          // Visual confidence indicator
+          let confidenceIcon = '❓';
+          if (step.visualConfidence === 'high') {
+            confidenceIcon = '🟢 High';
+          } else if (step.visualConfidence === 'medium') {
+            confidenceIcon = '🟡 Medium';
+          } else if (step.visualConfidence === 'low') {
+            confidenceIcon = '🔴 Low';
+          } else {
+            confidenceIcon = '⚪ Not Verified';
+          }
+          
+          // Build notes with video timestamp and deviation
+          const notes: string[] = [];
+          if (step.videoTimestamp) {
+            notes.push(`@${step.videoTimestamp}s`);
+          }
+          if (step.deviation) {
+            notes.push(step.deviation);
+          }
+          
+          const notesText = notes.join(' | ');
+          report += `| ${step.testCaseStep} | ${step.expectedAction.substring(0, 35)} | ${step.actualExecution.substring(0, 35)} | ${match} | ${confidenceIcon} | ${notesText} |\n`;
+        }
+        report += `\n`;
+        
+        // Summary of visual verification
+        const visualStats = {
+          high: tc.stepByStepComparison.filter(s => s.visualConfidence === 'high').length,
+          medium: tc.stepByStepComparison.filter(s => s.visualConfidence === 'medium').length,
+          low: tc.stepByStepComparison.filter(s => s.visualConfidence === 'low').length,
+          notVerified: tc.stepByStepComparison.filter(s => s.visualConfidence === 'not_verified').length,
+          discrepancies: tc.stepByStepComparison.filter(s => s.deviation && s.deviation.includes('⚠️')).length
+        };
+        
+        report += `**Visual Verification Summary**:\n`;
+        report += `- 🟢 High Confidence: ${visualStats.high} steps\n`;
+        report += `- 🟡 Medium Confidence: ${visualStats.medium} steps\n`;
+        report += `- 🔴 Low Confidence: ${visualStats.low} steps\n`;
+        report += `- ⚪ Not Verified: ${visualStats.notVerified} steps\n`;
+        if (visualStats.discrepancies > 0) {
+          report += `- ⚠️ **Discrepancies Detected**: ${visualStats.discrepancies} steps with log/video mismatch\n`;
+        }
+        report += `\n`;
+      }
+
+      // Prediction
+      report += `## 🔮 Prediction\n\n`;
+      report += `### Verdict: **${result.prediction.verdict}**\n`;
+      report += `**Confidence**: ${result.prediction.confidence}%\n\n`;
+      report += `**Reasoning**: ${result.prediction.reasoning}\n\n`;
+
+      if (result.prediction.evidenceForBug.length > 0) {
+        report += `**Evidence for Bug**:\n`;
+        result.prediction.evidenceForBug.forEach(e => {
+          report += `- ${e}\n`;
+        });
+        report += `\n`;
+      }
+
+      if (result.prediction.evidenceForTestUpdate.length > 0) {
+        report += `**Evidence for Test Update**:\n`;
+        result.prediction.evidenceForTestUpdate.forEach(e => {
+          report += `- ${e}\n`;
+        });
+        report += `\n`;
+      }
+
+      // Recommendations
+      report += `## 💡 Recommendations\n\n`;
+      for (const rec of result.prediction.recommendations) {
+        const priorityEmoji = rec.priority === 'high' ? '🔴' : rec.priority === 'medium' ? '🟡' : '🟢';
+        report += `### ${priorityEmoji} ${rec.description} (${rec.priority} priority)\n\n`;
+        report += `**Action Items**:\n`;
+        rec.actionItems.forEach(item => {
+          report += `- ${item}\n`;
+        });
+        report += `\n`;
+      }
+
+      // Summary
+      report += `## 📊 Summary\n\n`;
+      report += result.summary;
+      report += `\n\n`;
+
+      // Links
+      report += `## 🔗 Links\n\n`;
+      report += `- [Test Execution](${result.links.testUrl})\n`;
+      if (result.links.testCaseUrl) {
+        report += `- [Test Case](${result.links.testCaseUrl})\n`;
+      }
+      report += `- [Video Recording](${result.links.videoUrl})\n`;
+      report += `\n`;
+
+      // Add report text to content
+      content.push({
+        type: "text" as const,
+        text: report
+      });
+
+      // Add frames as clickable file:// links (avoiding 1MB MCP response limit)
+      if (result.frames.length > 0) {
+        content.push({
+          type: "text" as const,
+          text: `## 🖼️ Extracted Frames for Analysis\n\n` +
+                `${result.frames.length} frames were extracted from the test execution video. ` +
+                `Click the links below to view each frame:\n\n`
+        });
+
+        let framesText = '';
+        for (const frame of result.frames) {
+          if (frame.framePath) {
+            framesText += `### Frame ${frame.frameNumber} @ ${frame.timestamp}s\n`;
+            framesText += `📷 [View Frame](file://${frame.framePath})\n\n`;
+            
+            if (frame.ocrText && frame.ocrText.length > 0) {
+              framesText += `**OCR Text Detected**:\n\`\`\`\n${frame.ocrText.substring(0, 300)}${frame.ocrText.length > 300 ? '...' : ''}\n\`\`\`\n\n`;
+            }
+          }
+        }
+        
+        content.push({
+          type: "text" as const,
+          text: framesText
+        });
+      } else {
+        content.push({
+          type: "text" as const,
+          text: `## ⚠️ No Frames Extracted\n\n` +
+                `Frame extraction did not produce any frames. This could indicate:\n` +
+                `- Video format issues\n` +
+                `- FFmpeg extraction errors\n` +
+                `- Video file corruption\n\n` +
+                `Check the error logs for more details.\n\n`
+        });
+      }
+
+      // Final analysis summary
+      if (result.frames.length > 0) {
+        content.push({
+          type: "text" as const,
+          text: `\n\n---\n\n` +
+                `**📊 Analysis Summary**\n\n` +
+                `- **Frames Extracted**: ${result.frames.length}\n` +
+                `- **Video Duration**: ${result.videoMetadata.videoDuration}s\n` +
+                `- **Prediction**: **${result.prediction.verdict}** (${result.prediction.confidence}% confidence)\n\n` +
+                `💡 **Tip**: Click the frame links above to visually inspect what happened during the test execution.`
+        });
+      }
+
+      return { content };
+
+    } catch (error: any) {
+      return {
+        content: [{
+          type: "text" as const,
+          text: `❌ Error analyzing test execution video: ${error.message}\n\n` +
+                `Please ensure:\n` +
+                `1. The test has a video recording available\n` +
+                `2. FFmpeg is installed and accessible\n` +
+                `3. You have sufficient disk space for temporary video files\n\n` +
+                `Error details: ${error.stack || error}`
         }]
       };
     }

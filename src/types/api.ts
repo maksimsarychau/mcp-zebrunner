@@ -242,3 +242,45 @@ export class ZebrunnerRateLimitError extends ZebrunnerApiError {
     };
   }
 }
+
+// Video Analysis Input Schema
+export const AnalyzeTestExecutionVideoInputSchema = z.object({
+  testId: z.number().int().positive().describe("Test ID from Zebrunner"),
+  testRunId: z.number().int().positive().describe("Launch ID / Test Run ID"),
+  projectKey: z.string().min(1).optional().describe("Project key (MCP, etc.)"),
+  projectId: z.number().int().positive().optional().describe("Project ID (alternative to projectKey)"),
+
+  // Video Analysis Options
+  extractionMode: z.enum(['failure_focused', 'full_test', 'smart']).default('smart')
+    .describe("Frame extraction mode: failure_focused (10 frames around failure), full_test (30 frames throughout), smart (20 frames at key moments)"),
+  frameInterval: z.number().int().positive().default(5)
+    .describe("Seconds between frames for full_test mode"),
+  failureWindowSeconds: z.number().int().positive().default(30)
+    .describe("Time window around failure to analyze (seconds)"),
+
+  // Test Case Comparison
+  compareWithTestCase: z.boolean().default(true)
+    .describe("Compare video execution with test case steps"),
+  testCaseKey: z.string().optional()
+    .describe("Override test case key if different from test metadata"),
+
+  // Analysis Depth
+  analysisDepth: z.enum(['quick_text_only', 'standard', 'detailed']).default('standard')
+    .describe("Analysis depth: quick_text_only (no frames, ~10-20s), standard (8-12 frames for failure+coverage, ~30-60s), detailed (20-30 frames with OCR, ~60-120s)"),
+  includeOCR: z.boolean().default(false)
+    .describe("Extract text from frames using OCR (slow, adds 2-3s per frame)"),
+  analyzeSimilarFailures: z.boolean().default(true)
+    .describe("Find similar failures in project (last 30 days, top 10)"),
+  includeHistoricalTrends: z.boolean().default(true)
+    .describe("Analyze test stability and flakiness (last 30 runs)"),
+  includeLogCorrelation: z.boolean().default(true)
+    .describe("Correlate frames with log timestamps"),
+
+  // Output Format
+  format: z.enum(['detailed', 'summary', 'jira']).default('detailed')
+    .describe("Output format: detailed (full analysis), summary (condensed), jira (ticket-ready)"),
+  generateVideoReport: z.boolean().default(true)
+    .describe("Generate timestamped video analysis report")
+});
+
+export type AnalyzeTestExecutionVideoInput = z.infer<typeof AnalyzeTestExecutionVideoInputSchema>;
