@@ -2849,10 +2849,10 @@ export class ZebrunnerReportingToolHandlers {
       // Build launch URL
       const launchUrl = `${baseUrl}/projects/${resolvedProjectKey}/automation-launches/${testRunId}`;
       
-      // Build suite URL if available
+      // Build suite URL if available (use correct Zebrunner UI format)
       let suiteUrl: string | null = null;
       if (launch.testSuite && launch.testSuite.id) {
-        suiteUrl = `${baseUrl}/projects/${resolvedProjectKey}/test-suites/${launch.testSuite.id}`;
+        suiteUrl = `${baseUrl}/projects/${resolvedProjectKey}/test-cases?suiteId=${launch.testSuite.id}`;
       }
       
       // Collect unique devices from actual test sessions
