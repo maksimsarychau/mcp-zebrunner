@@ -950,6 +950,7 @@ export class ZebrunnerReportingToolHandlers {
         duration,
         stability,
         errorClassification,
+        logAnalysis,
         screenshots,
         similarFailures,
         testSessionUrl,
@@ -967,6 +968,33 @@ export class ZebrunnerReportingToolHandlers {
     report += `- **Root Cause:** ${errorClassification.category}\n`;
     report += `- **Confidence:** ${errorClassification.confidence}\n`;
     report += `- **Stability:** ${stability}%\n`;
+    
+    // Get device/OS info from sessions (FAILED first) for Executive Summary
+    const sessionsForSummary = await this.getAllSessionsWithArtifacts(testRunId, testId, projectId);
+    if (sessionsForSummary.length > 0) {
+      const failedSession = sessionsForSummary.find(s => s.status === 'FAILED' || s.status === 'ABORTED');
+      const primarySession = failedSession || sessionsForSummary[0];
+      
+      report += `- **Device:** ${primarySession.device}\n`;
+      report += `- **Platform:** ${primarySession.platform}\n`;
+      
+      // Show other environments if available
+      if (sessionsForSummary.length > 1) {
+        const uniqueEnvs = [...new Set(sessionsForSummary.map(s => `${s.device} (${s.platform})`))];
+        if (uniqueEnvs.length > 1) {
+          const otherEnvs = sessionsForSummary
+            .filter(s => s.sessionId !== primarySession.sessionId)
+            .map(s => `${s.device} (${s.platform})`)
+            .slice(0, 2)
+            .join(', ');
+          report += `- **Other Environments:** ${otherEnvs}`;
+          if (sessionsForSummary.length > 3) {
+            report += `, +${sessionsForSummary.length - 3} more`;
+          }
+          report += `\n`;
+        }
+      }
+    }
     
     // Test Cases
     if (testRun.testCases && testRun.testCases.length > 0) {
@@ -1044,8 +1072,16 @@ export class ZebrunnerReportingToolHandlers {
 
     // Failure Information
     report += `## 🚨 Failure Information\n\n`;
-    report += `### Error Message\n\n`;
-    report += `\`\`\`\n${testRun.message || 'No error message available'}\n\`\`\`\n\n`;
+    
+    // Error Message - Show both short (300 chars) and full
+    const fullErrorMessage = testRun.message || 'No error message available';
+    report += `### Error Message (Short)\n\n`;
+    report += `\`\`\`\n${fullErrorMessage.substring(0, 300)}${fullErrorMessage.length > 300 ? '\n... (truncated, see full message below)' : ''}\n\`\`\`\n\n`;
+    
+    if (fullErrorMessage.length > 300) {
+      report += `### Full Error Message\n\n`;
+      report += `\`\`\`\n${fullErrorMessage}\n\`\`\`\n\n`;
+    }
 
     // Error Classification
     report += `### Error Classification\n\n`;
@@ -1083,11 +1119,15 @@ export class ZebrunnerReportingToolHandlers {
       }
 
       if (logAnalysis.errorLogs.length > 0) {
-        report += `### Error Logs\n\n`;
-        logAnalysis.errorLogs.slice(0, 3).forEach((log: any) => {
-          report += `**[${log.level}]** ${new Date(log.timestamp).toLocaleTimeString()}:\n`;
-          report += `\`\`\`\n${log.message}\n\`\`\`\n\n`;
+        report += `### Error Logs (Top ${Math.min(5, logAnalysis.errorLogs.length)})\n\n`;
+        logAnalysis.errorLogs.slice(0, 5).forEach((log: any, idx: number) => {
+          report += `${idx + 1}. **[${log.level}]** ${new Date(log.timestamp).toLocaleTimeString()}:\n`;
+          const truncatedLog = log.message.substring(0, 300);
+          report += `\`\`\`\n${truncatedLog}${log.message.length > 300 ? '\n...' : ''}\n\`\`\`\n\n`;
         });
+        if (logAnalysis.errorLogs.length > 5) {
+          report += `_... and ${logAnalysis.errorLogs.length - 5} more error log entries_\n\n`;
+        }
       }
     }
 
@@ -1276,6 +1316,7 @@ export class ZebrunnerReportingToolHandlers {
     duration: number;
     stability: number;
     errorClassification: any;
+    logAnalysis: any;
     screenshots: any[];
     similarFailures: any[];
     testSessionUrl: string;
@@ -1290,6 +1331,7 @@ export class ZebrunnerReportingToolHandlers {
       duration,
       stability,
       errorClassification,
+      logAnalysis,
       screenshots,
       similarFailures,
       testSessionUrl,
@@ -1317,12 +1359,55 @@ export class ZebrunnerReportingToolHandlers {
     } else {
       report += `**Test Cases:** ⚠️ Not linked to test case\n`;
     }
+    
+    // Get sessions for device/OS info (FAILED sessions first)
+    const sessions = await this.getAllSessionsWithArtifacts(testRunId, testId, projectId);
+    if (sessions.length > 0) {
+      // Show device/OS info from FAILED session first, then others
+      const failedSession = sessions.find(s => s.status === 'FAILED' || s.status === 'ABORTED');
+      const sessionToShow = failedSession || sessions[0];
+      
+      report += `**Device:** ${sessionToShow.device}\n`;
+      report += `**Platform:** ${sessionToShow.platform}\n`;
+      
+      // If there are multiple sessions with different devices, note that
+      if (sessions.length > 1) {
+        const uniqueDevices = [...new Set(sessions.map(s => s.device))];
+        const uniquePlatforms = [...new Set(sessions.map(s => s.platform))];
+        if (uniqueDevices.length > 1 || uniquePlatforms.length > 1) {
+          report += `**Other Environments:** `;
+          const otherSessions = sessions.filter(s => s.sessionId !== sessionToShow.sessionId);
+          const envs = otherSessions.map(s => `${s.device} (${s.platform})`).slice(0, 2);
+          report += envs.join(', ');
+          if (otherSessions.length > 2) {
+            report += `, +${otherSessions.length - 2} more`;
+          }
+          report += `\n`;
+        }
+      }
+    }
+    
     report += `\n`;
 
-    report += `**Error:**\n\`\`\`\n${testRun.message}\n\`\`\`\n\n`;
+    // Error Message (short) and Error Logs
+    const errorMessage = testRun.message || 'No error message';
+    const truncatedError = errorMessage.substring(0, 300);
+    report += `**Error (Short):**\n\`\`\`\n${truncatedError}${errorMessage.length > 300 ? '\n... (truncated)' : ''}\n\`\`\`\n\n`;
+    
+    // Show first 5 error logs with timestamps
+    if (logAnalysis && logAnalysis.errorLogs && logAnalysis.errorLogs.length > 0) {
+      report += `**Error Logs (Top ${Math.min(5, logAnalysis.errorLogs.length)}):**\n\n`;
+      logAnalysis.errorLogs.slice(0, 5).forEach((log: any, idx: number) => {
+        const logTime = new Date(log.timestamp).toLocaleTimeString();
+        const truncatedLog = log.message.substring(0, 200);
+        report += `${idx + 1}. **[${log.level}]** ${logTime}:\n\`\`\`\n${truncatedLog}${log.message.length > 200 ? '...' : ''}\n\`\`\`\n\n`;
+      });
+      if (logAnalysis.errorLogs.length > 5) {
+        report += `_... and ${logAnalysis.errorLogs.length - 5} more error log entries_\n\n`;
+      }
+    }
 
-    // Get latest session for summary format
-    const sessions = await this.getAllSessionsWithArtifacts(testRunId, testId, projectId);
+    // Session artifacts (videos and screenshots)
     if (sessions.length > 0) {
       const latestSession = sessions[0];
       
@@ -1924,10 +2009,27 @@ export class ZebrunnerReportingToolHandlers {
 
     const links = await Promise.all(testCases.map(async tc => {
       const url = await this.buildTestCaseUrl(tc.testCaseId, projectKey, baseUrl);
+      
+      // Try to fetch test case title for enhanced display
+      let displayText = tc.testCaseId;
+      try {
+        if (this.tcmClient) {
+          const testCase = await this.tcmClient.getTestCaseByKey(projectKey, tc.testCaseId);
+          if (testCase.title) {
+            displayText = `${tc.testCaseId}: ${testCase.title}`;
+          }
+        }
+      } catch (error) {
+        // If we can't fetch the title, just use the ID
+        if (this.reportingClient['config'].debug) {
+          console.warn(`[formatTestCases] Could not fetch title for ${tc.testCaseId}`);
+        }
+      }
+      
       if (format === 'jira') {
-        return `[${tc.testCaseId}|${url}]`;
+        return `[${displayText}|${url}]`;
       } else {
-        return `[${tc.testCaseId}](${url})`;
+        return `[${displayText}](${url})`;
       }
     }));
 
@@ -2013,6 +2115,33 @@ export class ZebrunnerReportingToolHandlers {
     jiraContent += `|Stability|${stability}%|\n`;
     jiraContent += `|Duration|${Math.floor(duration / 60)}m ${duration % 60}s|\n`;
     
+    // Get device/OS info from sessions (FAILED first)
+    const sessions = await this.getAllSessionsWithArtifacts(testRunId, testId, projectId);
+    if (sessions.length > 0) {
+      const failedSession = sessions.find(s => s.status === 'FAILED' || s.status === 'ABORTED');
+      const sessionToShow = failedSession || sessions[0];
+      
+      jiraContent += `|Device|${sessionToShow.device}|\n`;
+      jiraContent += `|Platform/OS|${sessionToShow.platform}|\n`;
+      
+      // If there are multiple environments, add them too
+      if (sessions.length > 1) {
+        const uniqueEnvs = [...new Set(sessions.map(s => `${s.device} (${s.platform})`))];
+        if (uniqueEnvs.length > 1) {
+          const otherEnvs = sessions
+            .filter(s => s.sessionId !== sessionToShow.sessionId)
+            .map(s => `${s.device} (${s.platform})`)
+            .slice(0, 3)
+            .join(', ');
+          jiraContent += `|Other Environments|${otherEnvs}`;
+          if (sessions.length > 4) {
+            jiraContent += `, +${sessions.length - 4} more`;
+          }
+          jiraContent += `|\n`;
+        }
+      }
+    }
+    
     // Test Cases
     if (testRun.testCases && testRun.testCases.length > 0 && projectKey) {
       const testCaseLinks = await this.formatTestCases(testRun.testCases, projectKey, baseUrl, 'jira');
@@ -2045,8 +2174,21 @@ export class ZebrunnerReportingToolHandlers {
       jiraContent += `\n`;
     }
 
-    jiraContent += `h3. Error Message\n\n`;
-    jiraContent += `{code}\n${(testRun.message || 'No error message').substring(0, 500)}${testRun.message && testRun.message.length > 500 ? '\n... (truncated, see full logs in link)' : ''}\n{code}\n\n`;
+    jiraContent += `h3. Error Message (Short)\n\n`;
+    jiraContent += `{code}\n${(testRun.message || 'No error message').substring(0, 300)}${testRun.message && testRun.message.length > 300 ? '\n... (truncated, see full logs in link)' : ''}\n{code}\n\n`;
+
+    // Error Logs - Show first 5 error log entries with timestamps
+    if (logAnalysis && logAnalysis.errorLogs && logAnalysis.errorLogs.length > 0) {
+      jiraContent += `h3. Error Logs (Top 5)\n\n`;
+      logAnalysis.errorLogs.slice(0, 5).forEach((log: any, idx: number) => {
+        jiraContent += `*${idx + 1}. [${log.level}]* ${new Date(log.timestamp).toLocaleString()}:\n`;
+        jiraContent += `{code}\n${log.message.substring(0, 250)}${log.message.length > 250 ? '\n...' : ''}\n{code}\n\n`;
+      });
+      if (logAnalysis.errorLogs.length > 5) {
+        jiraContent += `_... and ${logAnalysis.errorLogs.length - 5} more error log entries_\n\n`;
+      }
+      jiraContent += `[View all logs|${testUrl}]\n\n`;
+    }
 
     // Expected vs Actual
     jiraContent += `h3. Expected vs Actual\n\n`;
@@ -2061,16 +2203,6 @@ export class ZebrunnerReportingToolHandlers {
         jiraContent += `# ${action}\n`;
       });
       jiraContent += `\n`;
-    }
-
-    // Logs
-    if (logAnalysis && logAnalysis.errorLogs && logAnalysis.errorLogs.length > 0) {
-      jiraContent += `h3. Error Logs\n\n`;
-      logAnalysis.errorLogs.slice(0, 3).forEach((log: any) => {
-        jiraContent += `*[${log.level}]* ${new Date(log.timestamp).toLocaleString()}:\n`;
-        jiraContent += `{code}\n${log.message.substring(0, 300)}${log.message.length > 300 ? '\n...' : ''}\n{code}\n\n`;
-      });
-      jiraContent += `[View all logs|${testUrl}]\n\n`;
     }
 
     // Screenshots
@@ -2593,9 +2725,28 @@ export class ZebrunnerReportingToolHandlers {
         jiraContent += `* *Stability:* ${detail.stability}% ${detail.stability < 50 ? '(!)' : detail.stability < 80 ? '(/)' : '(+)'}\n`;
         jiraContent += `* *Root Cause:* ${detail.rootCause}\n`;
         
-        if (detail.errorMsg && detail.errorMsg !== 'No error message') {
-          jiraContent += `\n{code:title=Error}\n${detail.errorMsg.substring(0, 200)}${detail.errorMsg.length > 200 ? '...' : ''}\n{code}\n`;
+        // Extract and display device/OS info
+        const deviceMatch = detail.fullAnalysis.match(/\*\*Device:\*\*\s*([^\n]+)/);
+        const platformMatch = detail.fullAnalysis.match(/\*\*Platform:\*\*\s*([^\n]+)/);
+        
+        if (deviceMatch) {
+          jiraContent += `* *Device:* ${deviceMatch[1].trim()}\n`;
         }
+        if (platformMatch) {
+          jiraContent += `* *Platform/OS:* ${platformMatch[1].trim()}\n`;
+        }
+        
+        if (detail.errorMsg && detail.errorMsg !== 'No error message') {
+          jiraContent += `\n{code:title=Error (Short)}\n${detail.errorMsg.substring(0, 300)}${detail.errorMsg.length > 300 ? '...' : ''}\n{code}\n`;
+        }
+        
+        // Extract and show top 3 error logs
+        const errorLogsMatch = detail.fullAnalysis.match(/\*\*Error Logs \(Top \d+\):\*\*\n\n([\s\S]*?)(?=\n\n\*\*|$)/);
+        if (errorLogsMatch) {
+          const logs = errorLogsMatch[1].substring(0, 400);
+          jiraContent += `\n{code:title=Error Logs (Top 3)}\n${logs}${errorLogsMatch[1].length > 400 ? '...' : ''}\n{code}\n`;
+        }
+        
         jiraContent += `\n`;
       }
     });
@@ -2698,10 +2849,10 @@ export class ZebrunnerReportingToolHandlers {
       // Build launch URL
       const launchUrl = `${baseUrl}/projects/${resolvedProjectKey}/automation-launches/${testRunId}`;
       
-      // Build suite URL if available
+      // Build suite URL if available (use correct Zebrunner UI format)
       let suiteUrl: string | null = null;
       if (launch.testSuite && launch.testSuite.id) {
-        suiteUrl = `${baseUrl}/projects/${resolvedProjectKey}/test-suites/${launch.testSuite.id}`;
+        suiteUrl = `${baseUrl}/projects/${resolvedProjectKey}/test-cases?suiteId=${launch.testSuite.id}`;
       }
       
       // Collect unique devices from actual test sessions
@@ -2958,7 +3109,11 @@ export class ZebrunnerReportingToolHandlers {
 
           // Extract all relevant information
           const classMatch = textContent.match(/\*\*Error Classification:\*\* ([^\n]+)/);
-          const errorMatch = textContent.match(/\*\*Error Message:\*\*\s*```([^`]+)```/);
+          // Try multiple patterns for error message extraction (summary vs detailed format)
+          let errorMatch = textContent.match(/\*\*Error \(Short\):\*\*\s*```([^`]+)```/); // Summary format
+          if (!errorMatch) {
+            errorMatch = textContent.match(/### Error Message \(Short\)\s*\n\s*```([^`]+)```/); // Detailed format
+          }
           const rootCauseMatch = textContent.match(/\*\*Root Cause:\*\*\s*([^\n]+)/);
           const stabilityMatch = textContent.match(/\*\*Stability:\*\* (\d+)%/);
           const timestampMatch = textContent.match(/\*\*Failure Time:\*\* ([^\n]+)/);
@@ -3122,10 +3277,12 @@ export class ZebrunnerReportingToolHandlers {
           
           for (const test of tests.sort((a, b) => a.stability - b.stability)) {
             const testUrl = `${baseUrl}/projects/${resolvedProjectKey}/automation-launches/${testRunId}/tests/${test.testId}`;
-            const testNameShort = test.testName.replace(/^\[[^\]]+\]\s*:\s*/, '').replace(/\s*-\s*\w+$/, '');
-            const issueShort = test.rootCause !== 'Unknown' 
-              ? test.rootCause.substring(0, 80) 
-              : test.errorMsg.substring(0, 80);
+            // Use FULL test name instead of shortened version
+            const testNameDisplay = test.testName;
+            // Use error message first, fallback to root cause
+            const issueShort = test.errorMsg && test.errorMsg !== 'No error message'
+              ? test.errorMsg.substring(0, 80) 
+              : (test.rootCause !== 'Unknown' ? test.rootCause.substring(0, 80) : 'Unknown error');
             
             // Get video URL for evidence
             const sessions = await this.getAllSessionsWithArtifacts(testRunId, test.testId, resolvedProjectId!);
@@ -3133,7 +3290,7 @@ export class ZebrunnerReportingToolHandlers {
               ? `[Video](${sessions[0].videos[0].url})` 
               : 'N/A';
             
-            report += `| [${testNameShort}](${testUrl}) | ${test.stability}% | ${issueShort} | ${videoLink} |\n`;
+            report += `| [${testNameDisplay}](${testUrl}) | ${test.stability}% | ${issueShort} | ${videoLink} |\n`;
           }
           report += `\n`;
         }
@@ -3161,10 +3318,12 @@ export class ZebrunnerReportingToolHandlers {
           
           for (const test of tests.sort((a, b) => a.stability - b.stability)) {
             const testUrl = `${baseUrl}/projects/${resolvedProjectKey}/automation-launches/${testRunId}/tests/${test.testId}`;
-            const testNameShort = test.testName.replace(/^\[[^\]]+\]\s*:\s*/, '').replace(/\s*-\s*\w+$/, '');
-            const issueShort = test.rootCause !== 'Unknown' 
-              ? test.rootCause.substring(0, 80) 
-              : test.errorMsg.substring(0, 80);
+            // Use FULL test name instead of shortened version
+            const testNameDisplay = test.testName;
+            // Use error message first, fallback to root cause
+            const issueShort = test.errorMsg && test.errorMsg !== 'No error message'
+              ? test.errorMsg.substring(0, 80) 
+              : (test.rootCause !== 'Unknown' ? test.rootCause.substring(0, 80) : 'Unknown error');
             
             // Get video URL for evidence
             const sessions = await this.getAllSessionsWithArtifacts(testRunId, test.testId, resolvedProjectId!);
@@ -3172,7 +3331,7 @@ export class ZebrunnerReportingToolHandlers {
               ? `[Video](${sessions[0].videos[0].url})` 
               : 'N/A';
             
-            report += `| [${testNameShort}](${testUrl}) | ${test.stability}% | ${issueShort} | ${videoLink} |\n`;
+            report += `| [${testNameDisplay}](${testUrl}) | ${test.stability}% | ${issueShort} | ${videoLink} |\n`;
           }
           report += `\n`;
         }
@@ -3448,10 +3607,32 @@ export class ZebrunnerReportingToolHandlers {
               }
               report += `- **Root Cause:** ${detail.rootCause}\n`;
               
-              // Show full error message
+              // Extract and show device/OS info from the full analysis
+              const textContent = result.analysis.content
+                .filter((c: any) => c.type === 'text')
+                .map((c: any) => c.text)
+                .join(' ');
+              
+              const deviceMatch = textContent.match(/\*\*Device:\*\*\s*([^\n]+)/);
+              const platformMatch = textContent.match(/\*\*Platform:\*\*\s*([^\n]+)/);
+              
+              if (deviceMatch) {
+                report += `- **Device:** ${deviceMatch[1].trim()}\n`;
+              }
+              if (platformMatch) {
+                report += `- **Platform:** ${platformMatch[1].trim()}\n`;
+              }
+              
+              // Show full error message (short)
               if (detail.errorMsg && detail.errorMsg !== 'No error message') {
-                report += `\n**Error Message:**\n`;
+                report += `\n**Error Message (Short):**\n`;
                 report += `\`\`\`\n${detail.errorMsg.substring(0, 300)}${detail.errorMsg.length > 300 ? '...' : ''}\n\`\`\`\n`;
+              }
+              
+              // Extract and show error logs from the full analysis
+              const errorLogsMatch = textContent.match(/\*\*Error Logs \(Top \d+\):\*\*\n\n([\s\S]*?)(?=\n\n\*\*|$)/);
+              if (errorLogsMatch) {
+                report += `\n**Error Logs:**\n${errorLogsMatch[1].substring(0, 500)}${errorLogsMatch[1].length > 500 ? '\n...' : ''}\n\n`;
               }
               
               // Show stack trace if available
@@ -3547,7 +3728,7 @@ export class ZebrunnerReportingToolHandlers {
    * Analyze test execution video tool - downloads video, extracts frames, compares with test case,
    * and predicts if failure is a bug or test issue using Claude Vision
    */
-  async analyzeTestExecutionVideoTool(input: AnalyzeTestExecutionVideoInput): Promise<{
+async analyzeTestExecutionVideoTool(input: AnalyzeTestExecutionVideoInput): Promise<{
     content: Array<{ type: "text"; text: string } | { type: "image"; data: string; mimeType: string }>;
   }> {
     try {
