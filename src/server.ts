@@ -3236,8 +3236,8 @@ async function main() {
       jiraDetailLevel: z.enum(['basic', 'full']).default('full').describe("Jira detail level: 'basic' = fast (no deep analysis), 'full' = comprehensive with deep analysis (DEFAULT, slower but thorough)"),
       executionMode: z.enum(['sequential', 'parallel', 'batches']).default('sequential').describe("Execution mode: sequential (safe), parallel (fast), or batches (balanced)"),
       batchSize: z.number().int().positive().default(5).describe("Batch size if executionMode is 'batches' (default: 5)"),
-      offset: z.number().int().min(0).default(0).describe("Pagination offset - start from test N (e.g., 0 for first 10, 10 for next 10)"),
-      limit: z.number().int().positive().default(10).describe("Number of tests to analyze (default: 10, max recommended: 20)")
+      offset: z.number().int().min(0).default(0).describe("Pagination offset - start from test N (e.g., 0 for first 20, 20 for next 20)"),
+      limit: z.number().int().positive().default(20).describe("Number of tests to analyze (default: 20, max recommended: 30)")
     },
     async (args) => {
       try {

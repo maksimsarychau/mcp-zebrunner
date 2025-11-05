@@ -2009,10 +2009,27 @@ export class ZebrunnerReportingToolHandlers {
 
     const links = await Promise.all(testCases.map(async tc => {
       const url = await this.buildTestCaseUrl(tc.testCaseId, projectKey, baseUrl);
+      
+      // Try to fetch test case title for enhanced display
+      let displayText = tc.testCaseId;
+      try {
+        if (this.tcmClient) {
+          const testCase = await this.tcmClient.getTestCaseByKey(projectKey, tc.testCaseId);
+          if (testCase.title) {
+            displayText = `${tc.testCaseId}: ${testCase.title}`;
+          }
+        }
+      } catch (error) {
+        // If we can't fetch the title, just use the ID
+        if (this.reportingClient['config'].debug) {
+          console.warn(`[formatTestCases] Could not fetch title for ${tc.testCaseId}`);
+        }
+      }
+      
       if (format === 'jira') {
-        return `[${tc.testCaseId}|${url}]`;
+        return `[${displayText}|${url}]`;
       } else {
-        return `[${tc.testCaseId}](${url})`;
+        return `[${displayText}](${url})`;
       }
     }));
 
@@ -3092,7 +3109,11 @@ export class ZebrunnerReportingToolHandlers {
 
           // Extract all relevant information
           const classMatch = textContent.match(/\*\*Error Classification:\*\* ([^\n]+)/);
-          const errorMatch = textContent.match(/\*\*Error Message:\*\*\s*```([^`]+)```/);
+          // Try multiple patterns for error message extraction (summary vs detailed format)
+          let errorMatch = textContent.match(/\*\*Error \(Short\):\*\*\s*```([^`]+)```/); // Summary format
+          if (!errorMatch) {
+            errorMatch = textContent.match(/### Error Message \(Short\)\s*\n\s*```([^`]+)```/); // Detailed format
+          }
           const rootCauseMatch = textContent.match(/\*\*Root Cause:\*\*\s*([^\n]+)/);
           const stabilityMatch = textContent.match(/\*\*Stability:\*\* (\d+)%/);
           const timestampMatch = textContent.match(/\*\*Failure Time:\*\* ([^\n]+)/);
@@ -3256,10 +3277,12 @@ export class ZebrunnerReportingToolHandlers {
           
           for (const test of tests.sort((a, b) => a.stability - b.stability)) {
             const testUrl = `${baseUrl}/projects/${resolvedProjectKey}/automation-launches/${testRunId}/tests/${test.testId}`;
-            const testNameShort = test.testName.replace(/^\[[^\]]+\]\s*:\s*/, '').replace(/\s*-\s*\w+$/, '');
-            const issueShort = test.rootCause !== 'Unknown' 
-              ? test.rootCause.substring(0, 80) 
-              : test.errorMsg.substring(0, 80);
+            // Use FULL test name instead of shortened version
+            const testNameDisplay = test.testName;
+            // Use error message first, fallback to root cause
+            const issueShort = test.errorMsg && test.errorMsg !== 'No error message'
+              ? test.errorMsg.substring(0, 80) 
+              : (test.rootCause !== 'Unknown' ? test.rootCause.substring(0, 80) : 'Unknown error');
             
             // Get video URL for evidence
             const sessions = await this.getAllSessionsWithArtifacts(testRunId, test.testId, resolvedProjectId!);
@@ -3267,7 +3290,7 @@ export class ZebrunnerReportingToolHandlers {
               ? `[Video](${sessions[0].videos[0].url})` 
               : 'N/A';
             
-            report += `| [${testNameShort}](${testUrl}) | ${test.stability}% | ${issueShort} | ${videoLink} |\n`;
+            report += `| [${testNameDisplay}](${testUrl}) | ${test.stability}% | ${issueShort} | ${videoLink} |\n`;
           }
           report += `\n`;
         }
@@ -3295,10 +3318,12 @@ export class ZebrunnerReportingToolHandlers {
           
           for (const test of tests.sort((a, b) => a.stability - b.stability)) {
             const testUrl = `${baseUrl}/projects/${resolvedProjectKey}/automation-launches/${testRunId}/tests/${test.testId}`;
-            const testNameShort = test.testName.replace(/^\[[^\]]+\]\s*:\s*/, '').replace(/\s*-\s*\w+$/, '');
-            const issueShort = test.rootCause !== 'Unknown' 
-              ? test.rootCause.substring(0, 80) 
-              : test.errorMsg.substring(0, 80);
+            // Use FULL test name instead of shortened version
+            const testNameDisplay = test.testName;
+            // Use error message first, fallback to root cause
+            const issueShort = test.errorMsg && test.errorMsg !== 'No error message'
+              ? test.errorMsg.substring(0, 80) 
+              : (test.rootCause !== 'Unknown' ? test.rootCause.substring(0, 80) : 'Unknown error');
             
             // Get video URL for evidence
             const sessions = await this.getAllSessionsWithArtifacts(testRunId, test.testId, resolvedProjectId!);
@@ -3306,7 +3331,7 @@ export class ZebrunnerReportingToolHandlers {
               ? `[Video](${sessions[0].videos[0].url})` 
               : 'N/A';
             
-            report += `| [${testNameShort}](${testUrl}) | ${test.stability}% | ${issueShort} | ${videoLink} |\n`;
+            report += `| [${testNameDisplay}](${testUrl}) | ${test.stability}% | ${issueShort} | ${videoLink} |\n`;
           }
           report += `\n`;
         }
