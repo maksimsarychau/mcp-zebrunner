@@ -26,6 +26,8 @@ jobs:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
+          mode: "auto"
+
           # Use latest model
           model: "claude-sonnet-4-5-20250929"
 
@@ -41,7 +43,7 @@ jobs:
             - async/await behavior, error handling, and edge cases
             - performance and code organization
             Provide specific, actionable feedback.
-            
+
       - name: Summary
         run: | 
             echo "Claude review posted for PR: ${{ github.event.pull_request.html_url }}"
