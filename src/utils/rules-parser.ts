@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { validateFilePath } from './security.js';
 
 /**
  * Configuration for test coverage rules and quality standards
@@ -206,7 +207,15 @@ export class RulesParser {
   private constructor() {
     // Get rules file path from environment or use default
     const rulesFileName = process.env.MCP_RULES_FILE || 'mcp-zebrunner-rules.md';
-    this.rulesFilePath = path.resolve(process.cwd(), rulesFileName);
+    
+    try {
+      // Validate path to prevent traversal attacks
+      this.rulesFilePath = validateFilePath(rulesFileName, process.cwd());
+    } catch (error) {
+      // If validation fails, fall back to safe default in current directory
+      console.warn(`[RulesParser] Invalid rules file path, using default: ${error instanceof Error ? error.message : error}`);
+      this.rulesFilePath = path.resolve(process.cwd(), 'mcp-zebrunner-rules.md');
+    }
   }
 
   public static getInstance(): RulesParser {

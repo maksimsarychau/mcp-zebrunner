@@ -27,6 +27,7 @@ import {
   ZebrunnerReportingAuthError,
   ZebrunnerReportingNotFoundError
 } from "../types/reporting.js";
+import { maskToken, maskAuthHeader, validateFileUrl } from "../utils/security.js";
 
 /**
  * Zebrunner Reporting API Client
@@ -70,6 +71,13 @@ export class ZebrunnerReportingClient {
       (config) => {
         if (this.config.debug) {
           console.log(`[ZebrunnerReportingClient] ${config.method?.toUpperCase()} ${config.url}`);
+          
+          // Mask Authorization header if present
+          if (config.headers?.Authorization) {
+            const maskedHeader = maskAuthHeader(config.headers.Authorization as string);
+            console.log('[ZebrunnerReportingClient] Authorization:', maskedHeader);
+          }
+          
           if (config.data) {
             console.log('[ZebrunnerReportingClient] Request data:', config.data);
           }
@@ -145,7 +153,8 @@ export class ZebrunnerReportingClient {
       this.tokenExpiresAt = new Date(Date.now() + expiresInMs);
 
       if (this.config.debug) {
-        console.log('[ZebrunnerReportingClient] Authentication successful, token expires at:', this.tokenExpiresAt);
+        const maskedToken = maskToken(this.bearerToken);
+        console.log(`[ZebrunnerReportingClient] Authentication successful, token: ${maskedToken}, expires at:`, this.tokenExpiresAt);
       }
 
       return this.bearerToken;
@@ -458,12 +467,22 @@ export class ZebrunnerReportingClient {
    */
   async downloadScreenshot(fileUrl: string): Promise<Buffer> {
     try {
+      // Get URL validation config from environment or defaults
+      const strictMode = process.env.STRICT_URL_VALIDATION !== 'false'; // Default true
+      const skipOnError = process.env.SKIP_URL_VALIDATION_ON_ERROR === 'true'; // Default false
+      
+      // Validate URL before processing
+      const validatedUrl = validateFileUrl(fileUrl, {
+        strictMode,
+        skipOnError
+      });
+      
       const bearerToken = await this.getBearerToken();
       
       // Construct full URL if relative path provided
-      let fullUrl = fileUrl;
-      if (fileUrl.startsWith('/files/')) {
-        fullUrl = `${this.config.baseUrl}${fileUrl}`;
+      let fullUrl = validatedUrl;
+      if (validatedUrl.startsWith('/files/')) {
+        fullUrl = `${this.config.baseUrl}${validatedUrl}`;
       }
       
       if (this.config.debug) {

@@ -129,6 +129,32 @@ export class ConfigManager {
       this.config.debug = process.env.DEBUG.toLowerCase() === 'true';
     }
 
+    if (process.env.STRICT_URL_VALIDATION !== undefined) {
+      this.config.strictUrlValidation = process.env.STRICT_URL_VALIDATION.toLowerCase() === 'true';
+    }
+
+    if (process.env.SKIP_URL_VALIDATION_ON_ERROR !== undefined) {
+      this.config.skipUrlValidationOnError = process.env.SKIP_URL_VALIDATION_ON_ERROR.toLowerCase() === 'true';
+    }
+
+    if (process.env.ENABLE_RATE_LIMITING !== undefined) {
+      this.config.enableRateLimiting = process.env.ENABLE_RATE_LIMITING.toLowerCase() === 'true';
+    }
+
+    // Load numeric rate limiting values
+    if (process.env.MAX_REQUESTS_PER_SECOND) {
+      const maxRps = parseInt(process.env.MAX_REQUESTS_PER_SECOND, 10);
+      if (!isNaN(maxRps) && maxRps > 0 && maxRps <= 100) {
+        this.config.maxRequestsPerSecond = maxRps;
+      }
+    }
+
+    if (process.env.RATE_LIMITING_BURST) {
+      const burst = parseInt(process.env.RATE_LIMITING_BURST, 10);
+      if (!isNaN(burst) && burst > 0 && burst <= 200) {
+        this.config.rateLimitingBurst = burst;
+      }
+    }
 
     // ENABLE_RULES_ENGINE is handled separately in handleRulesEngineDetection
   }

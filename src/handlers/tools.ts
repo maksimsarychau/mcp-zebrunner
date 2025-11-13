@@ -16,6 +16,7 @@ import {
 import { TestCaseValidator } from "../utils/test-case-validator.js";
 import { TestCaseImprover } from "../utils/test-case-improver.js";
 import path from "path";
+import { validateFilePath, sanitizeErrorMessage } from "../utils/security.js";
 
 /**
  * MCP Tool handlers for Zebrunner API
@@ -75,11 +76,12 @@ export class ZebrunnerToolHandlers {
         ]
       };
     } catch (error: any) {
+      const errorMsg = sanitizeErrorMessage(error, 'Error retrieving test cases', 'getTestCases');
       return {
         content: [
           {
             type: "text" as const,
-            text: `Error retrieving test cases: ${error.message}`
+            text: errorMsg
           }
         ]
       };
@@ -376,10 +378,14 @@ export class ZebrunnerToolHandlers {
       // Initialize validator with dynamic rules
       let validator: TestCaseValidator;
       if (rulesFilePath && checkpointsFilePath) {
-        // Use custom rules from files
-        const resolvedRulesPath = path.resolve(process.cwd(), rulesFilePath);
-        const resolvedCheckpointsPath = path.resolve(process.cwd(), checkpointsFilePath);
-        validator = await TestCaseValidator.fromMarkdownFiles(resolvedRulesPath, resolvedCheckpointsPath);
+        // Use custom rules from files - validate paths first
+        try {
+          const resolvedRulesPath = validateFilePath(rulesFilePath, process.cwd());
+          const resolvedCheckpointsPath = validateFilePath(checkpointsFilePath, process.cwd());
+          validator = await TestCaseValidator.fromMarkdownFiles(resolvedRulesPath, resolvedCheckpointsPath);
+        } catch (error) {
+          throw new Error(`Invalid file path provided: ${error instanceof Error ? error.message : error}`);
+        }
       } else {
         // Use default rules, but try to load from standard files if they exist
         const defaultRulesPath = path.resolve(process.cwd(), 'test_case_review_rules.md');
@@ -426,11 +432,12 @@ export class ZebrunnerToolHandlers {
         ]
       };
     } catch (error: any) {
+      const errorMsg = sanitizeErrorMessage(error, 'Error validating test case', 'validateTestCase');
       return {
         content: [
           {
             type: "text" as const,
-            text: `Error validating test case: ${error.message}`
+            text: errorMsg
           }
         ]
       };
@@ -700,10 +707,14 @@ export class ZebrunnerToolHandlers {
       // Initialize validator with dynamic rules
       let validator: TestCaseValidator;
       if (rulesFilePath && checkpointsFilePath) {
-        // Use custom rules from files
-        const resolvedRulesPath = path.resolve(process.cwd(), rulesFilePath);
-        const resolvedCheckpointsPath = path.resolve(process.cwd(), checkpointsFilePath);
-        validator = await TestCaseValidator.fromMarkdownFiles(resolvedRulesPath, resolvedCheckpointsPath);
+        // Use custom rules from files - validate paths first
+        try {
+          const resolvedRulesPath = validateFilePath(rulesFilePath, process.cwd());
+          const resolvedCheckpointsPath = validateFilePath(checkpointsFilePath, process.cwd());
+          validator = await TestCaseValidator.fromMarkdownFiles(resolvedRulesPath, resolvedCheckpointsPath);
+        } catch (error) {
+          throw new Error(`Invalid file path provided: ${error instanceof Error ? error.message : error}`);
+        }
       } else {
         // Use default rules, but try to load from standard files if they exist
         const defaultRulesPath = path.resolve(process.cwd(), 'test_case_review_rules.md');
@@ -765,11 +776,12 @@ export class ZebrunnerToolHandlers {
         ]
       };
     } catch (error: any) {
+      const errorMsg = sanitizeErrorMessage(error, 'Error improving test case', 'improveTestCase');
       return {
         content: [
           {
             type: "text" as const,
-            text: `Error improving test case: ${error.message}`
+            text: errorMsg
           }
         ]
       };

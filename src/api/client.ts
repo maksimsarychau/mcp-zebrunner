@@ -26,9 +26,62 @@ import {
   ZebrunnerTestResultResponseSchema
 } from "../types/core.js";
 
+/**
+ * Simple token bucket rate limiter
+ * Prevents exceeding API rate limits
+ */
+class SimpleRateLimiter {
+  private tokens: number;
+  private lastRefill: number;
+  private readonly maxTokens: number;
+  private readonly refillRate: number; // tokens per millisecond
+
+  constructor(maxRequestsPerSecond: number, burstSize: number) {
+    this.maxTokens = burstSize;
+    this.tokens = burstSize;
+    this.refillRate = maxRequestsPerSecond / 1000; // Convert to per-millisecond
+    this.lastRefill = Date.now();
+  }
+
+  /**
+   * Wait until a token is available
+   */
+  async acquire(): Promise<void> {
+    this.refill();
+
+    if (this.tokens >= 1) {
+      this.tokens -= 1;
+      return;
+    }
+
+    // Calculate wait time until next token is available
+    const tokensNeeded = 1 - this.tokens;
+    const waitMs = Math.ceil(tokensNeeded / this.refillRate);
+
+    await new Promise(resolve => setTimeout(resolve, waitMs));
+
+    // Refill again after waiting
+    this.refill();
+    this.tokens = Math.max(0, this.tokens - 1);
+  }
+
+  /**
+   * Refill tokens based on time elapsed
+   */
+  private refill(): void {
+    const now = Date.now();
+    const elapsed = now - this.lastRefill;
+    const tokensToAdd = elapsed * this.refillRate;
+
+    this.tokens = Math.min(this.maxTokens, this.tokens + tokensToAdd);
+    this.lastRefill = now;
+  }
+}
+
 export class ZebrunnerApiClient {
   private http: AxiosInstance;
   private config: ZebrunnerConfig;
+  private rateLimiter?: SimpleRateLimiter;
 
   constructor(config: ZebrunnerConfig) {
     this.config = {
@@ -40,6 +93,18 @@ export class ZebrunnerApiClient {
       maxPageSize: 200,
       ...config
     };
+
+    // Initialize rate limiter if enabled
+    const enableRateLimiting = process.env.ENABLE_RATE_LIMITING !== 'false'; // Default true
+    if (enableRateLimiting) {
+      const maxRps = parseInt(process.env.MAX_REQUESTS_PER_SECOND || '5', 10);
+      const burst = parseInt(process.env.RATE_LIMITING_BURST || '10', 10);
+      this.rateLimiter = new SimpleRateLimiter(maxRps, burst);
+
+      if (this.config.debug) {
+        console.log(`[ZebrunnerApiClient] Rate limiting enabled: ${maxRps} req/s, burst: ${burst}`);
+      }
+    }
 
     const baseURL = this.config.baseUrl.replace(/\/+$/, "");
     const basic = Buffer.from(`${this.config.username}:${this.config.token}`, "utf8").toString("base64");
@@ -115,6 +180,11 @@ export class ZebrunnerApiClient {
   ): Promise<T> {
     for (let i = 0; i < attempts; i++) {
       try {
+        // Apply rate limiting before request
+        if (this.rateLimiter) {
+          await this.rateLimiter.acquire();
+        }
+        
         return await requestFn();
       } catch (error) {
         if (i === attempts - 1 || error instanceof ZebrunnerAuthError) {
