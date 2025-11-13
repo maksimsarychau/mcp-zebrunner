@@ -1,49 +1,87 @@
 name: Claude Code Review
 
-# Auto-run on every PR targeting the default branch
 on:
   pull_request:
     types: [opened, synchronize, reopened]
 
 jobs:
+  # Run tests first
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: TypeScript check
+        run: npm run lint
+
+  # Claude review runs only after tests pass
   claude-review:
+    needs: test
+    if: ${{ !github.event.pull_request.draft }}  # Skip draft PRs
     runs-on: ubuntu-latest
 
     permissions:
       contents: read
       pull-requests: write
+      issues: read
       id-token: write
 
     steps:
-      - name: Checkout PR code
+      - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
 
       - name: Run Claude Code Review
         uses: anthropics/claude-code-action@beta
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          timeout_minutes: "60"
+          
+          direct_prompt: |
+            You are a senior TypeScript/Node.js engineer reviewing this MCP (Model Context Protocol) server for Zebrunner integration.
+            
+            **Context:**
+            - This is a TypeScript MCP server that integrates with Zebrunner TCM and Reporting APIs
+            - It provides tools for test case management, failure analysis, video/screenshot analysis
+            - Security is critical - we handle authentication tokens and file system access
+            
+            **Review Focus:**
+            1. **Security**: Validate input sanitization, path traversal prevention, credential handling, API security
+            2. **TypeScript Quality**: Check types, interfaces, generics, async/await patterns, error handling
+            3. **API Integration**: Verify proper error handling for Zebrunner API calls, rate limiting, retry logic
+            4. **Code Quality**: Assess maintainability, readability, performance, edge cases
+            5. **Business Logic**: Identify edge cases not covered by tests, potential race conditions
+            6. **MCP Compliance**: Ensure tool schemas match implementation, proper resource handling
+            
+            **Exclude from review:**
+            - Files in `dist/` (compiled output)
+            - Files in `node_modules/` (dependencies)
+            - Files in `tests/` (test files)
+            
+            **Output:**
+            - Summarize changes succinctly
+            - Highlight critical security issues (if any)
+            - Identify bugs or edge cases
+            - Suggest specific improvements with priority (HIGH/MEDIUM/LOW)
+            - Focus on actionable feedback
+            
+            Provide a detailed but concise review with clear recommendations.
 
-          mode: "auto"
-
-          # Use latest model
-          model: "claude-sonnet-4-5-20250929"
-
-          # Enable PR comments + inline code suggestions
-          allowed_tools: "comment_pr, suggest_code_change"
-
-          custom_instructions: |
-            You are a senior TypeScript engineer reviewing this pull request.
-            Evaluate:
-            - clarity and maintainability
-            - correctness and potential bugs
-            - TypeScript typing, interfaces, and generics
-            - async/await behavior, error handling, and edge cases
-            - performance and code organization
-            Provide specific, actionable feedback.
-
-      - name: Summary
+      - name: Review Summary
         run: | 
-            echo "Claude review posted for PR: ${{ github.event.pull_request.html_url }}"
+          echo "✅ Claude review posted for PR: ${{ github.event.pull_request.html_url }}"
+          echo "Review completed after tests passed successfully"
