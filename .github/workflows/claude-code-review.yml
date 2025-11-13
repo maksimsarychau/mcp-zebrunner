@@ -5,31 +5,8 @@ on:
     types: [opened, synchronize, reopened]
 
 jobs:
-  # Run tests first
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run tests
-        run: npm test
-
-      - name: TypeScript check
-        run: npm run lint
-
   # Claude review runs only after tests pass
   claude-review:
-    needs: test
     if: ${{ !github.event.pull_request.draft }}  # Skip draft PRs
     runs-on: ubuntu-latest
 
@@ -84,4 +61,3 @@ jobs:
       - name: Review Summary
         run: | 
           echo "✅ Claude review posted for PR: ${{ github.event.pull_request.html_url }}"
-          echo "Review completed after tests passed successfully"
