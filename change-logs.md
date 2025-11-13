@@ -2,12 +2,13 @@
 
 ## v5.10.0 - SECURITY: Comprehensive Security Hardening (HIGH + MEDIUM Severity Fixes)
 - **🔒 MAJOR SECURITY UPDATE** - Addressed all HIGH and MEDIUM severity vulnerabilities
-  - **Path Traversal Protection** - Block unauthorized file system access
+  - **Path Traversal Protection** - Block unauthorized file system access (CI-compatible)
   - **Credential Masking** - Secure token logging with partial visibility
   - **URL Validation** - Prevent malicious URL exploitation
   - **Temporary File Cleanup** - Automatic cleanup on process termination
   - **API Rate Limiting** - Prevent abuse with configurable throttling
   - **Error Sanitization** - Environment-aware error message handling
+- **🐛 CI/CD Fix**: Path validation now allows working directory even if under `/home` (fixes CI runner environments)
 
 ### 🔴 HIGH Severity Fixes
 
@@ -18,8 +19,13 @@
   - Blocks access to sensitive directories: `/etc`, `/home`, `/.ssh`, `/var`, `/usr`, `/bin`, `/sbin`, `/root`, `/boot`
   - Detects path traversal patterns: `..`, `~`, null bytes (`\0`)
   - Restricts paths to project working directory by default
+  - **CI-Compatible**: Allows working directory even if under `/home` (e.g., `/home/runner/work/...`)
   - Applied to: Rules file paths, checkpoints file paths, dynamic rules loading
 - **Configuration**: Automatic (no config needed)
+- **Security Logic**:
+  1. First checks if path stays within working directory (primary security check)
+  2. Only blocks sensitive directories if path tries to escape working directory
+  3. Allows `/home/runner/work/project/file.txt` but blocks `/home/other-user/.ssh/id_rsa`
 - **Files Modified**: `src/utils/security.ts` (new), `src/handlers/tools.ts`, `src/utils/rules-parser.ts`
 
 **2. Debug Token Logging - Credential Masking** ✅

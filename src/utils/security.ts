@@ -47,23 +47,25 @@ export function validateFilePath(userPath: string, baseDir: string = process.cwd
   // Resolve to absolute path
   const resolvedPath = path.resolve(baseDir, userPath);
   const normalizedPath = path.normalize(resolvedPath);
+  const resolvedBase = path.resolve(baseDir);
 
-  // Check if path starts with any blocked directory
-  for (const blockedDir of BLOCKED_DIRECTORIES) {
-    if (normalizedPath.startsWith(blockedDir)) {
-      throw new Error(`Security: Access denied - path in sensitive directory: ${blockedDir}`);
+  // FIRST: Check if path stays within base directory
+  // This is the primary security check - paths must stay within the working directory
+  if (!normalizedPath.startsWith(resolvedBase + path.sep) && normalizedPath !== resolvedBase) {
+    // Path is trying to escape base directory
+    // NOW check if it's trying to access sensitive directories
+    for (const blockedDir of BLOCKED_DIRECTORIES) {
+      if (normalizedPath.startsWith(blockedDir)) {
+        throw new Error(`Security: Access denied - path in sensitive directory: ${blockedDir}`);
+      }
     }
+    
+    // If not in a blocked directory, still don't allow escaping base directory
+    throw new Error('Security: Access denied - path escapes base directory');
   }
 
-  // Additional check: ensure resolved path doesn't escape base directory for relative paths
-  // (only if userPath was relative)
-  if (!path.isAbsolute(userPath)) {
-    const resolvedBase = path.resolve(baseDir);
-    if (!normalizedPath.startsWith(resolvedBase)) {
-      throw new Error('Security: Access denied - path escapes base directory');
-    }
-  }
-
+  // Path is within base directory - this is allowed even if base directory itself
+  // is under /home (like in CI environments: /home/runner/work/...)
   return normalizedPath;
 }
 

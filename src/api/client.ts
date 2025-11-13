@@ -97,8 +97,8 @@ export class ZebrunnerApiClient {
     // Initialize rate limiter if enabled
     const enableRateLimiting = process.env.ENABLE_RATE_LIMITING !== 'false'; // Default true
     if (enableRateLimiting) {
-      const maxRps = parseInt(process.env.MAX_REQUESTS_PER_SECOND || '5', 10);
-      const burst = parseInt(process.env.RATE_LIMITING_BURST || '10', 10);
+      const maxRps = parseInt(process.env.MAX_REQUESTS_PER_SECOND || '10', 10);
+      const burst = parseInt(process.env.RATE_LIMITING_BURST || '100', 10);
       this.rateLimiter = new SimpleRateLimiter(maxRps, burst);
 
       if (this.config.debug) {
