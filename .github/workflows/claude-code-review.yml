@@ -1,0 +1,50 @@
+name: Claude Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  claude-review:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write  # required for Claude Code Action
+
+    steps:
+      - name: Checkout PR code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Claude Code Review
+        uses: anthropics/claude-code-action@beta
+        with:
+          # REQUIRED: Your Anthropic API Key (safe because forks are not involved)
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+
+          # GitHub token (Claude uses it to post comments + suggestions)
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+          # Latest strong model
+          model: "claude-sonnet-4-5-20250929"
+
+          # Tools Claude uses for PR review
+          allowed_tools: "comment_pr, suggest_code_change"
+
+          # Customize reviewer behavior
+          custom_instructions: |
+            You are a senior TypeScript engineer reviewing this PR.
+            Focus on:
+            - readability and maintainability
+            - correctness and potential bugs
+            - TypeScript typings and interfaces
+            - async/await patterns and error handling
+            - performance considerations
+            Provide clear, specific, actionable feedback.
+
+      - name: Summary
+        run: | 
+            echo "Claude review posted for PR: ${{ github.event.pull_request.html_url }}"
