@@ -3096,7 +3096,7 @@ async function main() {
 
   server.tool(
     "analyze_test_failure",
-    "🔍 Deep forensic analysis of failed test including logs, screenshots, error classification, and similar failures. 💡 TIP: Can be auto-invoked from Zebrunner test URLs like: https://workspace.zebrunner.com/projects/PROJECT/automation-launches/LAUNCH_ID/tests/TEST_ID",
+    "🔍 Deep forensic analysis of failed test including logs, screenshots, error classification, and similar failures. 💡 NEW: Compare with last passed execution to see what changed! 💡 TIP: Can be auto-invoked from Zebrunner test URLs like: https://workspace.zebrunner.com/projects/PROJECT/automation-launches/LAUNCH_ID/tests/TEST_ID",
     {
       testId: z.number().int().positive().describe("Test ID (e.g., 5451420)"),
       testRunId: z.number().int().positive().describe("Test Run ID / Launch ID (e.g., 120806)"),
@@ -3110,7 +3110,15 @@ async function main() {
       analyzeSimilarFailures: z.boolean().default(true).describe("Find similar failures in the launch"),
       analyzeScreenshotsWithAI: z.boolean().default(true).describe("Download and analyze screenshots with AI (Claude Vision)"),
       screenshotAnalysisType: z.enum(['basic', 'detailed']).default('detailed').describe("Screenshot analysis type: basic (metadata+OCR) or detailed (includes Claude Vision)"),
-      format: z.enum(['detailed', 'summary', 'jira']).default('detailed').describe("Output format: detailed, summary, or jira (ready for Jira ticket creation)")
+      format: z.enum(['detailed', 'summary', 'jira']).default('detailed').describe("Output format: detailed, summary, or jira (ready for Jira ticket creation)"),
+      compareWithLastPassed: z.object({
+        enabled: z.boolean().describe("Enable comparison with last passed execution"),
+        includeLogs: z.boolean().optional().describe("Compare logs (default: true)"),
+        includeScreenshots: z.boolean().optional().describe("Compare screenshots (default: true)"),
+        includeVideo: z.boolean().optional().describe("Compare video frames (default: false)"),
+        includeEnvironment: z.boolean().optional().describe("Compare environment (device, platform, etc.) (default: true)"),
+        includeDuration: z.boolean().optional().describe("Compare execution duration (default: true)")
+      }).optional().describe("Compare current failure with last passed execution to identify what changed")
     },
     async (args) => {
       try {
@@ -3122,6 +3130,33 @@ async function main() {
           content: [{
             type: "text" as const,
             text: `❌ Error analyzing test failure: ${error.message}`
+          }]
+        };
+      }
+    }
+  );
+
+  server.tool(
+    "get_test_execution_history",
+    "📊 Get execution history for a test across multiple launches - shows pass/fail history, last passed execution, and pass rate",
+    {
+      testId: z.number().int().positive().describe("Test ID"),
+      testRunId: z.number().int().positive().describe("Test Run ID / Launch ID containing the test"),
+      projectKey: z.string().min(1).optional().describe("Project key (e.g., 'MCP') - alternative to projectId"),
+      projectId: z.number().int().positive().optional().describe("Project ID - alternative to projectKey"),
+      limit: z.number().int().positive().default(10).describe("Number of history items to return (default: 10, max: 50)"),
+      format: z.enum(['dto', 'json', 'string']).default('string').describe("Output format: dto (structured), json, or string (markdown table)")
+    },
+    async (args) => {
+      try {
+        debugLog("get_test_execution_history called", args);
+        return await reportingHandlers.getTestExecutionHistory(args);
+      } catch (error: any) {
+        debugLog("Error in get_test_execution_history", { error: error.message, args });
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error retrieving test execution history: ${error.message}`
           }]
         };
       }

@@ -11,6 +11,8 @@ import {
   TestSessionsResponseSchema,
   TestRunsResponse,
   TestRunsResponseSchema,
+  TestExecutionHistoryResponse,
+  TestExecutionHistoryResponseSchema,
   MilestonesResponse,
   MilestonesResponseSchema,
   AvailableProjectsResponse,
@@ -384,6 +386,36 @@ export class ZebrunnerReportingClient {
       page: 1,
       size: allItems.length
     };
+  }
+
+  /**
+   * Get test execution history for a specific test
+   * Returns history of test executions across multiple launches
+   * 
+   * @param launchId - Launch ID containing the test
+   * @param testId - Test ID to get history for
+   * @param projectId - Project ID
+   * @param limit - Number of history items to return (default: 10)
+   * @returns Test execution history with status, duration, timestamps
+   */
+  async getTestExecutionHistory(
+    launchId: number,
+    testId: number,
+    projectId: number,
+    limit: number = 10
+  ): Promise<TestExecutionHistoryResponse> {
+    const url = `/api/reporting/v1/launches/${launchId}/tests/${testId}/history?projectId=${projectId}&limit=${limit}`;
+    
+    if (this.config.debug) {
+      console.log(`[ZebrunnerReportingClient] Fetching test execution history for test ${testId} (limit: ${limit})`);
+    }
+    
+    const response = await this.makeAuthenticatedRequest<any>('GET', url);
+    
+    // Handle different response structures
+    const historyData = response.data || response;
+    
+    return TestExecutionHistoryResponseSchema.parse(historyData);
   }
 
   /**

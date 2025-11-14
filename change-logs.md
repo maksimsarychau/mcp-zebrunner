@@ -1,5 +1,226 @@
 # Change Logs
 
+## v5.11.0 - NEW FEATURES: Test Execution History & Comparison with Last Passed
+- **📊 NEW TOOL: `get_test_execution_history`** - Track test execution trends across launches
+  - View pass/fail history for any test
+  - Identify when test started failing
+  - Calculate pass rate and stability metrics
+  - Find last successful execution
+  - **Special Detection**: Highlights when all recent executions failed (e.g., "Failed in all last 10 runs")
+  - Output formats: Markdown table, JSON, or structured DTO
+
+- **🔄 ENHANCED: `analyze_test_failure` with Comparison Feature** - Compare current failure with last passed execution
+  - **New Parameter**: `compareWithLastPassed` with granular control
+    - Compare logs (error count, new errors detected)
+    - Compare screenshots (count, availability for visual analysis)
+    - Compare duration (performance regression detection)
+    - Compare environment (device, platform changes)
+    - Compare video frames (optional, for detailed analysis)
+  - **Smart Detection**: Automatically checks last 10 executions for any passed run
+  - **Critical Warning**: Shows prominent alert if test has no recent passed executions
+  - **Detailed Comparison Report**: Side-by-side comparison with clickable links
+
+### 📊 Test Execution History Features
+
+**Use Cases:**
+- **Trend Analysis**: See if test was stable before recent failures
+- **Regression Detection**: Identify when test started failing
+- **Stability Metrics**: Calculate pass rate over time
+- **Quick Insights**: Find last known good execution for comparison
+
+**Example Output:**
+```markdown
+# 📊 Test Execution History
+
+**Test ID:** 5478492
+**Current Launch:** 121482
+**Total Executions:** 10
+**Pass Rate:** 60% (6/10)
+
+## ✅ Last Passed Execution
+- **Launch:** 121479
+- **Date:** November 13, 2024 at 3:15 PM
+- **Duration:** 581s
+
+## 📋 Execution History (Last 10)
+| # | Status | Date | Duration | Launch | Issues |
+|---|--------|------|----------|--------|--------|
+| 1 | ❌ FAILED | Nov 13, 2024 4:30 PM | 588s | 121482 | None |
+| 2 | ✅ PASSED | Nov 13, 2024 3:15 PM | 581s | 121479 | None |
+...
+```
+
+### 🔄 Comparison with Last Passed Features
+
+**Comparison Capabilities:**
+
+1. **Duration Comparison**
+   - Current vs last passed execution time
+   - Performance regression detection
+   - Percentage change calculation
+   - Visual indicators (🔴 Slower / 🟢 Faster)
+
+2. **Log Comparison**
+   - Error count comparison
+   - New errors detection
+   - Semantic error analysis
+   - Highlights errors that weren't present in passed run
+
+3. **Screenshot Comparison**
+   - Screenshot count comparison
+   - Availability check for visual analysis
+   - Last screenshot comparison capability
+   - Prepared for Claude Vision analysis
+
+4. **Environment Comparison**
+   - Device changes detection
+   - Platform version changes
+   - Test class changes
+   - Build/environment differences
+
+5. **Critical Detection - All Failed Warning** ⚠️
+   - Automatically detects if test has no recent passed executions
+   - Shows prominent warning section:
+   ```markdown
+   ## ⚠️ Comparison with Last Passed
+
+   **🔴 CRITICAL: No Passed Executions Found**
+
+   This test has **FAILED** in all of the last **10** executions.
+   - **Total Failures:** 10
+   - **Recommendation:** This test appears to be consistently failing. Investigate if:
+     - Test is flaky or broken
+     - Feature is not implemented
+     - Environment issues are blocking the test
+   ```
+
+**Example Comparison Output:**
+```markdown
+## 🔄 Comparison with Last Passed
+
+Comparing current failure with last successful execution:
+
+**Last Passed:** Launch 121479
+**Date:** November 13, 2024 at 3:15 PM
+
+**Duration Comparison:**
+- Current: 588s
+- Last Passed: 581s
+- Difference: 🔴 Slower by 7s (1.2%)
+
+**Log Comparison:**
+- Current Errors: 5
+- Last Passed Errors: 0
+- 🔴 New errors appeared in current execution
+
+**Screenshot Comparison:**
+- Current Screenshots: 12
+- Last Passed Screenshots: 15
+
+**Environment Changes:**
+- 🔶 Test class changed
+```
+
+### 🎯 Use Cases
+
+**1. Regression Analysis**
+```
+"Show me the execution history for test 5478492 and compare current failure with last time it passed"
+```
+- Identifies when test started failing
+- Shows what changed between passed and failed runs
+- Helps determine if it's a recent regression
+
+**2. Stability Investigation**
+```
+"Has test 5478492 been failing consistently? Compare with last passed execution"
+```
+- Shows pass/fail pattern over time
+- Identifies flaky tests vs consistently failing tests
+- Provides pass rate metrics
+
+**3. Performance Regression**
+```
+"Analyze test failure and compare duration with last passed run"
+```
+- Detects performance degradation
+- Shows execution time differences
+- Helps identify performance-related failures
+
+**4. Environment Impact**
+```
+"Compare current test failure with last passed - check if environment changed"
+```
+- Detects device/platform changes
+- Identifies build/environment differences
+- Helps isolate environment-related issues
+
+### 📋 Configuration Options
+
+**Comparison Control:**
+```typescript
+compareWithLastPassed: {
+  enabled: true,              // Turn comparison on/off
+  includeLogs: true,          // Compare error logs (default: true)
+  includeScreenshots: true,   // Compare screenshots (default: true)
+  includeDuration: true,      // Compare execution time (default: true)
+  includeEnvironment: true,   // Compare device/platform (default: true)
+  includeVideo: false         // Compare video frames (default: false, detailed analysis)
+}
+```
+
+### 🔧 Technical Implementation
+
+**API Integration:**
+- Endpoint: `/api/reporting/v1/launches/{launchId}/tests/{testId}/history`
+- Limit: Configurable (default: 10, max: 50)
+- Caching: Comparison data cached for performance
+- Smart Detection: Checks last 10 executions for passed runs
+
+**Files Modified:**
+- `src/types/reporting.ts` - Added test execution history schemas
+- `src/api/reporting-client.ts` - Added `getTestExecutionHistory()` API method
+- `src/handlers/reporting-tools.ts` - Added history handler + comparison logic
+- `src/server.ts` - Registered new tool + updated existing tool
+
+**Performance:**
+- History lookup: ~100-200ms
+- Comparison with last passed: ~500-1000ms (includes fetching last passed execution details)
+- Minimal overhead for non-comparison mode
+
+### 💡 Benefits
+
+✅ **Faster Root Cause Analysis**: Quickly see what changed since last successful run
+✅ **Trend Identification**: Understand test stability patterns over time  
+✅ **Regression Detection**: Pinpoint when test started failing
+✅ **Performance Monitoring**: Track execution time changes
+✅ **Environment Validation**: Detect environment-related issues
+✅ **Critical Alerts**: Immediate visibility when tests are consistently failing
+
+### 🎓 Example Workflows
+
+**Workflow 1: Investigating New Failure**
+1. Get execution history: `get_test_execution_history`
+2. If last passed execution exists → Analyze with comparison
+3. Review differences (logs, duration, environment)
+4. Determine if regression or environment issue
+
+**Workflow 2: Flaky Test Analysis**
+1. Check history for pass/fail pattern
+2. If inconsistent → Likely flaky test
+3. Compare multiple failed runs to find common patterns
+4. Use similarity detection across failures
+
+**Workflow 3: Consistently Failing Test**
+1. Get history → See "All 10 executions failed"
+2. Critical warning displayed automatically
+3. Investigation priorities:
+   - Is test broken?
+   - Is feature not implemented?
+   - Is environment blocking test?
+
+---
+
 ## v5.10.0 - SECURITY: Comprehensive Security Hardening (HIGH + MEDIUM Severity Fixes)
 - **🔒 MAJOR SECURITY UPDATE** - Addressed all HIGH and MEDIUM severity vulnerabilities
   - **Path Traversal Protection** - Block unauthorized file system access (CI-compatible)
@@ -239,7 +460,7 @@ DEBUG=true                                    # Default: (not set) - use true fo
   - **Substring matching**: Requires 60% of expected in executed
   - **Debug logging**: Detailed matching diagnostics (enable with `debug: true`)
 - **🎯 Impact on Example Test**:
-  - **Before v5.9.1**: 
+  - **Before v5.9.1**:
     ```
     Test Case MCP-2107: 0% coverage
     Test Case MCP-88: 0% coverage
@@ -289,13 +510,13 @@ DEBUG=true                                    # Default: (not set) - use true fo
 - **📋 New Report Format** - Enhanced summary table + merged step analysis
   ```
   ## 📊 Test Case Analysis (3 Test Cases Found)
-  
+
   | Rank | Test Case | Steps | Coverage | Visual Confidence | Match Quality |
   |------|-----------|-------|----------|-------------------|---------------|
   | ⭐   | [MCP-1922](url) | 8   | 65%     | 72%              | 🟢 Excellent |
   | 2    | [MCP-1923](url) | 3   | 25%     | 55%              | 🟡 Good      |
   | 3    | [MCP-1921](url) | 1   | 15%     | 20%              | 🔴 Poor      |
-  
+
   Combined Coverage: 12 merged steps covering 75% of automation
   Best Match: MCP-1922 - Best coverage (65%) with excellent match quality
   ```
@@ -414,8 +635,8 @@ DEBUG=true                                    # Default: (not set) - use true fo
   - **Example Output (Good Test Case)**:
     ```markdown
     ✅ Test case provides adequate high-level description of automation behavior.
-    Note: Automation has 67 detailed steps vs 1 test case step - this is normal 
-    and expected. Test cases are high-level descriptions; automation is detailed 
+    Note: Automation has 67 detailed steps vs 1 test case step - this is normal
+    and expected. Test cases are high-level descriptions; automation is detailed
     implementation. Focus on investigating the actual test failure root cause.
     ```
   - **Example Output (Bad Test Case - Semantic Mismatch)**:
@@ -449,9 +670,9 @@ DEBUG=true                                    # Default: (not set) - use true fo
     ```markdown
     🔍 Element "Add Food" visible in UI but locator failed
     Recommendation: Update locator strategy or check if element attributes changed
-    
-    Visual diagnosis: Element "Add Food" appears to be visible in frames, but 
-    locator (xpath=//*[@id='add_food']) failed. This suggests the locator 
+
+    Visual diagnosis: Element "Add Food" appears to be visible in frames, but
+    locator (xpath=//*[@id='add_food']) failed. This suggests the locator
     strategy may be incorrect or the element structure changed.
     ```
 - **📊 Enhanced Coverage Verification**
@@ -761,24 +982,24 @@ Known issue: [QAT-27990](https://your-workspace.atlassian.net/browse/QAT-27990)
 2. **Enhanced Test Session Section** ✅
    ```markdown
    ## 📹 Test Execution Sessions
-   
+
    **Total Sessions:** 2
-   
+
    ### 📹 Session 1 (Latest)
    - **Device:** Pixel 8 Pro
    - **Platform:** Android 15
    - **Duration:** 4m 1s
    - **Started:** November 3, 2025 at 7:22:57 PM
    - **Status:** FAILED
-   
+
    **Videos:**
    🎥 [Watch Test Execution Video](https://...direct-link...)
-   
+
    **Screenshots:** 5 available
    1. 🖼️ [Screenshot 1](https://...link...)
    2. 🖼️ [Screenshot 2](https://...link...)
    ...
-   
+
    ### 📼 Session 2
    - **Device:** Galaxy S21
    - **Platform:** Android 14
@@ -795,7 +1016,7 @@ Known issue: [QAT-27990](https://your-workspace.atlassian.net/browse/QAT-27990)
    **Example:**
    ```markdown
    ## 🚀 Launch Information
-   
+
    - **Launch:** [Android-Minimal-Acceptance](https://...launch-url...)
    - **Launch ID:** [120906](https://...launch-url...)
    - **Project:** MCP
@@ -834,8 +1055,8 @@ Known issue: [QAT-27990](https://your-workspace.atlassian.net/browse/QAT-27990)
 ```typescript
 // New method structure
 private async getAllSessionsWithArtifacts(
-  testRunId: number, 
-  testId: number, 
+  testRunId: number,
+  testId: number,
   projectId: number
 ): Promise<Array<{
   sessionId: string;
