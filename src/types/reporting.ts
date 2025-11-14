@@ -299,6 +299,30 @@ export const TestRunsResponseSchema = z.object({
 
 export type TestRunsResponse = z.infer<typeof TestRunsResponseSchema>;
 
+// Test execution history item schema (from test history API)
+export const TestExecutionHistoryItemSchema = z.object({
+  testId: z.coerce.number(),
+  status: z.string(),
+  passedManually: z.boolean(),
+  elapsed: z.coerce.number(), // Duration in milliseconds
+  issueReferences: z.array(z.object({
+    id: z.coerce.number().optional(),
+    type: z.string(),
+    value: z.string()
+  })),
+  testRunId: z.coerce.number(),
+  startTime: z.coerce.number() // timestamp
+});
+
+export type TestExecutionHistoryItem = z.infer<typeof TestExecutionHistoryItemSchema>;
+
+// Test execution history response
+export const TestExecutionHistoryResponseSchema = z.object({
+  items: z.array(TestExecutionHistoryItemSchema)
+});
+
+export type TestExecutionHistoryResponse = z.infer<typeof TestExecutionHistoryResponseSchema>;
+
 // Log item schema (from test-execution-logs API)
 export const LogItemSchema = z.object({
   kind: z.enum(['log', 'screenshot']),

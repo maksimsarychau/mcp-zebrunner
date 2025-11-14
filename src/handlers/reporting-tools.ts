@@ -543,6 +543,163 @@ export class ZebrunnerReportingToolHandlers {
   }
 
   /**
+   * Get test execution history - Shows history of test executions across launches
+   */
+  async getTestExecutionHistory(input: {
+    testId: number;
+    testRunId: number;
+    projectKey?: string;
+    projectId?: number;
+    limit?: number;
+    format?: 'dto' | 'json' | 'string';
+  }) {
+    const {
+      testId,
+      testRunId,
+      projectKey,
+      projectId,
+      limit = 10,
+      format = 'string'
+    } = input;
+
+    try {
+      // Validate input
+      if (!projectKey && !projectId) {
+        throw new Error("Either projectKey or projectId must be provided");
+      }
+
+      let resolvedProjectId = projectId;
+      let resolvedProjectKey = projectKey;
+      
+      if (projectKey && !projectId) {
+        resolvedProjectId = await this.reportingClient.getProjectId(projectKey);
+      } else if (projectId && !projectKey) {
+        resolvedProjectKey = await this.reportingClient.getProjectKey(projectId);
+      }
+
+      // Fetch test execution history
+      const history = await this.reportingClient.getTestExecutionHistory(
+        testRunId,
+        testId,
+        resolvedProjectId!,
+        limit
+      );
+
+      const baseUrl = this.reportingClient['config'].baseUrl;
+
+      // Find last passed execution
+      const lastPassed = history.items.find(item => 
+        item.status === 'PASSED' && !item.passedManually
+      );
+
+      // Calculate pass rate
+      const totalExecutions = history.items.length;
+      const passedExecutions = history.items.filter(item => 
+        item.status === 'PASSED' && !item.passedManually
+      ).length;
+      const passRate = totalExecutions > 0 
+        ? Math.round((passedExecutions / totalExecutions) * 100) 
+        : 0;
+
+      // Format timestamps
+      const formattedHistory = history.items.map(item => ({
+        testId: item.testId,
+        status: item.status,
+        passedManually: item.passedManually,
+        duration: `${Math.round(item.elapsed / 1000)}s`,
+        durationMs: item.elapsed,
+        launchId: item.testRunId,
+        launchUrl: `${baseUrl}/projects/${resolvedProjectKey}/automation-launches/${item.testRunId}/tests/${item.testId}`,
+        date: new Date(item.startTime).toISOString(),
+        dateFormatted: new Date(item.startTime).toLocaleString(),
+        issues: item.issueReferences.length > 0 
+          ? item.issueReferences.map(issue => issue.value).join(', ')
+          : 'None'
+      }));
+
+      // Prepare summary object
+      const summary = {
+        testId,
+        currentLaunchId: testRunId,
+        totalExecutions,
+        passedExecutions,
+        failedExecutions: history.items.filter(item => item.status === 'FAILED').length,
+        passRate: `${passRate}%`,
+        lastPassedExecution: lastPassed ? {
+          testId: lastPassed.testId,
+          launchId: lastPassed.testRunId,
+          date: new Date(lastPassed.startTime).toLocaleString(),
+          duration: `${Math.round(lastPassed.elapsed / 1000)}s`,
+          launchUrl: `${baseUrl}/projects/${resolvedProjectKey}/automation-launches/${lastPassed.testRunId}/tests/${lastPassed.testId}`
+        } : null,
+        history: formattedHistory
+      };
+
+      // Format based on requested format
+      if (format === 'dto' || format === 'json') {
+        const formattedData = FormatProcessor.format(summary, format);
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2)
+            }
+          ]
+        };
+      }
+
+      // String format (markdown table)
+      let report = `# 📊 Test Execution History\n\n`;
+      report += `**Test ID:** ${testId}\n`;
+      report += `**Current Launch:** [${testRunId}](${baseUrl}/projects/${resolvedProjectKey}/automation-launches/${testRunId}/tests/${testId})\n`;
+      report += `**Total Executions:** ${totalExecutions}\n`;
+      report += `**Pass Rate:** ${passRate}% (${passedExecutions}/${totalExecutions})\n\n`;
+
+      if (lastPassed) {
+        report += `## ✅ Last Passed Execution\n\n`;
+        report += `- **Launch:** [${lastPassed.testRunId}](${baseUrl}/projects/${resolvedProjectKey}/automation-launches/${lastPassed.testRunId}/tests/${lastPassed.testId})\n`;
+        report += `- **Date:** ${new Date(lastPassed.startTime).toLocaleString()}\n`;
+        report += `- **Duration:** ${Math.round(lastPassed.elapsed / 1000)}s\n\n`;
+      } else {
+        report += `## ⚠️ No Passed Executions Found\n\n`;
+        report += `This test has not passed in the last ${limit} executions.\n\n`;
+      }
+
+      report += `## 📋 Execution History (Last ${Math.min(limit, totalExecutions)})\n\n`;
+      report += `| # | Status | Date | Duration | Launch | Issues |\n`;
+      report += `|---|--------|------|----------|--------|--------|\n`;
+
+      formattedHistory.forEach((item, idx) => {
+        const statusIcon = item.status === 'PASSED' ? '✅' :
+                          item.status === 'FAILED' ? '❌' :
+                          item.status === 'SKIPPED' ? '⏭️' : '❓';
+        const manualFlag = item.passedManually ? ' 👤' : '';
+        
+        report += `| ${idx + 1} | ${statusIcon} ${item.status}${manualFlag} | ${item.dateFormatted} | ${item.duration} | [${item.launchId}](${item.launchUrl}) | ${item.issues} |\n`;
+      });
+
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: report
+          }
+        ]
+      };
+
+    } catch (error: any) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Error retrieving test execution history: ${error.message}`
+          }
+        ]
+      };
+    }
+  }
+
+  /**
    * Analyze test failure by ID - Deep forensic analysis
    */
   async analyzeTestFailureById(input: {
@@ -559,6 +716,14 @@ export class ZebrunnerReportingToolHandlers {
     analyzeScreenshotsWithAI?: boolean;
     screenshotAnalysisType?: 'basic' | 'detailed';
     format?: 'detailed' | 'summary' | 'jira';
+    compareWithLastPassed?: {
+      enabled: boolean;
+      includeLogs?: boolean;
+      includeScreenshots?: boolean;
+      includeVideo?: boolean;
+      includeEnvironment?: boolean;
+      includeDuration?: boolean;
+    };
   }) {
     const {
       testId,
@@ -573,7 +738,8 @@ export class ZebrunnerReportingToolHandlers {
       analyzeSimilarFailures = true,
       analyzeScreenshotsWithAI = false,
       screenshotAnalysisType = 'detailed',
-      format = 'detailed'
+      format = 'detailed',
+      compareWithLastPassed
     } = input;
 
     try {
@@ -656,6 +822,50 @@ export class ZebrunnerReportingToolHandlers {
         };
       }
 
+      // Fetch comparison data if requested
+      let comparisonData = null;
+      if (compareWithLastPassed?.enabled) {
+        try {
+          // First, check test execution history to see if there's any passed execution
+          const history = await this.reportingClient.getTestExecutionHistory(
+            testRunId,
+            testId,
+            resolvedProjectId!,
+            10 // Check last 10 executions
+          );
+
+          const lastPassed = history.items.find(item => 
+            item.status === 'PASSED' && !item.passedManually
+          );
+
+          if (!lastPassed) {
+            // All recent executions failed - set special flag
+            comparisonData = {
+              noPassedExecutionFound: true,
+              totalExecutionsChecked: history.items.length,
+              allFailedCount: history.items.filter(item => item.status === 'FAILED').length
+            };
+          } else {
+            // Fetch detailed comparison data
+            comparisonData = await this.fetchLastPassedComparison({
+              testId,
+              testRunId,
+              projectId: resolvedProjectId!,
+              projectKey: resolvedProjectKey!,
+              currentTestRun: testRun,
+              currentLogs: logsAndScreenshots,
+              compareOptions: compareWithLastPassed,
+              lastPassedExecution: lastPassed
+            });
+          }
+        } catch (error: any) {
+          // Log error but continue with analysis
+          if (this.reportingClient['config'].debug) {
+            console.warn(`[analyzeTestFailureById] Failed to fetch comparison data: ${error.message}`);
+          }
+        }
+      }
+
       // Generate analysis report (detailed or summary)
       const analysisReport = await this.generateFailureAnalysisReport({
         testRun,
@@ -670,7 +880,8 @@ export class ZebrunnerReportingToolHandlers {
         format,
         baseUrl: this.reportingClient['config'].baseUrl,
         analyzeScreenshotsWithAI,
-        screenshotAnalysisType
+        screenshotAnalysisType,
+        comparisonData
       });
 
       return {
@@ -897,6 +1108,117 @@ export class ZebrunnerReportingToolHandlers {
   }
 
   /**
+   * Fetch last passed execution data for comparison
+   */
+  private async fetchLastPassedComparison(params: {
+    testId: number;
+    testRunId: number;
+    projectId: number;
+    projectKey: string;
+    currentTestRun: any;
+    currentLogs: any;
+    compareOptions: any;
+    lastPassedExecution: any;
+  }): Promise<any> {
+    const { testId, projectId, currentTestRun, currentLogs, compareOptions, lastPassedExecution } = params;
+
+    const comparisonData: any = {
+      lastPassedExecution: {
+        testId: lastPassedExecution.testId,
+        launchId: lastPassedExecution.testRunId,
+        date: new Date(lastPassedExecution.startTime).toLocaleString(),
+        duration: lastPassedExecution.elapsed
+      }
+    };
+
+    // Fetch last passed test details
+    const lastPassedTestRuns = await this.reportingClient.getTestRuns(lastPassedExecution.testRunId, projectId);
+    const lastPassedTestRun = lastPassedTestRuns.items.find(t => t.id === lastPassedExecution.testId);
+
+    if (!lastPassedTestRun) {
+      return comparisonData;
+    }
+
+    // Compare duration
+    if (compareOptions.includeDuration !== false) {
+      const currentDuration = currentTestRun.finishTime - currentTestRun.startTime;
+      const lastPassedDuration = lastPassedExecution.elapsed;
+      const durationDiff = currentDuration - lastPassedDuration;
+      const durationDiffPercent = ((durationDiff / lastPassedDuration) * 100).toFixed(1);
+
+      comparisonData.duration = {
+        current: currentDuration,
+        lastPassed: lastPassedDuration,
+        difference: durationDiff,
+        percentChange: durationDiffPercent
+      };
+    }
+
+    // Compare environment
+    if (compareOptions.includeEnvironment !== false && lastPassedTestRun) {
+      comparisonData.environment = {
+        changed: false,
+        differences: []
+      };
+
+      // Check for environment changes (would need launch details for full comparison)
+      if (lastPassedTestRun.testClass !== currentTestRun.testClass) {
+        comparisonData.environment.changed = true;
+        comparisonData.environment.differences.push('Test class changed');
+      }
+    }
+
+    // Compare logs
+    if (compareOptions.includeLogs !== false) {
+      try {
+        const lastPassedLogs = await this.reportingClient.getTestLogsAndScreenshots(
+          lastPassedExecution.testRunId,
+          lastPassedExecution.testId
+        );
+
+        const currentErrorLogs = currentLogs?.items?.filter((item: any) => 
+          item.kind === 'log' && item.level === 'ERROR'
+        ) || [];
+
+        const lastPassedErrorLogs = lastPassedLogs.items.filter(item => 
+          item.kind === 'log' && item.level === 'ERROR'
+        );
+
+        comparisonData.logs = {
+          currentErrorCount: currentErrorLogs.length,
+          lastPassedErrorCount: lastPassedErrorLogs.length,
+          newErrors: currentErrorLogs.length > 0 ? ['New errors detected in current execution'] : []
+        };
+      } catch (error: any) {
+        comparisonData.logs = { error: 'Failed to fetch last passed logs' };
+      }
+    }
+
+    // Compare screenshots
+    if (compareOptions.includeScreenshots !== false) {
+      try {
+        const lastPassedLogs = await this.reportingClient.getTestLogsAndScreenshots(
+          lastPassedExecution.testRunId,
+          lastPassedExecution.testId
+        );
+
+        const currentScreenshots = currentLogs?.items?.filter((item: any) => item.kind === 'screenshot') || [];
+        const lastPassedScreenshots = lastPassedLogs.items.filter(item => item.kind === 'screenshot');
+
+        comparisonData.screenshots = {
+          currentCount: currentScreenshots.length,
+          lastPassedCount: lastPassedScreenshots.length,
+          lastScreenshotAvailable: lastPassedScreenshots.length > 0
+        };
+      } catch (error: any) {
+        comparisonData.screenshots = { error: 'Failed to fetch last passed screenshots' };
+      }
+    }
+
+    return comparisonData;
+  }
+
+  /**
    * Generate comprehensive failure analysis report
    */
   private async generateFailureAnalysisReport(params: {
@@ -913,6 +1235,7 @@ export class ZebrunnerReportingToolHandlers {
     baseUrl: string;
     analyzeScreenshotsWithAI?: boolean;
     screenshotAnalysisType?: 'basic' | 'detailed';
+    comparisonData?: any;
   }): Promise<string> {
     const {
       testRun,
@@ -927,7 +1250,8 @@ export class ZebrunnerReportingToolHandlers {
       format,
       baseUrl,
       analyzeScreenshotsWithAI = false,
-      screenshotAnalysisType = 'detailed'
+      screenshotAnalysisType = 'detailed',
+      comparisonData
     } = params;
 
     const duration = testRun.finishTime && testRun.startTime
@@ -1005,6 +1329,70 @@ export class ZebrunnerReportingToolHandlers {
     }
     
     report += `- **Bug Status:** ${testRun.issueReferences && testRun.issueReferences.length > 0 ? '✅ Bug Linked' : '❌ No Bug Linked'}\n\n`;
+
+    // Comparison with Last Passed Execution
+    if (comparisonData) {
+      if (comparisonData.noPassedExecutionFound) {
+        report += `## ⚠️ Comparison with Last Passed\n\n`;
+        report += `**🔴 CRITICAL: No Passed Executions Found**\n\n`;
+        report += `This test has **FAILED** in all of the last **${comparisonData.totalExecutionsChecked}** executions.\n`;
+        report += `- **Total Failures:** ${comparisonData.allFailedCount}\n`;
+        report += `- **Recommendation:** This test appears to be consistently failing. Investigate if:\n`;
+        report += `  - Test is flaky or broken\n`;
+        report += `  - Feature is not implemented\n`;
+        report += `  - Environment issues are blocking the test\n\n`;
+      } else {
+        report += `## 🔄 Comparison with Last Passed\n\n`;
+        report += `Comparing current failure with last successful execution:\n\n`;
+        report += `**Last Passed:** [Launch ${comparisonData.lastPassedExecution.launchId}](${baseUrl}/projects/${projectKey}/automation-launches/${comparisonData.lastPassedExecution.launchId}/tests/${comparisonData.lastPassedExecution.testId})\n`;
+        report += `**Date:** ${comparisonData.lastPassedExecution.date}\n\n`;
+
+        if (comparisonData.duration) {
+          const currentDurationSec = Math.round(comparisonData.duration.current / 1000);
+          const lastPassedDurationSec = Math.round(comparisonData.duration.lastPassed / 1000);
+          const diffSec = Math.round(comparisonData.duration.difference / 1000);
+          const diffIndicator = diffSec > 0 ? '🔴 Slower' : '🟢 Faster';
+          
+          report += `**Duration Comparison:**\n`;
+          report += `- Current: ${currentDurationSec}s\n`;
+          report += `- Last Passed: ${lastPassedDurationSec}s\n`;
+          report += `- Difference: ${diffIndicator} by ${Math.abs(diffSec)}s (${comparisonData.duration.percentChange}%)\n\n`;
+        }
+
+        if (comparisonData.logs) {
+          report += `**Log Comparison:**\n`;
+          if (comparisonData.logs.error) {
+            report += `- ⚠️ ${comparisonData.logs.error}\n`;
+          } else {
+            report += `- Current Errors: ${comparisonData.logs.currentErrorCount}\n`;
+            report += `- Last Passed Errors: ${comparisonData.logs.lastPassedErrorCount}\n`;
+            if (comparisonData.logs.currentErrorCount > comparisonData.logs.lastPassedErrorCount) {
+              report += `- 🔴 New errors appeared in current execution\n`;
+            }
+          }
+          report += `\n`;
+        }
+
+        if (comparisonData.screenshots) {
+          report += `**Screenshot Comparison:**\n`;
+          if (comparisonData.screenshots.error) {
+            report += `- ⚠️ ${comparisonData.screenshots.error}\n`;
+          } else {
+            report += `- Current Screenshots: ${comparisonData.screenshots.currentCount}\n`;
+            report += `- Last Passed Screenshots: ${comparisonData.screenshots.lastPassedCount}\n`;
+          }
+          report += `\n`;
+        }
+
+        if (comparisonData.environment?.changed) {
+          report += `**Environment Changes:**\n`;
+          comparisonData.environment.differences.forEach((diff: string) => {
+            report += `- 🔶 ${diff}\n`;
+          });
+          report += `\n`;
+        }
+      }
+    }
 
     // Test Session Details
     report += `## 🧪 Test Session Details\n\n`;

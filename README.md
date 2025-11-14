@@ -559,7 +559,8 @@ Once connected, you can use these tools through natural language in your AI assi
 #### **Test Failure Analysis** 🆕 *Game Changer*
 | Tool | Description | Example Usage | Best For |
 |------|-------------|---------------|----------|
-| `analyze_test_failure` | Deep forensic analysis of failed tests with logs, screenshots, error classification, and recommendations. **NEW:** `format: 'jira'` generates ready-to-paste Jira tickets with auto-priority, labels, and clickable 🎥 video links! | `"Analyze test failure 5451420 in launch 120806"` or with `format: 'jira'` for Jira ticket | **QA Engineers, SDETs, Managers** |
+| `analyze_test_failure` | Deep forensic analysis of failed tests with logs, screenshots, error classification, and recommendations. **NEW in v5.11.0:** Compare with last passed execution! Shows what changed (logs, duration, environment). **Also:** `format: 'jira'` generates ready-to-paste Jira tickets with auto-priority, labels, and clickable 🎥 video links! | `"Analyze test failure 5451420 in launch 120806 and compare with last passed execution"` | **QA Engineers, SDETs, Managers** |
+| `get_test_execution_history` | 🆕 **NEW in v5.11.0!** Track test execution trends across launches. View pass/fail history, find last passed execution, calculate pass rate. **Critical Detection:** Highlights when test failed in all recent runs! | `"Show execution history for test 5478492"` or `"Has test 5478492 been failing consistently?"` | **QA Engineers, SDETs, Managers** |
 | `detailed_analyze_launch_failures` | 🚀 **Enhanced v4.12.1** Analyze failures WITHOUT linked issues with **Claude-level intelligence** + **Jira format support**. Auto-deep-dive with executive summary, timeline, patterns, priorities. **NEW:** Generate Jira-ready tickets for entire launches! | `"Analyze failures in launch 120806"` or with `format: 'jira'` | **QA Managers, SDETs, Team Leads** |
 
 > ✅ **FIXED in v5.2.4!** **Improved Reliability & Video Links**
@@ -588,6 +589,18 @@ Once connected, you can use these tools through natural language in your AI assi
 > - **Smart filtering**: Analyzes only tests WITHOUT linked issues by default
 > - Optional AI screenshot analysis for all tests
 > - **No manual follow-up needed** - get complete picture in one call!
+
+> 🆕 **NEW in v5.11.0!** **Test Execution History & Comparison**
+> - **📊 Track execution trends**: View pass/fail history across launches with `get_test_execution_history`
+> - **🔄 Compare with last passed**: New `compareWithLastPassed` parameter in `analyze_test_failure`
+>   - Compare logs (new errors detection)
+>   - Compare duration (performance regression)
+>   - Compare environment (device/platform changes)
+>   - Compare screenshots (visual differences)
+> - **⚠️ Critical detection**: Automatically highlights when test failed in all recent executions
+> - **🎯 Regression analysis**: See exactly what changed between passed and failed runs
+> - **📈 Pass rate metrics**: Calculate test stability over time
+> - See [TOOLS_CATALOG.md](TOOLS_CATALOG.md) for example prompts!
 
 #### **Screenshot Analysis & Visual Forensics** 🎯 *Enhanced in v4.11.0*
 | Tool | Description | Example Usage | Best For |
@@ -1199,6 +1212,10 @@ Leverage intelligent validation:
 
 ## 📚 Additional Documentation
 
+### 📖 Tool References
+- **[TOOLS_CATALOG.md](TOOLS_CATALOG.md)** - 🆕 **Complete catalog of all 40+ tools with natural language examples**
+- **[INSTALL-GUIDE.md](INSTALL-GUIDE.md)** - 📥 **Step-by-step installation and setup guide**
+
 ### 🧠 Intelligent Rules System
 - **[docs/INTELLIGENT_RULES_SYSTEM.md](docs/INTELLIGENT_RULES_SYSTEM.md)** - 🧠 **Complete guide to the 3-tier intelligent rules system**
 - **[docs/RULES_QUICK_REFERENCE.md](docs/RULES_QUICK_REFERENCE.md)** - ⚡ **Quick reference for rules system commands and configuration**
@@ -1207,6 +1224,10 @@ Leverage intelligent validation:
 - **[test_case_review_rules.md](test_case_review_rules.md)** - 🎯 **Core quality standards and writing guidelines**
 - **[test_case_analysis_checkpoints.md](test_case_analysis_checkpoints.md)** - ✅ **100+ detailed validation checkpoints**
 - **[mcp-zebrunner-rules.md](mcp-zebrunner-rules.md)** - ⚙️ **Technical configuration for test generation and coverage analysis**
+
+### 🔍 Specialized Guides
+- **[docs/SCREENSHOT_ANALYSIS.md](docs/SCREENSHOT_ANALYSIS.md)** - 📸 **Screenshot download and visual analysis guide**
+- **[change-logs.md](change-logs.md)** - 📝 **Version history and feature updates**
 
 ### 🛠️ Feature Documentation
 - **[docs/NEW_LAUNCHER_TOOL.md](docs/NEW_LAUNCHER_TOOL.md)** - Detailed information about launch and reporting tools
