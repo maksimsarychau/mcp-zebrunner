@@ -8,7 +8,7 @@
   - Find last successful execution
   - **Special Detection**: Highlights when all recent executions failed (e.g., "Failed in all last 10 runs")
   - Output formats: Markdown table, JSON, or structured DTO
-  
+
 - **🔄 ENHANCED: `analyze_test_failure` with Comparison Feature** - Compare current failure with last passed execution
   - **New Parameter**: `compareWithLastPassed` with granular control
     - Compare logs (error count, new errors detected)
@@ -19,7 +19,7 @@
   - **Smart Detection**: Automatically checks last 10 executions for any passed run
   - **Critical Warning**: Shows prominent alert if test has no recent passed executions
   - **Detailed Comparison Report**: Side-by-side comparison with clickable links
-  
+
 ### 📊 Test Execution History Features
 
 **Use Cases:**
@@ -83,9 +83,9 @@
    - Shows prominent warning section:
    ```markdown
    ## ⚠️ Comparison with Last Passed
-   
+
    **🔴 CRITICAL: No Passed Executions Found**
-   
+
    This test has **FAILED** in all of the last **10** executions.
    - **Total Failures:** 10
    - **Recommendation:** This test appears to be consistently failing. Investigate if:
@@ -460,7 +460,7 @@ DEBUG=true                                    # Default: (not set) - use true fo
   - **Substring matching**: Requires 60% of expected in executed
   - **Debug logging**: Detailed matching diagnostics (enable with `debug: true`)
 - **🎯 Impact on Example Test**:
-  - **Before v5.9.1**: 
+  - **Before v5.9.1**:
     ```
     Test Case MCP-2107: 0% coverage
     Test Case MCP-88: 0% coverage
@@ -510,13 +510,13 @@ DEBUG=true                                    # Default: (not set) - use true fo
 - **📋 New Report Format** - Enhanced summary table + merged step analysis
   ```
   ## 📊 Test Case Analysis (3 Test Cases Found)
-  
+
   | Rank | Test Case | Steps | Coverage | Visual Confidence | Match Quality |
   |------|-----------|-------|----------|-------------------|---------------|
   | ⭐   | [MCP-1922](url) | 8   | 65%     | 72%              | 🟢 Excellent |
   | 2    | [MCP-1923](url) | 3   | 25%     | 55%              | 🟡 Good      |
   | 3    | [MCP-1921](url) | 1   | 15%     | 20%              | 🔴 Poor      |
-  
+
   Combined Coverage: 12 merged steps covering 75% of automation
   Best Match: MCP-1922 - Best coverage (65%) with excellent match quality
   ```
@@ -635,8 +635,8 @@ DEBUG=true                                    # Default: (not set) - use true fo
   - **Example Output (Good Test Case)**:
     ```markdown
     ✅ Test case provides adequate high-level description of automation behavior.
-    Note: Automation has 67 detailed steps vs 1 test case step - this is normal 
-    and expected. Test cases are high-level descriptions; automation is detailed 
+    Note: Automation has 67 detailed steps vs 1 test case step - this is normal
+    and expected. Test cases are high-level descriptions; automation is detailed
     implementation. Focus on investigating the actual test failure root cause.
     ```
   - **Example Output (Bad Test Case - Semantic Mismatch)**:
@@ -670,9 +670,9 @@ DEBUG=true                                    # Default: (not set) - use true fo
     ```markdown
     🔍 Element "Add Food" visible in UI but locator failed
     Recommendation: Update locator strategy or check if element attributes changed
-    
-    Visual diagnosis: Element "Add Food" appears to be visible in frames, but 
-    locator (xpath=//*[@id='add_food']) failed. This suggests the locator 
+
+    Visual diagnosis: Element "Add Food" appears to be visible in frames, but
+    locator (xpath=//*[@id='add_food']) failed. This suggests the locator
     strategy may be incorrect or the element structure changed.
     ```
 - **📊 Enhanced Coverage Verification**
@@ -982,24 +982,24 @@ Known issue: [QAT-27990](https://your-workspace.atlassian.net/browse/QAT-27990)
 2. **Enhanced Test Session Section** ✅
    ```markdown
    ## 📹 Test Execution Sessions
-   
+
    **Total Sessions:** 2
-   
+
    ### 📹 Session 1 (Latest)
    - **Device:** Pixel 8 Pro
    - **Platform:** Android 15
    - **Duration:** 4m 1s
    - **Started:** November 3, 2025 at 7:22:57 PM
    - **Status:** FAILED
-   
+
    **Videos:**
    🎥 [Watch Test Execution Video](https://...direct-link...)
-   
+
    **Screenshots:** 5 available
    1. 🖼️ [Screenshot 1](https://...link...)
    2. 🖼️ [Screenshot 2](https://...link...)
    ...
-   
+
    ### 📼 Session 2
    - **Device:** Galaxy S21
    - **Platform:** Android 14
@@ -1016,7 +1016,7 @@ Known issue: [QAT-27990](https://your-workspace.atlassian.net/browse/QAT-27990)
    **Example:**
    ```markdown
    ## 🚀 Launch Information
-   
+
    - **Launch:** [Android-Minimal-Acceptance](https://...launch-url...)
    - **Launch ID:** [120906](https://...launch-url...)
    - **Project:** MCP
@@ -1055,8 +1055,8 @@ Known issue: [QAT-27990](https://your-workspace.atlassian.net/browse/QAT-27990)
 ```typescript
 // New method structure
 private async getAllSessionsWithArtifacts(
-  testRunId: number, 
-  testId: number, 
+  testRunId: number,
+  testId: number,
   projectId: number
 ): Promise<Array<{
   sessionId: string;
