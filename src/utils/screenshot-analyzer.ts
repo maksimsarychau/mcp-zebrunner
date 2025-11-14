@@ -444,3 +444,59 @@ try {
   console.error('[Screenshot Cleanup] Failed:', error);
 }
 
+/**
+ * Setup process exit handlers for cleanup
+ * Ensures temporary files are cleaned up when process terminates
+ */
+function setupCleanupHandlers(): void {
+  let cleanupExecuted = false;
+
+  const performCleanup = (signal: string) => {
+    if (cleanupExecuted) return;
+    cleanupExecuted = true;
+
+    try {
+      const count = clearAllScreenshots();
+      if (count > 0 && process.env.DEBUG === 'true') {
+        console.log(`[Screenshot Cleanup] Cleaned ${count} screenshot(s) on ${signal}`);
+      }
+    } catch (error) {
+      if (process.env.DEBUG === 'true') {
+        console.error(`[Screenshot Cleanup] Error during ${signal} cleanup:`, error);
+      }
+    }
+  };
+
+  // Handle graceful shutdown signals
+  process.on('SIGINT', () => {
+    performCleanup('SIGINT');
+    process.exit(0);
+  });
+
+  process.on('SIGTERM', () => {
+    performCleanup('SIGTERM');
+    process.exit(0);
+  });
+
+  // Handle uncaught exceptions
+  process.on('uncaughtException', (error) => {
+    if (process.env.DEBUG === 'true') {
+      console.error('[Screenshot Cleanup] Uncaught exception, cleaning up:', error);
+    }
+    performCleanup('uncaughtException');
+    process.exit(1);
+  });
+
+  // Handle unhandled promise rejections
+  process.on('unhandledRejection', (reason) => {
+    if (process.env.DEBUG === 'true') {
+      console.error('[Screenshot Cleanup] Unhandled rejection, cleaning up:', reason);
+    }
+    performCleanup('unhandledRejection');
+    process.exit(1);
+  });
+}
+
+// Setup cleanup handlers on module load
+setupCleanupHandlers();
+

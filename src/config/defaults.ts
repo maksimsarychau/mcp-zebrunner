@@ -23,6 +23,15 @@ export interface ZebrunnerDefaults {
   // Rules engine settings
   rulesFileName: string;
   rulesFileMinContentLength: number; // Minimum meaningful content length
+  
+  // Security settings
+  strictUrlValidation: boolean; // Enable strict URL validation for downloads
+  skipUrlValidationOnError: boolean; // Skip validation if it fails (less secure, more permissive)
+  
+  // Rate limiting settings
+  enableRateLimiting: boolean; // Enable rate limiting for API calls
+  maxRequestsPerSecond: number; // Maximum requests per second (default: 5)
+  rateLimitingBurst: number; // Allow burst of requests (default: 10)
 }
 
 /**
@@ -45,7 +54,16 @@ export const DEFAULT_CONFIG: ZebrunnerDefaults = {
   
   // Rules engine settings
   rulesFileName: 'mcp-zebrunner-rules.md',
-  rulesFileMinContentLength: 50 // Minimum chars for meaningful content (excluding whitespace/comments)
+  rulesFileMinContentLength: 50, // Minimum chars for meaningful content (excluding whitespace/comments)
+  
+  // Security settings
+  strictUrlValidation: true, // Enable strict URL validation by default for security
+  skipUrlValidationOnError: false, // Throw error on validation failure by default
+  
+  // Rate limiting settings
+  enableRateLimiting: true, // Enable rate limiting by default to prevent API abuse
+  maxRequestsPerSecond: 5, // Conservative default: 5 requests per second
+  rateLimitingBurst: 10 // Allow burst of up to 10 requests
 };
 
 /**
@@ -61,7 +79,12 @@ export const ENV_MAPPINGS = {
   MAX_PAGE_SIZE: 'maxPageSize',
   DEFAULT_PAGE_SIZE: 'defaultPageSize',
   DEBUG: 'debug',
-  ENABLE_RULES_ENGINE: 'enableRulesEngine'
+  ENABLE_RULES_ENGINE: 'enableRulesEngine',
+  STRICT_URL_VALIDATION: 'strictUrlValidation',
+  SKIP_URL_VALIDATION_ON_ERROR: 'skipUrlValidationOnError',
+  ENABLE_RATE_LIMITING: 'enableRateLimiting',
+  MAX_REQUESTS_PER_SECOND: 'maxRequestsPerSecond',
+  RATE_LIMITING_BURST: 'rateLimitingBurst'
 } as const;
 
 /**

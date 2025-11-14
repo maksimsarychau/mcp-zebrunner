@@ -6,6 +6,7 @@ import { TestSessionVideo, VideoDownloadResult } from './types.js';
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegPath from '@ffmpeg-installer/ffmpeg';
 import ffprobePath from '@ffprobe-installer/ffprobe';
+import { validateFileUrl } from '../security.js';
 
 // Set FFmpeg and FFprobe paths
 ffmpeg.setFfmpegPath(ffmpegPath.path);
@@ -83,9 +84,19 @@ export class VideoDownloader {
         return null;
       }
 
+      // Get URL validation config from environment or defaults
+      const strictMode = process.env.STRICT_URL_VALIDATION !== 'false'; // Default true
+      const skipOnError = process.env.SKIP_URL_VALIDATION_ON_ERROR === 'true'; // Default false
+      
+      // Validate artifact value before constructing URL
+      const validatedPath = validateFileUrl(videoArtifact.value, {
+        strictMode,
+        skipOnError
+      });
+      
       // Construct full video URL
       const baseUrl = this.reportingClient['config'].baseUrl.replace(/\/+$/, '');
-      const videoUrl = `${baseUrl}/${videoArtifact.value}`;
+      const videoUrl = `${baseUrl}/${validatedPath}`;
 
       if (this.debug) {
         console.log(`[VideoDownloader] Video URL constructed: ${videoUrl}`);
@@ -311,6 +322,80 @@ export class VideoDownloader {
   getTempDir(): string {
     return this.tempDir;
   }
+
+  /**
+   * Cleanup all videos in temp directory
+   */
+  cleanupAllVideos(): number {
+    return this.cleanupOldVideos(0); // Clean all videos regardless of age
+  }
 }
+
+/**
+ * Global registry of VideoDownloader instances for cleanup
+ */
+const downloaderInstances = new Set<VideoDownloader>();
+
+/**
+ * Register a downloader instance for cleanup tracking
+ */
+export function registerDownloaderForCleanup(downloader: VideoDownloader): void {
+  downloaderInstances.add(downloader);
+}
+
+/**
+ * Setup process exit handlers for video cleanup
+ * Ensures temporary video files are cleaned up when process terminates
+ */
+function setupVideoCleanupHandlers(): void {
+  let cleanupExecuted = false;
+
+  const performCleanup = (signal: string) => {
+    if (cleanupExecuted) return;
+    cleanupExecuted = true;
+
+    try {
+      let totalCleaned = 0;
+      downloaderInstances.forEach(downloader => {
+        try {
+          const count = downloader.cleanupAllVideos();
+          totalCleaned += count;
+        } catch (error) {
+          // Silently handle errors for individual downloaders
+        }
+      });
+
+      if (totalCleaned > 0 && process.env.DEBUG === 'true') {
+        console.log(`[VideoDownloader] Cleaned ${totalCleaned} video(s) on ${signal}`);
+      }
+    } catch (error) {
+      if (process.env.DEBUG === 'true') {
+        console.error(`[VideoDownloader] Error during ${signal} cleanup:`, error);
+      }
+    }
+  };
+
+  // Handle graceful shutdown signals
+  process.on('SIGINT', () => {
+    performCleanup('SIGINT');
+  });
+
+  process.on('SIGTERM', () => {
+    performCleanup('SIGTERM');
+  });
+
+  // Handle uncaught exceptions
+  process.on('uncaughtException', () => {
+    performCleanup('uncaughtException');
+  });
+
+  // Handle unhandled promise rejections
+  process.on('unhandledRejection', () => {
+    performCleanup('unhandledRejection');
+  });
+}
+
+// Setup cleanup handlers on module load
+setupVideoCleanupHandlers();
 
 
