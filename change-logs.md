@@ -1,5 +1,46 @@
 # Change Logs
 
+## v5.11.1 - CRITICAL FIX: Video Analysis Security Validation (2025-11-26)
+- **🐛 CRITICAL FIX: Video Analysis Tool** - Fixed "Analyse test execution video" tool failing with security validation error
+  - **Problem**: Tool was failing with error: `Security: Invalid URL - must start with /files/ or be a valid HTTP(S) URL`
+  - **Root Cause**: Zebrunner API returns video artifact URLs in format `artifacts/esg-test-sessions/.../video?projectId=7`, but security validator only accepted `/files/` paths or full HTTP(S) URLs
+  - **Solution**: Enhanced `validateFileUrl()` in `src/utils/security.ts` to accept Zebrunner artifact paths
+  - **Impact**: Video analysis tool now works correctly with Zebrunner video artifacts
+
+### Technical Details
+
+**Updated Security Validation:**
+- ✅ Now accepts paths starting with `artifacts/` or `/artifacts/`
+- ✅ Supports query parameters like `?projectId=7`
+- ✅ Character validation prevents injection attacks (alphanumeric, dash, underscore, dot, slash, question mark, equals, ampersand)
+- ✅ Still blocks dangerous protocols and patterns
+
+**Example Valid URLs:**
+```
+artifacts/esg-test-sessions/d7493c8e-2f36-44ea-bef3-c416499e6cec/video?projectId=7
+/artifacts/esg-test-sessions/abc123/screenshot.png?projectId=10
+/files/screenshots/test-123.png (existing pattern)
+https://s3.amazonaws.com/video.mp4 (existing pattern)
+```
+
+**Files Modified:**
+- `src/utils/security.ts` - Enhanced URL validation for artifact paths
+- `tests/unit/security.test.ts` - Added 3 new test cases for Zebrunner artifacts
+
+**Test Coverage:**
+- ✅ Zebrunner artifact paths without leading slash
+- ✅ Zebrunner artifact paths with leading slash
+- ✅ Rejection of dangerous characters in artifact paths
+- ✅ All 666 tests passing
+
+**Benefits:**
+- ✅ Video analysis tool now functional for all Zebrunner video artifacts
+- ✅ No breaking changes to existing validation
+- ✅ Maintains security while supporting Zebrunner's URL format
+- ✅ Comprehensive test coverage for new validation rules
+
+---
+
 ## v5.11.0 - NEW FEATURES: Test Execution History & Comparison with Last Passed
 - **📊 NEW TOOL: `get_test_execution_history`** - Track test execution trends across launches
   - View pass/fail history for any test
