@@ -154,6 +154,14 @@ export function validateFileUrl(
           throw new Error('Security: Invalid URL - contains disallowed characters');
         }
       }
+      // Allow relative paths starting with artifacts/ (Zebrunner video/screenshot artifacts)
+      else if (fileUrl.startsWith('artifacts/') || fileUrl.startsWith('/artifacts/')) {
+        const pathPart = fileUrl.startsWith('/') ? fileUrl.substring(1) : fileUrl; // Remove leading / if present
+        // Allow alphanumeric, dash, underscore, dot, slash, question mark (for query params), equals, ampersand
+        if (!/^artifacts\/[a-zA-Z0-9_/.?=&-]+$/.test(pathPart)) {
+          throw new Error('Security: Invalid URL - contains disallowed characters in artifacts path');
+        }
+      }
       // Allow full URLs only if they're HTTPS
       else if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) {
         // Parse URL to validate
@@ -167,7 +175,7 @@ export function validateFileUrl(
           throw new Error('Security: Invalid URL - malformed URL');
         }
       } else {
-        throw new Error('Security: Invalid URL - must start with /files/ or be a valid HTTP(S) URL');
+        throw new Error('Security: Invalid URL - must start with /files/, artifacts/, or be a valid HTTP(S) URL');
       }
     }
 

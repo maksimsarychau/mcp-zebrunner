@@ -60,7 +60,7 @@ function renderTestCaseMarkdown(tcRaw: any): string {
 async function main() {
   const server = new McpServer(
     { name: "zebrunner-mcp-enhanced-working", version: "2.0.0" },
-    { 
+    {
       capabilities: {
         tools: {}
       }
@@ -84,7 +84,7 @@ async function main() {
     async (args) => {
       try {
         const { projectKey, suiteId, rootSuiteId, includeSteps, format, page, size } = args;
-        
+
         const searchParams = {
           page,
           size,
@@ -93,7 +93,7 @@ async function main() {
         };
 
         const response = await enhancedClient.getTestCases(projectKey, searchParams);
-        
+
         // If includeSteps is true, fetch detailed info for first few test cases
         if (includeSteps && response.items.length > 0) {
           const detailedCases = await Promise.all(
@@ -108,7 +108,7 @@ async function main() {
               }
             })
           );
-          
+
           const formattedData = FormatProcessor.format(detailedCases, format);
           return {
             content: [
@@ -157,7 +157,7 @@ async function main() {
     async (args) => {
       try {
         const { projectKey, parentSuiteId, rootOnly, includeHierarchy, format, page, size } = args;
-        
+
         const searchParams = {
           page,
           size,
@@ -165,7 +165,7 @@ async function main() {
         };
 
         let response = await enhancedClient.getTestSuites(projectKey, searchParams);
-        
+
         if (rootOnly) {
           response.items = response.items.filter(suite => !suite.parentSuiteId);
         }
@@ -174,7 +174,7 @@ async function main() {
           // Get all suites to build hierarchy
           const allSuites = await enhancedClient.getAllTestSuites(projectKey);
           const enrichedSuites = HierarchyProcessor.enrichSuitesWithHierarchy(allSuites);
-          
+
           // Filter to requested suites but with hierarchy info
           response.items = response.items.map(suite => {
             const enriched = enrichedSuites.find(s => s.id === suite.id);
@@ -216,7 +216,7 @@ async function main() {
     async (args) => {
       try {
         const { projectKey, rootSuiteId, maxDepth, format } = args;
-        
+
         const allSuites = await enhancedClient.getAllTestSuites(projectKey);
         let suitesToProcess = allSuites;
 
@@ -229,13 +229,13 @@ async function main() {
 
         // Build hierarchical tree
         const hierarchyTree = HierarchyProcessor.buildSuiteTree(suitesToProcess);
-        
+
         // Limit depth if specified
         const limitDepth = (suites: any[], currentDepth: number): any[] => {
           if (currentDepth >= maxDepth) {
             return suites.map(suite => ({ ...suite, children: [] }));
           }
-          
+
           return suites.map(suite => ({
             ...suite,
             children: suite.children ? limitDepth(suite.children, currentDepth + 1) : []
@@ -244,7 +244,7 @@ async function main() {
 
         const limitedTree = limitDepth(hierarchyTree, 0);
         const formattedData = FormatProcessor.format(limitedTree, format);
-        
+
         return {
           content: [
             {
@@ -278,9 +278,9 @@ async function main() {
     async (args) => {
       try {
         const { projectKey, caseKey, includeSteps, format } = args;
-        
+
         const testCase = await enhancedClient.getTestCaseByKey(projectKey, caseKey);
-        
+
         if (format === 'markdown' && includeSteps) {
           // Use enhanced markdown format
           const markdownData = FormatProcessor.formatTestCaseMarkdown(testCase);
@@ -293,9 +293,9 @@ async function main() {
             ]
           };
         }
-        
+
         const formattedData = FormatProcessor.format(testCase, format === 'markdown' ? 'string' : format);
-        
+
         return {
           content: [
             {
@@ -331,11 +331,11 @@ async function main() {
       if (!project_key && !project_id) {
         throw new Error("Either project_key or project_id must be provided");
       }
-      
+
       try {
-        const suites = await legacyClient.listTestSuites({ 
-          projectKey: project_key, 
-          projectId: project_id 
+        const suites = await legacyClient.listTestSuites({
+          projectKey: project_key,
+          projectId: project_id
         });
         const data = suites.map((s: unknown) => {
           const parsed = TestSuiteSchema.safeParse(s);
@@ -343,11 +343,11 @@ async function main() {
         });
         return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
       } catch (error: any) {
-        return { 
-          content: [{ 
-            type: "text" as const, 
-            text: `Error: ${error.message}` 
-          }] 
+        return {
+          content: [{
+            type: "text" as const,
+            text: `Error: ${error.message}`
+          }]
         };
       }
     }
@@ -374,11 +374,11 @@ async function main() {
           ]
         };
       } catch (error: any) {
-        return { 
-          content: [{ 
-            type: "text" as const, 
-            text: `Error: ${error.message}` 
-          }] 
+        return {
+          content: [{
+            type: "text" as const,
+            text: `Error: ${error.message}`
+          }]
         };
       }
     }
@@ -387,7 +387,7 @@ async function main() {
   // Start the server
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  
+
   if (DEBUG_MODE) {
     console.log("Zebrunner MCP Server Enhanced (Working) started in debug mode");
   }
@@ -397,26 +397,3 @@ main().catch((e) => {
   console.error("MCP server failed to start:", e);
   process.exit(1);
 });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
