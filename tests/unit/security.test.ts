@@ -266,6 +266,34 @@ describe('Security Utilities', () => {
       });
       assert.strictEqual(result, videoUrl);
     });
+
+    it('should validate Zebrunner artifact paths', () => {
+      // Simulating Zebrunner video artifact path
+      const artifactPath = 'artifacts/esg-test-sessions/d7493c8e-2f36-44ea-bef3-c416499e6cec/video?projectId=7';
+      const result = validateFileUrl(artifactPath, {
+        strictMode: true,
+        skipOnError: false
+      });
+      assert.strictEqual(result, artifactPath);
+    });
+
+    it('should validate Zebrunner artifact paths with leading slash', () => {
+      // Simulating Zebrunner screenshot artifact path with leading slash
+      const artifactPath = '/artifacts/esg-test-sessions/abc123/screenshot.png?projectId=10';
+      const result = validateFileUrl(artifactPath, {
+        strictMode: true,
+        skipOnError: false
+      });
+      assert.strictEqual(result, artifactPath);
+    });
+
+    it('should reject invalid artifact paths with dangerous characters', () => {
+      // Should reject artifact paths with script injection attempts
+      assert.throws(
+        () => validateFileUrl('artifacts/test<script>alert(1)</script>', { strictMode: true }),
+        /Invalid URL - contains disallowed characters in artifacts path/
+      );
+    });
   });
 });
 
