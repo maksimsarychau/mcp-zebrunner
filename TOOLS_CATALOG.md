@@ -441,7 +441,7 @@ Complete reference of all available tools with natural language usage examples.
 
 ### `get_bug_review`
 
-**Description:** Get comprehensive bug review with detailed failure information, defect tracking, and reproduction dates. Returns information about bugs affecting the project including project name, failure reason, defect links, failure counts, first seen date, and last reproduction date.
+**Description:** Get comprehensive bug review with detailed failure information, defect tracking, reproduction dates, and **automatic failure detail fetching** for single-call analysis.
 
 **Key Features:**
 - Detailed bug review with failure analysis
@@ -449,13 +449,22 @@ Complete reference of all available tools with natural language usage examples.
 - Historical data (first seen and last reproduction dates)
 - Configurable time periods (Last 7/14/30/90 Days, Week, Month, Quarter)
 - Multiple output formats (detailed, summary, json)
-- Limit control (up to 500 bugs)
+- **NEW: Automatic failure detail fetching** - No need for separate calls
+- **NEW: Priority analysis** - Bugs categorized as Critical/High/Medium/Low
+- **NEW: Trend analysis** - Recently introduced, long-standing, frequently reproduced
+- **NEW: Recommendations section** - Actionable insights
+
+**New Parameters:**
+- `include_failure_details` (boolean, default: false) - When true, automatically fetches detailed failure info for each bug
+- `failure_detail_level` ('none' | 'summary' | 'full', default: 'summary') - Level of detail to fetch
+- `max_details_limit` (number, default: 30, max: 50) - Max bugs to fetch details for
 
 **Example Prompts:**
 - "Show me detailed bug review for last 7 days"
-- "Get bug review for Android project from last 14 days"
-- "What bugs have been reported in the last month?"
-- "Give me a summary of top 50 bugs from last week"
+- "Get bug review for Android project from last 14 days with failure details"
+- "Show me top 10 bugs with full failure analysis for iOS"
+- "Give me a comprehensive bug analysis for MFPIOS with priority breakdown"
+- `{ project: "ios", period: "Last 7 Days", limit: 10, include_failure_details: true, failure_detail_level: "full" }`
 
 ### `get_bug_failure_info`
 

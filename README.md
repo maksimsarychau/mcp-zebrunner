@@ -617,8 +617,8 @@ Once connected, you can use these tools through natural language in your AI assi
 |------|-------------|---------------|----------|
 | `get_platform_results_by_period` | Test results by platform/period | `"Get iOS test results for the last 7 days"` | **Managers, Leads** |
 | `get_top_bugs` | Most frequent defects | `"Show me top 10 bugs from last week"` | **Managers, Developers** |
-| `get_bug_review` | Detailed bug review with failure analysis | `"Show me detailed bug review for last 14 days"` | **Managers, QA, Developers** |
-| `get_bug_failure_info` | Comprehensive failure info by hashcode | `"Get failure info for hashcode 1051677506"` | **Developers, SDETs** |
+| `get_bug_review` | Detailed bug review with failure analysis, priority breakdown, and automatic detail fetching | `"Get bug review with full failure details for top 10 bugs"` | **Managers, QA, Developers** |
+| `get_bug_failure_info` | Comprehensive failure info by hashcode (alternative to auto-fetch) | `"Get failure info for hashcode 1051677506"` | **Developers, SDETs** |
 | `get_project_milestones` | Available milestones | `"Get all milestones for project MCP"` | **Managers, PMs** |
 
 #### **Project Discovery**

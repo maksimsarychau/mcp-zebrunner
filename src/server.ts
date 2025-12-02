@@ -391,6 +391,113 @@ function toMarkdownLink(url: string | null, text: string): string {
   return `[${text}](${url})`;
 }
 
+/**
+ * Analyze bug priorities and trends for comprehensive reporting
+ */
+function analyzeBugPriorities(bugs: any[]): {
+  critical: any[];
+  high: any[];
+  medium: any[];
+  low: any[];
+  trends: {
+    recentlyIntroduced: any[];
+    longStanding: any[];
+    frequentlyReproduced: any[];
+  };
+  statistics: {
+    totalBugs: number;
+    withDefects: number;
+    withoutDefects: number;
+    avgFailureCount: number;
+  };
+  prioritySummary: string;
+} {
+  const now = new Date();
+  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  
+  // Parse failure counts
+  const bugsWithCounts = bugs.map(bug => ({
+    ...bug,
+    failureCountNum: parseInt(bug.failureCount) || 0,
+    sinceDate: bug.since ? new Date(bug.since) : null,
+    lastReproDate: bug.lastRepro ? new Date(bug.lastRepro) : null
+  }));
+  
+  // Categorize by priority based on failure count and recency
+  const critical = bugsWithCounts.filter(b => 
+    b.failureCountNum >= 20 || 
+    (b.lastReproDate && b.lastReproDate >= sevenDaysAgo && b.failureCountNum >= 10)
+  );
+  
+  const high = bugsWithCounts.filter(b => 
+    !critical.includes(b) && 
+    (b.failureCountNum >= 10 || 
+     (b.lastReproDate && b.lastReproDate >= sevenDaysAgo && b.failureCountNum >= 5))
+  );
+  
+  const medium = bugsWithCounts.filter(b => 
+    !critical.includes(b) && !high.includes(b) && 
+    (b.failureCountNum >= 3 || 
+     (b.lastReproDate && b.lastReproDate >= thirtyDaysAgo))
+  );
+  
+  const low = bugsWithCounts.filter(b => 
+    !critical.includes(b) && !high.includes(b) && !medium.includes(b)
+  );
+  
+  // Identify trends
+  const recentlyIntroduced = bugsWithCounts.filter(b => 
+    b.sinceDate && b.sinceDate >= sevenDaysAgo
+  );
+  
+  const longStanding = bugsWithCounts.filter(b => 
+    b.sinceDate && b.sinceDate < thirtyDaysAgo
+  );
+  
+  const frequentlyReproduced = bugsWithCounts
+    .filter(b => b.lastReproDate && b.lastReproDate >= sevenDaysAgo)
+    .sort((a, b) => b.failureCountNum - a.failureCountNum)
+    .slice(0, 10);
+  
+  // Calculate statistics
+  const totalFailures = bugsWithCounts.reduce((sum, b) => sum + b.failureCountNum, 0);
+  const withDefects = bugs.filter(b => b.defectKey && b.defectKey !== "No defect linked").length;
+  
+  // Generate priority summary
+  const prioritySummary = `
+🔴 **CRITICAL (${critical.length})**: ${critical.length > 0 ? 'Immediate attention required' : 'None'}
+🟠 **HIGH (${high.length})**: ${high.length > 0 ? 'Should be addressed soon' : 'None'}
+🟡 **MEDIUM (${medium.length})**: ${medium.length > 0 ? 'Plan for next sprint' : 'None'}
+🟢 **LOW (${low.length})**: ${low.length > 0 ? 'Monitor and address when possible' : 'None'}
+
+📊 **Key Insights:**
+- **${recentlyIntroduced.length}** bugs introduced in the last 7 days
+- **${longStanding.length}** bugs older than 30 days (tech debt)
+- **${frequentlyReproduced.length}** bugs actively reproducing
+- **${withDefects}** of ${bugs.length} bugs have linked defects (${((withDefects / bugs.length) * 100).toFixed(0)}% coverage)
+`.trim();
+
+  return {
+    critical,
+    high,
+    medium,
+    low,
+    trends: {
+      recentlyIntroduced,
+      longStanding,
+      frequentlyReproduced
+    },
+    statistics: {
+      totalBugs: bugs.length,
+      withDefects,
+      withoutDefects: bugs.length - withDefects,
+      avgFailureCount: bugs.length > 0 ? Math.round(totalFailures / bugs.length) : 0
+    },
+    prioritySummary
+  };
+}
+
 /** Enhanced markdown rendering with debug info */
 async function renderTestCaseMarkdown(
   testCase: ZebrunnerTestCase,
@@ -3926,7 +4033,7 @@ async function main() {
   // === Tool #2.1: Get detailed bug review for project and period ===
   server.tool(
     "get_bug_review",
-    "🔍 Get detailed bug review with failures, defects, and reproduction dates (SQL widget, templateId: 9)",
+    "🔍 Get detailed bug review with failures, defects, reproduction dates, and optional automatic failure detail fetching (SQL widget, templateId: 9)",
     {
       project: z.union([z.enum(["web","android","ios","api"]), z.string(), z.number()])
         .default("web")
@@ -3937,6 +4044,15 @@ async function main() {
       limit: z.number().int().positive().max(500)
         .default(100)
         .describe("Maximum number of bugs to return (default: 100, max: 500)"),
+      include_failure_details: z.boolean()
+        .default(false)
+        .describe("When true, automatically fetches detailed failure info for each bug (affected test runs, error details). Enables comprehensive single-call analysis."),
+      failure_detail_level: z.enum(['none', 'summary', 'full'])
+        .default('summary')
+        .describe("Level of failure details: none (just bug list), summary (error + count), full (all affected test runs)"),
+      max_details_limit: z.number().int().positive().max(50)
+        .default(30)
+        .describe("Maximum bugs to fetch detailed failure info for (default: 30, max: 50). Prevents excessive API calls."),
       templateId: z.number()
         .default(TEMPLATE.BUG_REVIEW)
         .describe("Override templateId if needed (default: 9 for Bug Review)"),
@@ -4005,9 +4121,129 @@ async function main() {
             dashboardId: failureInfo.dashboardId,
             hashcode: failureInfo.hashcode,
             since: row.SINCE || "Unknown",
-            lastRepro: row.REPRO || "Unknown"
+            lastRepro: row.REPRO || "Unknown",
+            // Placeholder for failure details (populated if include_failure_details is true)
+            failureDetails: null as any
           };
         });
+
+        // Fetch detailed failure information if requested
+        if (args.include_failure_details && args.failure_detail_level !== 'none') {
+          const bugsToFetch = bugs.slice(0, args.max_details_limit).filter(bug => bug.hashcode);
+          
+          debugLog(`Fetching failure details for ${bugsToFetch.length} bugs in parallel`);
+          
+          // Fetch failure details in parallel for all bugs with hashcodes
+          const detailPromises = bugsToFetch.map(async (bug) => {
+            try {
+              const failureInfoParams = {
+                PERIOD: args.period,
+                dashboardName: "Failures analysis",
+                hashcode: bug.hashcode,
+                isReact: true
+              };
+
+              const failureDetailsParams = {
+                PERIOD: args.period,
+                dashboardName: "Failures analysis",
+                hashcode: bug.hashcode,
+                isReact: true
+              };
+
+              // Fetch both widgets in parallel
+              const [failureInfoRaw, failureDetailsRaw] = await Promise.all([
+                callWidgetSql(projectId, TEMPLATE.FAILURE_INFO, failureInfoParams),
+                args.failure_detail_level === 'full' 
+                  ? callWidgetSql(projectId, TEMPLATE.FAILURE_DETAILS, failureDetailsParams)
+                  : Promise.resolve([])
+              ]);
+
+              const failureInfo: any[] = Array.isArray(failureInfoRaw) ? failureInfoRaw : [];
+              const failureDetails: any[] = Array.isArray(failureDetailsRaw) ? failureDetailsRaw : [];
+
+              // Parse failure info (high-level summary)
+              const summaryInfo = failureInfo.map(row => ({
+                failureCount: row["#"] || "0",
+                errorStability: (row["ERROR/STABILITY"] || "").replace(/\\n/g, '\n')
+              }));
+
+              // Parse failure details (individual test runs) - only if full level
+              const detailsInfo = args.failure_detail_level === 'full' 
+                ? failureDetails.slice(0, 20).map(row => { // Limit to 20 test runs per bug
+                    const testInfo = parseHtmlAnchor(row.TEST || "");
+                    const defectInfo = parseHtmlAnchor(row.DEFECT || "");
+                    return {
+                      runId: row.RUN_ID,
+                      testId: row.TEST_ID,
+                      runName: row.RUN || "Unknown",
+                      testName: testInfo.text,
+                      testUrl: testInfo.url,
+                      defectKey: defectInfo.text || "No defect",
+                      defectUrl: defectInfo.url
+                    };
+                  })
+                : [];
+
+              return {
+                hashcode: bug.hashcode,
+                summary: summaryInfo,
+                totalFailures: failureDetails.length,
+                failures: detailsInfo
+              };
+            } catch (error: any) {
+              debugLog(`Failed to fetch details for hashcode ${bug.hashcode}`, error.message);
+              return {
+                hashcode: bug.hashcode,
+                summary: [],
+                totalFailures: 0,
+                failures: [],
+                error: error.message
+              };
+            }
+          });
+
+          // Wait for all detail fetches to complete
+          const allDetails = await Promise.all(detailPromises);
+          
+          // Map details back to bugs
+          const detailsMap = new Map(allDetails.map(d => [d.hashcode, d]));
+          bugs.forEach(bug => {
+            if (bug.hashcode && detailsMap.has(bug.hashcode)) {
+              bug.failureDetails = detailsMap.get(bug.hashcode);
+            }
+          });
+
+          debugLog(`Completed fetching failure details for ${allDetails.length} bugs`);
+        }
+
+        // Calculate priority and trend analysis
+        const priorityAnalysis = analyzeBugPriorities(bugs);
+
+        // Helper to format failure details section
+        const formatFailureDetails = (bug: any, level: string) => {
+          if (!bug.failureDetails || level === 'none') return '';
+          
+          const details = bug.failureDetails;
+          let output = '';
+          
+          if (details.summary && details.summary.length > 0) {
+            const errorPreview = details.summary[0].errorStability?.split('\n').slice(0, 3).join('\n') || '';
+            output += `\n**Error Details:**\n\`\`\`\n${errorPreview.substring(0, 500)}${errorPreview.length > 500 ? '...' : ''}\n\`\`\``;
+          }
+          
+          if (level === 'full' && details.failures && details.failures.length > 0) {
+            output += `\n\n**Affected Test Runs (${details.totalFailures} total, showing ${details.failures.length}):**\n`;
+            output += details.failures.slice(0, 5).map((f: any, i: number) => {
+              const testLink = toMarkdownLink(f.testUrl, f.testName || `Test ${f.testId}`);
+              return `  ${i + 1}. ${testLink} (Run: ${f.runName})`;
+            }).join('\n');
+            if (details.failures.length > 5) {
+              output += `\n  *...and ${details.failures.length - 5} more*`;
+            }
+          }
+          
+          return output;
+        };
 
         // Format output based on format parameter
         if (args.format === 'json') {
@@ -4018,7 +4254,24 @@ async function main() {
                 period: args.period, 
                 totalBugs: rows.length,
                 returnedBugs: bugs.length,
-                bugs 
+                includeFailureDetails: args.include_failure_details,
+                failureDetailLevel: args.failure_detail_level,
+                priorityAnalysis: {
+                  critical: priorityAnalysis.critical.length,
+                  high: priorityAnalysis.high.length,
+                  medium: priorityAnalysis.medium.length,
+                  low: priorityAnalysis.low.length,
+                  statistics: priorityAnalysis.statistics,
+                  trends: {
+                    recentlyIntroduced: priorityAnalysis.trends.recentlyIntroduced.length,
+                    longStanding: priorityAnalysis.trends.longStanding.length,
+                    frequentlyReproduced: priorityAnalysis.trends.frequentlyReproduced.length
+                  }
+                },
+                bugs: bugs.map(b => ({
+                  ...b,
+                  failureDetails: b.failureDetails || undefined
+                }))
               }, null, 2) 
             }]
           };
@@ -4030,16 +4283,28 @@ async function main() {
 **Total Bugs Found:** ${rows.length}
 **Showing:** ${bugs.length} bugs
 
-**Top Issues:**
+---
+
+## 🎯 Priority Summary
+
+${priorityAnalysis.prioritySummary}
+
+---
+
+## 🔝 Top Issues
+
 ${bugs.slice(0, 10).map(bug => {
   const defectLink = toMarkdownLink(bug.defectUrl, bug.defectKey);
   const failureLink = toMarkdownLink(bug.failureUrl, `${bug.failureCount} failures`);
-  return `${bug.rank}. ${defectLink} - ${failureLink}
+  const priority = priorityAnalysis.critical.some((b: any) => b.hashcode === bug.hashcode) ? '🔴' :
+                   priorityAnalysis.high.some((b: any) => b.hashcode === bug.hashcode) ? '🟠' :
+                   priorityAnalysis.medium.some((b: any) => b.hashcode === bug.hashcode) ? '🟡' : '🟢';
+  return `${priority} **${bug.rank}. ${defectLink}** - ${failureLink}
    First seen: ${bug.since} | Last repro: ${bug.lastRepro}
-   ${bug.reason.split('\n')[0].substring(0, 100)}${bug.reason.length > 100 ? '...' : ''}`;
+   \`${bug.reason.split('\n')[0].substring(0, 100)}${bug.reason.length > 100 ? '...' : ''}\`${formatFailureDetails(bug, args.failure_detail_level)}`;
 }).join('\n\n')}
 
-${bugs.length > 10 ? `\n*...and ${bugs.length - 10} more bugs*` : ''}`;
+${bugs.length > 10 ? `\n---\n\n*...and ${bugs.length - 10} more bugs*` : ''}`;
 
           return {
             content: [{ type: "text" as const, text: summary }]
@@ -4047,17 +4312,33 @@ ${bugs.length > 10 ? `\n*...and ${bugs.length - 10} more bugs*` : ''}`;
         }
 
         // Detailed format (default)
-        const detailed = `🔍 **Detailed Bug Review** (${args.period})
+        const detailed = `🔍 **Comprehensive Bug Review** (${args.period})
+
+## 📊 Executive Summary
 
 **Total Bugs Found:** ${rows.length}
 **Showing:** ${bugs.length} bugs
+${args.include_failure_details ? `**Failure Details Fetched:** ${bugs.filter(b => b.failureDetails).length} bugs` : ''}
 
 ---
+
+## 🎯 Priority Analysis
+
+${priorityAnalysis.prioritySummary}
+
+---
+
+## 🐞 Bug Details
 
 ${bugs.map(bug => {
   const projectLink = toMarkdownLink(bug.projectUrl, bug.project);
   const defectLink = toMarkdownLink(bug.defectUrl, bug.defectKey);
   const failureLink = toMarkdownLink(bug.failureUrl, `View ${bug.failureCount} failures`);
+  
+  // Determine priority emoji
+  const priority = priorityAnalysis.critical.some((b: any) => b.hashcode === bug.hashcode) ? '🔴 CRITICAL' :
+                   priorityAnalysis.high.some((b: any) => b.hashcode === bug.hashcode) ? '🟠 HIGH' :
+                   priorityAnalysis.medium.some((b: any) => b.hashcode === bug.hashcode) ? '🟡 MEDIUM' : '🟢 LOW';
   
   // Truncate reason to first 200 chars of first line for readability
   const reasonPreview = bug.reason.split('\n')[0];
@@ -4065,7 +4346,7 @@ ${bugs.map(bug => {
     ? reasonPreview.substring(0, 200) + '...' 
     : reasonPreview;
   
-  return `### ${bug.rank}. ${defectLink}
+  return `### ${bug.rank}. ${defectLink} [${priority}]
 
 **Project:** ${projectLink}
 **Failures:** ${failureLink}
@@ -4076,9 +4357,17 @@ ${bugs.map(bug => {
 \`\`\`
 ${truncatedReason}
 \`\`\`
+${formatFailureDetails(bug, args.failure_detail_level)}`;
+}).join('\n\n---\n\n')}
 
-${bug.hashcode ? `**Hashcode:** ${bug.hashcode}` : ''}`;
-}).join('\n\n---\n\n')}`;
+---
+
+## 📈 Recommendations
+
+${priorityAnalysis.critical.length > 0 ? `1. **Address ${priorityAnalysis.critical.length} CRITICAL bugs immediately** - These are causing significant test failures` : ''}
+${priorityAnalysis.high.length > 0 ? `${priorityAnalysis.critical.length > 0 ? '2' : '1'}. **Plan to fix ${priorityAnalysis.high.length} HIGH priority bugs** - Schedule for current sprint` : ''}
+${priorityAnalysis.trends.longStanding.length > 5 ? `- **Tech Debt Alert:** ${priorityAnalysis.trends.longStanding.length} bugs are older than 30 days` : ''}
+${priorityAnalysis.statistics.withoutDefects > 0 ? `- **Tracking Gap:** ${priorityAnalysis.statistics.withoutDefects} bugs have no linked defects - consider creating tickets` : ''}`;
 
         return {
           content: [{ type: "text" as const, text: detailed }]
