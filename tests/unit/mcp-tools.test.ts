@@ -330,6 +330,43 @@ describe('MCP Tools Schema Validation', () => {
       assert.ok(['detailed', 'summary', 'json'].includes(validInput.format));
     });
 
+    it('should validate get_bug_review with include_failure_details', () => {
+      const validInput = {
+        project: 'ios',
+        period: 'Last 7 Days',
+        limit: 10,
+        include_failure_details: true,
+        failure_detail_level: 'full',
+        max_details_limit: 30,
+        format: 'detailed'
+      };
+
+      assert.equal(typeof validInput.project, 'string');
+      assert.ok(['Last 7 Days', 'Last 14 Days', 'Last 30 Days', 'Last 90 Days', 'Week', 'Month', 'Quarter'].includes(validInput.period));
+      assert.ok(typeof validInput.limit === 'number');
+      assert.ok(validInput.limit > 0 && validInput.limit <= 500);
+      assert.equal(typeof validInput.include_failure_details, 'boolean');
+      assert.ok(validInput.include_failure_details === true);
+      assert.ok(['none', 'summary', 'full'].includes(validInput.failure_detail_level));
+      assert.ok(typeof validInput.max_details_limit === 'number');
+      assert.ok(validInput.max_details_limit > 0 && validInput.max_details_limit <= 50);
+      assert.ok(['detailed', 'summary', 'json'].includes(validInput.format));
+    });
+
+    it('should validate get_bug_review failure_detail_level options', () => {
+      const levels = ['none', 'summary', 'full'];
+      
+      levels.forEach(level => {
+        const input = {
+          project: 'web',
+          period: 'Last 7 Days',
+          include_failure_details: true,
+          failure_detail_level: level as 'none' | 'summary' | 'full'
+        };
+        assert.ok(['none', 'summary', 'full'].includes(input.failure_detail_level));
+      });
+    });
+
     it('should validate get_bug_review with minimal parameters', () => {
       const minimalInput = {
         project: 'web',

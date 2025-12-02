@@ -16,6 +16,44 @@
   - **Test Coverage**: Added 11 new security test cases in `tests/unit/utilities.test.ts`
 
 
+### 🚀 Performance Enhancement: Single-Call Bug Analysis
+
+- **ENHANCED: `get_bug_review` - Automatic Failure Detail Fetching**
+  - **Problem**: Previously required 10+ separate tool calls with manual approval for each bug
+  - **Solution**: New `include_failure_details` parameter fetches all details in a single call
+  
+  **New Parameters:**
+  - `include_failure_details` (boolean, default: false) - Enables automatic detail fetching
+  - `failure_detail_level` ('none' | 'summary' | 'full') - Controls detail depth
+  - `max_details_limit` (number, default: 30, max: 50) - Limits API calls
+
+  **New Features:**
+  - **Priority Analysis**: Bugs categorized as 🔴 CRITICAL / 🟠 HIGH / 🟡 MEDIUM / 🟢 LOW
+  - **Trend Analysis**: 
+    - Recently introduced bugs (last 7 days)
+    - Long-standing bugs (tech debt, 30+ days old)
+    - Frequently reproduced bugs
+  - **Statistics**: Total bugs, defect coverage, average failure count
+  - **Recommendations**: Actionable insights based on priority analysis
+  - **Parallel API Calls**: Fetches all failure details concurrently for speed
+
+  **Example Usage:**
+  ```json
+  {
+    "project": "ios",
+    "period": "Last 7 Days",
+    "limit": 10,
+    "include_failure_details": true,
+    "failure_detail_level": "full",
+    "format": "detailed"
+  }
+  ```
+
+  **Output Includes:**
+  - Executive summary with priority breakdown
+  - Each bug with priority level, failure details, affected test runs
+  - Recommendations section with actionable next steps
+
 ### 🐞 New Bug Analysis Tools
 
 - **📊 NEW TOOL: `get_bug_review`** - Comprehensive bug review with detailed failure analysis
