@@ -3837,7 +3837,8 @@ async function main() {
           }
 
           // Handle "TO REVIEW" case or other non-ticket entries
-          const cleanText = textMatch ? textMatch[1] : html.replace(/<[^>]*>/g, '');
+          // Security: Use stripHtmlTags for complete HTML sanitization (CodeQL fix)
+          const cleanText = textMatch ? textMatch[1] : stripHtmlTags(html);
           return {
             key: cleanText,
             title: cleanText,
