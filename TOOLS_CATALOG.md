@@ -439,6 +439,44 @@ Complete reference of all available tools with natural language usage examples.
 - "What are the most common bugs?"
 - "Get top bugs from last 30 days"
 
+### `get_bug_review`
+
+**Description:** Get comprehensive bug review with detailed failure information, defect tracking, and reproduction dates. Returns information about bugs affecting the project including project name, failure reason, defect links, failure counts, first seen date, and last reproduction date.
+
+**Key Features:**
+- Detailed bug review with failure analysis
+- Defect tracking with Jira/issue tracker links
+- Historical data (first seen and last reproduction dates)
+- Configurable time periods (Last 7/14/30/90 Days, Week, Month, Quarter)
+- Multiple output formats (detailed, summary, json)
+- Limit control (up to 500 bugs)
+
+**Example Prompts:**
+- "Show me detailed bug review for last 7 days"
+- "Get bug review for Android project from last 14 days"
+- "What bugs have been reported in the last month?"
+- "Give me a summary of top 50 bugs from last week"
+
+### `get_bug_failure_info`
+
+**Description:** Get comprehensive failure information for a specific bug/hashcode, including high-level failure summary and detailed list of affected test runs. This tool combines data from multiple SQL widgets to provide complete failure analysis.
+
+**Key Features:**
+- Combines failure info (templateId: 6) and failure details (templateId: 10)
+- Shows error/stability information
+- Lists all affected test runs with links
+- Includes defect associations for each failure
+- Multiple output formats (detailed, summary, json)
+- Requires dashboardId and hashcode from bug review
+
+**Example Prompts:**
+- "Get failure info for hashcode 1051677506 on dashboard 99"
+- "Show me detailed failures for this bug hashcode"
+- "Analyze failure information for hashcode X from last 14 days"
+- "Give me a summary of test runs affected by this failure"
+
+**Usage Note:** The dashboardId and hashcode can be obtained from the `get_bug_review` tool output. Each bug in the review includes these identifiers in the failure link.
+
 ### `get_project_milestones`
 
 **Description:** Get all milestones configured for a project.

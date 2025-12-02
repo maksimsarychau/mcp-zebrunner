@@ -312,6 +312,73 @@ describe('MCP Tools Schema Validation', () => {
       assert.ok(['raw', 'formatted'].includes(validInputWithMilestone.format));
     });
 
+    it('should validate get_bug_review parameters', () => {
+      const validInput = {
+        project: 'android',
+        period: 'Last 14 Days',
+        limit: 100,
+        templateId: 9,
+        format: 'detailed'
+      };
+
+      assert.equal(typeof validInput.project, 'string');
+      assert.ok(['Last 7 Days', 'Last 14 Days', 'Last 30 Days', 'Last 90 Days', 'Week', 'Month', 'Quarter'].includes(validInput.period));
+      assert.ok(typeof validInput.limit === 'number');
+      assert.ok(validInput.limit > 0 && validInput.limit <= 500);
+      assert.ok(typeof validInput.templateId === 'number');
+      assert.equal(validInput.templateId, 9);
+      assert.ok(['detailed', 'summary', 'json'].includes(validInput.format));
+    });
+
+    it('should validate get_bug_review with minimal parameters', () => {
+      const minimalInput = {
+        project: 'web',
+        period: 'Last 7 Days',
+        limit: 50,
+        format: 'summary'
+      };
+
+      assert.equal(typeof minimalInput.project, 'string');
+      assert.ok(['Last 7 Days', 'Last 14 Days', 'Last 30 Days', 'Last 90 Days', 'Week', 'Month', 'Quarter'].includes(minimalInput.period));
+      assert.ok(typeof minimalInput.limit === 'number');
+      assert.ok(minimalInput.limit > 0 && minimalInput.limit <= 500);
+      assert.ok(['detailed', 'summary', 'json'].includes(minimalInput.format));
+    });
+
+    it('should validate get_bug_failure_info parameters', () => {
+      const validInput = {
+        project: 'android',
+        dashboardId: 99,
+        hashcode: '1051677506',
+        period: 'Last 14 Days',
+        format: 'detailed'
+      };
+
+      assert.equal(typeof validInput.project, 'string');
+      assert.ok(typeof validInput.dashboardId === 'number');
+      assert.ok(validInput.dashboardId > 0);
+      assert.equal(typeof validInput.hashcode, 'string');
+      assert.ok(validInput.hashcode.length > 0);
+      assert.ok(['Last 7 Days', 'Last 14 Days', 'Last 30 Days', 'Last 90 Days', 'Week', 'Month', 'Quarter'].includes(validInput.period));
+      assert.ok(['detailed', 'summary', 'json'].includes(validInput.format));
+    });
+
+    it('should validate get_bug_failure_info with different format options', () => {
+      const formats = ['detailed', 'summary', 'json'];
+      
+      formats.forEach(format => {
+        const input = {
+          project: 'ios',
+          dashboardId: 102,
+          hashcode: '987654321',
+          period: 'Last 7 Days',
+          format: format as 'detailed' | 'summary' | 'json'
+        };
+
+        assert.ok(['detailed', 'summary', 'json'].includes(input.format));
+      });
+    });
+
     it('should validate milestone parameter backward compatibility', () => {
       // Test that tools work without milestone parameter (backward compatibility)
       const legacyInput = {

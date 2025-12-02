@@ -89,7 +89,7 @@ const PROJECT_ALIASES: Record<string, string> = {
   web: "MFPWEB", android: "MFPAND", ios: "MFPIOS", api: "MFPAPI"
 };
 
-const PERIODS = ["Last 7 Days","Week","Month"] as const;
+const PERIODS = ["Last 14 Days","Last 7 Days","Week","Month"] as const;
 
 const PLATFORM_MAP: Record<string, string[]> = {
   web: [],        // web often uses BROWSER instead
@@ -100,7 +100,10 @@ const PLATFORM_MAP: Record<string, string[]> = {
 
 const TEMPLATE = {
   RESULTS_BY_PLATFORM: 8,
-  TOP_BUGS: 4
+  TOP_BUGS: 4,
+  BUG_REVIEW: 9,
+  FAILURE_INFO: 6,
+  FAILURE_DETAILS: 10
 } as const;
 
 /** Debug logging utility with safe serialization - uses stderr to avoid MCP protocol interference */
@@ -268,6 +271,124 @@ function buildParamsConfig(opts: {
     isReact: true,
     ...extra
   };
+}
+
+// === Helper functions for parsing HTML anchor tags ===
+
+/**
+ * Safely strip all HTML tags from a string using iterative replacement.
+ * This prevents incomplete sanitization that could leave partial tags like <script.
+ * CodeQL Security Fix: Iterative stripping ensures complete tag removal.
+ * @param html - Input string potentially containing HTML tags
+ * @returns Plain text with all HTML tags removed
+ */
+function stripHtmlTags(html: string): string {
+  if (!html) return "";
+  
+  let result = html;
+  let previous: string;
+  
+  // Iteratively remove tags until no more are found
+  // This handles cases like <<script>script> that single-pass regex misses
+  do {
+    previous = result;
+    result = result.replace(/<[^>]*>/g, '');
+  } while (result !== previous);
+  
+  // Also handle any remaining angle brackets that could form partial tags
+  result = result.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  
+  return result.trim();
+}
+
+/**
+ * Parse HTML anchor tag to extract URL and text
+ * Example: <a href="https://example.com/browse/JIRA-123" target="_blank">JIRA-123</a>
+ * Returns: { url: "https://example.com/browse/JIRA-123", text: "JIRA-123" }
+ */
+function parseHtmlAnchor(html: string): { url: string | null; text: string } {
+  if (!html) return { url: null, text: "" };
+  
+  // Extract href attribute
+  const hrefMatch = html.match(/href="([^"]+)"/);
+  // Extract text content between tags (preferred - direct extraction)
+  const textMatch = html.match(/>([^<]+)</);
+  
+  const url = hrefMatch ? hrefMatch[1] : null;
+  // Use direct text extraction if available, otherwise safely strip all tags
+  const text = textMatch ? textMatch[1] : stripHtmlTags(html);
+  
+  return { url, text };
+}
+
+/**
+ * Parse HTML anchor with div attribute for dashboards/runs
+ */
+function parseDashboardAnchor(html: string, baseUrl?: string): { url: string | null; text: string; dashboardId: number | null } {
+  if (!html) return { url: null, text: "", dashboardId: null };
+  
+  const hrefMatch = html.match(/href="([^"]+)"/);
+  const textMatch = html.match(/>([^<]+)</);
+  const dashboardIdMatch = html.match(/automation-dashboards\/(\d+)/);
+  
+  let url = hrefMatch ? hrefMatch[1] : null;
+  // Use direct text extraction if available, otherwise safely strip all tags
+  const text = textMatch ? textMatch[1] : stripHtmlTags(html);
+  const dashboardId = dashboardIdMatch ? parseInt(dashboardIdMatch[1]) : null;
+  
+  // Convert relative URLs to absolute if baseUrl is provided
+  if (url && baseUrl && url.startsWith('../../')) {
+    const projectMatch = url.match(/\.\.\/\.\.\/([^\/]+)/);
+    if (projectMatch) {
+      url = `${baseUrl}/projects/${projectMatch[1]}/automation-dashboards/${dashboardId}`;
+    }
+  }
+  
+  return { url, text, dashboardId };
+}
+
+/**
+ * Parse bug failure link with hashcode
+ */
+function parseFailureLink(html: string, baseUrl?: string): {
+  url: string | null;
+  text: string;
+  dashboardId: number | null;
+  hashcode: string | null;
+  period: string | null;
+} {
+  if (!html) return { url: null, text: "", dashboardId: null, hashcode: null, period: null };
+  
+  const hrefMatch = html.match(/href="([^"]+)"/);
+  const textMatch = html.match(/>([^<]+)</);
+  const dashboardIdMatch = html.match(/automation-dashboards\/(\d+)/);
+  const hashcodeMatch = html.match(/hashcode=([^&"]+)/);
+  const periodMatch = html.match(/PERIOD=([^&"]+)/);
+  
+  let url = hrefMatch ? hrefMatch[1] : null;
+  // Use direct text extraction if available, otherwise safely strip all tags
+  const text = textMatch ? textMatch[1] : stripHtmlTags(html);
+  const dashboardId = dashboardIdMatch ? parseInt(dashboardIdMatch[1]) : null;
+  const hashcode = hashcodeMatch ? hashcodeMatch[1] : null;
+  const period = periodMatch ? decodeURIComponent(periodMatch[1].replace(/\+/g, ' ')) : null;
+  
+  // Convert relative URLs to absolute if baseUrl is provided
+  if (url && baseUrl && url.startsWith('../../')) {
+    const projectMatch = url.match(/\.\.\/\.\.\/([^\/]+)/);
+    if (projectMatch) {
+      url = `${baseUrl}/projects/${projectMatch[1]}/automation-dashboards/${dashboardId}${url.includes('?') ? '?' + url.split('?')[1] : ''}`;
+    }
+  }
+  
+  return { url, text, dashboardId, hashcode, period };
+}
+
+/**
+ * Convert parsed anchor to markdown link
+ */
+function toMarkdownLink(url: string | null, text: string): string {
+  if (!url || !text) return text || "N/A";
+  return `[${text}](${url})`;
 }
 
 /** Enhanced markdown rendering with debug info */
@@ -3716,7 +3837,8 @@ async function main() {
           }
 
           // Handle "TO REVIEW" case or other non-ticket entries
-          const cleanText = textMatch ? textMatch[1] : html.replace(/<[^>]*>/g, '');
+          // Security: Use stripHtmlTags for complete HTML sanitization (CodeQL fix)
+          const cleanText = textMatch ? textMatch[1] : stripHtmlTags(html);
           return {
             key: cleanText,
             title: cleanText,
@@ -3795,6 +3917,352 @@ async function main() {
           content: [{
             type: "text" as const,
             text: `❌ Error getting top bugs: ${error?.message || error}`
+          }]
+        };
+      }
+    }
+  );
+
+  // === Tool #2.1: Get detailed bug review for project and period ===
+  server.tool(
+    "get_bug_review",
+    "🔍 Get detailed bug review with failures, defects, and reproduction dates (SQL widget, templateId: 9)",
+    {
+      project: z.union([z.enum(["web","android","ios","api"]), z.string(), z.number()])
+        .default("web")
+        .describe("Project alias ('web', 'android', 'ios', 'api'), project key, or numeric projectId"),
+      period: z.enum(["Last 7 Days", "Last 14 Days", "Last 30 Days", "Last 90 Days", "Week", "Month", "Quarter"])
+        .default("Last 7 Days")
+        .describe("Time period for bug review"),
+      limit: z.number().int().positive().max(500)
+        .default(100)
+        .describe("Maximum number of bugs to return (default: 100, max: 500)"),
+      templateId: z.number()
+        .default(TEMPLATE.BUG_REVIEW)
+        .describe("Override templateId if needed (default: 9 for Bug Review)"),
+      format: z.enum(['detailed', 'summary', 'json']).default('detailed')
+        .describe("Output format: detailed (full info with markdown links), summary (concise), or json (raw data)")
+    },
+    async (args) => {
+      try {
+        debugLog("get_bug_review called", args);
+
+        // Resolve project ID with enhanced discovery and suggestions
+        const { projectId } = await resolveProjectId(args.project);
+
+        // Build params config for bug review widget
+        const paramsConfig = {
+          BROWSER: [],
+          DEFECT: [],
+          APPLICATION: [],
+          BUILD: [],
+          PRIORITY: [],
+          RUN: [],
+          USER: [],
+          ENV: [],
+          MILESTONE: [],
+          PLATFORM: [],
+          STATUS: [],
+          LOCALE: [],
+          PERIOD: args.period,
+          ERROR_COUNT: "0",
+          dashboardName: "Bug review",
+          isReact: true
+        };
+
+        const raw = await callWidgetSql(projectId, args.templateId, paramsConfig);
+
+        // Normalize returned rows - widget returns array directly
+        const rows: any[] = Array.isArray(raw) ? raw : [];
+
+        if (rows.length === 0) {
+          return {
+            content: [{ type: "text" as const, text: "No bug review data found for the specified period" }]
+          };
+        }
+
+        // Apply limit to results
+        const limitedRows = rows.slice(0, args.limit);
+
+        // Parse and process bug review data
+        const baseUrl = WIDGET_BASE_URL; // Use the configured base URL
+        
+        const bugs = limitedRows.map((row, index) => {
+          const projectInfo = parseDashboardAnchor(row.PROJECT || "", baseUrl);
+          const defectInfo = parseHtmlAnchor(row.DEFECT || "");
+          const failureInfo = parseFailureLink(row["#"] || "", baseUrl);
+          
+          return {
+            rank: index + 1,
+            project: projectInfo.text,
+            projectUrl: projectInfo.url,
+            projectDashboardId: projectInfo.dashboardId,
+            reason: (row.REASON || "").replace(/\\n/g, '\n'), // Unescape newlines
+            defectKey: defectInfo.text || "No defect linked",
+            defectUrl: defectInfo.url,
+            failureCount: failureInfo.text,
+            failureUrl: failureInfo.url,
+            dashboardId: failureInfo.dashboardId,
+            hashcode: failureInfo.hashcode,
+            since: row.SINCE || "Unknown",
+            lastRepro: row.REPRO || "Unknown"
+          };
+        });
+
+        // Format output based on format parameter
+        if (args.format === 'json') {
+          return {
+            content: [{ 
+              type: "text" as const, 
+              text: JSON.stringify({ 
+                period: args.period, 
+                totalBugs: rows.length,
+                returnedBugs: bugs.length,
+                bugs 
+              }, null, 2) 
+            }]
+          };
+        }
+
+        if (args.format === 'summary') {
+          const summary = `📋 **Bug Review Summary** (${args.period})
+
+**Total Bugs Found:** ${rows.length}
+**Showing:** ${bugs.length} bugs
+
+**Top Issues:**
+${bugs.slice(0, 10).map(bug => {
+  const defectLink = toMarkdownLink(bug.defectUrl, bug.defectKey);
+  const failureLink = toMarkdownLink(bug.failureUrl, `${bug.failureCount} failures`);
+  return `${bug.rank}. ${defectLink} - ${failureLink}
+   First seen: ${bug.since} | Last repro: ${bug.lastRepro}
+   ${bug.reason.split('\n')[0].substring(0, 100)}${bug.reason.length > 100 ? '...' : ''}`;
+}).join('\n\n')}
+
+${bugs.length > 10 ? `\n*...and ${bugs.length - 10} more bugs*` : ''}`;
+
+          return {
+            content: [{ type: "text" as const, text: summary }]
+          };
+        }
+
+        // Detailed format (default)
+        const detailed = `🔍 **Detailed Bug Review** (${args.period})
+
+**Total Bugs Found:** ${rows.length}
+**Showing:** ${bugs.length} bugs
+
+---
+
+${bugs.map(bug => {
+  const projectLink = toMarkdownLink(bug.projectUrl, bug.project);
+  const defectLink = toMarkdownLink(bug.defectUrl, bug.defectKey);
+  const failureLink = toMarkdownLink(bug.failureUrl, `View ${bug.failureCount} failures`);
+  
+  // Truncate reason to first 200 chars of first line for readability
+  const reasonPreview = bug.reason.split('\n')[0];
+  const truncatedReason = reasonPreview.length > 200 
+    ? reasonPreview.substring(0, 200) + '...' 
+    : reasonPreview;
+  
+  return `### ${bug.rank}. ${defectLink}
+
+**Project:** ${projectLink}
+**Failures:** ${failureLink}
+**First Seen:** ${bug.since}
+**Last Reproduced:** ${bug.lastRepro}
+
+**Failure Reason:**
+\`\`\`
+${truncatedReason}
+\`\`\`
+
+${bug.hashcode ? `**Hashcode:** ${bug.hashcode}` : ''}`;
+}).join('\n\n---\n\n')}`;
+
+        return {
+          content: [{ type: "text" as const, text: detailed }]
+        };
+      } catch (error: any) {
+        debugLog("Error in get_bug_review", { error: error.message, args });
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error getting bug review: ${error?.message || error}`
+          }]
+        };
+      }
+    }
+  );
+
+  // === Tool #2.2: Get detailed failure information by hashcode ===
+  server.tool(
+    "get_bug_failure_info",
+    "🔬 Get comprehensive failure information including failure summary and detailed test runs (SQL widgets, templateId: 6 & 10)",
+    {
+      project: z.union([z.enum(["web","android","ios","api"]), z.string(), z.number()])
+        .default("web")
+        .describe("Project alias ('web', 'android', 'ios', 'api'), project key, or numeric projectId"),
+      dashboardId: z.number()
+        .describe("Dashboard ID from bug review (e.g., 99)"),
+      hashcode: z.string()
+        .describe("Hashcode from bug review failure link (e.g., '1051677506')"),
+      period: z.enum(["Last 7 Days", "Last 14 Days", "Last 30 Days", "Last 90 Days", "Week", "Month", "Quarter"])
+        .default("Last 14 Days")
+        .describe("Time period for failure analysis"),
+      format: z.enum(['detailed', 'summary', 'json']).default('detailed')
+        .describe("Output format: detailed (full info), summary (concise), or json (raw data)")
+    },
+    async (args) => {
+      try {
+        debugLog("get_bug_failure_info called", args);
+
+        // Resolve project ID with enhanced discovery and suggestions
+        const { projectId } = await resolveProjectId(args.project);
+
+        // Build params config for both widgets
+        const failureInfoParams = {
+          PERIOD: args.period,
+          dashboardName: "Failures analysis",
+          hashcode: args.hashcode,
+          isReact: true
+        };
+
+        const failureDetailsParams = {
+          PERIOD: args.period,
+          dashboardName: "Failures analysis",
+          hashcode: args.hashcode,
+          isReact: true
+        };
+
+        // Call both widgets in parallel
+        const [failureInfoRaw, failureDetailsRaw] = await Promise.all([
+          callWidgetSql(projectId, TEMPLATE.FAILURE_INFO, failureInfoParams),
+          callWidgetSql(projectId, TEMPLATE.FAILURE_DETAILS, failureDetailsParams)
+        ]);
+
+        // Normalize returned rows
+        const failureInfo: any[] = Array.isArray(failureInfoRaw) ? failureInfoRaw : [];
+        const failureDetails: any[] = Array.isArray(failureDetailsRaw) ? failureDetailsRaw : [];
+
+        if (failureInfo.length === 0 && failureDetails.length === 0) {
+          return {
+            content: [{ type: "text" as const, text: "No failure information found for the specified hashcode" }]
+          };
+        }
+
+        const baseUrl = WIDGET_BASE_URL;
+
+        // Parse failure info (high-level summary)
+        const summaryInfo = failureInfo.map(row => ({
+          failureCount: row["#"] || "0",
+          errorStability: (row["ERROR/STABILITY"] || "").replace(/\\n/g, '\n')
+        }));
+
+        // Parse failure details (individual test runs)
+        const detailsInfo = failureDetails.map(row => {
+          const testInfo = parseHtmlAnchor(row.TEST || "");
+          const defectInfo = parseHtmlAnchor(row.DEFECT || "");
+          
+          return {
+            runId: row.RUN_ID,
+            testId: row.TEST_ID,
+            runName: row.RUN || "Unknown",
+            testName: testInfo.text,
+            testUrl: testInfo.url,
+            defectKey: defectInfo.text || "No defect",
+            defectUrl: defectInfo.url
+          };
+        });
+
+        // Format output based on format parameter
+        if (args.format === 'json') {
+          return {
+            content: [{ 
+              type: "text" as const, 
+              text: JSON.stringify({ 
+                dashboardId: args.dashboardId,
+                hashcode: args.hashcode,
+                period: args.period,
+                summary: summaryInfo,
+                totalFailures: detailsInfo.length,
+                failures: detailsInfo
+              }, null, 2) 
+            }]
+          };
+        }
+
+        if (args.format === 'summary') {
+          const summary = `🔬 **Failure Analysis Summary**
+
+**Dashboard ID:** ${args.dashboardId}
+**Hashcode:** ${args.hashcode}
+**Period:** ${args.period}
+
+**Overview:**
+${summaryInfo.length > 0 ? summaryInfo.map(s => `- **${s.failureCount}** failures detected
+- Error: ${s.errorStability.split('\n')[0].substring(0, 150)}${s.errorStability.length > 150 ? '...' : ''}`).join('\n\n') : 'No summary available'}
+
+**Test Runs Affected:** ${detailsInfo.length}
+
+**Recent Failures:**
+${detailsInfo.slice(0, 5).map((detail, i) => {
+  const testLink = toMarkdownLink(detail.testUrl, detail.testName || `Test ${detail.testId}`);
+  const defectLink = toMarkdownLink(detail.defectUrl, detail.defectKey);
+  return `${i + 1}. ${testLink}
+   Run: ${detail.runName} | Defect: ${defectLink}`;
+}).join('\n\n')}
+
+${detailsInfo.length > 5 ? `\n*...and ${detailsInfo.length - 5} more failures*` : ''}`;
+
+          return {
+            content: [{ type: "text" as const, text: summary }]
+          };
+        }
+
+        // Detailed format (default)
+        const detailed = `🔬 **Comprehensive Failure Analysis**
+
+**Dashboard ID:** ${args.dashboardId}
+**Hashcode:** ${args.hashcode}
+**Period:** ${args.period}
+
+---
+
+## 📊 Failure Summary
+
+${summaryInfo.length > 0 ? summaryInfo.map(s => `**Total Occurrences:** ${s.failureCount}
+
+**Error Details:**
+\`\`\`
+${s.errorStability}
+\`\`\``).join('\n\n') : 'No summary information available'}
+
+---
+
+## 🧪 Affected Test Runs (${detailsInfo.length} total)
+
+${detailsInfo.map((detail, i) => {
+  const testLink = toMarkdownLink(detail.testUrl, detail.testName || `Test ${detail.testId}`);
+  const defectLink = toMarkdownLink(detail.defectUrl, detail.defectKey);
+  
+  return `### ${i + 1}. ${testLink}
+
+**Run:** ${detail.runName}
+**Run ID:** ${detail.runId}
+**Test ID:** ${detail.testId}
+**Defect:** ${defectLink}`;
+}).join('\n\n')}`;
+
+        return {
+          content: [{ type: "text" as const, text: detailed }]
+        };
+      } catch (error: any) {
+        debugLog("Error in get_bug_failure_info", { error: error.message, args });
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error getting failure info: ${error?.message || error}`
           }]
         };
       }

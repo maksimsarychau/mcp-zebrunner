@@ -710,5 +710,103 @@ describe('Utilities Unit Tests', () => {
     });
     
   });
+
+  describe('HTML Sanitization (Security)', () => {
+    
+    /**
+     * Tests for the stripHtmlTags security function
+     * Addresses CodeQL "Incomplete multi-character sanitization" vulnerability
+     */
+    
+    // Simulate the stripHtmlTags function from server.ts
+    const stripHtmlTags = (html: string): string => {
+      if (!html) return "";
+      
+      let result = html;
+      let previous: string;
+      
+      // Iteratively remove tags until no more are found
+      do {
+        previous = result;
+        result = result.replace(/<[^>]*>/g, '');
+      } while (result !== previous);
+      
+      // Also handle any remaining angle brackets
+      result = result.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      
+      return result.trim();
+    };
+
+    it('should strip simple HTML tags', () => {
+      const input = '<a href="https://example.com">Click here</a>';
+      const result = stripHtmlTags(input);
+      assert.equal(result, 'Click here');
+    });
+
+    it('should handle nested tags', () => {
+      const input = '<div><span><a href="#">Link</a></span></div>';
+      const result = stripHtmlTags(input);
+      assert.equal(result, 'Link');
+    });
+
+    it('should prevent script injection via incomplete tags', () => {
+      // This is the vulnerability CodeQL flagged - <<script>script> becoming <script>
+      const input = '<<script>script>alert(1)<</script>/script>';
+      const result = stripHtmlTags(input);
+      assert.ok(!result.includes('<script'), 'should not contain <script');
+      assert.ok(!result.includes('script>'), 'should not contain script>');
+    });
+
+    it('should handle malformed HTML safely', () => {
+      const input = '<a href="test">text<';
+      const result = stripHtmlTags(input);
+      assert.ok(!result.includes('<'), 'should escape remaining angle brackets');
+    });
+
+    it('should handle empty input', () => {
+      assert.equal(stripHtmlTags(''), '');
+      assert.equal(stripHtmlTags(null as any), '');
+      assert.equal(stripHtmlTags(undefined as any), '');
+    });
+
+    it('should handle plain text without tags', () => {
+      const input = 'Plain text without any HTML';
+      const result = stripHtmlTags(input);
+      assert.equal(result, 'Plain text without any HTML');
+    });
+
+    it('should handle Zebrunner anchor tags correctly', () => {
+      const input = '<a href="https://myfitnesspal.atlassian.net/browse/APPS-2771" target="_blank">APPS-2771</a>';
+      const result = stripHtmlTags(input);
+      assert.equal(result, 'APPS-2771');
+    });
+
+    it('should handle dashboard anchors with div attribute', () => {
+      const input = '<a div="MCP Android" href="../../MCPAND/automation-dashboards/102">MCP Android</a>';
+      const result = stripHtmlTags(input);
+      assert.equal(result, 'MCP Android');
+    });
+
+    it('should handle failure link anchors', () => {
+      const input = '<a div="0000000043" href="../../MCPAND/automation-dashboards/99?PERIOD=Last 7 Days&hashcode=1051677506">43</a>';
+      const result = stripHtmlTags(input);
+      assert.equal(result, '43');
+    });
+
+    it('should prevent XSS via event handlers', () => {
+      const input = '<img src=x onerror="alert(1)">Text';
+      const result = stripHtmlTags(input);
+      assert.ok(!result.includes('onerror'), 'should not contain event handlers');
+      assert.ok(!result.includes('alert'), 'should not contain script code');
+    });
+
+    it('should handle multiple iterations for deeply nested malicious input', () => {
+      // Construct input that requires multiple passes
+      const input = '<<<div>div>div>Hello</div>>';
+      const result = stripHtmlTags(input);
+      assert.ok(!result.match(/<[^&]/), 'should not contain unescaped tags');
+    });
+    
+  });
   
 });

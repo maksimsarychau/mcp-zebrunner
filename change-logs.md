@@ -1,5 +1,94 @@
 # Change Logs
 
+## v5.13.0 (2025-12-02) - NEW TOOLS: Bug Review & Failure Analysis
+
+### 🔒 Security Fixes (CodeQL + Claude Code Review)
+
+- **FIXED: Incomplete HTML sanitization (CRITICAL)** - 4 instances total
+  - **Issue**: Using `html.replace(/<[^>]*>/g, '')` could leave partial tags like `<script` intact
+  - **Solution**: Implemented `stripHtmlTags()` function with iterative tag removal
+  - **Details**:
+    - Uses loop-based stripping until no more tags are found
+    - Escapes any remaining angle brackets to prevent partial tag injection
+    - Handles edge cases like `<<script>script>` that single-pass regex misses
+  - **Files Fixed**: 
+    - `src/server.ts` - 4 instances (3 in helper functions, 1 in `parseDefectHtml`)
+  - **Test Coverage**: Added 11 new security test cases in `tests/unit/utilities.test.ts`
+
+
+### 🐞 New Bug Analysis Tools
+
+- **📊 NEW TOOL: `get_bug_review`** - Comprehensive bug review with detailed failure analysis
+  - View all bugs affecting the project with failure counts, defect links, and reproduction dates
+  - Track bug history: first seen date and last reproduction date
+  - Support for multiple time periods: Last 7/14/30/90 Days, Week, Month, Quarter
+  - Configurable limit (up to 500 bugs)
+  - Multiple output formats: `detailed`, `summary`, `json`
+  - Automatic conversion of HTML anchor tags to clickable markdown links
+  - Extracts and parses dashboard IDs and hashcodes for drill-down analysis
+  - **SQL Widget**: Uses templateId 9 (Bug Review widget)
+
+- **🔬 NEW TOOL: `get_bug_failure_info`** - Deep dive into specific failure patterns
+  - Combines two SQL widgets for comprehensive failure analysis:
+    - templateId 6 (Failure Info) - High-level summary with error/stability information
+    - templateId 10 (Failure Details) - Individual test runs affected by the failure
+  - Requires `dashboardId` and `hashcode` from bug review output
+  - Shows all affected test runs with direct links to Zebrunner
+  - Includes defect associations for each failure
+  - Multiple output formats: `detailed`, `summary`, `json`
+  - Perfect for understanding recurring failures and their impact
+
+### 🔧 Enhanced Features
+
+- **HTML Link Parsing**: New helper functions to parse and convert HTML anchor tags
+  - `parseHtmlAnchor()` - Extract URLs and text from standard anchor tags
+  - `parseDashboardAnchor()` - Parse dashboard/project links with relative URL resolution
+  - `parseFailureLink()` - Extract hashcode, period, and dashboard ID from failure links
+  - `toMarkdownLink()` - Convert parsed data to clickable markdown links
+  - Automatic conversion of relative URLs to absolute URLs using base URL
+
+- **Template IDs**: Added new constants for bug analysis widgets
+  - `TEMPLATE.BUG_REVIEW = 9` - Bug review widget
+  - `TEMPLATE.FAILURE_INFO = 6` - Failure summary widget
+  - `TEMPLATE.FAILURE_DETAILS = 10` - Detailed failure widget
+
+### 📖 Documentation Updates
+
+- Updated `TOOLS_CATALOG.md` with comprehensive documentation for both new tools
+- Added example prompts and usage notes for bug review and failure analysis
+- Updated `README.md` with tool descriptions in Platform & Results Analysis section
+- Enhanced Bug Analysis section with real-world usage examples
+
+### 🎯 Use Cases
+
+**Bug Review Tool:**
+- "Show me detailed bug review for last 7 days"
+- "Get bug review for Android project from last 14 days"
+- "What bugs have been reported in the last month?"
+- "Give me a summary of top 50 bugs from last week"
+
+**Failure Info Tool:**
+- "Get failure info for hashcode 1051677506 on dashboard 99"
+- "Show me detailed failures for this bug hashcode"
+- "Analyze failure information for hashcode X from last 14 days"
+- "Give me a summary of test runs affected by this failure"
+
+### 🔗 Workflow Integration
+
+These tools work together for comprehensive bug analysis:
+1. Use `get_bug_review` to get overview of all bugs with their hashcodes
+2. Use `get_bug_failure_info` with specific hashcode to drill down into failure details
+3. Both tools automatically convert HTML links to markdown for easy navigation
+
+### ✅ Testing
+
+- Successfully compiled with TypeScript
+- All build checks passed
+- Tools integrated into existing server.ts structure
+- Follows same patterns as existing reporting tools
+
+---
+
 ## v5.12.0 (2025-12-02)
 - **🎉 Published to MCP Registry** - Server is now discoverable at https://registry.modelcontextprotocol.io
 - **📦 Published to npm** - Package available at https://www.npmjs.com/package/mcp-zebrunner

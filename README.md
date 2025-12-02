@@ -617,6 +617,8 @@ Once connected, you can use these tools through natural language in your AI assi
 |------|-------------|---------------|----------|
 | `get_platform_results_by_period` | Test results by platform/period | `"Get iOS test results for the last 7 days"` | **Managers, Leads** |
 | `get_top_bugs` | Most frequent defects | `"Show me top 10 bugs from last week"` | **Managers, Developers** |
+| `get_bug_review` | Detailed bug review with failure analysis | `"Show me detailed bug review for last 14 days"` | **Managers, QA, Developers** |
+| `get_bug_failure_info` | Comprehensive failure info by hashcode | `"Get failure info for hashcode 1051677506"` | **Developers, SDETs** |
 | `get_project_milestones` | Available milestones | `"Get all milestones for project MCP"` | **Managers, PMs** |
 
 #### **Project Discovery**
@@ -823,6 +825,10 @@ Once connected, you can use these tools through natural language in your AI assi
 ```
 "Get test execution results for launch 118685 to understand recent failures"
 "Show me top bugs from last week related to my feature area"
+"Get detailed bug review for Android project from last 14 days"
+"Show me comprehensive failure information for hashcode 1051677506"
+"What are the top 50 bugs affecting our project this month?"
+"Give me a summary of bug failures with reproduction dates from last 7 days"
 "Analyze test case MCP-34 - why might it be failing in automation?"
 ```
 
