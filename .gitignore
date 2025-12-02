@@ -6,3 +6,5 @@ mcp.config.json
 .claude
 !.env.example
 
+.mcpregistry_registry_token
+.mcpregistry_github_token

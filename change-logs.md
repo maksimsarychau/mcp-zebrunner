@@ -1,5 +1,15 @@
 # Change Logs
 
+## v5.12.0 (2025-12-02)
+- **🎉 Published to MCP Registry** - Server is now discoverable at https://registry.modelcontextprotocol.io
+- **📦 Published to npm** - Package available at https://www.npmjs.com/package/mcp-zebrunner
+- **📖 Added comprehensive MCP NPM Installation Guide** - Detailed setup instructions for Claude Desktop, Cursor, IntelliJ IDEA, and ChatGPT Desktop
+- **🔧 Enhanced version management** - Updated increment-version.js to keep server.json in sync with package.json
+- Added `mcpName` field to package.json for MCP registry integration
+
+
+
+
 ## v5.11.1 - CRITICAL FIX: Video Analysis Security Validation (2025-11-26)
 - **🐛 CRITICAL FIX: Video Analysis Tool** - Fixed "Analyse test execution video" tool failing with security validation error
   - **Problem**: Tool was failing with error: `Security: Invalid URL - must start with /files/ or be a valid HTTP(S) URL`
