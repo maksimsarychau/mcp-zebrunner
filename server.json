@@ -1,0 +1,142 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
+  "name": "io.github.maksimsarychau/mcp-zebrunner",
+  "display_name": "Zebrunner TCM & Reporting MCP",
+  "description": "Unified Zebrunner MCP server for TCM test cases, suites, coverage analysis, launchers, etc.",
+  "homepage": "https://github.com/maksimsarychau/mcp-zebrunner",
+  "source_code_url": "https://github.com/maksimsarychau/mcp-zebrunner",
+  "issue_tracker_url": "https://github.com/maksimsarychau/mcp-zebrunner/issues",
+  "changelog_url": "https://github.com/maksimsarychau/mcp-zebrunner/blob/main/change-logs.md",
+  "repository": {
+    "url": "https://github.com/maksimsarychau/mcp-zebrunner",
+    "source": "github"
+  },
+  "license": "AGPL-3.0",
+  "categories": ["testing", "devtools"],
+  "languages": ["TypeScript", "JavaScript"],
+  "version": "5.12.0",
+  "environment": {
+    "runtime": "node"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "mcp-zebrunner",
+      "version": "5.12.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "run": {
+        "command": "node",
+        "args": ["dist/server.js"]
+      },
+      "environmentVariables": [
+        {
+          "name": "ZEBRUNNER_URL",
+          "description": "Base URL for your Zebrunner instance (e.g., https://your-instance.zebrunner.com)",
+          "isRequired": true,
+          "format": "string",
+          "isSecret": false
+        },
+        {
+          "name": "ZEBRUNNER_LOGIN",
+          "description": "Your Zebrunner username/login",
+          "isRequired": true,
+          "format": "string",
+          "isSecret": false
+        },
+        {
+          "name": "ZEBRUNNER_TOKEN",
+          "description": "Your Zebrunner API authentication token",
+          "isRequired": true,
+          "format": "string",
+          "isSecret": true
+        },
+        {
+          "name": "TIMEOUT",
+          "description": "API request timeout in milliseconds (default: 30000)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false
+        },
+        {
+          "name": "RETRY_ATTEMPTS",
+          "description": "Number of retry attempts for failed API requests (default: 3)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false
+        },
+        {
+          "name": "RETRY_DELAY",
+          "description": "Delay between retry attempts in milliseconds (default: 1000)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false
+        },
+        {
+          "name": "MAX_PAGE_SIZE",
+          "description": "Maximum page size for paginated API requests (default: 100, max: 1000)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false
+        },
+        {
+          "name": "DEFAULT_PAGE_SIZE",
+          "description": "Default page size for paginated API requests (default: 10)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false
+        },
+        {
+          "name": "DEBUG",
+          "description": "Enable debug logging (default: false)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false
+        },
+        {
+          "name": "ENABLE_RULES_ENGINE",
+          "description": "Enable the rules engine for test case validation (default: auto-detected from mcp-zebrunner-rules.md file)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false
+        },
+        {
+          "name": "STRICT_URL_VALIDATION",
+          "description": "Enable strict URL validation for security (default: true)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false
+        },
+        {
+          "name": "SKIP_URL_VALIDATION_ON_ERROR",
+          "description": "Skip URL validation if it fails (less secure, more permissive) (default: false)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false
+        },
+        {
+          "name": "ENABLE_RATE_LIMITING",
+          "description": "Enable rate limiting for API calls (default: true)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false
+        },
+        {
+          "name": "MAX_REQUESTS_PER_SECOND",
+          "description": "Maximum API requests per second (default: 5, max: 100)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false
+        },
+        {
+          "name": "RATE_LIMITING_BURST",
+          "description": "Allow burst of API requests (default: 10, max: 200)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false
+        }
+      ]
+    }
+  ]
+}

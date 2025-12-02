@@ -1,9 +1,32 @@
 {
   "name": "mcp-zebrunner",
-  "version": "5.11.1",
-  "private": true,
+  "version": "5.12.0",
   "type": "module",
-  "description": "MCP server (stdio) for Zebrunner TCM API (read-only)",
+  "description": "Unified Zebrunner MCP server for TCM test cases, suites, coverage analysis, launchers, etc.",
+  "mcpName": "io.github.maksimsarychau/mcp-zebrunner",
+  "main": "dist/index.js",
+  "author": "Maksim Sarychau",
+  "license": "AGPL-3.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/maksimsarychau/mcp-zebrunner.git"
+  },
+  "keywords": [
+    "zebrunner",
+    "tcm",
+    "qa",
+    "testing",
+    "reporting",
+    "dashboards",
+    "mcp",
+    "model-context-protocol"
+  ],
+  "files": [
+    "dist/**/*",
+    "README.md",
+    "LICENSE.md",
+    "mcp-zebrunner-rules.md.example"
+  ],
   "scripts": {
     "version": "node -p \"require('./package.json').version\"",
     "dev": "tsx watch src/server.ts",

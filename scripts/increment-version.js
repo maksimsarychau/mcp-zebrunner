@@ -4,6 +4,7 @@ import { join } from 'path';
 import { execSync } from 'child_process';
 
 const packagePath = join(process.cwd(), 'package.json');
+const serverJsonPath = join(process.cwd(), 'server.json');
 const changelogPath = join(process.cwd(), 'change-logs.md');
 const packageJson = JSON.parse(readFileSync(packagePath, 'utf8'));
 
@@ -299,6 +300,24 @@ function updateChangelog(version, description) {
 // Update package.json version
 packageJson.version = newVersion;
 writeFileSync(packagePath, JSON.stringify(packageJson, null, 2) + '\n');
+
+// Update server.json version
+if (existsSync(serverJsonPath)) {
+  const serverJson = JSON.parse(readFileSync(serverJsonPath, 'utf8'));
+  serverJson.version = newVersion;
+  
+  // Update version in packages array if it exists
+  if (serverJson.packages && Array.isArray(serverJson.packages)) {
+    serverJson.packages.forEach(pkg => {
+      if (pkg.version) {
+        pkg.version = newVersion;
+      }
+    });
+  }
+  
+  writeFileSync(serverJsonPath, JSON.stringify(serverJson, null, 2) + '\n');
+  console.log(`server.json version updated to ${newVersion}`);
+}
 
 // Generate and add changelog entry
 const changeDescription = generateChangelogEntry();
