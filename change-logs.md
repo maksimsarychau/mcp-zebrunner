@@ -2,6 +2,18 @@
 
 ## v5.13.0 (2025-12-02) - NEW TOOLS: Bug Review & Failure Analysis
 
+### 🔒 Security Fix: HTML Sanitization (CodeQL)
+
+- **FIXED: Incomplete multi-character sanitization vulnerability** - Addressed CodeQL security alerts
+  - **Issue**: Using `html.replace(/<[^>]*>/g, '')` could leave partial tags like `<script` intact
+  - **Solution**: Implemented `stripHtmlTags()` function with iterative tag removal
+  - **Details**:
+    - Uses loop-based stripping until no more tags are found
+    - Escapes any remaining angle brackets to prevent partial tag injection
+    - Handles edge cases like `<<script>script>` that single-pass regex misses
+  - **Files Fixed**: `src/server.ts` (3 instances in HTML parsing functions)
+  - **Test Coverage**: Added 11 new security test cases in `tests/unit/utilities.test.ts`
+
 ### 🐞 New Bug Analysis Tools
 
 - **📊 NEW TOOL: `get_bug_review`** - Comprehensive bug review with detailed failure analysis

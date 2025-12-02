@@ -276,6 +276,32 @@ function buildParamsConfig(opts: {
 // === Helper functions for parsing HTML anchor tags ===
 
 /**
+ * Safely strip all HTML tags from a string using iterative replacement.
+ * This prevents incomplete sanitization that could leave partial tags like <script.
+ * CodeQL Security Fix: Iterative stripping ensures complete tag removal.
+ * @param html - Input string potentially containing HTML tags
+ * @returns Plain text with all HTML tags removed
+ */
+function stripHtmlTags(html: string): string {
+  if (!html) return "";
+  
+  let result = html;
+  let previous: string;
+  
+  // Iteratively remove tags until no more are found
+  // This handles cases like <<script>script> that single-pass regex misses
+  do {
+    previous = result;
+    result = result.replace(/<[^>]*>/g, '');
+  } while (result !== previous);
+  
+  // Also handle any remaining angle brackets that could form partial tags
+  result = result.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  
+  return result.trim();
+}
+
+/**
  * Parse HTML anchor tag to extract URL and text
  * Example: <a href="https://example.com/browse/JIRA-123" target="_blank">JIRA-123</a>
  * Returns: { url: "https://example.com/browse/JIRA-123", text: "JIRA-123" }
@@ -285,11 +311,12 @@ function parseHtmlAnchor(html: string): { url: string | null; text: string } {
   
   // Extract href attribute
   const hrefMatch = html.match(/href="([^"]+)"/);
-  // Extract text content between tags
+  // Extract text content between tags (preferred - direct extraction)
   const textMatch = html.match(/>([^<]+)</);
   
   const url = hrefMatch ? hrefMatch[1] : null;
-  const text = textMatch ? textMatch[1] : html.replace(/<[^>]*>/g, '').trim();
+  // Use direct text extraction if available, otherwise safely strip all tags
+  const text = textMatch ? textMatch[1] : stripHtmlTags(html);
   
   return { url, text };
 }
@@ -305,7 +332,8 @@ function parseDashboardAnchor(html: string, baseUrl?: string): { url: string | n
   const dashboardIdMatch = html.match(/automation-dashboards\/(\d+)/);
   
   let url = hrefMatch ? hrefMatch[1] : null;
-  const text = textMatch ? textMatch[1] : html.replace(/<[^>]*>/g, '').trim();
+  // Use direct text extraction if available, otherwise safely strip all tags
+  const text = textMatch ? textMatch[1] : stripHtmlTags(html);
   const dashboardId = dashboardIdMatch ? parseInt(dashboardIdMatch[1]) : null;
   
   // Convert relative URLs to absolute if baseUrl is provided
@@ -338,7 +366,8 @@ function parseFailureLink(html: string, baseUrl?: string): {
   const periodMatch = html.match(/PERIOD=([^&"]+)/);
   
   let url = hrefMatch ? hrefMatch[1] : null;
-  const text = textMatch ? textMatch[1] : html.replace(/<[^>]*>/g, '').trim();
+  // Use direct text extraction if available, otherwise safely strip all tags
+  const text = textMatch ? textMatch[1] : stripHtmlTags(html);
   const dashboardId = dashboardIdMatch ? parseInt(dashboardIdMatch[1]) : null;
   const hashcode = hashcodeMatch ? hashcodeMatch[1] : null;
   const period = periodMatch ? decodeURIComponent(periodMatch[1].replace(/\+/g, ' ')) : null;
