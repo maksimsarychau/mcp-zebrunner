@@ -270,12 +270,126 @@ app.post('/exchange', async (req, res) => {
 
 ---
 
+## TODO: Docker MCP Gateway OAuth Integration
+
+Based on research of [Docker MCP Gateway documentation](https://github.com/docker/mcp-gateway/tree/main/docs), here are actionable steps for implementing OAuth support:
+
+### Phase 1: Configure Secure Secrets (Can Do Now)
+
+- [ ] **Update `server.yaml` for Docker MCP Registry** with proper secrets config:
+
+```yaml
+config:
+  secrets:
+    - name: zebrunner.api_token
+      env: ZEBRUNNER_TOKEN
+      required: true
+      example: "your-api-token-here"
+    - name: zebrunner.login
+      env: ZEBRUNNER_LOGIN
+      required: true
+      example: "user@company.com"
+```
+
+- [ ] **Document secure secret management** for users:
+```bash
+docker mcp secret set ZEBRUNNER_TOKEN=your_actual_token
+docker mcp secret set ZEBRUNNER_LOGIN=your_login
+```
+
+### Phase 2: Add OAuth Provider Configuration (Future)
+
+- [ ] **Create Okta OAuth application**:
+  - Type: Web Application (Authorization Code flow)
+  - Redirect URI: `http://localhost:8080/callback` (or Docker Desktop callback)
+  - Scopes: `openid`, `email`, `profile`
+
+- [ ] **Add OAuth config to `server.yaml`**:
+
+```yaml
+oauth:
+  providers:
+    - provider: okta
+      secret: zebrunner.oauth_secret
+      env: ZEBRUNNER_OAUTH_SECRET
+```
+
+- [ ] **Configure full OAuth provider** (in gateway config):
+
+```yaml
+providers:
+  okta:
+    display_name: "Zebrunner via Okta"
+    client_id: "${OKTA_CLIENT_ID}"
+    client_secret: "${OKTA_CLIENT_SECRET}"
+    auth_url: "https://your-domain.okta.com/oauth2/default/v1/authorize"
+    token_url: "https://your-domain.okta.com/oauth2/default/v1/token"
+    user_info_url: "https://your-domain.okta.com/oauth2/default/v1/userinfo"
+    scopes:
+      - "openid"
+      - "email"
+      - "profile"
+    enabled: true
+```
+
+### Phase 3: Implement Token Exchange Service (Advanced)
+
+- [ ] **Build Token Exchange Service** that:
+  1. Validates Okta OAuth tokens
+  2. Maps Okta user email to Zebrunner API token
+  3. Returns credentials to MCP server
+
+- [ ] **Consider using [MCP OAuth Gateway](https://github.com/akshay5995/mcp-oauth-gateway)**:
+  - Pre-built OAuth 2.1 authorization server
+  - Supports custom OAuth providers
+  - Can be containerized alongside MCP server
+
+### Phase 4: Enable Docker Desktop OAuth Flow
+
+Once OAuth is configured, users will be able to:
+
+```bash
+# Enable the server
+docker mcp server enable mcp-zebrunner
+
+# Authorize via OAuth (opens browser)
+docker mcp oauth authorize mcp-zebrunner
+```
+
+Or in Docker Desktop UI:
+1. Navigate to MCP Toolkit → Catalog tab
+2. Add "Zebrunner MCP" server
+3. Click "Authorize" in OAuth tab → Browser opens
+4. Login via Okta → Token stored securely
+
+### Useful References
+
+| Resource | URL | Purpose |
+|----------|-----|---------|
+| Docker MCP Toolkit OAuth | [docs.docker.com](https://docs.docker.com/ai/mcp-catalog-and-toolkit/toolkit/) | Native OAuth flow docs |
+| MCP Registry Catalog Package | [pkg.go.dev](https://pkg.go.dev/github.com/docker/mcp-registry/pkg/catalog) | OAuth type definitions |
+| Docker MCP Gateway Auth | [docs](https://github.com/docker/mcp-gateway/tree/main/docs) | Gateway configuration |
+| MCP OAuth Gateway | [github.com](https://github.com/akshay5995/mcp-oauth-gateway) | Standalone OAuth server |
+| MCP Security Best Practices | [docker.com/blog](https://www.docker.com/blog/mcp-horror-stories-the-supply-chain-attack/) | Secret management |
+
+### Priority Order
+
+1. ✅ **Use Docker Secret Store** (works today with current implementation)
+2. 📋 **Add OAuth provider to server.yaml** (enables Docker Desktop OAuth tab)
+3. 📋 **Build Token Exchange Service** (for full SSO integration)
+4. 📋 **Submit to Docker MCP Registry** (requires OAuth support for approval)
+
+---
+
 ## References
 
 - [Zebrunner SSO Documentation](https://zebrunner.com/documentation/guide/sso/)
 - [Docker MCP Registry](https://github.com/docker/mcp-registry)
+- [Docker MCP Toolkit](https://docs.docker.com/ai/mcp-catalog-and-toolkit/toolkit/)
+- [Docker MCP Gateway Docs](https://github.com/docker/mcp-gateway/tree/main/docs)
 - [MCP OAuth Specification](https://modelcontextprotocol.io/docs/concepts/authentication)
 - [Okta OAuth 2.0 Guide](https://developer.okta.com/docs/guides/)
+- [MCP OAuth Gateway](https://github.com/akshay5995/mcp-oauth-gateway)
 
 ---
 
