@@ -1,5 +1,60 @@
 # Change Logs
 
+## v5.14.0 (2025-12-03) - Docker Support & MCP Toolkit Integration
+
+### 🐳 Docker Support
+
+- **NEW: Multi-stage Dockerfile** with optimized build
+  - Node.js 20 Alpine base image
+  - Native dependencies: ffmpeg, tesseract-ocr, sharp (vips)
+  - Non-root user for security
+  - Tini init system for proper signal handling
+  - ~500MB optimized image size
+
+- **NEW: Docker Compose** for local development
+  - Environment variable configuration
+  - Health checks
+  - Security hardening (read-only, no-new-privileges)
+
+- **NEW: Docker MCP Toolkit Integration**
+  - `mcp-catalog.yaml` - Docker MCP Toolkit catalog format
+  - `custom-catalog.yaml` - Custom catalog for local testing
+  - `catalogs/mcp-zebrunner/catalog.yaml` - Gateway catalog
+  - `server.yaml` - Docker MCP Registry submission format
+  - `tools.json` - Tool manifest for registry
+
+### 📚 Documentation
+
+- **NEW: `docs/DOCKER_USAGE.md`** - Comprehensive Docker guide
+  - Build, run, and test instructions
+  - Docker MCP Toolkit setup
+  - Cursor and Claude Desktop integration
+  - Troubleshooting guide
+  - TODO checklist for Docker MCP Registry submission
+
+- **NEW: `docs/OKTA_ACCESS_INVESTIGATION.md`** - Enterprise SSO investigation
+  - SAML vs OAuth analysis for MCP
+  - Three implementation options for enterprise auth
+  - Per-user token mapping architecture
+  - Custom token exchange service design
+
+### 🔧 Build Improvements
+
+- **ENHANCED: `scripts/increment-version.js`**
+  - Automatic Docker file version sync
+  - New `--sync` flag for version-only sync
+  - Supports: mcp-catalog.yaml, custom-catalog.yaml, catalogs/
+
+- **NEW: npm script** - `npm run sync-versions`
+  - Syncs package.json version to all Docker-related files
+
+### 📦 Published
+
+- **Docker Hub**: `msarychau/mcp-zebrunner:5.14.0`
+- **npm**: `mcp-zebrunner@5.14.0`
+
+---
+
 ## v5.13.0 (2025-12-02) - NEW TOOLS: Bug Review & Failure Analysis
 
 ### 🔒 Security Fixes (CodeQL + Claude Code Review)

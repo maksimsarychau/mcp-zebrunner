@@ -463,7 +463,7 @@ Complete reference of all available tools with natural language usage examples.
 - "Show me detailed bug review for last 7 days"
 - "Get bug review for Android project from last 14 days with failure details"
 - "Show me top 10 bugs with full failure analysis for iOS"
-- "Give me a comprehensive bug analysis for MFPIOS with priority breakdown"
+- "Give me a comprehensive bug analysis for IOS with priority breakdown"
 - `{ project: "ios", period: "Last 7 Days", limit: 10, include_failure_details: true, failure_detail_level: "full" }`
 
 ### `get_bug_failure_info`

@@ -6,12 +6,24 @@ import { execSync } from 'child_process';
 const packagePath = join(process.cwd(), 'package.json');
 const serverJsonPath = join(process.cwd(), 'server.json');
 const changelogPath = join(process.cwd(), 'change-logs.md');
+
+// Docker-related files that need version sync
+const dockerFiles = {
+  mcpCatalog: join(process.cwd(), 'mcp-catalog.yaml'),
+  customCatalog: join(process.cwd(), 'custom-catalog.yaml'),
+  catalogsYaml: join(process.cwd(), 'catalogs/mcp-zebrunner/catalog.yaml'),
+};
+
 const packageJson = JSON.parse(readFileSync(packagePath, 'utf8'));
 
-const [major, minor, patch] = packageJson.version.split('.');
+// Check for --sync flag to only sync versions without incrementing
+const syncOnly = process.argv.includes('--sync');
+
+const currentVersion = packageJson.version;
+const [major, minor, patch] = currentVersion.split('.');
 const newPatch = parseInt(patch, 10) + 1;
-const newVersion = `${major}.${minor}.${newPatch}`;
-const oldVersion = packageJson.version;
+const newVersion = syncOnly ? currentVersion : `${major}.${minor}.${newPatch}`;
+const oldVersion = syncOnly ? currentVersion : packageJson.version;
 
 // Analyze file content to understand what changed
 function analyzeFileChanges(filePath) {
@@ -297,12 +309,75 @@ function updateChangelog(version, description) {
   }
 }
 
-// Update package.json version
-packageJson.version = newVersion;
-writeFileSync(packagePath, JSON.stringify(packageJson, null, 2) + '\n');
+// Escape special regex characters in a string
+// This properly escapes all regex metacharacters including backslash
+function escapeRegExp(string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
-// Update server.json version
-if (existsSync(serverJsonPath)) {
+// Update version in YAML file using regex replacement
+function updateYamlVersion(filePath, oldVer, newVer, forceSync = false) {
+  if (!existsSync(filePath)) {
+    return false;
+  }
+  
+  try {
+    let content = readFileSync(filePath, 'utf8');
+    let updated = false;
+    
+    if (forceSync) {
+      // In sync mode, replace any version pattern with the new version
+      // Pattern: version: "X.Y.Z" or version: 'X.Y.Z' (at root level, not nested)
+      const versionLinePattern = /^(version:\s*)["']?\d+\.\d+\.\d+["']?/gm;
+      if (versionLinePattern.test(content)) {
+        content = content.replace(versionLinePattern, `$1"${newVer}"`);
+        updated = true;
+      }
+      
+      // Also update nested version fields (like in custom-catalog.yaml)
+      const nestedVersionPattern = /(^\s+version:\s*)["']?\d+\.\d+\.\d+["']?/gm;
+      if (nestedVersionPattern.test(content)) {
+        content = content.replace(nestedVersionPattern, `$1"${newVer}"`);
+        updated = true;
+      }
+    } else {
+      // Normal mode: only replace old version with new version
+      // Use escapeRegExp to properly escape all regex metacharacters
+      const escapedOldVer = escapeRegExp(oldVer);
+      
+      // Pattern 1: version: "X.Y.Z" (quoted)
+      const quotedPattern = new RegExp(`(version:\\s*)["']${escapedOldVer}["']`, 'g');
+      if (quotedPattern.test(content)) {
+        content = content.replace(quotedPattern, `$1"${newVer}"`);
+        updated = true;
+      }
+      
+      // Pattern 2: version: X.Y.Z (unquoted)
+      const unquotedPattern = new RegExp(`(version:\\s*)${escapedOldVer}(?=\\s|$|\\n)`, 'g');
+      if (unquotedPattern.test(content)) {
+        content = content.replace(unquotedPattern, `$1"${newVer}"`);
+        updated = true;
+      }
+    }
+    
+    if (updated) {
+      writeFileSync(filePath, content);
+    }
+    return updated;
+  } catch (error) {
+    console.warn(`Warning: Could not update version in ${filePath}: ${error.message}`);
+    return false;
+  }
+}
+
+// Update package.json version (skip if sync-only)
+if (!syncOnly) {
+  packageJson.version = newVersion;
+  writeFileSync(packagePath, JSON.stringify(packageJson, null, 2) + '\n');
+}
+
+// Update server.json version (skip if sync-only)
+if (!syncOnly && existsSync(serverJsonPath)) {
   const serverJson = JSON.parse(readFileSync(serverJsonPath, 'utf8'));
   serverJson.version = newVersion;
   
@@ -319,9 +394,31 @@ if (existsSync(serverJsonPath)) {
   console.log(`server.json version updated to ${newVersion}`);
 }
 
-// Generate and add changelog entry
-const changeDescription = generateChangelogEntry();
-updateChangelog(newVersion, changeDescription);
+// Update Docker-related files
+console.log('\nSyncing Docker-related files...');
+const dockerFilesUpdated = [];
 
-console.log(`Version incremented from ${oldVersion} to ${newVersion}`);
-console.log(`Changelog updated with: ${changeDescription}`);
+for (const [name, filePath] of Object.entries(dockerFiles)) {
+  // Use forceSync in sync-only mode to update any version to current
+  if (updateYamlVersion(filePath, oldVersion, newVersion, syncOnly)) {
+    const fileName = filePath.split('/').pop();
+    dockerFilesUpdated.push(fileName);
+    console.log(`  ✓ ${fileName} updated to ${newVersion}`);
+  }
+}
+
+if (dockerFilesUpdated.length > 0) {
+  console.log(`Docker files synced: ${dockerFilesUpdated.join(', ')}`);
+} else {
+  console.log('No Docker files found to update (or already in sync)');
+}
+
+// Generate and add changelog entry (skip if sync-only)
+if (!syncOnly) {
+  const changeDescription = generateChangelogEntry();
+  updateChangelog(newVersion, changeDescription);
+  console.log(`\nVersion incremented from ${oldVersion} to ${newVersion}`);
+  console.log(`Changelog updated with: ${changeDescription}`);
+} else {
+  console.log(`\n✓ Docker files synced to version ${currentVersion}`);
+}

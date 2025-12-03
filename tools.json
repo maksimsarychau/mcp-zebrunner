@@ -1,0 +1,188 @@
+[
+  {
+    "name": "analyze_test_failure",
+    "description": "Deep forensic analysis of failed tests including logs, screenshots, error classification, and comparison with last passed execution"
+  },
+  {
+    "name": "detailed_analyze_launch_failures",
+    "description": "Analyze ALL failures in a launch with intelligent grouping, executive summary, timeline analysis, and pattern detection"
+  },
+  {
+    "name": "get_test_execution_history",
+    "description": "Track test execution trends across multiple launches with pass/fail history and pass rate"
+  },
+  {
+    "name": "get_launch_details",
+    "description": "Get comprehensive information about a specific launch including test results, environment, and metadata"
+  },
+  {
+    "name": "get_launch_summary",
+    "description": "Quick launch overview with key metrics and status"
+  },
+  {
+    "name": "get_launch_test_summary",
+    "description": "Lightweight aggregated test results with statistics and most unstable tests"
+  },
+  {
+    "name": "get_all_launches_for_project",
+    "description": "Get all launches for a project with pagination and filtering"
+  },
+  {
+    "name": "get_all_launches_with_filter",
+    "description": "Filter launches by milestone, build, or other criteria"
+  },
+  {
+    "name": "analyze_test_execution_video",
+    "description": "Download and analyze test execution video with AI vision - extracts frames and compares with test steps"
+  },
+  {
+    "name": "download_test_screenshot",
+    "description": "Download protected screenshots from Zebrunner with authentication"
+  },
+  {
+    "name": "analyze_screenshot",
+    "description": "Visual analysis of screenshots with OCR, UI element detection, and AI vision analysis"
+  },
+  {
+    "name": "get_test_case_by_key",
+    "description": "Get detailed information for a specific test case by its key (e.g., MCP-123)"
+  },
+  {
+    "name": "get_test_case_by_title",
+    "description": "Search for test cases by title"
+  },
+  {
+    "name": "get_test_cases_advanced",
+    "description": "Advanced test case search with multiple filters"
+  },
+  {
+    "name": "get_test_cases_by_automation_state",
+    "description": "Get test cases filtered by automation state"
+  },
+  {
+    "name": "get_test_case_by_filter",
+    "description": "Filter test cases by various criteria"
+  },
+  {
+    "name": "get_automation_states",
+    "description": "Get available automation states for test cases"
+  },
+  {
+    "name": "get_automation_priorities",
+    "description": "Get available automation priorities"
+  },
+  {
+    "name": "get_all_tcm_test_cases_by_project",
+    "description": "Get all test cases for a project"
+  },
+  {
+    "name": "get_all_tcm_test_cases_with_root_suite_id",
+    "description": "Get all test cases under a specific root suite"
+  },
+  {
+    "name": "list_test_suites",
+    "description": "List test suites with pagination"
+  },
+  {
+    "name": "get_suite_hierarchy",
+    "description": "Get complete suite hierarchy tree"
+  },
+  {
+    "name": "get_root_suites",
+    "description": "Get root-level test suites"
+  },
+  {
+    "name": "get_all_subsuites",
+    "description": "Get all subsuites under a parent suite"
+  },
+  {
+    "name": "get_tcm_suite_by_id",
+    "description": "Get test suite details by ID"
+  },
+  {
+    "name": "get_tcm_test_suites_by_project",
+    "description": "Get all test suites for a project"
+  },
+  {
+    "name": "get_root_id_by_suite_id",
+    "description": "Find the root suite ID for any suite"
+  },
+  {
+    "name": "get_test_coverage_by_test_case_steps_by_key",
+    "description": "Analyze test coverage by test case steps"
+  },
+  {
+    "name": "get_enhanced_test_coverage_with_rules",
+    "description": "Enhanced test coverage analysis with rules engine"
+  },
+  {
+    "name": "validate_test_case",
+    "description": "Validate test case quality against best practices"
+  },
+  {
+    "name": "improve_test_case",
+    "description": "Get AI-powered suggestions to improve test case quality"
+  },
+  {
+    "name": "generate_draft_test_by_key",
+    "description": "Generate draft test code from test case specification"
+  },
+  {
+    "name": "analyze_test_cases_duplicates",
+    "description": "Find duplicate test cases using text similarity"
+  },
+  {
+    "name": "analyze_test_cases_duplicates_semantic",
+    "description": "Find duplicate test cases using semantic/AI analysis"
+  },
+  {
+    "name": "list_test_runs",
+    "description": "List test runs with pagination"
+  },
+  {
+    "name": "get_test_run_by_id",
+    "description": "Get test run details by ID"
+  },
+  {
+    "name": "list_test_run_test_cases",
+    "description": "List test cases in a test run"
+  },
+  {
+    "name": "get_test_run_result_statuses",
+    "description": "Get result statuses for a test run"
+  },
+  {
+    "name": "get_test_run_configuration_groups",
+    "description": "Get configuration groups for a test run"
+  },
+  {
+    "name": "get_platform_results_by_period",
+    "description": "Get test results grouped by platform over a time period"
+  },
+  {
+    "name": "get_top_bugs",
+    "description": "Get top bugs affecting test results"
+  },
+  {
+    "name": "get_bug_review",
+    "description": "Get detailed bug review information"
+  },
+  {
+    "name": "get_bug_failure_info",
+    "description": "Get failure information for a specific bug"
+  },
+  {
+    "name": "get_project_milestones",
+    "description": "Get milestones for a project"
+  },
+  {
+    "name": "get_available_projects",
+    "description": "Discover available Zebrunner projects"
+  },
+  {
+    "name": "test_reporting_connection",
+    "description": "Test the connection to Zebrunner reporting API"
+  }
+]
+
+

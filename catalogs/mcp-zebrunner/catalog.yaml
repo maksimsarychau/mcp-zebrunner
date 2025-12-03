@@ -1,0 +1,73 @@
+registry:
+    mcp-zebrunner:
+        title: Zebrunner MCP
+        description: Comprehensive test management integration for AI assistants - manage test cases, suites, launches, and analyze test results
+        icon: https://avatars.githubusercontent.com/u/52832169?s=200&v=4
+        type: server
+        image: msarychau/mcp-zebrunner:latest
+        dateAdded: "2025-12-03T00:00:00Z"
+        
+        # Command with template variables for config
+        command:
+            - -e
+            - ZEBRUNNER_URL={{mcp-zebrunner.zebrunner_url}}
+            - -e
+            - ZEBRUNNER_LOGIN={{mcp-zebrunner.zebrunner_login}}
+            - -e
+            - DEBUG={{mcp-zebrunner.debug}}
+            - -e
+            - ENABLE_RULES_ENGINE={{mcp-zebrunner.enable_rules_engine}}
+        
+        # Configuration UI schema
+        config:
+            - name: mcp-zebrunner
+              description: Configure connection to Zebrunner
+              type: object
+              properties:
+                zebrunner_url:
+                    type: string
+                    description: Base URL of your Zebrunner instance (e.g., https://company.zebrunner.com)
+                zebrunner_login:
+                    type: string
+                    description: Your Zebrunner username or email
+                debug:
+                    type: string
+                    description: Enable debug logging (true/false)
+                enable_rules_engine:
+                    type: string
+                    description: Enable rules-based test generation (true/false)
+        
+        # Secret (password field in UI)
+        secrets:
+            - name: mcp-zebrunner.api_token
+              env: ZEBRUNNER_TOKEN
+              description: Personal access token from Zebrunner (Settings → API Tokens)
+              example: your-zebrunner-api-token
+        
+        # Tools list
+        tools:
+            - name: analyze_test_failure
+            - name: detailed_analyze_launch_failures
+            - name: get_launch_details
+            - name: get_launch_summary
+            - name: get_test_case_by_key
+            - name: list_test_suites
+            - name: get_suite_hierarchy
+            - name: get_available_projects
+        
+        # Metadata
+        metadata:
+            category: testing
+            license: AGPL-3.0
+            owner: maksimsarychau
+            tags:
+                - testing
+                - qa
+                - zebrunner
+        
+        # Links
+        readme: https://github.com/maksimsarychau/mcp-zebrunner#readme
+        source: https://github.com/maksimsarychau/mcp-zebrunner
+        upstream: https://github.com/maksimsarychau/mcp-zebrunner
+        prompts: 0
+        resources: {}
