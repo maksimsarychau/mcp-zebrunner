@@ -1,0 +1,92 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# Zebrunner MCP Server - Docker Compose
+# ══════════════════════════════════════════════════════════════════════════════
+# Usage:
+#   Build:   docker compose build
+#   Run:     docker compose up -d
+#   Logs:    docker compose logs -f zebrunner-mcp
+#   Stop:    docker compose down
+#
+# For local development, copy .env.example to .env and fill in your credentials
+# ══════════════════════════════════════════════════════════════════════════════
+
+services:
+  zebrunner-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NODE_VERSION: "20"
+    image: msarychau/mcp-zebrunner:${VERSION:-latest}
+    container_name: zebrunner-mcp
+    restart: unless-stopped
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # Environment Configuration
+    # ──────────────────────────────────────────────────────────────────────────
+    environment:
+      # Required credentials (must be set in .env or passed via CLI)
+      ZEBRUNNER_URL: ${ZEBRUNNER_URL:?ZEBRUNNER_URL is required}
+      ZEBRUNNER_LOGIN: ${ZEBRUNNER_LOGIN:?ZEBRUNNER_LOGIN is required}
+      ZEBRUNNER_TOKEN: ${ZEBRUNNER_TOKEN:?ZEBRUNNER_TOKEN is required}
+
+      # Optional configuration with defaults
+      DEBUG: ${DEBUG:-false}
+      EXPERIMENTAL_FEATURES: ${EXPERIMENTAL_FEATURES:-false}
+      MAX_PAGE_SIZE: ${MAX_PAGE_SIZE:-100}
+      DEFAULT_PAGE_SIZE: ${DEFAULT_PAGE_SIZE:-10}
+      ENABLE_RULES_ENGINE: ${ENABLE_RULES_ENGINE:-false}
+
+      # Node.js settings
+      NODE_ENV: production
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # stdio transport requires interactive mode
+    # ──────────────────────────────────────────────────────────────────────────
+    stdin_open: true
+    tty: true
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # Optional: Mount custom rules file
+    # ──────────────────────────────────────────────────────────────────────────
+    # volumes:
+    #   - ./mcp-zebrunner-rules.md:/app/mcp-zebrunner-rules.md:ro
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # Resource limits (optional, uncomment if needed)
+    # ──────────────────────────────────────────────────────────────────────────
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '1.0'
+    #       memory: 512M
+    #     reservations:
+    #       cpus: '0.25'
+    #       memory: 128M
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # Health check
+    # ──────────────────────────────────────────────────────────────────────────
+    healthcheck:
+      test: ["CMD", "node", "-e", "process.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # Security options
+    # ──────────────────────────────────────────────────────────────────────────
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:size=100M,mode=1777
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # Labels for Docker Desktop and MCP Toolkit discovery
+    # ──────────────────────────────────────────────────────────────────────────
+    labels:
+      - "ai.mcp.server=true"
+      - "ai.mcp.transport=stdio"
+      - "com.docker.desktop.extension.api.version=0.1"

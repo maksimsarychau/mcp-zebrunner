@@ -1,0 +1,95 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# Zebrunner MCP Server - Docker MCP Registry Entry
+# ══════════════════════════════════════════════════════════════════════════════
+# This file follows Docker's official MCP Registry format.
+# To submit: Fork https://github.com/docker/mcp-registry and add this to servers/
+#
+# Documentation: https://github.com/docker/mcp-registry/blob/main/CONTRIBUTING.md
+# ══════════════════════════════════════════════════════════════════════════════
+
+name: mcp-zebrunner
+image: msarychau/mcp-zebrunner
+type: server
+
+meta:
+  category: testing
+  tags:
+    - testing
+    - qa
+    - test-management
+    - automation
+    - reporting
+    - tcm
+
+about:
+  title: Zebrunner MCP
+  description: |
+    Comprehensive test management integration for AI assistants. 
+    Manage test cases, suites, launches, analyze test results, 
+    video recordings, and screenshots with AI-powered insights.
+  icon: https://avatars.githubusercontent.com/u/52832169?s=200&v=4
+
+source:
+  project: https://github.com/maksimsarychau/mcp-zebrunner
+
+config:
+  description: Configure your Zebrunner instance connection
+  
+  # Secrets (sensitive values - shown as password fields)
+  secrets:
+    - name: mcp-zebrunner.api_token
+      env: ZEBRUNNER_TOKEN
+      example: "<your-zebrunner-api-token>"
+  
+  # Environment variables (shown as text fields)
+  env:
+    - name: ZEBRUNNER_URL
+      example: "https://company.zebrunner.com"
+      value: "{{mcp-zebrunner.zebrunner_url}}"
+    - name: ZEBRUNNER_LOGIN
+      example: "user@example.com"
+      value: "{{mcp-zebrunner.zebrunner_login}}"
+    - name: DEBUG
+      example: "false"
+      value: "{{mcp-zebrunner.debug}}"
+    - name: ENABLE_RULES_ENGINE
+      example: "false"
+      value: "{{mcp-zebrunner.enable_rules_engine}}"
+    - name: MAX_PAGE_SIZE
+      example: "100"
+      value: "{{mcp-zebrunner.max_page_size}}"
+    - name: DEFAULT_PAGE_SIZE
+      example: "10"
+      value: "{{mcp-zebrunner.default_page_size}}"
+  
+  # Parameters schema (defines the UI form)
+  parameters:
+    type: object
+    properties:
+      zebrunner_url:
+        type: string
+        description: "Base URL of your Zebrunner instance"
+      zebrunner_login:
+        type: string
+        description: "Your Zebrunner username or email"
+      debug:
+        type: string
+        description: "Enable debug logging (true/false)"
+        default: "false"
+      enable_rules_engine:
+        type: string
+        description: "Enable rules-based test generation (true/false)"
+        default: "false"
+      max_page_size:
+        type: string
+        description: "Maximum items per API page"
+        default: "100"
+      default_page_size:
+        type: string
+        description: "Default items per request"
+        default: "10"
+    required:
+      - zebrunner_url
+      - zebrunner_login
+
+

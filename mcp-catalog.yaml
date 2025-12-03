@@ -1,0 +1,163 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# Zebrunner MCP Server - Docker MCP Toolkit Catalog
+# ══════════════════════════════════════════════════════════════════════════════
+# This file defines the MCP server for Docker's official MCP Toolkit.
+# Place this file in your Docker Desktop MCP catalog directory or reference it
+# when adding custom servers to the MCP Toolkit.
+#
+# Documentation: https://docs.docker.com/desktop/features/mcp-toolkit/
+# ══════════════════════════════════════════════════════════════════════════════
+
+name: zebrunner-mcp
+version: "5.14.0"
+description: |
+  Zebrunner MCP Server - Comprehensive test management integration for AI assistants.
+  
+  Features:
+  • Test Case Management (CRUD operations, search, bulk actions)
+  • Test Suite Organization (hierarchy, coverage analysis)
+  • Test Execution & Reporting (launches, results, dashboards)
+  • Milestone & Release Tracking
+  • Video & Screenshot Analysis (AI-powered)
+  • Automation State Management
+  • Dynamic Test Generation (with Rules Engine)
+
+author: Maksim Sarychau
+license: AGPL-3.0
+repository: https://github.com/maksimsarychau/mcp-zebrunner
+documentation: https://github.com/maksimsarychau/mcp-zebrunner#readme
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Container Configuration
+# ──────────────────────────────────────────────────────────────────────────────
+image: msarychau/mcp-zebrunner:latest
+
+# Transport protocol (stdio is default for MCP)
+transport: stdio
+
+# Container runtime options
+runtime:
+  # Interactive mode required for stdio transport
+  interactive: true
+  # Run as non-root user (security)
+  user: "1001:1001"
+  # Read-only filesystem (security)
+  read_only: true
+  # Temp filesystem for runtime data
+  tmpfs:
+    - /tmp:size=100M
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Environment Variables Configuration
+# ──────────────────────────────────────────────────────────────────────────────
+# These will appear in Docker Desktop MCP Toolkit configuration UI
+config:
+  # Required credentials
+  ZEBRUNNER_URL:
+    type: string
+    required: true
+    title: "Zebrunner URL"
+    description: "Base URL of your Zebrunner instance (e.g., https://company.zebrunner.com)"
+    placeholder: "https://your-instance.zebrunner.com"
+
+  ZEBRUNNER_LOGIN:
+    type: string
+    required: true
+    title: "Username"
+    description: "Your Zebrunner username or email"
+    placeholder: "user@example.com"
+
+  ZEBRUNNER_TOKEN:
+    type: secret
+    required: true
+    title: "API Token"
+    description: "Personal access token from Zebrunner (Settings → API Tokens)"
+    placeholder: "your-api-token"
+
+  # Optional settings
+  DEBUG:
+    type: boolean
+    required: false
+    default: false
+    title: "Debug Mode"
+    description: "Enable verbose debug logging"
+
+  EXPERIMENTAL_FEATURES:
+    type: boolean
+    required: false
+    default: false
+    title: "Experimental Features"
+    description: "Enable experimental API endpoints and features"
+
+  MAX_PAGE_SIZE:
+    type: number
+    required: false
+    default: 100
+    title: "Max Page Size"
+    description: "Maximum number of items per API page (1-1000)"
+    min: 1
+    max: 1000
+
+  DEFAULT_PAGE_SIZE:
+    type: number
+    required: false
+    default: 10
+    title: "Default Page Size"
+    description: "Default number of items returned per request"
+    min: 1
+    max: 100
+
+  ENABLE_RULES_ENGINE:
+    type: boolean
+    required: false
+    default: false
+    title: "Rules Engine"
+    description: "Enable rules-based test generation and validation"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# MCP Server Capabilities
+# ──────────────────────────────────────────────────────────────────────────────
+capabilities:
+  tools: true
+  resources: false
+  prompts: false
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Tool Categories (for UI grouping)
+# ──────────────────────────────────────────────────────────────────────────────
+categories:
+  - name: "Test Cases"
+    description: "Create, read, update, delete, and search test cases"
+  - name: "Test Suites"
+    description: "Manage test suite hierarchy and organization"
+  - name: "Launches"
+    description: "Create and manage test launches and executions"
+  - name: "Reporting"
+    description: "Access dashboards, widgets, and test results"
+  - name: "Analysis"
+    description: "Video analysis, screenshot analysis, coverage reports"
+  - name: "Automation"
+    description: "Automation state management and test generation"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Health Check
+# ──────────────────────────────────────────────────────────────────────────────
+healthcheck:
+  test: ["CMD", "node", "-e", "process.exit(0)"]
+  interval: 30s
+  timeout: 10s
+  retries: 3
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Tags for Discovery
+# ──────────────────────────────────────────────────────────────────────────────
+tags:
+  - testing
+  - qa
+  - test-management
+  - zebrunner
+  - automation
+  - reporting
+  - tcm
+
+

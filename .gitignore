@@ -8,3 +8,4 @@ mcp.config.json
 
 .mcpregistry_registry_token
 .mcpregistry_github_token
+.cursor/mcp.json
