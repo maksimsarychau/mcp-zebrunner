@@ -57,14 +57,19 @@ LABEL ai.mcp.transport="stdio"
 # - ffmpeg: required for video analysis
 # - tesseract-ocr: required for OCR in screenshots
 # - ca-certificates: for HTTPS requests
+# - wget: for downloading tessdata
 RUN apk add --no-cache \
     vips \
     ffmpeg \
     tesseract-ocr \
-    tesseract-ocr-data-eng \
     ca-certificates \
-    tini \
+    wget \
     && rm -rf /var/cache/apk/*
+
+# Download tesseract training data from official repository
+RUN mkdir -p /usr/share/tessdata && \
+    wget -q -O /usr/share/tessdata/eng.traineddata \
+    https://github.com/tesseract-ocr/tessdata_best/raw/main/eng.traineddata
 
 # Create non-root user for security
 RUN addgroup -g 1001 -S mcpuser && \
@@ -77,11 +82,8 @@ COPY --from=builder --chown=mcpuser:mcpuser /build/dist ./dist
 COPY --from=builder --chown=mcpuser:mcpuser /build/node_modules ./node_modules
 COPY --from=builder --chown=mcpuser:mcpuser /build/package.json ./
 
-# Copy default rules file if needed by rules engine
-COPY --chown=mcpuser:mcpuser mcp-zebrunner-rules.md.example ./mcp-zebrunner-rules.md
-
-# Copy tesseract training data (for OCR)
-COPY --chown=mcpuser:mcpuser eng.traineddata /usr/share/tessdata/
+# Copy default rules file if it exists (use wildcard to avoid build failure)
+COPY --chown=mcpuser:mcpuser mcp-zebrunner-rules.md* ./
 
 # Create directory for optional config mounts
 RUN mkdir -p /config && chown mcpuser:mcpuser /config
@@ -102,8 +104,6 @@ ENV ENABLE_RULES_ENGINE=false
 # ENV ZEBRUNNER_LOGIN=
 # ENV ZEBRUNNER_TOKEN=
 
-# Use tini as init system for proper signal handling
-ENTRYPOINT ["/sbin/tini", "--"]
-
 # Start MCP server (stdio transport)
+# Note: Use 'docker run --init' for proper signal handling instead of tini
 CMD ["node", "dist/server.js"]

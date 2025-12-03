@@ -20,15 +20,19 @@ services:
     image: msarychau/mcp-zebrunner:${VERSION:-latest}
     container_name: zebrunner-mcp
     restart: unless-stopped
+    
+    # Use Docker's built-in init for proper signal handling
+    init: true
 
     # ──────────────────────────────────────────────────────────────────────────
     # Environment Configuration
     # ──────────────────────────────────────────────────────────────────────────
     environment:
       # Required credentials (must be set in .env or passed via CLI)
-      ZEBRUNNER_URL: ${ZEBRUNNER_URL:?ZEBRUNNER_URL is required}
-      ZEBRUNNER_LOGIN: ${ZEBRUNNER_LOGIN:?ZEBRUNNER_LOGIN is required}
-      ZEBRUNNER_TOKEN: ${ZEBRUNNER_TOKEN:?ZEBRUNNER_TOKEN is required}
+      # Using generic error messages to avoid information disclosure
+      ZEBRUNNER_URL: ${ZEBRUNNER_URL:?Required}
+      ZEBRUNNER_LOGIN: ${ZEBRUNNER_LOGIN:?Required}
+      ZEBRUNNER_TOKEN: ${ZEBRUNNER_TOKEN:?Required}
 
       # Optional configuration with defaults
       DEBUG: ${DEBUG:-false}
@@ -65,14 +69,16 @@ services:
     #       memory: 128M
 
     # ──────────────────────────────────────────────────────────────────────────
-    # Health check
+    # Health check - validates MCP server can process basic Node.js operations
+    # Note: stdio-based MCP servers don't expose HTTP endpoints for health checks
+    # This checks that Node.js runtime and required modules are functional
     # ──────────────────────────────────────────────────────────────────────────
     healthcheck:
-      test: ["CMD", "node", "-e", "process.exit(0)"]
+      test: ["CMD", "node", "-e", "require('./dist/server.js'); process.exit(0)"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: 15s
 
     # ──────────────────────────────────────────────────────────────────────────
     # Security options

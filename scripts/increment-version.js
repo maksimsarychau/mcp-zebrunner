@@ -309,6 +309,12 @@ function updateChangelog(version, description) {
   }
 }
 
+// Escape special regex characters in a string
+// This properly escapes all regex metacharacters including backslash
+function escapeRegExp(string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 // Update version in YAML file using regex replacement
 function updateYamlVersion(filePath, oldVer, newVer, forceSync = false) {
   if (!existsSync(filePath)) {
@@ -336,15 +342,18 @@ function updateYamlVersion(filePath, oldVer, newVer, forceSync = false) {
       }
     } else {
       // Normal mode: only replace old version with new version
+      // Use escapeRegExp to properly escape all regex metacharacters
+      const escapedOldVer = escapeRegExp(oldVer);
+      
       // Pattern 1: version: "X.Y.Z" (quoted)
-      const quotedPattern = new RegExp(`(version:\\s*)["']${oldVer.replace(/\./g, '\\.')}["']`, 'g');
+      const quotedPattern = new RegExp(`(version:\\s*)["']${escapedOldVer}["']`, 'g');
       if (quotedPattern.test(content)) {
         content = content.replace(quotedPattern, `$1"${newVer}"`);
         updated = true;
       }
       
       // Pattern 2: version: X.Y.Z (unquoted)
-      const unquotedPattern = new RegExp(`(version:\\s*)${oldVer.replace(/\./g, '\\.')}(?=\\s|$|\\n)`, 'g');
+      const unquotedPattern = new RegExp(`(version:\\s*)${escapedOldVer}(?=\\s|$|\\n)`, 'g');
       if (unquotedPattern.test(content)) {
         content = content.replace(unquotedPattern, `$1"${newVer}"`);
         updated = true;
