@@ -14,7 +14,7 @@
   "license": "AGPL-3.0",
   "categories": ["testing", "devtools"],
   "languages": ["TypeScript", "JavaScript"],
-  "version": "5.14.0",
+  "version": "5.15.0",
   "environment": {
     "runtime": "node"
   },
@@ -22,7 +22,7 @@
     {
       "registryType": "npm",
       "identifier": "mcp-zebrunner",
-      "version": "5.14.0",
+      "version": "5.15.0",
       "transport": {
         "type": "stdio"
       },

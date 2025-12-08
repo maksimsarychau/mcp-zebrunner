@@ -54,7 +54,7 @@ describe('Automation State Tools', () => {
             key: 'TEST-1',
             title: 'Test Case 1',
             automationState: { id: 10, name: 'Not Automated' },
-            createdAt: '2024-01-15T10:00:00Z',
+            createdAt: '2025-01-15T10:00:00Z',
             priority: { id: 1, name: 'High' }
           },
           {
@@ -62,7 +62,7 @@ describe('Automation State Tools', () => {
             key: 'TEST-2', 
             title: 'Test Case 2',
             automationState: { id: 11, name: 'To Be Automated' },
-            createdAt: '2024-06-15T10:00:00Z',
+            createdAt: '2025-06-15T10:00:00Z',
             priority: { id: 2, name: 'Medium' }
           },
           {
@@ -70,7 +70,7 @@ describe('Automation State Tools', () => {
             key: 'TEST-3',
             title: 'Test Case 3', 
             automationState: { id: 12, name: 'Automated' },
-            createdAt: '2024-09-01T10:00:00Z',
+            createdAt: '2025-09-01T10:00:00Z',
             priority: { id: 3, name: 'Low' }
           }
         ];
@@ -221,10 +221,10 @@ describe('Automation State Tools', () => {
     it('should generate correct RQL for combined filters', () => {
       const filter = mockEnhancedClient.buildRQLFilter({
         automationState: 'To Be Automated',
-        createdAfter: '2024-01-01'
+        createdAfter: '2025-01-01'
       });
       
-      assert.strictEqual(filter, "automationState.name = 'To Be Automated' AND createdAt >= '2024-01-01'");
+      assert.strictEqual(filter, "automationState.name = 'To Be Automated' AND createdAt >= '2025-01-01'");
     });
 
     it('should handle special characters in automation state names', () => {
@@ -372,7 +372,7 @@ describe('Automation State Tools', () => {
       const result = await mockEnhancedClient.getTestCases('MCP', {
         automationState: 'To Be Automated',
         suiteId: 123,
-        createdAfter: '2024-01-01'
+        createdAfter: '2025-01-01'
       });
       
       // Should apply all filters

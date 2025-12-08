@@ -903,8 +903,7 @@ async function main() {
   const server = new McpServer(
     {
       name: "mcp-zebrunner",
-      version: "3.1.0",
-      description: "Unified Zebrunner MCP Server with comprehensive features, improved error handling, and new Reporting API support"
+      version: "3.1.0"
     },
     {
       capabilities: {
@@ -1197,10 +1196,10 @@ async function main() {
         z.array(z.union([z.string(), z.number()]))
       ]).optional().describe("Filter by automation state(s). Can be: single name ('Not Automated'), single ID (10), array of names (['Not Automated', 'To Be Automated']), array of IDs ([10, 12]), or mixed array (['Not Automated', 12])"),
       // 🆕 Date filtering
-      created_after: z.string().optional().describe("Filter test cases created after this date (ISO format: '2024-01-01' or '2024-01-01T10:00:00Z')"),
-      created_before: z.string().optional().describe("Filter test cases created before this date (ISO format: '2024-12-31' or '2024-12-31T23:59:59Z')"),
-      modified_after: z.string().optional().describe("Filter test cases modified after this date (ISO format: '2024-01-01' or '2024-01-01T10:00:00Z')"),
-      modified_before: z.string().optional().describe("Filter test cases modified before this date (ISO format: '2024-12-31' or '2024-12-31T23:59:59Z')"),
+      created_after: z.string().optional().describe("Filter test cases created after this date (ISO format: '2025-01-01' or '2025-01-01T10:00:00Z')"),
+      created_before: z.string().optional().describe("Filter test cases created before this date (ISO format: '2025-12-31' or '2025-12-31T23:59:59Z')"),
+      modified_after: z.string().optional().describe("Filter test cases modified after this date (ISO format: '2025-01-01' or '2025-01-01T10:00:00Z')"),
+      modified_before: z.string().optional().describe("Filter test cases modified before this date (ISO format: '2025-12-31' or '2025-12-31T23:59:59Z')"),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
       page: z.number().int().nonnegative().default(0).describe("Page number (0-based)"),
       size: z.number().int().positive().max(100).default(10).describe("Page size (configurable via MAX_PAGE_SIZE env var)"),
@@ -1402,7 +1401,7 @@ async function main() {
         z.array(z.union([z.string(), z.number()]))
       ]).describe("Automation state(s) to filter by. Examples: 'Not Automated', ['Not Automated', 'To Be Automated'], [10, 12], or 'Automated'"),
       suite_id: z.number().int().positive().optional().describe("Optional: Filter by specific suite ID"),
-      created_after: z.string().optional().describe("Optional: Filter test cases created after this date (ISO format: '2024-01-01')"),
+      created_after: z.string().optional().describe("Optional: Filter test cases created after this date (ISO format: '2025-01-01')"),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
       page: z.number().int().nonnegative().default(0).describe("Page number (0-based)"),
       size: z.number().int().positive().max(100).default(20).describe("Page size"),
@@ -1790,10 +1789,10 @@ async function main() {
     {
       project_key: z.string().min(1).describe("Project key"),
       test_suite_id: z.number().int().positive().optional().describe("Filter by exact test suite ID"),
-      created_after: z.string().optional().describe("Filter test cases created after this date (ISO format: '2024-01-01T00:00:00Z')"),
-      created_before: z.string().optional().describe("Filter test cases created before this date (ISO format: '2024-12-31T23:59:59Z')"),
-      last_modified_after: z.string().optional().describe("Filter test cases last modified after this date (ISO format: '2024-01-01T00:00:00Z')"),
-      last_modified_before: z.string().optional().describe("Filter test cases last modified before this date (ISO format: '2024-12-31T23:59:59Z')"),
+      created_after: z.string().optional().describe("Filter test cases created after this date (ISO format: '2025-01-01T00:00:00Z')"),
+      created_before: z.string().optional().describe("Filter test cases created before this date (ISO format: '2025-12-31T23:59:59Z')"),
+      last_modified_after: z.string().optional().describe("Filter test cases last modified after this date (ISO format: '2025-01-01T00:00:00Z')"),
+      last_modified_before: z.string().optional().describe("Filter test cases last modified before this date (ISO format: '2025-12-31T23:59:59Z')"),
       priority_id: z.number().int().positive().optional().describe("Filter by priority ID (use get_automation_priorities to see available priorities)"),
       automation_state_id: z.number().int().positive().optional().describe("Filter by automation state ID (use get_automation_states to see available states)"),
       max_page_size: z.number().int().positive().max(100).default(20).describe("Maximum number of results per page"),
@@ -6146,6 +6145,411 @@ ${detailsInfo.map((detail, i) => {
           content: [{
             type: "text" as const,
             text: `❌ Error in semantic duplicate analysis: ${error?.message || error}`
+          }]
+        };
+      }
+    }
+  );
+
+  // ========== AGGREGATE TEST CASES BY FEATURE ==========
+
+  server.tool(
+    "aggregate_test_cases_by_feature",
+    "🔍 Find ALL test cases related to a specific feature across the project.\n" +
+    "Searches in title, description, preconditions, and test steps (case-insensitive, partial match).\n" +
+    "Groups results by Root Suite and Feature Suite, avoiding duplicates.\n" +
+    "Output formats: detailed (full hierarchy), short (summary), dto (JSON), test_run_rules (for automation tags)",
+    {
+      project_key: z.string().min(1).describe("Project key (e.g., 'MCPAND', 'MCP')"),
+      feature_keyword: z.string().min(1).describe("Feature keyword to search for (case-insensitive, partial match)"),
+      output_format: z.enum(['detailed', 'short', 'dto', 'test_run_rules']).default('short').describe(
+        "Output format: detailed, short, dto, or test_run_rules"
+      ),
+      tags_format: z.enum(['by_root_suite', 'single_line']).default('by_root_suite').describe(
+        "TAGS output format: by_root_suite (separate TAGS line per root suite, default) or single_line (all combined on one line)"
+      ),
+      max_results: z.number().int().positive().max(2000).default(500).describe("Maximum test cases to process")
+    },
+    async (args) => {
+      const { project_key, feature_keyword, output_format, tags_format, max_results } = args;
+
+      try {
+        debugLog("Aggregating test cases by feature", { project_key, feature_keyword, output_format, max_results });
+
+        // Step 1: Get all test cases (short info) for the project
+        console.error(`📥 Fetching all test cases for project ${project_key}...`);
+        let allShortTestCases: any[] = [];
+        let pageToken: string | undefined = undefined;
+        let pageCount = 0;
+        const maxPages = 100;
+
+        do {
+          const result = await client.getTestCases(project_key, {
+            size: MAX_PAGE_SIZE,
+            pageToken: pageToken
+          });
+
+          allShortTestCases.push(...result.items);
+          pageToken = result._meta?.nextPageToken;
+          pageCount++;
+
+          if (allShortTestCases.length >= max_results) {
+            allShortTestCases = allShortTestCases.slice(0, max_results);
+            console.error(`⚠️  Limiting to ${max_results} test cases for performance`);
+            break;
+          }
+
+          debugLog(`Fetched page ${pageCount}`, { itemsCount: result.items.length, totalSoFar: allShortTestCases.length });
+        } while (pageToken && pageCount < maxPages);
+
+        console.error(`📊 Found ${allShortTestCases.length} total test cases`);
+
+        // Step 2: Get all suites for hierarchy information
+        console.error(`📥 Fetching test suites for hierarchy...`);
+        const allSuites = await client.getAllTestSuites(project_key);
+        const processedSuites = HierarchyProcessor.setRootParentsToSuites(allSuites);
+        
+        // Build suite lookup maps
+        const suiteMap = new Map<number, any>();
+        processedSuites.forEach(suite => suiteMap.set(suite.id, suite));
+
+        // Step 3: Filter test cases by title first (fast preliminary filter)
+        const keywordLower = feature_keyword.toLowerCase();
+        const titleMatches = allShortTestCases.filter(tc => 
+          tc.title?.toLowerCase().includes(keywordLower)
+        );
+
+        console.error(`🔍 Found ${titleMatches.length} test cases matching by title`);
+
+        // Step 4: For test cases not matching by title, fetch full details and search in body
+        const nonTitleMatches = allShortTestCases.filter(tc => 
+          !tc.title?.toLowerCase().includes(keywordLower)
+        );
+
+        console.error(`📥 Checking ${nonTitleMatches.length} test cases for body matches...`);
+
+        // Fetch full details in batches for body search
+        const bodyMatches: any[] = [];
+        const batchSize = 10;
+        
+        for (let i = 0; i < nonTitleMatches.length; i += batchSize) {
+          const batch = nonTitleMatches.slice(i, i + batchSize);
+          
+          const batchResults = await Promise.allSettled(
+            batch.map(async (tc) => {
+              try {
+                const fullTC = await client.getTestCaseByKey(project_key, tc.key);
+                
+                // Search in description, preconditions, and steps
+                const description = fullTC.description?.toLowerCase() || '';
+                const preconditions = fullTC.preConditions?.toLowerCase() || '';
+                const postConditions = fullTC.postConditions?.toLowerCase() || '';
+                
+                // Search in steps
+                let stepsText = '';
+                if (fullTC.steps && Array.isArray(fullTC.steps)) {
+                  stepsText = fullTC.steps.map((step: any) => {
+                    const action = step.action || step.actionText || step.step || step.instruction || '';
+                    const expected = step.expected || step.expectedResult || step.expectedText || '';
+                    return `${action} ${expected}`;
+                  }).join(' ').toLowerCase();
+                }
+
+                const bodyContent = `${description} ${preconditions} ${postConditions} ${stepsText}`;
+                
+                if (bodyContent.includes(keywordLower)) {
+                  return { ...tc, _fullTC: fullTC, _matchedIn: 'body' };
+                }
+                return null;
+              } catch (error) {
+                // Skip test cases we can't fetch
+                return null;
+              }
+            })
+          );
+
+          const successfulMatches = batchResults
+            .filter((r): r is PromiseFulfilledResult<any> => r.status === 'fulfilled' && r.value !== null)
+            .map(r => r.value);
+          
+          bodyMatches.push(...successfulMatches);
+
+          // Progress indicator
+          if ((i + batchSize) % 50 === 0 || i + batchSize >= nonTitleMatches.length) {
+            console.error(`   Checked ${Math.min(i + batchSize, nonTitleMatches.length)}/${nonTitleMatches.length} test cases...`);
+          }
+
+          // Small delay to avoid rate limiting
+          if (i + batchSize < nonTitleMatches.length) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+        }
+
+        console.error(`🔍 Found ${bodyMatches.length} additional test cases matching in body`);
+
+        // Step 5: Combine all matches and deduplicate
+        const allMatches = [...titleMatches.map(tc => ({ ...tc, _matchedIn: 'title' })), ...bodyMatches];
+        
+        // Deduplicate by test case ID
+        const seenIds = new Set<number>();
+        const uniqueMatches = allMatches.filter(tc => {
+          if (seenIds.has(tc.id)) {
+            return false;
+          }
+          seenIds.add(tc.id);
+          return true;
+        });
+
+        console.error(`✅ Total unique matches: ${uniqueMatches.length}`);
+
+        if (uniqueMatches.length === 0) {
+          return {
+            content: [{
+              type: "text" as const,
+              text: `No test cases found matching feature keyword "${feature_keyword}" in project ${project_key}`
+            }]
+          };
+        }
+
+        // Step 6: Enrich matches with hierarchy information
+        const enrichedMatches = uniqueMatches.map(tc => {
+          const featureSuiteId = tc.featureSuiteId || tc.testSuite?.id;
+          const featureSuite = featureSuiteId ? suiteMap.get(featureSuiteId) : null;
+          
+          // Get root suite
+          const rootSuiteId = featureSuite?.rootSuiteId || HierarchyProcessor.getRootId(processedSuites, featureSuiteId || 0);
+          const rootSuite = suiteMap.get(rootSuiteId);
+          
+          // Get full path
+          const suitePath = featureSuiteId ? HierarchyProcessor.generateSuitePath(featureSuiteId, processedSuites) : '';
+
+          return {
+            id: tc.id,
+            key: tc.key,
+            title: tc.title,
+            featureSuiteId: featureSuiteId,
+            featureSuiteName: featureSuite?.name || featureSuite?.title || 'Unknown Suite',
+            rootSuiteId: rootSuiteId,
+            rootSuiteName: rootSuite?.name || rootSuite?.title || 'Unknown Root Suite',
+            suitePath: suitePath,
+            matchedIn: tc._matchedIn
+          };
+        });
+
+        // Step 7: Group by root suite and feature suite
+        const rootSuiteGroups = new Map<number, {
+          rootSuiteId: number;
+          rootSuiteName: string;
+          featureSuites: Map<number, {
+            featureSuiteId: number;
+            featureSuiteName: string;
+            testCases: any[];
+          }>;
+        }>();
+
+        for (const tc of enrichedMatches) {
+          if (!rootSuiteGroups.has(tc.rootSuiteId)) {
+            rootSuiteGroups.set(tc.rootSuiteId, {
+              rootSuiteId: tc.rootSuiteId,
+              rootSuiteName: tc.rootSuiteName,
+              featureSuites: new Map()
+            });
+          }
+          
+          const rootGroup = rootSuiteGroups.get(tc.rootSuiteId)!;
+          
+          if (!rootGroup.featureSuites.has(tc.featureSuiteId)) {
+            rootGroup.featureSuites.set(tc.featureSuiteId, {
+              featureSuiteId: tc.featureSuiteId,
+              featureSuiteName: tc.featureSuiteName,
+              testCases: []
+            });
+          }
+          
+          rootGroup.featureSuites.get(tc.featureSuiteId)!.testCases.push(tc);
+        }
+
+        // Collect all unique feature suite IDs
+        const allFeatureSuiteIds = new Set<number>();
+        enrichedMatches.forEach(tc => {
+          if (tc.featureSuiteId) {
+            allFeatureSuiteIds.add(tc.featureSuiteId);
+          }
+        });
+
+        // Step 8: Format output based on requested format
+        let output = '';
+
+        if (output_format === 'test_run_rules') {
+          // Format: RootSuiteId (Name) and TAGS line with all featureSuiteIds
+          output = `# Test Run Rules for Feature: "${feature_keyword}"\n\n`;
+          output += `## Summary\n`;
+          output += `- Total Test Cases: ${uniqueMatches.length}\n`;
+          output += `- Root Suites: ${rootSuiteGroups.size}\n`;
+          output += `- Feature Suites: ${allFeatureSuiteIds.size}\n\n`;
+
+          // List all root suites
+          output += `## Root Suites\n`;
+          for (const [rootId, rootGroup] of rootSuiteGroups) {
+            output += `- RootSuiteId: ${rootId} (${rootGroup.rootSuiteName})\n`;
+          }
+          output += `\n`;
+
+          // Generate TAGS - either by root suite or as single combined line
+          output += `## Automation Tags\n\n`;
+          
+          if (tags_format === 'by_root_suite') {
+            // Group featureSuiteIds by root suite
+            for (const [rootId, rootGroup] of rootSuiteGroups) {
+              const rootFeatureSuiteIds = Array.from(rootGroup.featureSuites.keys()).sort((a, b) => a - b);
+              const tagsLine = rootFeatureSuiteIds.map(id => `featureSuiteId=${id}`).join('||');
+              
+              output += `**${rootGroup.rootSuiteName}** (RootSuiteId: ${rootId})\n`;
+              output += `\`\`\`\n`;
+              output += `TAGS=>${tagsLine}\n`;
+              output += `\`\`\`\n\n`;
+            }
+          } else {
+            // Single line with all featureSuiteIds combined
+            const featureSuiteIdArray = Array.from(allFeatureSuiteIds).sort((a, b) => a - b);
+            const tagsLine = featureSuiteIdArray.map(id => `featureSuiteId=${id}`).join('||');
+            output += `\`\`\`\n`;
+            output += `TAGS=>${tagsLine}\n`;
+            output += `\`\`\`\n`;
+          }
+
+        } else if (output_format === 'dto') {
+          // JSON format with all data
+          const dto = {
+            featureKeyword: feature_keyword,
+            projectKey: project_key,
+            summary: {
+              totalTestCases: uniqueMatches.length,
+              totalRootSuites: rootSuiteGroups.size,
+              totalFeatureSuites: allFeatureSuiteIds.size,
+              matchedByTitle: enrichedMatches.filter(tc => tc.matchedIn === 'title').length,
+              matchedByBody: enrichedMatches.filter(tc => tc.matchedIn === 'body').length
+            },
+            featureSuiteIds: Array.from(allFeatureSuiteIds).sort((a, b) => a - b),
+            rootSuites: Array.from(rootSuiteGroups.values()).map(rg => ({
+              rootSuiteId: rg.rootSuiteId,
+              rootSuiteName: rg.rootSuiteName,
+              featureSuites: Array.from(rg.featureSuites.values()).map(fs => ({
+                featureSuiteId: fs.featureSuiteId,
+                featureSuiteName: fs.featureSuiteName,
+                testCaseCount: fs.testCases.length,
+                testCases: fs.testCases.map(tc => ({
+                  id: tc.id,
+                  key: tc.key,
+                  title: tc.title,
+                  matchedIn: tc.matchedIn
+                }))
+              }))
+            })),
+            testRunRuleTags: tags_format === 'by_root_suite'
+              ? Array.from(rootSuiteGroups.entries()).map(([rootId, rootGroup]) => ({
+                  rootSuiteId: rootId,
+                  rootSuiteName: rootGroup.rootSuiteName,
+                  tags: `TAGS=>${Array.from(rootGroup.featureSuites.keys()).sort((a, b) => a - b).map(id => `featureSuiteId=${id}`).join('||')}`
+                }))
+              : `TAGS=>${Array.from(allFeatureSuiteIds).sort((a, b) => a - b).map(id => `featureSuiteId=${id}`).join('||')}`
+          };
+          
+          output = JSON.stringify(dto, null, 2);
+
+        } else if (output_format === 'short') {
+          // Short format: Root Suite -> Direct Parent -> TestCaseKey + Name
+          output = `# Test Cases for Feature: "${feature_keyword}"\n\n`;
+          output += `**Summary:** ${uniqueMatches.length} test cases | ${rootSuiteGroups.size} root suites | ${allFeatureSuiteIds.size} feature suites\n\n`;
+
+          for (const [rootId, rootGroup] of rootSuiteGroups) {
+            output += `## 📁 ${rootGroup.rootSuiteName} (ID: ${rootId})\n\n`;
+            
+            for (const [featureId, featureGroup] of rootGroup.featureSuites) {
+              output += `### 📂 ${featureGroup.featureSuiteName} (featureSuiteId: ${featureId})\n`;
+              
+              for (const tc of featureGroup.testCases) {
+                const matchIcon = tc.matchedIn === 'title' ? '📌' : '📝';
+                output += `- ${matchIcon} **${tc.key}** - ${tc.title}\n`;
+              }
+              output += `\n`;
+            }
+          }
+
+        } else if (output_format === 'detailed') {
+          // Detailed format with full hierarchy
+          output = `# Detailed Test Case Analysis for Feature: "${feature_keyword}"\n\n`;
+          output += `## Summary\n`;
+          output += `- **Feature Keyword:** ${feature_keyword}\n`;
+          output += `- **Project:** ${project_key}\n`;
+          output += `- **Total Test Cases Found:** ${uniqueMatches.length}\n`;
+          output += `- **Matched by Title:** ${enrichedMatches.filter(tc => tc.matchedIn === 'title').length}\n`;
+          output += `- **Matched by Body:** ${enrichedMatches.filter(tc => tc.matchedIn === 'body').length}\n`;
+          output += `- **Root Suites:** ${rootSuiteGroups.size}\n`;
+          output += `- **Feature Suites:** ${allFeatureSuiteIds.size}\n\n`;
+
+          output += `## Feature Suite IDs\n`;
+          output += `\`${Array.from(allFeatureSuiteIds).sort((a, b) => a - b).join(', ')}\`\n\n`;
+
+          for (const [rootId, rootGroup] of rootSuiteGroups) {
+            output += `---\n`;
+            output += `## 🏠 Root Suite: ${rootGroup.rootSuiteName}\n`;
+            output += `- **Root Suite ID:** ${rootId}\n`;
+            output += `- **Feature Suites in this Root:** ${rootGroup.featureSuites.size}\n\n`;
+            
+            for (const [featureId, featureGroup] of rootGroup.featureSuites) {
+              output += `### 📁 Feature Suite: ${featureGroup.featureSuiteName}\n`;
+              output += `- **Feature Suite ID:** ${featureId}\n`;
+              output += `- **Test Cases:** ${featureGroup.testCases.length}\n\n`;
+              
+              output += `| Key | Title | Full Path | Match Type |\n`;
+              output += `|-----|-------|-----------|------------|\n`;
+              
+              for (const tc of featureGroup.testCases) {
+                const matchType = tc.matchedIn === 'title' ? '📌 Title' : '📝 Body';
+                output += `| ${tc.key} | ${tc.title} | ${tc.suitePath} | ${matchType} |\n`;
+              }
+              output += `\n`;
+            }
+          }
+
+          // Add test run rules at the end
+          output += `---\n`;
+          output += `## 🏷️ Test Run Rules (Copy-Ready)\n\n`;
+          
+          if (tags_format === 'by_root_suite') {
+            // Group by root suite
+            for (const [rootId, rootGroup] of rootSuiteGroups) {
+              const rootFeatureSuiteIds = Array.from(rootGroup.featureSuites.keys()).sort((a, b) => a - b);
+              const tagsLine = rootFeatureSuiteIds.map(id => `featureSuiteId=${id}`).join('||');
+              
+              output += `**${rootGroup.rootSuiteName}** (RootSuiteId: ${rootId})\n`;
+              output += `\`\`\`\n`;
+              output += `TAGS=>${tagsLine}\n`;
+              output += `\`\`\`\n\n`;
+            }
+          } else {
+            // Single line with all combined
+            const detailedFeatureSuiteIdArray = Array.from(allFeatureSuiteIds).sort((a, b) => a - b);
+            output += `\`\`\`\n`;
+            output += `TAGS=>${detailedFeatureSuiteIdArray.map(id => `featureSuiteId=${id}`).join('||')}\n`;
+            output += `\`\`\`\n`;
+          }
+        }
+
+        return {
+          content: [{
+            type: "text" as const,
+            text: output
+          }]
+        };
+
+      } catch (error: any) {
+        debugLog("Error in aggregate_test_cases_by_feature", { error: error.message, args });
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error aggregating test cases by feature: ${error?.message || error}`
           }]
         };
       }

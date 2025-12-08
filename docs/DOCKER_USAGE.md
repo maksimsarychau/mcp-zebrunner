@@ -25,7 +25,7 @@ cd mcp-zebrunner
 docker compose build
 
 # Or build with version tag
-VERSION=5.14.0 docker compose build
+VERSION=5.15.0 docker compose build
 ```
 
 ### Run Locally with Docker Compose
@@ -189,7 +189,7 @@ docker compose build
 docker compose build --no-cache
 
 # Build with version tag
-VERSION=5.14.0 docker compose build
+VERSION=5.15.0 docker compose build
 ```
 
 ### Running
@@ -233,10 +233,10 @@ docker run --rm \
 docker login -u msarychau
 
 # Tag with version
-docker tag msarychau/mcp-zebrunner:latest msarychau/mcp-zebrunner:5.14.0
+docker tag msarychau/mcp-zebrunner:latest msarychau/mcp-zebrunner:5.15.0
 
 # Push both tags
-docker push msarychau/mcp-zebrunner:5.14.0
+docker push msarychau/mcp-zebrunner:5.15.0
 docker push msarychau/mcp-zebrunner:latest
 ```
 

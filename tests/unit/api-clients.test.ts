@@ -201,8 +201,8 @@ describe('API Clients Unit Tests', () => {
     
     it('should validate date range parameters', () => {
       const dateRange = {
-        fromDate: '2024-01-01',
-        toDate: '2024-01-31'
+        fromDate: '2025-01-01',
+        toDate: '2025-01-31'
       };
       
       const fromDate = new Date(dateRange.fromDate);
@@ -236,7 +236,7 @@ describe('API Clients Unit Tests', () => {
           skipped: 5
         },
         executionTime: 3600000, // milliseconds
-        timestamp: '2024-01-15T10:30:00Z'
+        timestamp: '2025-01-15T10:30:00Z'
       };
       
       assert.ok(mockPlatformResult.platform, 'result should have platform');

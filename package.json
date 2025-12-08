@@ -1,6 +1,6 @@
 {
   "name": "mcp-zebrunner",
-  "version": "5.14.0",
+  "version": "5.15.0",
   "type": "module",
   "description": "Unified Zebrunner MCP server for TCM test cases, suites, coverage analysis, launchers, etc.",
   "mcpName": "io.github.maksimsarychau/mcp-zebrunner",

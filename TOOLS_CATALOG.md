@@ -13,9 +13,10 @@ Complete reference of all available tools with natural language usage examples.
 7. [Test Coverage & Validation](#test-coverage--validation)
 8. [Test Code Generation](#test-code-generation)
 9. [Duplicate Detection](#duplicate-detection)
-10. [Test Run Management](#test-run-management)
-11. [Platform & Results Analysis](#platform--results-analysis)
-12. [Project Discovery](#project-discovery)
+10. [Feature-Based Test Case Aggregation](#feature-based-test-case-aggregation)
+11. [Test Run Management](#test-run-management)
+12. [Platform & Results Analysis](#platform--results-analysis)
+13. [Project Discovery](#project-discovery)
 
 ---
 
@@ -168,9 +169,9 @@ Complete reference of all available tools with natural language usage examples.
 **Description:** Advanced filtering with automation states, dates, priority, and more.
 
 **Example Prompts:**
-- "Get test cases created after 2024-01-01 with automation state 'Manual'"
+- "Get test cases created after 2025-01-01 with automation state 'Manual'"
 - "Show me high priority test cases from last month"
-- "Find test cases updated after 2024-11-01 that are not automated"
+- "Find test cases updated after 2025-11-01 that are not automated"
 
 ### `get_test_cases_by_automation_state`
 
@@ -186,7 +187,7 @@ Complete reference of all available tools with natural language usage examples.
 **Description:** Advanced filtering by suite, dates, priority, automation state, and status.
 
 **Example Prompts:**
-- "Get test cases from suite 491 created after 2024-01-01 with high priority"
+- "Get test cases from suite 491 created after 2025-01-01 with high priority"
 - "Show me test cases from suite 17470 with status 'Approved'"
 - "Find test cases in suite 18697 that were updated last week"
 
@@ -370,6 +371,47 @@ Complete reference of all available tools with natural language usage examples.
 
 ---
 
+## Feature-Based Test Case Aggregation
+
+### `aggregate_test_cases_by_feature`
+
+**Description:** Find ALL test cases related to a specific feature keyword across the entire project. Searches in title, description, preconditions, post-conditions, and test steps (case-insensitive, partial match). Groups results by Root Suite and Feature Suite hierarchy.
+
+**Key Features:**
+- Comprehensive search across all test case fields
+- Smart grouping by suite hierarchy
+- Automatic deduplication
+- Ready-to-use automation tags generation
+- Multiple output formats
+
+**Parameters:**
+- `project_key` (required) - Project key (e.g., 'MCPAND', 'MCP')
+- `feature_keyword` (required) - Feature keyword to search for
+- `output_format` - Output format: `detailed`, `short` (default), `dto`, `test_run_rules`
+- `tags_format` - Tags output: `by_root_suite` (default) or `single_line`
+- `max_results` - Maximum test cases to process (default: 500, max: 2000)
+
+**Example Prompts:**
+- "Find all test cases related to 'login' feature in project MCP"
+- "Aggregate test cases for 'payment' in project MCPAND with detailed output"
+- "Get automation tags for all test cases mentioning 'diary' feature"
+- "Show me all 'food search' related test cases grouped by suite"
+- "Generate test run rules for 'onboarding' feature"
+
+**Output Formats:**
+- `short` - Summary view with test case keys and titles (recommended for quick review)
+- `detailed` - Full hierarchy with tables and complete information
+- `dto` - JSON format for programmatic use
+- `test_run_rules` - Ready-to-use TAGS for automation test runs
+
+**Use Cases:**
+1. **Feature Testing:** Find all test cases for a feature before release
+2. **Test Planning:** Generate automation tags for feature-specific test runs
+3. **Gap Analysis:** Identify features with comprehensive test coverage
+4. **Regression Testing:** Build targeted test suites based on feature keywords
+
+---
+
 ## Test Run Management
 
 ### `list_test_runs`
@@ -379,7 +421,7 @@ Complete reference of all available tools with natural language usage examples.
 **Example Prompts:**
 - "Get test runs from last 30 days with status 'FAILED'"
 - "Show me test runs from last week for iOS platform"
-- "Find test runs from November 2024 that failed"
+- "Find test runs from November 2025 that failed"
 
 ### `get_test_run_by_id`
 
@@ -573,7 +615,7 @@ For large datasets, you can specify filters and limits:
 
 ```
 "Get test cases from suite 17470, limit to 20, only manual tests"
-"Show me first 50 test cases created after 2024-01-01"
+"Show me first 50 test cases created after 2025-01-01"
 ```
 
 ---
@@ -643,7 +685,7 @@ For large datasets, you can specify filters and limits:
 
 ---
 
-**Last Updated:** v5.11.0 - November 2024
+**Last Updated:** v5.15.0 - December 2025
 
 For the latest features and updates, see [change-logs.md](change-logs.md).
 

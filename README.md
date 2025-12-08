@@ -487,10 +487,10 @@ Once connected, you can use these tools through natural language in your AI assi
 | Tool | Description | Example Usage | Best For |
 |------|-------------|---------------|----------|
 | `get_test_case_by_key` | Get detailed test case information | `"Get test case MCP-123 details"` | All roles |
-| `get_test_cases_advanced` | Advanced filtering with automation states, dates | `"Get test cases created after 2024-01-01 with automation state 'Manual'"` | QA, SDETs |
+| `get_test_cases_advanced` | Advanced filtering with automation states, dates | `"Get test cases created after 2025-01-01 with automation state 'Manual'"` | QA, SDETs |
 | `get_test_cases_by_automation_state` | Filter by specific automation states | `"Show me all 'Not Automated' test cases in project MCP"` | SDETs, Managers |
 | `get_test_case_by_title` | Search test cases by title (partial match) | `"Find test cases with title containing 'login functionality'"` | All roles |
-| `get_test_case_by_filter` | Advanced filtering by suite, dates, priority, automation state | `"Get test cases from suite 491 created after 2024-01-01 with high priority"` | QA, Managers |
+| `get_test_case_by_filter` | Advanced filtering by suite, dates, priority, automation state | `"Get test cases from suite 491 created after 2025-01-01 with high priority"` | QA, Managers |
 | `get_automation_states` | List available automation states | `"What automation states are available for project MCP?"` | All roles |
 | `get_automation_priorities` | List available priorities with IDs | `"Show me all priority levels for project MCP"` | All roles |
 
@@ -792,7 +792,7 @@ Once connected, you can use these tools through natural language in your AI assi
 "Generate coverage report for all test cases in project MYAPP"
 "Identify test cases in suite 18708 that have automation blockers"
 "Find test cases with title containing 'regression' for automation sprint planning"
-"Get test cases from suite 491 created after 2024-01-01 with high priority for next automation cycle"
+"Get test cases from suite 491 created after 2025-01-01 with high priority for next automation cycle"
 "Get automation priorities and states to create automation roadmap"
 ```
 
@@ -1205,7 +1205,7 @@ Get data in the format you need:
 ### Filtering and Search
 Find exactly what you need:
 ```
-"Get test cases created after 2024-01-01"
+"Get test cases created after 2025-01-01"
 "Find test cases with automation state 'Manual'"
 "Show me test cases that are not ready for automation"
 ```

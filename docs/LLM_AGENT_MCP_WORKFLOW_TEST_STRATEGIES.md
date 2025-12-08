@@ -64,7 +64,7 @@ Validate predictable, repeatable behaviors in MCP workflows to ensure consistenc
 #### 1. Tool Parameter Validation
 ```typescript
 // Example: Project Key Format Validation
-const validProjectKeys = ['MCP', 'ANDROID', 'IOS', 'WEB123', 'API2024'];
+const validProjectKeys = ['MCP', 'ANDROID', 'IOS', 'WEB123', 'API2025'];
 const invalidProjectKeys = ['mcp', 'android-test', '123', '', 'test-case'];
 
 // Validation Rule: /^[A-Z][A-Z0-9]*$/

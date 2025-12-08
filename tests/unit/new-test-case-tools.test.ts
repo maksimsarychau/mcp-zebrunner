@@ -318,10 +318,10 @@ describe('New Test Case Tools Unit Tests', () => {
       // At least one filter must be provided
       const validFilterParams = [
         { test_suite_id: 491 },
-        { created_after: '2024-01-01T00:00:00Z' },
-        { created_before: '2024-12-31T23:59:59Z' },
-        { last_modified_after: '2024-01-01T00:00:00Z' },
-        { last_modified_before: '2024-12-31T23:59:59Z' },
+        { created_after: '2025-01-01T00:00:00Z' },
+        { created_before: '2025-12-31T23:59:59Z' },
+        { last_modified_after: '2025-01-01T00:00:00Z' },
+        { last_modified_before: '2025-12-31T23:59:59Z' },
         { priority_id: 16 },
         { automation_state_id: 12 }
       ];
@@ -338,10 +338,10 @@ describe('New Test Case Tools Unit Tests', () => {
       const params = {
         project_key: 'MCP',
         test_suite_id: 491,
-        created_after: '2024-01-01T00:00:00Z',
-        created_before: '2024-12-31T23:59:59Z',
-        last_modified_after: '2024-01-01T00:00:00Z',
-        last_modified_before: '2024-12-31T23:59:59Z',
+        created_after: '2025-01-01T00:00:00Z',
+        created_before: '2025-12-31T23:59:59Z',
+        last_modified_after: '2025-01-01T00:00:00Z',
+        last_modified_before: '2025-12-31T23:59:59Z',
         priority_id: 16,
         automation_state_id: 12,
         max_page_size: 20,
@@ -384,10 +384,10 @@ describe('New Test Case Tools Unit Tests', () => {
     it('should build correct RQL filters for different parameters', () => {
       // Test individual filters
       const testSuiteFilter = 'testSuite.id = 491';
-      const createdAfterFilter = "createdAt >= '2024-01-01T00:00:00Z'";
-      const createdBeforeFilter = "createdAt <= '2024-12-31T23:59:59Z'";
-      const lastModifiedAfterFilter = "lastModifiedAt >= '2024-01-01T00:00:00Z'";
-      const lastModifiedBeforeFilter = "lastModifiedAt <= '2024-12-31T23:59:59Z'";
+      const createdAfterFilter = "createdAt >= '2025-01-01T00:00:00Z'";
+      const createdBeforeFilter = "createdAt <= '2025-12-31T23:59:59Z'";
+      const lastModifiedAfterFilter = "lastModifiedAt >= '2025-01-01T00:00:00Z'";
+      const lastModifiedBeforeFilter = "lastModifiedAt <= '2025-12-31T23:59:59Z'";
       const priorityFilter = 'priority.id = 16';
       const automationStateFilter = 'automationState.id = 12';
       
@@ -447,12 +447,12 @@ describe('New Test Case Tools Unit Tests', () => {
     it('should validate date range logic', () => {
       const validDateRanges = [
         {
-          created_after: '2024-01-01T00:00:00Z',
-          created_before: '2024-12-31T23:59:59Z'
+          created_after: '2025-01-01T00:00:00Z',
+          created_before: '2025-12-31T23:59:59Z'
         },
         {
-          last_modified_after: '2024-06-01T00:00:00Z',
-          last_modified_before: '2024-06-30T23:59:59Z'
+          last_modified_after: '2025-06-01T00:00:00Z',
+          last_modified_before: '2025-06-30T23:59:59Z'
         }
       ];
       

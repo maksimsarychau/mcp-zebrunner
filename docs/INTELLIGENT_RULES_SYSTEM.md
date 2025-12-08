@@ -302,7 +302,7 @@ Track changes to your rules over time:
 
 ```markdown
 # Rules Version: 2.1.0
-# Last Updated: 2024-01-15
+# Last Updated: 2025-01-15
 # Changes: Added mobile-specific validation rules
 
 ## Version History
