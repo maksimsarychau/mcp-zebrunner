@@ -284,3 +284,24 @@ export const AnalyzeTestExecutionVideoInputSchema = z.object({
 });
 
 export type AnalyzeTestExecutionVideoInput = z.infer<typeof AnalyzeTestExecutionVideoInputSchema>;
+
+// Aggregate Test Cases by Feature Input Schema
+export const AggregateTestCasesByFeatureInputSchema = z.object({
+  project_key: z.string().min(1).describe("Project key (e.g., 'MCPAND', 'MCP')"),
+  feature_keyword: z.string().min(1).describe("Feature keyword to search for (case-insensitive, partial match). Searches in title, description, preconditions, and test steps."),
+  output_format: z.enum(['detailed', 'short', 'dto', 'test_run_rules']).default('short').describe(
+    "Output format:\n" +
+    "- 'detailed': Full hierarchy with all intermediate levels\n" +
+    "- 'short': Root Suite -> Direct Parent -> TestCaseKey + Name\n" +
+    "- 'dto': JSON object with numbers, ids, keys, and names\n" +
+    "- 'test_run_rules': RootSuiteId with name + TAGS=>featureSuiteId=X||featureSuiteId=Y format"
+  ),
+  tags_format: z.enum(['by_root_suite', 'single_line']).default('by_root_suite').describe(
+    "TAGS output format:\n" +
+    "- 'by_root_suite': Separate TAGS line per root suite (default)\n" +
+    "- 'single_line': All featureSuiteIds combined on one line"
+  ),
+  max_results: z.number().int().positive().max(2000).default(500).describe("Maximum number of test cases to process (for performance)")
+});
+
+export type AggregateTestCasesByFeatureInput = z.infer<typeof AggregateTestCasesByFeatureInputSchema>;

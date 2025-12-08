@@ -136,6 +136,10 @@
     "description": "Find duplicate test cases using semantic/AI analysis"
   },
   {
+    "name": "aggregate_test_cases_by_feature",
+    "description": "Find ALL test cases related to a specific feature across the project. Searches title, description, preconditions, and test steps (case-insensitive). Groups by Root Suite and Feature Suite. Outputs: detailed (full hierarchy), short (summary), dto (JSON), test_run_rules (automation tags)"
+  },
+  {
     "name": "list_test_runs",
     "description": "List test runs with pagination"
   },

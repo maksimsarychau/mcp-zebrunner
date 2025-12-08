@@ -1,5 +1,92 @@
 # Change Logs
 
+## v5.15.0 (2025-12-08) - NEW TOOL: Feature-Based Test Case Aggregation
+
+### 🚀 New Tool: `aggregate_test_cases_by_feature`
+
+**Find ALL test cases related to a specific feature across the entire project.**
+
+This powerful new tool searches through your test case repository to find and group all test cases that mention a specific feature keyword.
+
+#### Key Features
+
+- **Comprehensive Search:** Searches in title, description, preconditions, post-conditions, and test steps (case-insensitive, partial match)
+- **Smart Grouping:** Groups results by Root Suite and Feature Suite hierarchy
+- **Deduplication:** Automatically removes duplicate matches
+- **Multiple Output Formats:**
+  - `detailed` - Full hierarchy with tables and complete information
+  - `short` - Summary view with test case keys and titles (default)
+  - `dto` - JSON format for programmatic use
+  - `test_run_rules` - Ready-to-use automation tags for test runs
+
+#### Parameters
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `project_key` | string | ✅ | - | Project key (e.g., 'MCPAND', 'MCP') |
+| `feature_keyword` | string | ✅ | - | Feature keyword to search for |
+| `output_format` | enum | ❌ | `short` | Output format: detailed, short, dto, test_run_rules |
+| `tags_format` | enum | ❌ | `by_root_suite` | TAGS output: by_root_suite or single_line |
+| `max_results` | number | ❌ | 500 | Maximum test cases to process (max: 2000) |
+
+#### Example Usage
+
+```json
+{
+  "project_key": "MCP",
+  "feature_keyword": "login",
+  "output_format": "short"
+}
+```
+
+```json
+{
+  "project_key": "MCPAND",
+  "feature_keyword": "payment",
+  "output_format": "test_run_rules",
+  "tags_format": "single_line"
+}
+```
+
+#### Output Examples
+
+**Short Format:**
+```
+# Test Cases for Feature: "login"
+
+**Summary:** 15 test cases | 2 root suites | 5 feature suites
+
+## 📁 iOS Suite (ID: 123)
+
+### 📂 Authentication (featureSuiteId: 456)
+- 📌 **MCP-101** - Verify user login with valid credentials
+- 📌 **MCP-102** - Verify login error for invalid password
+- 📝 **MCP-103** - User session persistence after login
+```
+
+**Test Run Rules Format:**
+```
+TAGS=>featureSuiteId=456||featureSuiteId=789||featureSuiteId=1011
+```
+
+#### Use Cases
+
+1. **Feature Testing:** Quickly find all test cases for a specific feature before release
+2. **Test Planning:** Generate automation tags for feature-specific test runs
+3. **Gap Analysis:** Identify which features have comprehensive test coverage
+4. **Regression Testing:** Build targeted test suites based on feature keywords
+
+### 🔧 Bug Fixes
+
+- **FIXED: MCP SDK Compatibility** - Removed unsupported `description` property from McpServer initialization for compatibility with latest `@modelcontextprotocol/sdk`
+
+### 📦 Published
+
+- **Docker Hub**: `msarychau/mcp-zebrunner:5.15.0`
+- **npm**: `mcp-zebrunner@5.15.0`
+
+---
+
 ## v5.14.0 (2025-12-03) - Docker Support & MCP Toolkit Integration
 
 ### 🐳 Docker Support
@@ -272,14 +359,14 @@ https://s3.amazonaws.com/video.mp4 (existing pattern)
 
 ## ✅ Last Passed Execution
 - **Launch:** 121479
-- **Date:** November 13, 2024 at 3:15 PM
+- **Date:** November 13, 2025 at 3:15 PM
 - **Duration:** 581s
 
 ## 📋 Execution History (Last 10)
 | # | Status | Date | Duration | Launch | Issues |
 |---|--------|------|----------|--------|--------|
-| 1 | ❌ FAILED | Nov 13, 2024 4:30 PM | 588s | 121482 | None |
-| 2 | ✅ PASSED | Nov 13, 2024 3:15 PM | 581s | 121479 | None |
+| 1 | ❌ FAILED | Nov 13, 2025 4:30 PM | 588s | 121482 | None |
+| 2 | ✅ PASSED | Nov 13, 2025 3:15 PM | 581s | 121479 | None |
 ...
 ```
 
@@ -334,7 +421,7 @@ https://s3.amazonaws.com/video.mp4 (existing pattern)
 Comparing current failure with last successful execution:
 
 **Last Passed:** Launch 121479
-**Date:** November 13, 2024 at 3:15 PM
+**Date:** November 13, 2025 at 3:15 PM
 
 **Duration Comparison:**
 - Current: 588s
