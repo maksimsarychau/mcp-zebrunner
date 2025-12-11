@@ -101,7 +101,7 @@ A natural language interface for test management. Instead of clicking through da
 
 ### Scale
 - **40+ tools** covering all aspects of test management
-- **5 major integrations** — Claude Desktop, Cursor, ChatGPT Desktop, IntelliJ IDEA, Docker
+- **5 major integrations** — Claude Desktop, Cursor, ChatGPT Desktop (beta), IntelliJ IDEA, Docker
 - **3-tier intelligent rules system** for quality validation
 - **Multiple output formats** — JSON, Markdown, Jira-ready tickets
 

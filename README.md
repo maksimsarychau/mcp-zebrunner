@@ -1256,7 +1256,14 @@ Leverage intelligent validation:
 
 ## 📄 License
 
-MIT License - see LICENSE file for details.
+## License
+
+This project is licensed under **AGPL-3.0** to ensure that all improvements to the MCP server remain open-source, especially when the software is deployed as a network service.
+
+If you modify and run the server in a way that users interact with it over a network (e.g., Claude Desktop / Cursor clients), you must make the full modified source code available to those users.
+
+Commercial usage is allowed. For closed-source modifications or enterprise licensing, please contact the author.
+See **[LICENSE.md](LICENSE.md)** file for details.
 
 ---
 
