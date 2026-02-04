@@ -257,7 +257,7 @@ TAGS=>featureSuiteId=456||featureSuiteId=789||featureSuiteId=1011
     - Uses loop-based stripping until no more tags are found
     - Escapes any remaining angle brackets to prevent partial tag injection
     - Handles edge cases like `<<script>script>` that single-pass regex misses
-  - **Files Fixed**: 
+  - **Files Fixed**:
     - `src/server.ts` - 4 instances (3 in helper functions, 1 in `parseDefectHtml`)
   - **Test Coverage**: Added 11 new security test cases in `tests/unit/utilities.test.ts`
 
@@ -267,7 +267,7 @@ TAGS=>featureSuiteId=456||featureSuiteId=789||featureSuiteId=1011
 - **ENHANCED: `get_bug_review` - Automatic Failure Detail Fetching**
   - **Problem**: Previously required 10+ separate tool calls with manual approval for each bug
   - **Solution**: New `include_failure_details` parameter fetches all details in a single call
-  
+
   **New Parameters:**
   - `include_failure_details` (boolean, default: false) - Enables automatic detail fetching
   - `failure_detail_level` ('none' | 'summary' | 'full') - Controls detail depth
@@ -275,7 +275,7 @@ TAGS=>featureSuiteId=456||featureSuiteId=789||featureSuiteId=1011
 
   **New Features:**
   - **Priority Analysis**: Bugs categorized as 🔴 CRITICAL / 🟠 HIGH / 🟡 MEDIUM / 🟢 LOW
-  - **Trend Analysis**: 
+  - **Trend Analysis**:
     - Recently introduced bugs (last 7 days)
     - Long-standing bugs (tech debt, 30+ days old)
     - Frequently reproduced bugs
