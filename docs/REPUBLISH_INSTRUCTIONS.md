@@ -1,4 +1,4 @@
-# Republish Instructions for Version 5.12.0
+# Republish Instructions for Version 5.16.1
 
 This document contains step-by-step instructions for republishing the MCP Zebrunner package to npm and the MCP Registry.
 
@@ -8,14 +8,18 @@ This document contains step-by-step instructions for republishing the MCP Zebrun
 
 Before republishing, verify:
 
-- ✅ Version updated to **5.12.0** in:
+- ✅ Version updated to **5.16.1** in:
   - `package.json`
   - `server.json` (both root and packages array)
   - `MCP_NPM_INSTALLATION_GUIDE.md`
+- ✅ `server.json` migrated to current MCP registry format (schema 2025-12-11 + updated field names like title/websiteUrl)
 - ✅ Changelog updated with new version entry
 - ✅ README.md updated with link to MCP NPM Installation Guide
 - ✅ All changes committed to git
 - ✅ Build succeeds without errors
+
+**Note:** MCP Registry currently returns a "deprecated schema" error even with schema 2025-12-11. This appears to be a registry-side issue. Track updates and re-try publish when resolved:
+- https://github.com/modelcontextprotocol/registry/issues/875
 
 ---
 
@@ -63,12 +67,12 @@ npm publish --access public
 
 **Expected output:**
 ```
-npm notice 📦  mcp-zebrunner@5.12.0
+npm notice 📦  mcp-zebrunner@5.16.1
 npm notice === Tarball Details ===
 npm notice name:          mcp-zebrunner
-npm notice version:       5.12.0
+npm notice version:       5.16.1
 ...
-+ mcp-zebrunner@5.12.0
++ mcp-zebrunner@5.16.1
 ```
 
 ### 2.3 Verify npm Publication
@@ -116,7 +120,7 @@ mcp-publisher publish
 ```
 Publishing to https://registry.modelcontextprotocol.io...
 ✓ Successfully published
-✓ Server io.github.maksimsarychau/mcp-zebrunner version 5.12.0
+✓ Server io.github.maksimsarychau/mcp-zebrunner version 5.16.1
 ```
 
 ### 3.3 Verify MCP Registry Publication
@@ -129,7 +133,7 @@ curl "https://registry.modelcontextprotocol.io/v0/servers?search=zebrunner" | jq
 
 **Expected output:**
 - Server status: `"active"`
-- Version: `"5.12.0"`
+- Version: `"5.16.1"`
 - Published timestamp updated
 
 ---
@@ -181,7 +185,7 @@ Check that all web pages are updated:
 
 1. **npm Package Page**
    - https://www.npmjs.com/package/mcp-zebrunner
-   - Verify version shows 5.12.0
+   - Verify version shows 5.16.1
 
 2. **GitHub Repository**
    - https://github.com/maksimsarychau/mcp-zebrunner
@@ -189,7 +193,7 @@ Check that all web pages are updated:
 
 3. **MCP Registry**
    - Search: `curl "https://registry.modelcontextprotocol.io/v0/servers?search=zebrunner"`
-   - Verify version is 5.12.0
+   - Verify version is 5.16.1
 
 ---
 
@@ -199,10 +203,10 @@ Create a git tag for this version:
 
 ```bash
 # Tag the current commit
-git tag -a v5.12.0 -m "Release v5.12.0: MCP Registry publication and comprehensive installation guide"
+git tag -a v5.16.1 -m "Release v5.16.1: MCP Registry publication and comprehensive installation guide"
 
 # Push the tag to GitHub
-git push origin v5.12.0
+git push origin v5.16.1
 
 # Push all changes
 git push origin feature/mcp-publisher-setup
@@ -212,8 +216,8 @@ git push origin feature/mcp-publisher-setup
 
 1. Go to https://github.com/maksimsarychau/mcp-zebrunner/releases
 2. Click "Draft a new release"
-3. Select tag: `v5.12.0`
-4. Release title: `v5.12.0 - MCP Registry Publication`
+3. Select tag: `v5.16.1`
+4. Release title: `v5.16.1 - MCP Registry Publication`
 5. Description:
    ```markdown
    ## 🎉 What's New
@@ -323,13 +327,13 @@ mcp-publisher publish
 
 You know the publication was successful when:
 
-- ✅ npm shows the new version: `npm view mcp-zebrunner version` returns `5.12.0`
-- ✅ MCP registry search returns status `"active"` with version `5.12.0`
+- ✅ npm shows the new version: `npm view mcp-zebrunner version` returns `5.16.1`
+- ✅ MCP registry search returns status `"active"` with version `5.16.1`
 - ✅ Users can install: `npm install -g mcp-zebrunner` succeeds
 - ✅ Server runs without errors
 - ✅ GitHub tag and release created
 
 ---
 
-**Last Updated:** December 2, 2025  
-**Version:** 5.12.0
+**Last Updated:** February 4, 2026
+**Version:** 5.16.1
