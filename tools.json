@@ -24,6 +24,10 @@
     "description": "Lightweight aggregated test results with statistics and most unstable tests"
   },
   {
+    "name": "generate_weekly_regression_stability_report",
+    "description": "Generate weekly regression stability report with pass rates, WoW delta, and Jira-ready output"
+  },
+  {
     "name": "get_all_launches_for_project",
     "description": "Get all launches for a project with pagination and filtering"
   },

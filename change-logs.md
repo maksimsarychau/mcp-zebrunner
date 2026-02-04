@@ -1,5 +1,92 @@
 # Change Logs
 
+## v5.16.0 (2026-02-04) - Weekly Stability Report Enhancements
+
+### 🚀 Enhanced Tool: `generate_weekly_regression_stability_report`
+
+**Added linked issues section grouped by suite.**
+
+The weekly stability report now includes linked issue keys from the current launch, with clickable Jira links when available.
+
+#### Key Enhancements
+
+- **Linked issues by suite:** Collects issue references from the current launch and groups them per suite
+- **Configurable placement:** `linked_issues.position` controls where the section appears (`after_comparison`, `after_status`, `end`)
+- **Configurable limit:** `linked_issues.limit` controls max issues per suite (default: 5)
+- **Configurable on/off:** `linked_issues.enabled` toggles issue collection (default: true)
+- **New output formats:** `summary` (table + status), `detailed` (full report), `json`/`dto` (structured payload)
+- **Strict output style:** `output_style: strict` enforces a fixed template with no narrative text
+- **Pass rate update:** manual passes (`passedManually`) now count as passed in the stability rate
+- **Launch comparison guardrails:** validates launch name similarity and test overlap before comparison; mismatches are marked as `ERROR` with a notes warning
+- **Build-based mode:** auto-discovers launches by build numbers and compares suites one-by-one with a launch mapping section in detailed output
+- **Build lookup matching:** uses version segment when available and validates `launch.build` when list buildNumber is missing
+
+#### Example Usage
+
+```json
+{
+  "project_key": "MCP",
+  "suites": [
+    {
+      "name": "Manage My Day",
+      "current_launch_id": 120906,
+      "previous_launch_id": 120814
+    }
+  ],
+  "linked_issues": {
+    "enabled": true,
+    "limit": 5,
+    "position": "after_comparison"
+  }
+}
+```
+
+## v5.15.1 (2026-02-04) - Weekly Regression Stability Report
+
+### 🚀 New Tool: `generate_weekly_regression_stability_report`
+
+**Generate a Jira-ready weekly stability snapshot across suites.**
+
+This tool provides a high-level weekly regression report with pass rate, week-over-week delta, and stability classification.
+
+#### Key Features
+
+- **Launch-level pass rate:** Uses total launch results for stability classification
+- **WoW delta:** Compares current vs previous weekly regression launches
+- **Stability status:** STABLE / WATCH / UNSTABLE with configurable thresholds
+- **Executive notes:** Optional one-line failure note for WATCH/UNSTABLE suites
+- **Jira-ready output:** Preformatted snapshot tables with status breakdown
+
+#### Example Usage
+
+```json
+{
+  "project_key": "MCP",
+  "suites": [
+    {
+      "name": "Manage My Day",
+      "current_launch_id": 120906,
+      "previous_launch_id": 120814
+    },
+    {
+      "name": "Diary AA",
+      "current_launch_id": 120901,
+      "previous_launch_id": 120809
+    }
+  ],
+  "thresholds": {
+    "stable": 90,
+    "watch": 85
+  },
+  "output_format": "jira"
+}
+```
+
+### 🔧 Documentation Updates
+
+- Added readable usage examples for weekly stability reporting
+- Updated tool catalog and MCP tool registry
+
 ## v5.15.0 (2025-12-08) - NEW TOOL: Feature-Based Test Case Aggregation
 
 ### 🚀 New Tool: `aggregate_test_cases_by_feature`

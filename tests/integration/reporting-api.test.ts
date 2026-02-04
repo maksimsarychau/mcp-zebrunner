@@ -35,7 +35,7 @@ describe('ZebrunnerReportingClient Integration Tests', () => {
     config = {
       baseUrl,
       accessToken,
-      timeout: 30000,
+      timeout: 60000,
       debug: process.env.DEBUG === 'true'
     };
 

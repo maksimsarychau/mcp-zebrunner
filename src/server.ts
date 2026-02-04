@@ -3297,6 +3297,73 @@ async function main() {
   );
 
   server.tool(
+    "generate_weekly_regression_stability_report",
+    "📌 Generate weekly regression stability report with pass rates, WoW deltas, and Jira-ready output",
+    {
+      project_key: z.string().min(1).describe("Project key (e.g., 'MCP')"),
+      suites: z.array(z.object({
+        name: z.string().min(1).describe("Human-readable suite name"),
+        current_launch_id: z.number().int().positive().describe("Current weekly regression launch ID"),
+        previous_launch_id: z.number().int().positive().describe("Previous weekly regression launch ID")
+      })).min(1).optional().describe("Suites to include in the report"),
+      builds: z.object({
+        current: z.string().min(1).describe("Current build identifier (e.g., '49117')"),
+        previous: z.string().min(1).describe("Previous build identifier (e.g., '48886')"),
+        page_size: z.number().int().positive().max(100).optional().describe("Page size for build lookup (default: 50)"),
+        max_pages: z.number().int().positive().max(50).optional().describe("Max pages to scan for build lookup (default: 10)")
+      }).optional().describe("Build-based lookup (uses build identifiers to find launches and suites)"),
+      thresholds: z.object({
+        stable: z.number().min(0).max(100).optional().describe("Stable threshold percentage (default: 90)"),
+        watch: z.number().min(0).max(100).optional().describe("Watch threshold percentage (default: 85)")
+      }).optional().describe("Custom thresholds for stability classification"),
+      linked_issues: z.object({
+        enabled: z.boolean().optional().describe("Include linked issues from current launch (default: true)"),
+        limit: z.number().int().positive().max(50).optional().describe("Max linked issues per suite (default: 5)"),
+        position: z.enum(['after_comparison', 'after_status', 'end'])
+          .optional()
+          .describe("Where to place linked issues section in report (default: after_comparison)")
+      }).optional().describe("Linked issues configuration"),
+      output_style: z.enum(['strict', 'default']).default('strict').describe("Output style: strict (no narrative) or default"),
+      output_format: z.enum(['jira', 'json', 'dto', 'summary', 'detailed'])
+        .default('jira')
+        .describe("Output format: jira (default), json, dto, summary, or detailed")
+    },
+    async (args) => {
+      try {
+        debugLog("generate_weekly_regression_stability_report called", args);
+        return await reportingHandlers.generateWeeklyRegressionStabilityReport({
+          projectKey: args.project_key,
+          suites: args.suites
+            ? args.suites.map((suite: any) => ({
+                name: suite.name,
+                currentLaunchId: suite.current_launch_id,
+                previousLaunchId: suite.previous_launch_id
+              }))
+            : [],
+          builds: args.builds ? {
+            current: args.builds.current,
+            previous: args.builds.previous,
+            pageSize: args.builds.page_size,
+            maxPages: args.builds.max_pages
+          } : undefined,
+          thresholds: args.thresholds,
+          linkedIssues: args.linked_issues,
+          outputStyle: args.output_style,
+          outputFormat: args.output_format
+        });
+      } catch (error: any) {
+        debugLog("Error in generate_weekly_regression_stability_report", { error: error.message, args });
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error generating weekly regression stability report: ${error.message}`
+          }]
+        };
+      }
+    }
+  );
+
+  server.tool(
     "get_launch_summary",
     "📋 Get quick launch summary without detailed test sessions (uses new reporting API)",
     {

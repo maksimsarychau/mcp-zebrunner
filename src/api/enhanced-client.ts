@@ -280,12 +280,12 @@ export class EnhancedZebrunnerClient {
   /**
    * Test connection to Zebrunner API
    */
-  async testConnection(): Promise<{ success: boolean; message: string; details?: any }> {
+  async testConnection(projectKey: string = process.env.ZEBRUNNER_PROJECT_KEY || 'MCP'): Promise<{ success: boolean; message: string; details?: any }> {
     try {
       // Try a minimal request to test-suites endpoint which should work with valid auth
       const response = await this.http.get('/test-suites', {
-        params: { projectKey: 'MCP', size: 1 }, // Use MCP project
-        timeout: 10000
+        params: { projectKey, size: 1 }, // Use configured project
+        timeout: this.config.timeout || 30000
       });
       
       return {
@@ -307,7 +307,7 @@ export class EnhancedZebrunnerClient {
           details: {
             status: error.response.status,
             baseUrl: this.config.baseUrl,
-            note: 'Authentication works but no access to test project MCP'
+            note: `Authentication works but no access to test project ${projectKey}`
           }
         };
       }
@@ -316,7 +316,7 @@ export class EnhancedZebrunnerClient {
       try {
         const fallbackResponse = await this.http.get('/test-suites', {
           params: { projectKey: 'INVALID', size: 1 },
-          timeout: 5000
+          timeout: Math.max(10000, this.config.timeout || 0)
         });
 
         return {

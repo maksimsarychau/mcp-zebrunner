@@ -93,6 +93,133 @@ Complete reference of all available tools with natural language usage examples.
 - "Show me summary of launch 120906 - just failed tests"
 - "Get lightweight summary for launch 121482"
 
+### `generate_weekly_regression_stability_report`
+
+**Description:** Generate a Jira-ready weekly regression stability report across multiple suites with pass rate, week-over-week delta, and stability classification.
+
+**Example Prompts:**
+- "Weekly stability report for MCP: Manage My Day (120906 vs 120814), Diary AA (120901 vs 120809)"
+- "Generate Jira-ready weekly regression stability report for MCP with thresholds stable 92, watch 88"
+- "Give me a JSON stability snapshot for MCP: Premium Hub (121001 vs 120901)"
+
+**Output Formats:**
+- `jira` - Full Jira-ready report (default)
+- `summary` - Table + status only (no linked issues/notes)
+- `detailed` - Full report with linked issues and notes
+- `json` - Structured JSON response
+- `dto` - Structured JSON response (alias of json)
+
+**Output Style:**
+- `strict` - Fixed template, no narrative text (default)
+- `default` - Fixed template + small footer
+
+**Launch Comparison Validation:**
+- Launch name similarity and test overlap are validated before comparison.
+- If similarity is below 70%, the suite is marked as `ERROR` and comparison is skipped.
+- The warning appears in the Notes section.
+
+**Build-Based Mode:**
+- Provide `builds.current` and `builds.previous` to auto-discover launches by build number.
+- The tool maps the latest launch per suite for each build and compares them one-by-one.
+- A build mapping section is included in detailed output.
+- Build lookup uses the version segment (e.g., `26.6.0`) when available, otherwise the final token. But better to use build number like `49117`
+- If `buildNumber` is not present in the launch list response, the tool validates against `launch.build`.
+
+**Readable Usage Examples:**
+
+```text
+Weekly stability report for project MCP using:
+- Manage My Day (current 120906, previous 120814)
+- Diary AA (current 120901, previous 120809)
+```
+
+```json
+{
+  "project_key": "MCP",
+  "suites": [
+    {
+      "name": "Manage My Day",
+      "current_launch_id": 120906,
+      "previous_launch_id": 120814
+    },
+    {
+      "name": "Diary AA",
+      "current_launch_id": 120901,
+      "previous_launch_id": 120809
+    }
+  ],
+  "linked_issues": {
+    "enabled": true,
+    "limit": 5,
+    "position": "after_comparison"
+  },
+  "output_style": "strict"
+}
+```
+
+```json
+{
+  "project_key": "",
+  "builds": {
+    "current": "49117",
+    "previous": "48886"
+  },
+  "output_format": "detailed",
+  "output_style": "strict"
+}
+```
+
+```json
+{
+  "project_key": "MCP",
+  "suites": [
+    {
+      "name": "Premium Hub",
+      "current_launch_id": 121001,
+      "previous_launch_id": 120901
+    }
+  ],
+  "thresholds": {
+    "stable": 92,
+    "watch": 88
+  },
+  "output_format": "json"
+}
+```
+
+```json
+{
+  "project_key": "MCP",
+  "suites": [
+    {
+      "name": "Manage My Day",
+      "current_launch_id": 120906,
+      "previous_launch_id": 120814
+    }
+  ],
+  "output_format": "summary"
+}
+```
+
+```json
+{
+  "project_key": "MCP",
+  "suites": [
+    {
+      "name": "Manage My Day",
+      "current_launch_id": 120906,
+      "previous_launch_id": 120814
+    }
+  ],
+  "output_format": "detailed",
+  "linked_issues": {
+    "enabled": true,
+    "limit": 10,
+    "position": "after_status"
+  }
+}
+```
+
 ### `get_all_launches_for_project`
 
 **Description:** Get all launches for a project with pagination and filtering.
@@ -685,7 +812,7 @@ For large datasets, you can specify filters and limits:
 
 ---
 
-**Last Updated:** v5.15.0 - December 2025
+**Last Updated:** v5.16.0 - February 2026
 
 For the latest features and updates, see [change-logs.md](change-logs.md).
 

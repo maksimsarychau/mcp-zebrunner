@@ -555,6 +555,7 @@ Once connected, you can use these tools through natural language in your AI assi
 | `get_launch_summary` | Quick launch overview | `"Show me summary for launch 118685"` | **Managers** |
 | `get_all_launches_for_project` | All launches with pagination | `"Get all launches for project MCP from last month"` | **Managers, Leads** |
 | `get_all_launches_with_filter` | Filter by milestone/build | `"Get launches for milestone 2.1.0 and build 'mcp-app-2.1.0'"` | **Managers, Leads** |
+| `generate_weekly_regression_stability_report` | Weekly regression stability report with WoW delta, linked issues, and strict Jira-ready output. Supports launch list or build-based auto-discovery (version-segment build lookup with `launch.build` validation when needed). | `"Weekly stability report for MCP: (120906 vs 120814), (120901 vs 120809)"` or `"Weekly stability report for builds 9117 vs 48886"` | **Managers, Leads** |
 
 ### 📊 Reporting & Analytics
 

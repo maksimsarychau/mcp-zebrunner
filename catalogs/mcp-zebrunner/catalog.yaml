@@ -50,6 +50,7 @@ registry:
             - name: detailed_analyze_launch_failures
             - name: get_launch_details
             - name: get_launch_summary
+            - name: generate_weekly_regression_stability_report
             - name: get_test_case_by_key
             - name: list_test_suites
             - name: get_suite_hierarchy
