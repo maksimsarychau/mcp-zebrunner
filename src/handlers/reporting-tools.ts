@@ -477,6 +477,824 @@ export class ZebrunnerReportingToolHandlers {
   }
 
   /**
+   * Generate weekly regression stability report across suites
+   */
+  async generateWeeklyRegressionStabilityReport(input: {
+    projectKey: string;
+    suites: Array<{
+      name: string;
+      currentLaunchId: number;
+      previousLaunchId: number;
+    }>;
+    builds?: {
+      current: string;
+      previous: string;
+      pageSize?: number;
+      maxPages?: number;
+    };
+    thresholds?: {
+      stable?: number;
+      watch?: number;
+    };
+    linkedIssues?: {
+      enabled?: boolean;
+      limit?: number;
+      position?: 'after_comparison' | 'after_status' | 'end';
+    };
+    outputStyle?: 'strict' | 'default';
+    outputFormat?: 'jira' | 'json' | 'dto' | 'summary' | 'detailed';
+  }) {
+    const {
+      projectKey,
+      suites,
+      builds,
+      thresholds,
+      linkedIssues,
+      outputStyle = 'strict',
+      outputFormat = 'jira'
+    } = input;
+
+    try {
+      if (!projectKey) {
+        throw new Error("projectKey is required");
+      }
+      if ((!suites || suites.length === 0) && !builds) {
+        throw new Error("At least one suite is required");
+      }
+
+      const normalizedThresholds = this.normalizeStabilityThresholds(thresholds);
+      const projectId = await this.reportingClient.getProjectId(projectKey);
+
+      const suiteResults: Array<{
+        suite: string;
+        passRate: number | null;
+        total: number | null;
+        failed: number | null;
+        skipped: number | null;
+        flaky: number | null;
+        deltaWoW: number | null;
+        status: 'STABLE' | 'WATCH' | 'UNSTABLE' | 'ERROR';
+        note?: string;
+        linkedIssues?: Array<{ key: string; url?: string; type?: string }>;
+      }> = [];
+
+      const linkedIssuesConfig = {
+        enabled: linkedIssues?.enabled !== false,
+        limit: typeof linkedIssues?.limit === 'number' ? linkedIssues.limit : 5,
+        position: linkedIssues?.position || 'after_comparison' as const
+      };
+
+      let resolvedSuites = suites;
+      let buildComparisonSummary: {
+        currentBuild: string;
+        previousBuild: string;
+        currentLaunches: Array<{ suiteName: string; launchId: number; launchName: string; startedAt?: number }>;
+        previousLaunches: Array<{ suiteName: string; launchId: number; launchName: string; startedAt?: number }>;
+        matchedSuites: Array<{ suiteName: string; currentLaunchId: number; previousLaunchId: number }>;
+        unmatchedCurrent: Array<{ suiteName: string; launchId: number; launchName: string }>;
+        unmatchedPrevious: Array<{ suiteName: string; launchId: number; launchName: string }>;
+      } | null = null;
+
+      if (builds) {
+        const buildResolution = await this.resolveSuitesFromBuilds(projectId, builds);
+        resolvedSuites = buildResolution.suites;
+        buildComparisonSummary = buildResolution.summary;
+
+        if (buildResolution.unmatchedCurrent.length > 0) {
+          buildResolution.unmatchedCurrent.forEach(entry => {
+            suiteResults.push({
+              suite: entry.suiteName,
+              passRate: null,
+              total: null,
+              failed: null,
+              skipped: null,
+              flaky: null,
+              deltaWoW: null,
+              status: 'ERROR',
+              note: `No matching suite found for previous build "${builds.previous}".`,
+              linkedIssues: []
+            });
+          });
+        }
+
+        if (buildResolution.unmatchedPrevious.length > 0) {
+          buildResolution.unmatchedPrevious.forEach(entry => {
+            suiteResults.push({
+              suite: entry.suiteName,
+              passRate: null,
+              total: null,
+              failed: null,
+              skipped: null,
+              flaky: null,
+              deltaWoW: null,
+              status: 'ERROR',
+              note: `No matching suite found for current build "${builds.current}".`,
+              linkedIssues: []
+            });
+          });
+        }
+      }
+
+      for (const suite of resolvedSuites) {
+        try {
+          const currentMetrics = await this.getLaunchMetricsForStability(
+            suite.currentLaunchId,
+            projectId,
+            linkedIssuesConfig.enabled,
+            linkedIssuesConfig.limit
+          );
+          const previousMetrics = await this.getLaunchMetricsForStability(
+            suite.previousLaunchId,
+            projectId,
+            false,
+            0
+          );
+
+          const comparisonValidation = this.validateLaunchComparison(
+            currentMetrics,
+            previousMetrics
+          );
+          if (!comparisonValidation.isValid) {
+            suiteResults.push({
+              suite: suite.name,
+              passRate: null,
+              total: null,
+              failed: null,
+              skipped: null,
+              flaky: null,
+              deltaWoW: null,
+              status: 'ERROR',
+              note: comparisonValidation.message,
+              linkedIssues: currentMetrics.linkedIssues
+            });
+            continue;
+          }
+
+          const deltaWoW = currentMetrics.passRate - previousMetrics.passRate;
+          const status = this.classifyStabilityStatus(
+            currentMetrics.passRate,
+            normalizedThresholds.stable,
+            normalizedThresholds.watch
+          );
+
+          let note: string | undefined;
+          if (status === 'WATCH' || status === 'UNSTABLE') {
+            try {
+              const failureSummary = await this.analyzeLaunchFailures({
+                testRunId: suite.currentLaunchId,
+                projectKey,
+                format: 'summary',
+                limit: 10
+              });
+              const reportText = failureSummary?.content?.find((c: any) => c.type === 'text')?.text;
+              note = this.extractExecutiveFailureNote(reportText);
+            } catch (error: any) {
+              note = `Failure summary unavailable: ${error?.message || String(error)}`;
+            }
+          }
+
+          suiteResults.push({
+            suite: suite.name,
+            passRate: currentMetrics.passRate,
+            total: currentMetrics.total,
+            failed: currentMetrics.failed,
+            skipped: currentMetrics.skipped,
+            flaky: currentMetrics.flaky,
+            deltaWoW,
+            status,
+            note,
+            linkedIssues: currentMetrics.linkedIssues
+          });
+        } catch (error: any) {
+          suiteResults.push({
+            suite: suite.name,
+            passRate: null,
+            total: null,
+            failed: null,
+            skipped: null,
+            flaky: null,
+            deltaWoW: null,
+            status: 'ERROR',
+            note: `Error fetching launch metrics: ${error?.message || String(error)}`
+          });
+        }
+      }
+
+      if (outputFormat === 'json' || outputFormat === 'dto') {
+        const response = {
+          generatedAt: new Date().toISOString().slice(0, 10),
+          thresholds: normalizedThresholds,
+          linkedIssues: linkedIssuesConfig,
+          outputStyle,
+          buildComparison: buildComparisonSummary,
+          suites: suiteResults
+        };
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(response, null, 2)
+            }
+          ]
+        };
+      }
+
+      const report = this.buildWeeklyStabilityJiraReport(
+        suiteResults,
+        normalizedThresholds,
+        linkedIssuesConfig,
+        outputStyle,
+        outputFormat === 'summary' ? 'summary' : 'detailed',
+        buildComparisonSummary
+      );
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: report
+          }
+        ]
+      };
+    } catch (error: any) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `❌ Error generating weekly regression stability report: ${error.message}`
+          }
+        ]
+      };
+    }
+  }
+
+  private normalizeStabilityThresholds(thresholds?: { stable?: number; watch?: number }) {
+    const defaultStable = 90;
+    const defaultWatch = 85;
+    const minGap = 3;
+
+    const stable = typeof thresholds?.stable === 'number' ? thresholds.stable : defaultStable;
+    let watch = typeof thresholds?.watch === 'number' ? thresholds.watch : defaultWatch;
+
+    if (watch >= stable || stable - watch < minGap) {
+      watch = Math.max(0, stable - minGap);
+    }
+
+    return {
+      stable: Math.max(0, Math.min(100, Math.round(stable))),
+      watch: Math.max(0, Math.min(100, Math.round(watch)))
+    };
+  }
+
+  private classifyStabilityStatus(passRate: number, stableThreshold: number, watchThreshold: number) {
+    if (passRate >= stableThreshold) {
+      return 'STABLE';
+    }
+    if (passRate >= watchThreshold) {
+      return 'WATCH';
+    }
+    return 'UNSTABLE';
+  }
+
+  private async getLaunchMetricsForStability(
+    launchId: number,
+    projectId: number,
+    includeLinkedIssues: boolean,
+    linkedIssuesLimit: number
+  ) {
+    const launch = await this.reportingClient.getLaunch(launchId, projectId);
+    const testRuns = await this.reportingClient.getAllTestRuns(launchId, projectId);
+    const items = testRuns.items || [];
+
+    let passed = 0;
+    let failed = 0;
+    let skipped = 0;
+    let flaky = 0;
+    const linkedIssuesMap = new Map<string, { key: string; url?: string; type?: string }>();
+    const testIdentifiers = new Set<string>();
+
+    for (const test of items) {
+      this.collectTestIdentifiers(test, testIdentifiers);
+      const status = (test.status || '').toUpperCase();
+      if (status === 'PASSED' || test.passedManually === true) {
+        passed += 1;
+      } else if (status === 'FAILED' || status === 'ABORTED') {
+        failed += 1;
+      } else if (status === 'SKIPPED') {
+        skipped += 1;
+      }
+
+      const stabilityPercent = test.stability !== undefined
+        ? Math.round((test.stability || 0) * 100)
+        : 0;
+      if (status !== 'PASSED' && stabilityPercent >= 20 && stabilityPercent <= 80) {
+        flaky += 1;
+      }
+
+      if (includeLinkedIssues && linkedIssuesLimit > 0 && test.issueReferences && test.issueReferences.length > 0) {
+        for (const issue of test.issueReferences) {
+          const issueKey = issue?.value;
+          if (!issueKey || linkedIssuesMap.has(issueKey)) {
+            continue;
+          }
+
+          if (linkedIssuesMap.size >= linkedIssuesLimit) {
+            break;
+          }
+
+          if (issue?.type === 'JIRA') {
+            const jiraUrl = await this.reportingClient.buildJiraUrl(issueKey, projectId);
+            linkedIssuesMap.set(issueKey, { key: issueKey, url: jiraUrl, type: issue.type });
+          } else {
+            linkedIssuesMap.set(issueKey, { key: issueKey, type: issue?.type });
+          }
+        }
+      }
+    }
+
+    const total = items.length;
+    const passRate = total > 0 ? Math.round((passed / total) * 100) : 0;
+
+    return {
+      launchName: launch?.name || `Launch ${launchId}`,
+      testIdentifiers,
+      total,
+      passed,
+      failed,
+      skipped,
+      flaky,
+      passRate,
+      linkedIssues: Array.from(linkedIssuesMap.values())
+    };
+  }
+
+  private validateLaunchComparison(
+    current: {
+      launchName: string;
+      testIdentifiers: Set<string>;
+    },
+    previous: {
+      launchName: string;
+      testIdentifiers: Set<string>;
+    }
+  ) {
+    const nameSimilarityThreshold = 0.7;
+    const testOverlapThreshold = 0.7;
+
+    const nameSimilarity = this.calculateNameSimilarity(current.launchName, previous.launchName);
+    const testOverlap = this.calculateTestOverlap(current.testIdentifiers, previous.testIdentifiers);
+
+    if (nameSimilarity < nameSimilarityThreshold || testOverlap < testOverlapThreshold) {
+      const namePercent = Math.round(nameSimilarity * 100);
+      const overlapPercent = Math.round(testOverlap * 100);
+      return {
+        isValid: false,
+        message: `Launch comparison failed: "${current.launchName}" vs "${previous.launchName}" with name similarity ${namePercent}% and test overlap ${overlapPercent}%. Check that the current and previous launches belong to the same suite/week.`
+      };
+    }
+
+    return { isValid: true };
+  }
+
+  private calculateNameSimilarity(a: string, b: string) {
+    const tokensA = this.normalizeLaunchNameTokens(a);
+    const tokensB = this.normalizeLaunchNameTokens(b);
+    if (tokensA.length === 0 && tokensB.length === 0) {
+      return 1;
+    }
+    if (tokensA.length === 0 || tokensB.length === 0) {
+      return 0;
+    }
+    const setA = new Set(tokensA);
+    const setB = new Set(tokensB);
+    const intersection = [...setA].filter(token => setB.has(token)).length;
+    const union = new Set([...setA, ...setB]).size;
+    return union === 0 ? 0 : intersection / union;
+  }
+
+  private normalizeLaunchNameTokens(name: string) {
+    return name
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]+/g, ' ')
+      .split(/\s+/)
+      .filter(token => token.length > 1);
+  }
+
+  private calculateTestOverlap(current: Set<string>, previous: Set<string>) {
+    if (current.size === 0 && previous.size === 0) {
+      return 1;
+    }
+    if (current.size === 0 || previous.size === 0) {
+      return 0;
+    }
+    let intersection = 0;
+    for (const id of current) {
+      if (previous.has(id)) {
+        intersection += 1;
+      }
+    }
+    const denominator = Math.max(current.size, previous.size);
+    return denominator === 0 ? 0 : intersection / denominator;
+  }
+
+  private async resolveSuitesFromBuilds(
+    projectId: number,
+    builds: { current: string; previous: string; pageSize?: number; maxPages?: number }
+  ) {
+    const pageSize = builds.pageSize || 50;
+    const maxPages = builds.maxPages || 10;
+
+    const currentLaunches = await this.fetchLaunchesByBuild(projectId, builds.current, pageSize, maxPages);
+    const previousLaunches = await this.fetchLaunchesByBuild(projectId, builds.previous, pageSize, maxPages);
+
+    const currentBySuite = this.groupLaunchesBySuite(currentLaunches);
+    const previousBySuite = this.groupLaunchesBySuite(previousLaunches);
+
+    const matchedSuites: Array<{ suiteName: string; currentLaunchId: number; previousLaunchId: number }> = [];
+    const unmatchedCurrent: Array<{ suiteName: string; launchId: number; launchName: string }> = [];
+    const unmatchedPrevious: Array<{ suiteName: string; launchId: number; launchName: string }> = [];
+
+    const previousSuiteNames = new Set<string>(Object.keys(previousBySuite));
+
+    Object.entries(currentBySuite).forEach(([suiteName, currentLaunch]) => {
+      let bestMatchName: string | null = null;
+      let bestMatchSimilarity = 0;
+      previousSuiteNames.forEach(prevName => {
+        const similarity = this.calculateNameSimilarity(suiteName, prevName);
+        if (similarity > bestMatchSimilarity) {
+          bestMatchSimilarity = similarity;
+          bestMatchName = prevName;
+        }
+      });
+
+      if (bestMatchName && bestMatchSimilarity >= 0.7) {
+        const previousLaunch = previousBySuite[bestMatchName];
+        matchedSuites.push({
+          suiteName,
+          currentLaunchId: currentLaunch.launchId,
+          previousLaunchId: previousLaunch.launchId
+        });
+        previousSuiteNames.delete(bestMatchName);
+      } else {
+        unmatchedCurrent.push({
+          suiteName,
+          launchId: currentLaunch.launchId,
+          launchName: currentLaunch.launchName
+        });
+      }
+    });
+
+    previousSuiteNames.forEach(prevName => {
+      const previousLaunch = previousBySuite[prevName];
+      unmatchedPrevious.push({
+        suiteName: prevName,
+        launchId: previousLaunch.launchId,
+        launchName: previousLaunch.launchName
+      });
+    });
+
+    return {
+      suites: matchedSuites.map(match => ({
+        name: match.suiteName,
+        currentLaunchId: match.currentLaunchId,
+        previousLaunchId: match.previousLaunchId
+      })),
+      summary: {
+        currentBuild: builds.current,
+        previousBuild: builds.previous,
+        currentLaunches,
+        previousLaunches,
+        matchedSuites,
+        unmatchedCurrent,
+        unmatchedPrevious
+      },
+      unmatchedCurrent,
+      unmatchedPrevious
+    };
+  }
+
+  private async fetchLaunchesByBuild(
+    projectId: number,
+    build: string,
+    pageSize: number,
+    maxPages: number
+  ) {
+    const launches: Array<{ suiteName: string; launchId: number; launchName: string; startedAt?: number }> = [];
+    const normalizedBuild = build.toLowerCase();
+    const versionMatch = build.match(/\d+\.\d+\.\d+/);
+    const buildToken = versionMatch ? versionMatch[0] : (build.includes('-') ? build.split('-').pop() || build : build);
+    const normalizedToken = buildToken.toLowerCase();
+    const debugEnabled = Boolean(this.reportingClient['config']?.debug);
+
+    let page = 1;
+    let totalItems = 0;
+    while (page <= maxPages) {
+      const response = await this.reportingClient.getLaunches(projectId, {
+        page,
+        pageSize,
+        query: buildToken
+      });
+
+      const items = response.items || [];
+      totalItems += items.length;
+      if (items.length === 0) {
+        break;
+      }
+
+      for (const item of items) {
+        const buildNumber = item.buildNumber?.toLowerCase();
+        const matchesBuild = buildNumber
+          ? buildNumber.includes(normalizedBuild) || buildNumber.includes(normalizedToken)
+          : true;
+
+        if (!matchesBuild) {
+          continue;
+        }
+
+        if (buildNumber) {
+          if (debugEnabled) {
+            console.log(`[WeeklyReport] Build match via buildNumber: ${item.id} "${item.name}" buildNumber="${item.buildNumber}" query="${buildToken}"`);
+          }
+          launches.push({
+            suiteName: item.name,
+            launchId: item.id,
+            launchName: item.name,
+            startedAt: item.startedAt
+          });
+          continue;
+        }
+
+        if (debugEnabled) {
+          console.log(`[WeeklyReport] Build check via launch.build (no buildNumber): ${item.id} "${item.name}" query="${buildToken}"`);
+        }
+        const launch = await this.reportingClient.getLaunch(item.id, projectId);
+        const launchBuild = launch.build?.toLowerCase();
+        const launchMatchesBuild = launchBuild
+          ? launchBuild.includes(normalizedBuild) || launchBuild.includes(normalizedToken)
+          : false;
+
+        if (!launchMatchesBuild) {
+          continue;
+        }
+
+        if (debugEnabled) {
+          console.log(`[WeeklyReport] Build match via launch.build: ${item.id} "${launch.name}" build="${launch.build}" query="${buildToken}"`);
+        }
+        const suiteName = launch.testSuite?.name || launch.name || `Launch ${launch.id}`;
+        launches.push({
+          suiteName,
+          launchId: launch.id,
+          launchName: launch.name || `Launch ${launch.id}`,
+          startedAt: launch.startedAt
+        });
+      }
+
+      if (!response._meta || page >= response._meta.totalPages) {
+        break;
+      }
+
+      page += 1;
+    }
+
+    if (launches.length === 0) {
+      if (totalItems === 0) {
+        throw new Error(`No launches found for build "${build}" using query "${buildToken}"`);
+      }
+      throw new Error(`No launches matched build "${build}" (query "${buildToken}" returned ${totalItems} items)`);
+    }
+
+    return launches;
+  }
+
+  private groupLaunchesBySuite(
+    launches: Array<{ suiteName: string; launchId: number; launchName: string; startedAt?: number }>
+  ): Record<string, { suiteName: string; launchId: number; launchName: string; startedAt?: number }> {
+    const grouped: Record<string, { suiteName: string; launchId: number; launchName: string; startedAt?: number }> = {};
+    launches.forEach(launch => {
+      const existing = grouped[launch.suiteName];
+      if (!existing || (launch.startedAt || 0) > (existing.startedAt || 0)) {
+        grouped[launch.suiteName] = launch;
+      }
+    });
+    return grouped;
+  }
+  private collectTestIdentifiers(test: any, identifiers: Set<string>) {
+    if (test?.testCases && Array.isArray(test.testCases) && test.testCases.length > 0) {
+      test.testCases.forEach((tc: any) => {
+        const idValue = tc?.testCaseId ?? tc?.testId;
+        if (idValue !== undefined && idValue !== null) {
+          identifiers.add(String(idValue).toLowerCase());
+        }
+      });
+      return;
+    }
+
+    if (test?.name) {
+      identifiers.add(this.normalizeTestName(test.name));
+    }
+  }
+
+  private normalizeTestName(name: string) {
+    return name
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  private extractExecutiveFailureNote(reportText?: string): string | undefined {
+    if (!reportText) {
+      return undefined;
+    }
+
+    const patternMatch = reportText.match(/## 🔬 Pattern Analysis[\s\S]*?\*\*1️⃣ ([^*]+)\*\* -/);
+    if (patternMatch) {
+      return `Failures mostly caused by ${patternMatch[1].trim()}`;
+    }
+
+    const breakdownMatch = reportText.match(/## 📈 Failure Breakdown by Category[\s\S]*?-\s\*\*([^*]+)\*\*:\s*\d+\stest/);
+    if (breakdownMatch) {
+      return `Failures mostly caused by ${breakdownMatch[1].trim()}`;
+    }
+
+    const patternsMatch = reportText.match(/Detected\s+(\d+)\s+unique error pattern/);
+    if (patternsMatch) {
+      return `Multiple failure patterns detected (${patternsMatch[1]} unique patterns)`;
+    }
+
+    const failedMatch = reportText.match(/\*\*Failed Tests \(Total\):\*\*\s*(\d+)/);
+    const totalMatch = reportText.match(/\*\*Total Tests in Launch:\*\*\s*(\d+)/);
+    if (failedMatch && totalMatch) {
+      const failed = Number(failedMatch[1]);
+      const total = Number(totalMatch[1]);
+      if (total > 0) {
+        const failureRate = Math.round((failed / total) * 100);
+        return `Failure rate ${failureRate}% (${failed}/${total} tests) in current launch`;
+      }
+    }
+
+    return undefined;
+  }
+
+  private buildWeeklyStabilityJiraReport(
+    suites: Array<{
+      suite: string;
+      passRate: number | null;
+      total: number | null;
+      failed: number | null;
+      skipped: number | null;
+      flaky: number | null;
+      deltaWoW: number | null;
+      status: 'STABLE' | 'WATCH' | 'UNSTABLE' | 'ERROR';
+      note?: string;
+      linkedIssues?: Array<{ key: string; url?: string; type?: string }>;
+    }>,
+    thresholds: { stable: number; watch: number },
+    linkedIssuesConfig: { enabled: boolean; limit: number; position: 'after_comparison' | 'after_status' | 'end' },
+    outputStyle: 'strict' | 'default',
+    detailLevel: 'summary' | 'detailed',
+    buildComparisonSummary: {
+      currentBuild: string;
+      previousBuild: string;
+      currentLaunches: Array<{ suiteName: string; launchId: number; launchName: string; startedAt?: number }>;
+      previousLaunches: Array<{ suiteName: string; launchId: number; launchName: string; startedAt?: number }>;
+      matchedSuites: Array<{ suiteName: string; currentLaunchId: number; previousLaunchId: number }>;
+      unmatchedCurrent: Array<{ suiteName: string; launchId: number; launchName: string }>;
+      unmatchedPrevious: Array<{ suiteName: string; launchId: number; launchName: string }>;
+    } | null
+  ) {
+    let report = `## 📊 Stability Snapshot\n\n`;
+    report += `| Suite | Pass % | Total | Failed | Skipped | Flaky | Δ WoW |\n`;
+    report += `|------|--------|-------|--------|---------|-------|-------|\n`;
+
+    suites.forEach(suite => {
+      const passRate = suite.passRate === null ? 'N/A' : `${suite.passRate}%`;
+      const total = suite.total === null ? 'N/A' : suite.total;
+      const failed = suite.failed === null ? 'N/A' : suite.failed;
+      const skipped = suite.skipped === null ? 'N/A' : suite.skipped;
+      const flaky = suite.flaky === null ? 'N/A' : suite.flaky;
+      const delta = suite.deltaWoW === null
+        ? 'N/A'
+        : `${suite.deltaWoW >= 0 ? '+' : ''}${suite.deltaWoW}%`;
+      report += `| ${suite.suite} | ${passRate} | ${total} | ${failed} | ${skipped} | ${flaky} | ${delta} |\n`;
+    });
+
+    if (detailLevel === 'detailed' && buildComparisonSummary) {
+      report += this.buildLaunchMappingSection(buildComparisonSummary);
+    }
+
+    const linkedIssuesSection = this.buildLinkedIssuesSection(suites, linkedIssuesConfig);
+
+    if (detailLevel === 'detailed' && linkedIssuesConfig.enabled && linkedIssuesConfig.position === 'after_comparison' && linkedIssuesSection) {
+      report += `\n${linkedIssuesSection}\n`;
+    }
+
+    const stableSuites = suites.filter(s => s.status === 'STABLE').map(s => s.suite);
+    const watchSuites = suites.filter(s => s.status === 'WATCH').map(s => s.suite);
+    const unstableSuites = suites.filter(s => s.status === 'UNSTABLE').map(s => s.suite);
+    const errorSuites = suites.filter(s => s.status === 'ERROR').map(s => s.suite);
+
+    report += `\n## 🚦 Status\n`;
+    report += `🟢 Stable (>= ${thresholds.stable}%): ${stableSuites.length ? stableSuites.join(', ') : 'None'}\n`;
+    report += `🟡 Watch (>= ${thresholds.watch}%): ${watchSuites.length ? watchSuites.join(', ') : 'None'}\n`;
+    report += `🔴 Unstable (< ${thresholds.watch}%): ${unstableSuites.length ? unstableSuites.join(', ') : 'None'}\n`;
+    if (errorSuites.length > 0) {
+      report += `⚠️ Error: ${errorSuites.join(', ')}\n`;
+    }
+
+    if (detailLevel === 'detailed' && linkedIssuesConfig.enabled && linkedIssuesConfig.position === 'after_status' && linkedIssuesSection) {
+      report += `\n${linkedIssuesSection}\n`;
+    }
+
+    if (detailLevel === 'detailed') {
+      const notes = suites.filter(s => s.note).map(s => `- ${s.suite} — ${s.note}`);
+      if (notes.length > 0) {
+        report += `\n## 🧭 Notes\n`;
+        report += `${notes.join('\n')}\n`;
+      }
+    }
+
+    if (detailLevel === 'detailed' && linkedIssuesConfig.enabled && linkedIssuesConfig.position === 'end' && linkedIssuesSection) {
+      report += `\n${linkedIssuesSection}\n`;
+    }
+
+    if (outputStyle === 'default') {
+      report += `\n_Generated by MCP Zebrunner Weekly Stability Report_\n`;
+    }
+
+    return report;
+  }
+
+  private buildLaunchMappingSection(summary: {
+    currentBuild: string;
+    previousBuild: string;
+    currentLaunches: Array<{ suiteName: string; launchId: number; launchName: string; startedAt?: number }>;
+    previousLaunches: Array<{ suiteName: string; launchId: number; launchName: string; startedAt?: number }>;
+    matchedSuites: Array<{ suiteName: string; currentLaunchId: number; previousLaunchId: number }>;
+    unmatchedCurrent: Array<{ suiteName: string; launchId: number; launchName: string }>;
+    unmatchedPrevious: Array<{ suiteName: string; launchId: number; launchName: string }>;
+  }) {
+    let section = `\n## 🧩 Build Launch Mapping\n\n`;
+    section += `**Current Build:** ${summary.currentBuild}\n`;
+    section += `**Previous Build:** ${summary.previousBuild}\n\n`;
+    section += `| Suite | Current Launch | Previous Launch |\n`;
+    section += `|------|----------------|-----------------|\n`;
+
+    summary.matchedSuites.forEach(match => {
+      section += `| ${match.suiteName} | ${match.currentLaunchId} | ${match.previousLaunchId} |\n`;
+    });
+
+    if (summary.unmatchedCurrent.length > 0) {
+      section += `\n**Unmatched Current Launches:**\n`;
+      summary.unmatchedCurrent.forEach(entry => {
+        section += `- ${entry.suiteName} — ${entry.launchName} (ID: ${entry.launchId})\n`;
+      });
+      section += `\n`;
+    }
+
+    if (summary.unmatchedPrevious.length > 0) {
+      section += `**Unmatched Previous Launches:**\n`;
+      summary.unmatchedPrevious.forEach(entry => {
+        section += `- ${entry.suiteName} — ${entry.launchName} (ID: ${entry.launchId})\n`;
+      });
+      section += `\n`;
+    }
+
+    return section;
+  }
+
+  private buildLinkedIssuesSection(
+    suites: Array<{
+      suite: string;
+      linkedIssues?: Array<{ key: string; url?: string; type?: string }>;
+    }>,
+    linkedIssuesConfig: { enabled: boolean; limit: number }
+  ) {
+    if (!linkedIssuesConfig.enabled) {
+      return '';
+    }
+
+    const lines: string[] = [];
+    suites.forEach(suite => {
+      const issues = suite.linkedIssues || [];
+      if (issues.length === 0) {
+        return;
+      }
+      const displayIssues = issues
+        .slice(0, linkedIssuesConfig.limit)
+        .map(issue => issue.url ? `[${issue.key}](${issue.url})` : issue.key);
+      lines.push(`- ${suite.suite} — ${displayIssues.join(', ')}`);
+    });
+
+    if (lines.length === 0) {
+      return '';
+    }
+
+    let section = `## 🔗 Linked Issues\n\n`;
+    section += `${lines.join('\n')}\n`;
+    return section;
+  }
+
+  /**
    * Get launcher summary - quick overview without detailed test sessions
    */
   async getLauncherSummary(input: { projectKey?: string; projectId?: number; launchId: number; format?: 'dto' | 'json' | 'string' }) {

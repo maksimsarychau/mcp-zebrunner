@@ -19,6 +19,7 @@ import 'dotenv/config';
 describe('EnhancedZebrunnerClient Integration Tests', () => {
   let client: EnhancedZebrunnerClient;
   let config: ZebrunnerConfig;
+  const testProjectKey = process.env.ZEBRUNNER_PROJECT_KEY || 'MCP';
 
   beforeEach(() => {
     // Require valid credentials for integration tests
@@ -39,7 +40,7 @@ describe('EnhancedZebrunnerClient Integration Tests', () => {
 
   describe('Connection and Health', () => {
     it('should successfully test connection to Zebrunner API', async () => {
-      const result = await client.testConnection();
+      const result = await client.testConnection(testProjectKey);
       
       assert.equal(result.success, true);
       assert.ok(result.message.includes('Connection successful'));
@@ -54,8 +55,8 @@ describe('EnhancedZebrunnerClient Integration Tests', () => {
   });
 
   describe('Test Suites API', () => {
-    it('should list test suites for MCP project', async () => {
-      const response = await client.getTestSuites('MCP');
+    it('should list test suites for project', async () => {
+      const response = await client.getTestSuites(testProjectKey);
       
       assert.ok(response);
       assert.ok(response.items);
@@ -70,19 +71,19 @@ describe('EnhancedZebrunnerClient Integration Tests', () => {
     });
 
     it('should get all test suites with pagination', async () => {
-      const allSuites = await client.getAllTestSuites('MCP');
+      const allSuites = await client.getAllTestSuites(testProjectKey);
       
       assert.ok(Array.isArray(allSuites));
       assert.ok(allSuites.length > 0);
 
       // Should have more or equal items than single page
-      const singlePage = await client.getTestSuites('MCP', { size: 5 });
+      const singlePage = await client.getTestSuites(testProjectKey, { size: 5 });
       assert.ok(allSuites.length >= singlePage.items.length);
     });
 
     it('should handle pagination parameters correctly', async () => {
-      const page0 = await client.getTestSuites('MCP', { page: 0, size: 2 });
-      const page1 = await client.getTestSuites('MCP', { page: 1, size: 2 });
+      const page0 = await client.getTestSuites(testProjectKey, { page: 0, size: 2 });
+      const page1 = await client.getTestSuites(testProjectKey, { page: 1, size: 2 });
       
       assert.ok(page0.items.length <= 2);
       assert.ok(page1.items.length <= 2);

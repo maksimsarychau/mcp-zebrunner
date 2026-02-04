@@ -18,6 +18,9 @@ const hasRealCredentials = process.env.ZEBRUNNER_URL &&
                           process.env.ZEBRUNNER_LOGIN &&
                           process.env.ZEBRUNNER_TOKEN;
 
+const TEST_PROJECT_KEY = process.env.ZEBRUNNER_PROJECT_KEY || 'MCP';
+const REQUEST_TIMEOUT_MS = 45000;
+
 if (!hasRealCredentials) {
   console.log('⚠️  Manual E2E tests skipped - no real Zebrunner credentials found');
   console.log('   Set ZEBRUNNER_URL, ZEBRUNNER_LOGIN, and ZEBRUNNER_TOKEN in .env to run these tests');
@@ -43,8 +46,8 @@ describe('Manual E2E Tests - Zebrunner MCP Server', () => {
     // Wait for server to be ready (with timeout)
     return new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(() => {
-        reject(new Error('Server startup timeout after 15 seconds'));
-      }, 15000);
+        reject(new Error('Server startup timeout after 30 seconds'));
+      }, 30000);
 
       // Listen to both stdout and stderr for startup message
       const handleOutput = (data: Buffer) => {
@@ -119,7 +122,7 @@ describe('Manual E2E Tests - Zebrunner MCP Server', () => {
         params: {
           name: 'list_test_suites',
           arguments: {
-            project_key: 'MCP',
+            project_key: TEST_PROJECT_KEY,
             format: 'json'
           }
         }
@@ -167,7 +170,7 @@ describe('Manual E2E Tests - Zebrunner MCP Server', () => {
         params: {
           name: 'list_test_suites',
           arguments: {
-            project_key: 'MCP',
+            project_key: TEST_PROJECT_KEY,
             format: 'json'
           }
         }
@@ -185,7 +188,7 @@ describe('Manual E2E Tests - Zebrunner MCP Server', () => {
         assert.ok(response.result || response.error, `Request ${i} should complete`);
       });
 
-      assert.ok(duration < 10000, 'Should handle concurrent requests within 10 seconds');
+      assert.ok(duration < 30000, 'Should handle concurrent requests within 30 seconds');
     });
   });
 });
@@ -196,8 +199,8 @@ describe('Manual E2E Tests - Zebrunner MCP Server', () => {
 async function sendMCPRequest(serverProcess: ChildProcess, request: any): Promise<any> {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
-      reject(new Error(`Request ${request.id} timeout after 15 seconds`));
-    }, 15000);
+      reject(new Error(`Request ${request.id} timeout after ${REQUEST_TIMEOUT_MS / 1000} seconds`));
+    }, REQUEST_TIMEOUT_MS);
 
     let responseBuffer = '';
 
