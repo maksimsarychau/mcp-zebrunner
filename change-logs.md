@@ -1,5 +1,21 @@
 # Change Logs
 
+## v5.16.1 (2026-02-04) - Build Lookup Reliability & Test Stability
+
+### 🧪 Test Reliability Improvements
+
+- **Integration tests:** Use configurable project key via `ZEBRUNNER_PROJECT_KEY`
+- **E2E timeouts:** Increased server startup and request timeouts for real API latency
+- **Reporting API tests:** Longer timeout for authentication stability
+- **Registry schema migration:** Updated `server.json` to schema 2025-12-11 and field names (title/websiteUrl)
+- **Registry publish note:** MCP Registry may still reject schema as deprecated (tracked in issue #875)
+
+### 🔍 Build Lookup Improvements
+
+- **Version-segment query:** Uses `26.6.0`-style tokens when available
+- **Strict build matching:** Verifies build via `buildNumber` or `launch.build` without fallback scans
+- **Debug visibility:** Optional debug logs for buildNumber/name/build matches
+
 ## v5.16.0 (2026-02-04) - Weekly Stability Report Enhancements
 
 ### 🚀 Enhanced Tool: `generate_weekly_regression_stability_report`
@@ -20,6 +36,7 @@ The weekly stability report now includes linked issue keys from the current laun
 - **Launch comparison guardrails:** validates launch name similarity and test overlap before comparison; mismatches are marked as `ERROR` with a notes warning
 - **Build-based mode:** auto-discovers launches by build numbers and compares suites one-by-one with a launch mapping section in detailed output
 - **Build lookup matching:** uses version segment when available and validates `launch.build` when list buildNumber is missing
+- **Registry publishing:** updated `server.json` schema to 2025-12-11 and migrated to camelCase fields for MCP registry compliance
 
 #### Example Usage
 
@@ -240,7 +257,7 @@ TAGS=>featureSuiteId=456||featureSuiteId=789||featureSuiteId=1011
     - Uses loop-based stripping until no more tags are found
     - Escapes any remaining angle brackets to prevent partial tag injection
     - Handles edge cases like `<<script>script>` that single-pass regex misses
-  - **Files Fixed**: 
+  - **Files Fixed**:
     - `src/server.ts` - 4 instances (3 in helper functions, 1 in `parseDefectHtml`)
   - **Test Coverage**: Added 11 new security test cases in `tests/unit/utilities.test.ts`
 
@@ -250,7 +267,7 @@ TAGS=>featureSuiteId=456||featureSuiteId=789||featureSuiteId=1011
 - **ENHANCED: `get_bug_review` - Automatic Failure Detail Fetching**
   - **Problem**: Previously required 10+ separate tool calls with manual approval for each bug
   - **Solution**: New `include_failure_details` parameter fetches all details in a single call
-  
+
   **New Parameters:**
   - `include_failure_details` (boolean, default: false) - Enables automatic detail fetching
   - `failure_detail_level` ('none' | 'summary' | 'full') - Controls detail depth
@@ -258,7 +275,7 @@ TAGS=>featureSuiteId=456||featureSuiteId=789||featureSuiteId=1011
 
   **New Features:**
   - **Priority Analysis**: Bugs categorized as 🔴 CRITICAL / 🟠 HIGH / 🟡 MEDIUM / 🟢 LOW
-  - **Trend Analysis**: 
+  - **Trend Analysis**:
     - Recently introduced bugs (last 7 days)
     - Long-standing bugs (tech debt, 30+ days old)
     - Frequently reproduced bugs
