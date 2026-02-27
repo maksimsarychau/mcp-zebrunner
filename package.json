@@ -1,6 +1,6 @@
 {
   "name": "mcp-zebrunner",
-  "version": "5.16.1",
+  "version": "6.0.1",
   "type": "module",
   "description": "Unified Zebrunner MCP server for TCM test cases, suites, coverage analysis, launchers, etc.",
   "mcpName": "io.github.maksimsarychau/mcp-zebrunner",
@@ -25,7 +25,8 @@
     "dist/**/*",
     "README.md",
     "LICENSE.md",
-    "mcp-zebrunner-rules.md.example"
+    "mcp-zebrunner-rules.md.example",
+    ".integrity-signature"
   ],
   "scripts": {
     "version": "node -p \"require('./package.json').version\"",
@@ -51,7 +52,9 @@
     "test:verbose": "tsx tests/test-runner.ts all --verbose",
     "lint": "tsc --noEmit",
     "clean": "rm -rf dist",
-    "dev:debug": "DEBUG=true tsx watch src/server.ts"
+    "dev:debug": "DEBUG=true tsx watch src/server.ts",
+    "sign-release": "tsx scripts/sign-release.ts",
+    "update-control": "tsx scripts/update-control.ts"
   },
   "dependencies": {
     "@ffmpeg-installer/ffmpeg": "^1.1.0",

@@ -9,12 +9,12 @@
     "source": "github"
   },
   "license": "AGPL-3.0",
-  "version": "5.16.1",
+  "version": "6.0.1",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "mcp-zebrunner",
-      "version": "5.16.1",
+      "version": "6.0.1",
       "transport": {
         "type": "stdio"
       },

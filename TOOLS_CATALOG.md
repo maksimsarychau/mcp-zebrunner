@@ -812,7 +812,7 @@ For large datasets, you can specify filters and limits:
 
 ---
 
-**Last Updated:** v5.16.0 - February 2026
+**Last Updated:** v6.0.1 - February 2026
 
 For the latest features and updates, see [change-logs.md](change-logs.md).
 
