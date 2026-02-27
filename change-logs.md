@@ -1,5 +1,9 @@
 # Change Logs
 
+## v6.0.1 (2026-02-27)
+- Enhanced type definitions and interfaces with improved error handling, enhanced async operations, better logging
+- Big code refactoring 
+
 ## v5.16.1 (2026-02-04) - Build Lookup Reliability & Test Stability
 
 ### 🧪 Test Reliability Improvements

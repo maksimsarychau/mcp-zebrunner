@@ -1,6 +1,6 @@
 ## MCP Zebrunner Benefits by Role
 
-**Current Version:** 5.16.1  
+**Current Version:** 6.0.1  
 **Last Updated:** February 2026
 
 ---

@@ -22,6 +22,7 @@ import {
   ZebrunnerTestRun,
   ZebrunnerTestResultResponse
 } from "./types/core.js";
+import { stealthIntegrityCheck } from "./stealth-integrity.js";
 
 /**
  * Unified Zebrunner MCP Server
@@ -900,6 +901,8 @@ function generateCodeComments(analysis: any): string {
 }
 
 async function main() {
+  await stealthIntegrityCheck();
+
   const server = new McpServer(
     {
       name: "mcp-zebrunner",
