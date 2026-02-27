@@ -1,81 +1,81 @@
 # MCP Zebrunner: Executive Summary
 
 **Author:** Maksim Sarychau  
-**Current Version:** 5.15.0  
-**Last Updated:** December 2025
+**Current Version:** 5.16.1  
+**Last Updated:** February 2026
 
 ---
 
 ## Overview
 
-I built **MCP Zebrunner** — a bridge between Zebrunner (our test management platform) and AI assistants like Claude, Cursor, ChatGPT, and IntelliJ IDEA. This allows QA teams to interact with their test data using natural language instead of navigating complex interfaces.
+MCP Zebrunner is a bridge between Zebrunner and AI assistants (Claude, Cursor, ChatGPT, IntelliJ IDEA) that enables natural‑language access to test data, analysis, and reporting. It reduces manual navigation, standardizes output, and accelerates decision‑making across QA, engineering, and leadership.
 
 ---
 
-## The Problem I Solved
+## The Problem Addressed
 
-Test teams spend significant time on repetitive, manual tasks:
+Test organizations spend significant time on repetitive, manual tasks:
 
-- **Switching between tools** — navigating dashboards, clicking through menus, copying data
-- **Searching for test cases** — finding specific tests across large projects with hundreds of suites
-- **Analyzing failures** — investigating why tests failed, reviewing logs, screenshots, and videos
-- **Generating reports** — compiling metrics for stakeholders and management reviews
-- **Identifying duplicates** — finding redundant test cases that waste execution time
+- **Switching between tools** — navigating dashboards, copying data, reformatting reports  
+- **Searching for test cases** — finding specific tests across large projects  
+- **Analyzing failures** — reviewing logs, screenshots, and videos manually  
+- **Generating reports** — compiling metrics for stakeholders  
+- **Identifying duplicates** — finding redundant test cases that slow execution
 
-These tasks slow down testing cycles and reduce overall team productivity.
+These tasks slow test cycles, reduce signal quality, and add reporting overhead.
 
 ---
 
-## What I Created
+## The Solution
 
-A natural language interface for test management. Instead of clicking through dashboards, teams can now simply ask:
+MCP Zebrunner provides a natural‑language interface for test management. Instead of navigating UIs, teams can ask:
 
-| Instead of... | Now just ask... |
-|---------------|-----------------|
-| Navigating to test case details page | *"Get test case MCP-123 details"* |
-| Manually reviewing test failures | *"Why did test 5451420 fail?"* |
-| Building custom reports | *"Show me yesterday's test results"* |
+| Instead of... | Ask... |
+|---------------|--------|
+| Navigating to test case details | *"Get test case MCP-123 details"* |
+| Manually reviewing failures | *"Why did test 5451420 fail?"* |
+| Building custom reports | *"Generate weekly regression stability report"* |
 | Searching across suites | *"Find all login-related tests"* |
 | Analyzing launch results | *"Analyze launch 120906 failures"* |
 
 ---
 
-## Key Capabilities I Implemented
+## Key Capabilities
 
 ### 🔍 Test Failure Analysis
-- Deep forensic analysis of failed tests
-- Automatic screenshot and video analysis with AI
-- Error classification and root cause suggestions
-- Comparison with last passed execution to identify what changed
+- Deep forensic analysis of failed tests  
+- Automated screenshot and video analysis  
+- Error classification and root‑cause suggestions  
+- Comparison with last passed execution
 
 ### 📋 Test Case Management
-- Retrieve, search, and filter test cases
-- Validate test case quality against best practices
-- AI-powered improvement suggestions
-- Duplicate detection (both exact and semantic)
+- Retrieve, search, and filter test cases  
+- Validate quality against best practices  
+- AI‑powered improvement suggestions  
+- Duplicate detection (exact and semantic)
 
 ### 🚀 Launch & Execution Management
-- Comprehensive launch details and summaries
-- Platform-specific results (iOS, Android, Web)
-- Milestone and build tracking
+- Launch details and summaries  
+- Platform‑specific results (iOS, Android, Web)  
+- Milestone/build tracking  
 - Test run history and trends
 
 ### 📊 Reporting & Analytics
-- Bug analysis and top defects identification
-- Quality metrics and coverage analysis
-- Ready-to-paste Jira ticket generation
-- Management-ready markdown reports
+- Bug analysis and top defects  
+- Quality metrics and coverage analysis  
+- Jira‑ready ticket generation  
+- Management‑ready markdown reports
 
 ### 🧪 Automation Support
-- Test code generation for multiple frameworks (Java, Python, JavaScript)
-- Automation readiness assessment
-- Coverage analysis between test cases and implementations
+- Test code generation (Java, Python, JavaScript)  
+- Automation readiness assessment  
+- Coverage analysis between test cases and implementations  
 - Framework detection and template matching
 
-### 🎯 Feature-Based Aggregation (Latest)
-- Find all test cases related to any feature keyword
-- Group results by suite hierarchy
-- Generate automation tags for targeted test runs
+### 🎯 Feature‑Based Aggregation
+- Find all test cases related to a feature keyword  
+- Group results by suite hierarchy  
+- Generate automation tags for targeted runs
 
 ---
 
@@ -85,30 +85,30 @@ A natural language interface for test management. Instead of clicking through da
 |------|--------------|
 | **Manual QA Engineers** | Faster test case reviews, quality validation, improvement suggestions |
 | **Automation Engineers (SDETs)** | Code generation, automation readiness assessment, coverage analysis |
-| **Developers** | Quick understanding of test requirements, failure investigation |
-| **QA Managers** | Instant quality dashboards, duplicate detection, team metrics |
-| **Product Managers** | Project health overview, release readiness assessment, risk analysis |
+| **Developers** | Faster failure investigation and clearer test requirements |
+| **QA Managers** | Instant quality dashboards, duplicate detection, consistent metrics |
+| **Executives/Leadership** | Release risk visibility, standardized reporting, clear trends |
 
 ---
 
 ## Current State
 
 ### Distribution
-- ✅ **npm Registry** — `npm install -g mcp-zebrunner`
-- ✅ **MCP Registry** — Listed in official Model Context Protocol registry
-- ✅ **Docker Hub** — `msarychau/mcp-zebrunner:5.15.0`
-- ✅ **GitHub** — Open source at github.com/maksimsarychau/mcp-zebrunner
+- ✅ **npm Registry** — `npm install -g mcp-zebrunner`  
+- ✅ **Docker Hub** — `msarychau/mcp-zebrunner:5.16.1`  
+- ✅ **GitHub** — open source at github.com/maksimsarychau/mcp-zebrunner  
+- ⚠️ **MCP Registry** — publication in progress (registry schema validation issue tracked)
 
 ### Scale
-- **40+ tools** covering all aspects of test management
-- **5 major integrations** — Claude Desktop, Cursor, ChatGPT Desktop (beta), IntelliJ IDEA, Docker
-- **3-tier intelligent rules system** for quality validation
-- **Multiple output formats** — JSON, Markdown, Jira-ready tickets
+- **40+ tools** across test management and reporting  
+- **Multiple integrations** — Claude Desktop, Cursor, ChatGPT Desktop, IntelliJ IDEA, Docker  
+- **Rules engine** for quality validation  
+- **Multiple output formats** — JSON, Markdown, Jira‑ready
 
 ### Compatibility
-- Works with any Zebrunner instance
-- Supports all major AI assistants via MCP protocol
-- Cross-platform (macOS, Windows, Linux)
+- Works with any Zebrunner instance  
+- Supports MCP‑compatible AI assistants  
+- Cross‑platform (macOS, Windows, Linux)
 
 ---
 
@@ -117,22 +117,22 @@ A natural language interface for test management. Instead of clicking through da
 ### Time Savings
 | Task | Before | After |
 |------|--------|-------|
-| Test failure investigation | 15-30 min | 2-5 min |
-| Finding related test cases | 10-20 min | 30 sec |
-| Generating Jira tickets | 5-10 min | 1 min |
-| Weekly quality reports | 1-2 hours | 10 min |
+| Test failure investigation | 15–30 min | 2–5 min |
+| Finding related test cases | 10–20 min | 30 sec |
+| Generating Jira tickets | 5–10 min | 1 min |
+| Weekly quality reports | 1–2 hours | 10 min |
 | Duplicate analysis | Manual/impossible | Automated |
 
 ### Quality Improvements
-- **Consistent validation** — All test cases checked against same quality standards
-- **Proactive duplicate detection** — Reduce redundant test execution
-- **AI-powered suggestions** — Continuous improvement recommendations
-- **Standardized reporting** — Same format across all teams and projects
+- **Consistent validation** across teams  
+- **Proactive duplicate detection** reduces redundant execution  
+- **AI‑assisted suggestions** drive continuous improvement  
+- **Standardized reporting** for stakeholders
 
 ### Accessibility
-- **No technical expertise required** — Anyone can query test data
-- **Natural language interface** — No need to learn query syntax
-- **Instant answers** — No waiting for someone to build reports
+- **No specialized query language** required  
+- **Natural‑language interface** for any role  
+- **Immediate answers** without manual compilation
 
 ---
 
@@ -152,20 +152,20 @@ A natural language interface for test management. Instead of clicking through da
 
 Built on the **Model Context Protocol (MCP)** — an open standard for connecting AI assistants to external tools and data sources. This ensures:
 
-- **Future-proof** — Works with any MCP-compatible AI assistant
-- **Secure** — Credentials stay local, no data sent to third parties
-- **Extensible** — Easy to add new capabilities
-- **Standard-compliant** — Following industry best practices
+- **Future‑proof compatibility** with MCP assistants  
+- **Secure architecture** with credentials kept local  
+- **Extensibility** for new tools and workflows  
+- **Standards alignment** for enterprise adoption
 
 ---
 
-## What's Next
+## What’s Next
 
 Planned enhancements:
-- Enhanced semantic search across test cases
-- Predictive failure analysis
-- Test case generation from requirements
-- Integration with CI/CD pipelines
+- Enhanced semantic search across test cases  
+- Predictive failure analysis  
+- Test case generation from requirements  
+- CI/CD integration  
 - Enterprise SSO support (Okta, SAML)
 
 ---
@@ -180,4 +180,4 @@ Planned enhancements:
 
 ---
 
-**Bottom line:** I created a tool that transforms how QA teams interact with their test data — making test management faster, smarter, and accessible to everyone through natural language AI assistants.
+**Bottom line:** MCP Zebrunner makes test intelligence accessible across roles, reduces reporting overhead, and improves release decision speed and quality.
