@@ -112,8 +112,6 @@ export async function computeHash(root: string, files: string[]): Promise<Buffer
 }
 
 function verifySignatureWithKey(data: Buffer, signatureB64: string): boolean {
-  const placeholder: string = 'REPLACE_WITH_PUBLIC_KEY_BASE64';
-  if ((PUBLIC_KEY_BASE64 as string) === placeholder) return true;
   try {
     const publicKey = crypto.createPublicKey({
       key: Buffer.from(PUBLIC_KEY_BASE64, 'base64'),
@@ -186,6 +184,21 @@ interface CacheEntry extends ControlFile {
   cachedAt: string;
 }
 
+function isValidControlFile(data: unknown): data is ControlFile {
+  if (!data || typeof data !== 'object') return false;
+  const obj = data as Record<string, unknown>;
+  if (typeof obj.signature !== 'string' || !obj.signature) return false;
+  const p = obj.payload;
+  if (!p || typeof p !== 'object') return false;
+  const payload = p as Record<string, unknown>;
+  return (
+    typeof payload.status === 'string' &&
+    typeof payload.minVersion === 'string' &&
+    typeof payload.message === 'string' &&
+    typeof payload.updatedAt === 'string'
+  );
+}
+
 function fetchUrl(url: string, timeoutMs: number): Promise<string> {
   return new Promise((resolve, reject) => {
     const req = https.get(url, { timeout: timeoutMs }, (res) => {
@@ -211,7 +224,10 @@ async function remoteHealthCheck(root: string): Promise<{ ok: boolean; message: 
 
   try {
     const body = await fetchUrl(CONTROL_URL, 5000);
-    controlData = JSON.parse(body) as ControlFile;
+    const parsed: unknown = JSON.parse(body);
+    if (isValidControlFile(parsed)) {
+      controlData = parsed;
+    }
   } catch {
     // Network failure - try cache
   }
@@ -237,10 +253,12 @@ async function remoteHealthCheck(root: string): Promise<{ ok: boolean; message: 
   try {
     const cacheData = await fs.readFile(cacheFile, 'utf-8');
     cacheExists = true;
-    const cached = JSON.parse(cacheData) as CacheEntry;
-    const age = Date.now() - new Date(cached.cachedAt).getTime();
-    if (age < CACHE_TTL_MS) {
-      return evaluatePayload(cached.payload, currentVersion);
+    const cached: unknown = JSON.parse(cacheData);
+    if (isValidControlFile(cached) && typeof (cached as CacheEntry).cachedAt === 'string') {
+      const age = Date.now() - new Date((cached as CacheEntry).cachedAt).getTime();
+      if (age < CACHE_TTL_MS) {
+        return evaluatePayload(cached.payload, currentVersion);
+      }
     }
   } catch { /* no cache or corrupt */ }
 
@@ -251,10 +269,12 @@ async function remoteHealthCheck(root: string): Promise<{ ok: boolean; message: 
     try {
       const localPath = path.join(root, '.mcp-status');
       const localData = await fs.readFile(localPath, 'utf-8');
-      const local = JSON.parse(localData) as ControlFile;
-      const localPayloadStr = JSON.stringify(local.payload);
-      if (verifySignatureWithKey(Buffer.from(localPayloadStr), local.signature)) {
-        return evaluatePayload(local.payload, currentVersion);
+      const parsed: unknown = JSON.parse(localData);
+      if (isValidControlFile(parsed)) {
+        const localPayloadStr = JSON.stringify(parsed.payload);
+        if (verifySignatureWithKey(Buffer.from(localPayloadStr), parsed.signature)) {
+          return evaluatePayload(parsed.payload, currentVersion);
+        }
       }
     } catch { /* no local file or corrupt */ }
   }
