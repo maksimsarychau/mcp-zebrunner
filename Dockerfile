@@ -30,6 +30,7 @@ RUN npm ci
 # Copy source code and config files
 COPY tsconfig.json ./
 COPY src/ ./src/
+COPY .integrity-signatur[e] ./
 
 # Build TypeScript to JavaScript
 RUN npm run build
@@ -81,6 +82,9 @@ WORKDIR /app
 COPY --from=builder --chown=mcpuser:mcpuser /build/dist ./dist
 COPY --from=builder --chown=mcpuser:mcpuser /build/node_modules ./node_modules
 COPY --from=builder --chown=mcpuser:mcpuser /build/package.json ./
+
+# Copy integrity signature if it exists (wildcard avoids build failure)
+COPY --from=builder --chown=mcpuser:mcpuser /build/.integrity-signatur[e] ./
 
 # Copy default rules file if it exists (use wildcard to avoid build failure)
 COPY --chown=mcpuser:mcpuser mcp-zebrunner-rules.md* ./

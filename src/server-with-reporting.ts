@@ -20,6 +20,7 @@ import {
   AnalyzeTestFailureInputSchema
 } from "./types/api.js";
 import { ZebrunnerReportingConfig } from "./types/reporting.js";
+import { stealthIntegrityCheck } from "./stealth-integrity.js";
 
 /** Environment configuration */
 const ZEBRUNNER_URL = process.env.ZEBRUNNER_URL?.replace(/\/+$/, "");
@@ -71,6 +72,8 @@ function debugLog(message: string, data?: unknown) {
 }
 
 async function main() {
+  await stealthIntegrityCheck();
+
   const server = new McpServer(
     { 
       name: "zebrunner-mcp-with-reporting", 
