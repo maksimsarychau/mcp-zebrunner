@@ -1138,6 +1138,7 @@ This will show:
 3. **Verify your configuration** - Double-check your `.env` file
 4. **Check Zebrunner permissions** - Ensure your user has proper access
 5. **Validate rules files** - Ensure rules files have meaningful content
+6. **Report issues** - If you find a bug, please open an issue at https://github.com/maksimsarychau/mcp-zebrunner/issues
 
 [⬆️ Back to top](#-table-of-contents)
 
