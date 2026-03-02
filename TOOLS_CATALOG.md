@@ -594,6 +594,11 @@ Weekly stability report for project MCP using:
 
 **Description:** Get test results grouped by platform for a specific time period.
 
+**Supported Periods (Input):**
+- Today, Last 24 Hours, Week, Last 7 Days, Last 14 Days, Month, Last 30 Days, Quarter, Last 90 Days, Year, Last 365 Days, Total
+
+**Mapping Note:** Periods are mapped to supported widget values (Last 7 Days, Week, Month) when needed.
+
 **Example Prompts:**
 - "Get iOS test results for the last 7 days"
 - "Show me Android test results from last week"
@@ -602,6 +607,11 @@ Weekly stability report for project MCP using:
 ### `get_top_bugs`
 
 **Description:** Get most frequent defects/bugs from test executions.
+
+**Supported Periods (Input):**
+- Today, Last 24 Hours, Week, Last 7 Days, Last 14 Days, Month, Last 30 Days, Quarter, Last 90 Days, Year, Last 365 Days, Total
+
+**Mapping Note:** Periods are mapped to supported widget values (Last 7 Days, Week, Month) when needed.
 
 **Example Prompts:**
 - "Show me top 10 bugs from last week"
@@ -616,12 +626,14 @@ Weekly stability report for project MCP using:
 - Detailed bug review with failure analysis
 - Defect tracking with Jira/issue tracker links
 - Historical data (first seen and last reproduction dates)
-- Configurable time periods (Last 7/14/30/90 Days, Week, Month, Quarter)
+- Configurable time periods (Today, Last 24 Hours, Week, Last 7/14/30/90 Days, Month, Quarter, Year, Last 365 Days, Total)
 - Multiple output formats (detailed, summary, json)
 - **NEW: Automatic failure detail fetching** - No need for separate calls
 - **NEW: Priority analysis** - Bugs categorized as Critical/High/Medium/Low
 - **NEW: Trend analysis** - Recently introduced, long-standing, frequently reproduced
 - **NEW: Recommendations section** - Actionable insights
+
+**Mapping Note:** Periods are mapped to supported widget values (Last 7/14/30/90 Days, Week, Month, Quarter) when needed.
 
 **New Parameters:**
 - `include_failure_details` (boolean, default: false) - When true, automatically fetches detailed failure info for each bug
@@ -646,6 +658,8 @@ Weekly stability report for project MCP using:
 - Includes defect associations for each failure
 - Multiple output formats (detailed, summary, json)
 - Requires dashboardId and hashcode from bug review
+
+**Mapping Note:** Periods are mapped to supported widget values (Last 7/14/30/90 Days, Week, Month, Quarter) when needed.
 
 **Example Prompts:**
 - "Get failure info for hashcode 1051677506 on dashboard 99"
@@ -812,7 +826,7 @@ For large datasets, you can specify filters and limits:
 
 ---
 
-**Last Updated:** v6.0.2 - February 2026
+**Last Updated:** v6.1.1 - March 2026
 
 For the latest features and updates, see [change-logs.md](change-logs.md).
 

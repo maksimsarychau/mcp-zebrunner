@@ -1,8 +1,10 @@
 # Change Logs
 
-## v6.0.2 (2026-02-27)
+## v6.1.1 (2026-03-01)
 - Excluded markdown files and docs/ from integrity 
 - Version bump and documentation updates
+- Expanded widget tool period inputs with mapping to supported values
+- Added a short note to report bugs via GitHub issues
 
 ## v6.0.1 (2026-02-27)
 - Enhanced type definitions and interfaces with improved error handling, enhanced async operations, better logging

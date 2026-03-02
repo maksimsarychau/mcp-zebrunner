@@ -90,7 +90,37 @@ const PROJECT_ALIASES: Record<string, string> = {
   web: "MFPWEB", android: "MFPAND", ios: "MFPIOS", api: "MFPAPI"
 };
 
-const PERIODS = ["Last 14 Days","Last 7 Days","Week","Month"] as const;
+const ALL_PERIODS = [
+  "Today",
+  "Last 24 Hours",
+  "Week",
+  "Last 7 Days",
+  "Last 14 Days",
+  "Month",
+  "Last 30 Days",
+  "Quarter",
+  "Last 90 Days",
+  "Year",
+  "Last 365 Days",
+  "Total"
+] as const;
+
+type Period = (typeof ALL_PERIODS)[number];
+
+const PERIOD_PRIORITY: Record<Period, Period[]> = {
+  "Today": ["Today", "Last 24 Hours", "Last 7 Days", "Week"],
+  "Last 24 Hours": ["Last 24 Hours", "Today", "Last 7 Days", "Week"],
+  "Last 7 Days": ["Last 7 Days", "Week"],
+  "Week": ["Week", "Last 7 Days"],
+  "Last 14 Days": ["Last 14 Days", "Last 7 Days", "Week"],
+  "Month": ["Month", "Last 30 Days"],
+  "Last 30 Days": ["Last 30 Days", "Month"],
+  "Quarter": ["Quarter", "Last 90 Days", "Month"],
+  "Last 90 Days": ["Last 90 Days", "Quarter", "Month"],
+  "Year": ["Year", "Last 365 Days", "Quarter", "Month"],
+  "Last 365 Days": ["Last 365 Days", "Year", "Quarter", "Month"],
+  "Total": ["Total", "Year", "Month"]
+};
 
 const PLATFORM_MAP: Record<string, string[]> = {
   web: [],        // web often uses BROWSER instead
@@ -106,6 +136,9 @@ const TEMPLATE = {
   FAILURE_INFO: 6,
   FAILURE_DETAILS: 10
 } as const;
+
+const WIDGET_PERIODS_BASIC = ["Last 7 Days", "Week", "Month"] as const;
+const WIDGET_PERIODS_BUG_REVIEW = ["Last 7 Days", "Last 14 Days", "Last 30 Days", "Last 90 Days", "Week", "Month", "Quarter"] as const;
 
 /** Debug logging utility with safe serialization - uses stderr to avoid MCP protocol interference */
 function debugLog(message: string, data?: unknown) {
@@ -239,20 +272,31 @@ async function callWidgetSql(
   return res.json();
 }
 
+function resolvePeriod(input: string, allowed: readonly Period[]) {
+  const normalized = ALL_PERIODS.find(p => p.toLowerCase() === input.toLowerCase());
+  if (!normalized) {
+    throw new Error(`Invalid period: ${input}. Allowed: ${ALL_PERIODS.join(", ")}`);
+  }
+  const candidates = PERIOD_PRIORITY[normalized];
+  const resolved = candidates.find(candidate => allowed.includes(candidate));
+  if (!resolved) {
+    throw new Error(`Unsupported period: ${input}. Allowed: ${allowed.join(", ")}`);
+  }
+  return resolved;
+}
+
 // === Build paramsConfig for widget requests ===
 function buildParamsConfig(opts: {
-  period: (typeof PERIODS)[number];
+  period: string;
+  allowedPeriods: readonly Period[];
   platform?: string | string[];  // alias ("ios") or explicit array (["ios"])
   browser?: string[];            // e.g., ["chrome"] for web
   milestone?: string[];          // e.g., ["25.39.0"] for milestone filtering
   dashboardName?: string;        // optional override
   extra?: Partial<Record<string, any>>;
 }) {
-  const { period, platform, browser = [], milestone = [], dashboardName, extra = {} } = opts;
-
-  if (!PERIODS.includes(period as any)) {
-    throw new Error(`Invalid period: ${period}. Allowed: ${PERIODS.join(", ")}`);
-  }
+  const { period, allowedPeriods, platform, browser = [], milestone = [], dashboardName, extra = {} } = opts;
+  const resolvedPeriod = resolvePeriod(period, allowedPeriods);
 
   const resolvedPlatform: string[] =
     Array.isArray(platform)
@@ -267,7 +311,7 @@ function buildParamsConfig(opts: {
     RUN: [], USER: [], ENV: [], MILESTONE: milestone,
     PLATFORM: resolvedPlatform,
     STATUS: [], LOCALE: [],
-    PERIOD: period,
+    PERIOD: resolvedPeriod,
     dashboardName: dashboardName ?? "Weekly results",
     isReact: true,
     ...extra
@@ -3860,9 +3904,9 @@ async function main() {
       project: z.union([z.enum(["web","android","ios","api"]), z.string(), z.number()])
         .default("web")
         .describe("Project alias ('web', 'android', 'ios', 'api'), project key, or numeric projectId"),
-      period: z.enum(["Last 7 Days","Week","Month"])
+      period: z.enum(ALL_PERIODS)
         .default("Last 7 Days")
-        .describe("Time period"),
+        .describe("Time period (mapped to supported widget periods)"),
       platform: z.union([z.enum(["web","android","ios","api"]), z.array(z.string())])
         .optional()
         .describe("Platform alias or explicit array for paramsConfig.PLATFORM"),
@@ -3889,6 +3933,7 @@ async function main() {
 
         const paramsConfig = buildParamsConfig({
           period: args.period,
+          allowedPeriods: WIDGET_PERIODS_BASIC,
           platform: args.platform ?? (typeof args.project === 'string' ? args.project : undefined),   // default to project alias
           browser: args.browser,
           milestone: args.milestone,
@@ -3943,9 +3988,9 @@ async function main() {
       project: z.union([z.enum(["web","android","ios","api"]), z.string(), z.number()])
         .default("web")
         .describe("Project alias ('web', 'android', 'ios', 'api'), project key, or numeric projectId"),
-      period: z.enum(["Last 7 Days","Week","Month"])
+      period: z.enum(ALL_PERIODS)
         .default("Last 7 Days")
-        .describe("Time period"),
+        .describe("Time period (mapped to supported widget periods)"),
       limit: z.number().int().positive().max(100)
         .default(10)
         .describe("How many bugs to return"),
@@ -3973,6 +4018,7 @@ async function main() {
         // Keep PLATFORM empty by default as per your examples
         const paramsConfig = buildParamsConfig({
           period: args.period,
+          allowedPeriods: WIDGET_PERIODS_BASIC,
           platform: args.platform ?? [],
           milestone: args.milestone,
           dashboardName: "Bugs repro rate (last 7 days)"
@@ -4107,9 +4153,9 @@ async function main() {
       project: z.union([z.enum(["web","android","ios","api"]), z.string(), z.number()])
         .default("web")
         .describe("Project alias ('web', 'android', 'ios', 'api'), project key, or numeric projectId"),
-      period: z.enum(["Last 7 Days", "Last 14 Days", "Last 30 Days", "Last 90 Days", "Week", "Month", "Quarter"])
+      period: z.enum(ALL_PERIODS)
         .default("Last 7 Days")
-        .describe("Time period for bug review"),
+        .describe("Time period for bug review (mapped to supported widget periods)"),
       limit: z.number().int().positive().max(500)
         .default(100)
         .describe("Maximum number of bugs to return (default: 100, max: 500)"),
@@ -4135,6 +4181,8 @@ async function main() {
         // Resolve project ID with enhanced discovery and suggestions
         const { projectId } = await resolveProjectId(args.project);
 
+        const resolvedPeriod = resolvePeriod(args.period, WIDGET_PERIODS_BUG_REVIEW);
+
         // Build params config for bug review widget
         const paramsConfig = {
           BROWSER: [],
@@ -4149,7 +4197,7 @@ async function main() {
           PLATFORM: [],
           STATUS: [],
           LOCALE: [],
-          PERIOD: args.period,
+          PERIOD: resolvedPeriod,
           ERROR_COUNT: "0",
           dashboardName: "Bug review",
           isReact: true
@@ -4206,14 +4254,14 @@ async function main() {
           const detailPromises = bugsToFetch.map(async (bug) => {
             try {
               const failureInfoParams = {
-                PERIOD: args.period,
+                PERIOD: resolvedPeriod,
                 dashboardName: "Failures analysis",
                 hashcode: bug.hashcode,
                 isReact: true
               };
 
               const failureDetailsParams = {
-                PERIOD: args.period,
+                PERIOD: resolvedPeriod,
                 dashboardName: "Failures analysis",
                 hashcode: bug.hashcode,
                 isReact: true
@@ -4465,9 +4513,9 @@ ${priorityAnalysis.statistics.withoutDefects > 0 ? `- **Tracking Gap:** ${priori
         .describe("Dashboard ID from bug review (e.g., 99)"),
       hashcode: z.string()
         .describe("Hashcode from bug review failure link (e.g., '1051677506')"),
-      period: z.enum(["Last 7 Days", "Last 14 Days", "Last 30 Days", "Last 90 Days", "Week", "Month", "Quarter"])
+      period: z.enum(ALL_PERIODS)
         .default("Last 14 Days")
-        .describe("Time period for failure analysis"),
+        .describe("Time period for failure analysis (mapped to supported widget periods)"),
       format: z.enum(['detailed', 'summary', 'json']).default('detailed')
         .describe("Output format: detailed (full info), summary (concise), or json (raw data)")
     },
@@ -4478,16 +4526,18 @@ ${priorityAnalysis.statistics.withoutDefects > 0 ? `- **Tracking Gap:** ${priori
         // Resolve project ID with enhanced discovery and suggestions
         const { projectId } = await resolveProjectId(args.project);
 
+        const resolvedPeriod = resolvePeriod(args.period, WIDGET_PERIODS_BUG_REVIEW);
+
         // Build params config for both widgets
         const failureInfoParams = {
-          PERIOD: args.period,
+          PERIOD: resolvedPeriod,
           dashboardName: "Failures analysis",
           hashcode: args.hashcode,
           isReact: true
         };
 
         const failureDetailsParams = {
-          PERIOD: args.period,
+          PERIOD: resolvedPeriod,
           dashboardName: "Failures analysis",
           hashcode: args.hashcode,
           isReact: true
