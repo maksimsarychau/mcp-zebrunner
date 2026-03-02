@@ -1,5 +1,9 @@
 # Change Logs
 
+## v6.0.2 (2026-02-27)
+- Excluded markdown files and docs/ from integrity 
+- Version bump and documentation updates
+
 ## v6.0.1 (2026-02-27)
 - Enhanced type definitions and interfaces with improved error handling, enhanced async operations, better logging
 - Big code refactoring 
