@@ -30,7 +30,10 @@ const WHITELIST_PATTERNS = [
   'dist/',
   '.integrity-signature',
   '.mcp-status',
+  'docs/',
 ];
+
+const WHITELIST_EXTENSIONS = ['.md'];
 
 const GENERIC_ERROR = `Server initialization failed. Please reinstall from the official source:\nhttps://github.com/maksimsarychau/mcp-zebrunner`;
 
@@ -40,6 +43,7 @@ export function getProjectRoot(): string {
 }
 
 function isWhitelisted(relPath: string): boolean {
+  if (WHITELIST_EXTENSIONS.some(ext => relPath.endsWith(ext))) return true;
   return WHITELIST_PATTERNS.some(p => relPath === p.replace(/\/$/, '') || relPath.startsWith(p));
 }
 
