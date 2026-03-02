@@ -3,8 +3,9 @@
 ## v6.1.1 (2026-03-01)
 - Excluded markdown files and docs/ from integrity 
 - Version bump and documentation updates
-- Expanded widget tool period inputs with mapping to supported values
+- Expanded widget tool period inputs across reporting widgets
 - Added a short note to report bugs via GitHub issues
+- Disabled period fallback mapping; widgets now use the requested period as-is
 
 ## v6.0.1 (2026-02-27)
 - Enhanced type definitions and interfaces with improved error handling, enhanced async operations, better logging
