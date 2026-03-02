@@ -107,21 +107,6 @@ const ALL_PERIODS = [
 
 type Period = (typeof ALL_PERIODS)[number];
 
-const PERIOD_PRIORITY: Record<Period, Period[]> = {
-  "Today": ["Today", "Last 24 Hours", "Last 7 Days", "Week"],
-  "Last 24 Hours": ["Last 24 Hours", "Today", "Last 7 Days", "Week"],
-  "Last 7 Days": ["Last 7 Days", "Week"],
-  "Week": ["Week", "Last 7 Days"],
-  "Last 14 Days": ["Last 14 Days", "Last 7 Days", "Week"],
-  "Month": ["Month", "Last 30 Days"],
-  "Last 30 Days": ["Last 30 Days", "Month"],
-  "Quarter": ["Quarter", "Last 90 Days", "Month"],
-  "Last 90 Days": ["Last 90 Days", "Quarter", "Month"],
-  "Year": ["Year", "Last 365 Days", "Quarter", "Month"],
-  "Last 365 Days": ["Last 365 Days", "Year", "Quarter", "Month"],
-  "Total": ["Total", "Year", "Month"]
-};
-
 const PLATFORM_MAP: Record<string, string[]> = {
   web: [],        // web often uses BROWSER instead
   api: ["api"],
@@ -136,9 +121,6 @@ const TEMPLATE = {
   FAILURE_INFO: 6,
   FAILURE_DETAILS: 10
 } as const;
-
-const WIDGET_PERIODS_BASIC = ["Last 7 Days", "Week", "Month"] as const;
-const WIDGET_PERIODS_BUG_REVIEW = ["Last 7 Days", "Last 14 Days", "Last 30 Days", "Last 90 Days", "Week", "Month", "Quarter"] as const;
 
 /** Debug logging utility with safe serialization - uses stderr to avoid MCP protocol interference */
 function debugLog(message: string, data?: unknown) {
@@ -272,31 +254,20 @@ async function callWidgetSql(
   return res.json();
 }
 
-function resolvePeriod(input: string, allowed: readonly Period[]) {
-  const normalized = ALL_PERIODS.find(p => p.toLowerCase() === input.toLowerCase());
-  if (!normalized) {
-    throw new Error(`Invalid period: ${input}. Allowed: ${ALL_PERIODS.join(", ")}`);
-  }
-  const candidates = PERIOD_PRIORITY[normalized];
-  const resolved = candidates.find(candidate => allowed.includes(candidate));
-  if (!resolved) {
-    throw new Error(`Unsupported period: ${input}. Allowed: ${allowed.join(", ")}`);
-  }
-  return resolved;
-}
-
 // === Build paramsConfig for widget requests ===
 function buildParamsConfig(opts: {
   period: string;
-  allowedPeriods: readonly Period[];
   platform?: string | string[];  // alias ("ios") or explicit array (["ios"])
   browser?: string[];            // e.g., ["chrome"] for web
   milestone?: string[];          // e.g., ["25.39.0"] for milestone filtering
   dashboardName?: string;        // optional override
   extra?: Partial<Record<string, any>>;
 }) {
-  const { period, allowedPeriods, platform, browser = [], milestone = [], dashboardName, extra = {} } = opts;
-  const resolvedPeriod = resolvePeriod(period, allowedPeriods);
+  const { period, platform, browser = [], milestone = [], dashboardName, extra = {} } = opts;
+  const normalized = ALL_PERIODS.find(p => p.toLowerCase() === period.toLowerCase());
+  if (!normalized) {
+    throw new Error(`Invalid period: ${period}. Allowed: ${ALL_PERIODS.join(", ")}`);
+  }
 
   const resolvedPlatform: string[] =
     Array.isArray(platform)
@@ -311,7 +282,7 @@ function buildParamsConfig(opts: {
     RUN: [], USER: [], ENV: [], MILESTONE: milestone,
     PLATFORM: resolvedPlatform,
     STATUS: [], LOCALE: [],
-    PERIOD: resolvedPeriod,
+    PERIOD: normalized,
     dashboardName: dashboardName ?? "Weekly results",
     isReact: true,
     ...extra
@@ -3933,7 +3904,6 @@ async function main() {
 
         const paramsConfig = buildParamsConfig({
           period: args.period,
-          allowedPeriods: WIDGET_PERIODS_BASIC,
           platform: args.platform ?? (typeof args.project === 'string' ? args.project : undefined),   // default to project alias
           browser: args.browser,
           milestone: args.milestone,
@@ -4018,7 +3988,6 @@ async function main() {
         // Keep PLATFORM empty by default as per your examples
         const paramsConfig = buildParamsConfig({
           period: args.period,
-          allowedPeriods: WIDGET_PERIODS_BASIC,
           platform: args.platform ?? [],
           milestone: args.milestone,
           dashboardName: "Bugs repro rate (last 7 days)"
@@ -4181,8 +4150,6 @@ async function main() {
         // Resolve project ID with enhanced discovery and suggestions
         const { projectId } = await resolveProjectId(args.project);
 
-        const resolvedPeriod = resolvePeriod(args.period, WIDGET_PERIODS_BUG_REVIEW);
-
         // Build params config for bug review widget
         const paramsConfig = {
           BROWSER: [],
@@ -4197,7 +4164,7 @@ async function main() {
           PLATFORM: [],
           STATUS: [],
           LOCALE: [],
-          PERIOD: resolvedPeriod,
+          PERIOD: args.period,
           ERROR_COUNT: "0",
           dashboardName: "Bug review",
           isReact: true
@@ -4254,14 +4221,14 @@ async function main() {
           const detailPromises = bugsToFetch.map(async (bug) => {
             try {
               const failureInfoParams = {
-                PERIOD: resolvedPeriod,
+                PERIOD: args.period,
                 dashboardName: "Failures analysis",
                 hashcode: bug.hashcode,
                 isReact: true
               };
 
               const failureDetailsParams = {
-                PERIOD: resolvedPeriod,
+                PERIOD: args.period,
                 dashboardName: "Failures analysis",
                 hashcode: bug.hashcode,
                 isReact: true
@@ -4526,18 +4493,16 @@ ${priorityAnalysis.statistics.withoutDefects > 0 ? `- **Tracking Gap:** ${priori
         // Resolve project ID with enhanced discovery and suggestions
         const { projectId } = await resolveProjectId(args.project);
 
-        const resolvedPeriod = resolvePeriod(args.period, WIDGET_PERIODS_BUG_REVIEW);
-
         // Build params config for both widgets
         const failureInfoParams = {
-          PERIOD: resolvedPeriod,
+          PERIOD: args.period,
           dashboardName: "Failures analysis",
           hashcode: args.hashcode,
           isReact: true
         };
 
         const failureDetailsParams = {
-          PERIOD: resolvedPeriod,
+          PERIOD: args.period,
           dashboardName: "Failures analysis",
           hashcode: args.hashcode,
           isReact: true
