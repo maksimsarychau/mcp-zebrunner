@@ -5,7 +5,6 @@ import ffmpeg from 'fluent-ffmpeg';
 import ffmpegPath from '@ffmpeg-installer/ffmpeg';
 import ffprobePath from '@ffprobe-installer/ffprobe';
 import sharp from 'sharp';
-import Tesseract from 'tesseract.js';
 import { ExtractedFrame, FrameAnalysis } from './types.js';
 
 // Set FFmpeg and FFprobe paths
@@ -328,6 +327,8 @@ export class FrameExtractor {
    */
   private async extractTextFromImage(imagePath: string): Promise<string> {
     try {
+      // Lazy-load OCR dependency to avoid loading deprecated transitive modules at server startup
+      const { default: Tesseract } = await import('tesseract.js');
       // Tesseract.js requires logger to be a function, not undefined
       const options: any = {};
       if (this.debug) {
