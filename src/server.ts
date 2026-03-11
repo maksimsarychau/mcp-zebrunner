@@ -23,6 +23,11 @@ import {
   ZebrunnerTestResultResponse
 } from "./types/core.js";
 import { stealthIntegrityCheck } from "./stealth-integrity.js";
+import {
+  loadToolIntelSnapshot,
+  markdownForAllTools,
+  markdownForToolDetails
+} from "./utils/tool-intel.js";
 
 /**
  * Unified Zebrunner MCP Server
@@ -3865,6 +3870,63 @@ async function main() {
     }
   );
 
+  // === Tool: About MCP Tools (discovery and guidance) ===
+  server.tool(
+    "about_mcp_tools",
+    "📚 Summarize Zebrunner MCP tools or show detailed info for one tool with examples and approximate token usage",
+    {
+      mode: z.enum(["summary", "tool"]).default("summary")
+        .describe("summary: all tools overview; tool: detailed view for one tool"),
+      tool_name: z.string().optional()
+        .describe("Tool name for detailed mode, e.g. analyze_test_execution_video"),
+      include_examples: z.boolean().default(true)
+        .describe("Include example prompts"),
+      include_token_estimates: z.boolean().default(true)
+        .describe("Include approximate token usage ranges"),
+      include_role_benefits: z.boolean().default(true)
+        .describe("Include role-based value summary")
+    },
+    async (args) => {
+      try {
+        debugLog("about_mcp_tools called", args);
+        const snapshot = loadToolIntelSnapshot();
+
+        if (args.mode === "tool") {
+          if (!args.tool_name) {
+            return {
+              content: [{
+                type: "text" as const,
+                text: "❌ tool_name is required when mode='tool'"
+              }]
+            };
+          }
+          const details = markdownForToolDetails(snapshot, args.tool_name, {
+            includeExamples: args.include_examples,
+            includeTokenEstimates: args.include_token_estimates,
+            includeRoleBenefits: args.include_role_benefits
+          });
+          return { content: [{ type: "text" as const, text: details }] };
+        }
+
+        const summary = markdownForAllTools(snapshot, {
+          includeExamples: args.include_examples,
+          includeTokenEstimates: args.include_token_estimates,
+          includeRoleBenefits: args.include_role_benefits
+        });
+
+        return { content: [{ type: "text" as const, text: summary }] };
+      } catch (error: any) {
+        debugLog("Error in about_mcp_tools", { error: error.message, args });
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error in about_mcp_tools: ${error?.message || error}`
+          }]
+        };
+      }
+    }
+  );
+
   // ========== ZEBRUNNER WIDGET TOOLS ==========
 
   // === Tool #1: Platform test results by period ===
@@ -3877,7 +3939,7 @@ async function main() {
         .describe("Project alias ('web', 'android', 'ios', 'api'), project key, or numeric projectId"),
       period: z.enum(ALL_PERIODS)
         .default("Last 7 Days")
-        .describe("Time period (mapped to supported widget periods)"),
+        .describe("Time period (passed to widget as-is)"),
       platform: z.union([z.enum(["web","android","ios","api"]), z.array(z.string())])
         .optional()
         .describe("Platform alias or explicit array for paramsConfig.PLATFORM"),
@@ -3960,7 +4022,7 @@ async function main() {
         .describe("Project alias ('web', 'android', 'ios', 'api'), project key, or numeric projectId"),
       period: z.enum(ALL_PERIODS)
         .default("Last 7 Days")
-        .describe("Time period (mapped to supported widget periods)"),
+        .describe("Time period (passed to widget as-is)"),
       limit: z.number().int().positive().max(100)
         .default(10)
         .describe("How many bugs to return"),
@@ -4124,7 +4186,7 @@ async function main() {
         .describe("Project alias ('web', 'android', 'ios', 'api'), project key, or numeric projectId"),
       period: z.enum(ALL_PERIODS)
         .default("Last 7 Days")
-        .describe("Time period for bug review (mapped to supported widget periods)"),
+        .describe("Time period for bug review (passed to widget as-is)"),
       limit: z.number().int().positive().max(500)
         .default(100)
         .describe("Maximum number of bugs to return (default: 100, max: 500)"),
@@ -4482,7 +4544,7 @@ ${priorityAnalysis.statistics.withoutDefects > 0 ? `- **Tracking Gap:** ${priori
         .describe("Hashcode from bug review failure link (e.g., '1051677506')"),
       period: z.enum(ALL_PERIODS)
         .default("Last 14 Days")
-        .describe("Time period for failure analysis (mapped to supported widget periods)"),
+        .describe("Time period for failure analysis (passed to widget as-is)"),
       format: z.enum(['detailed', 'summary', 'json']).default('detailed')
         .describe("Output format: detailed (full info), summary (concise), or json (raw data)")
     },

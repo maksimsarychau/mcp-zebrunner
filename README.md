@@ -479,7 +479,7 @@ User: "Analyze https://other-workspace.zebrunner.com/..."
 
 ## 🛠️ Available Tools
 
-Once connected, you can use these tools through natural language in your AI assistant. Here's a comprehensive reference of all 33+ available tools organized by category:
+Once connected, you can use these tools through natural language in your AI assistant. Here's a comprehensive reference of all 40+ available tools organized by category:
 
 ### 📋 Test Case Management
 
@@ -499,6 +499,7 @@ Once connected, you can use these tools through natural language in your AI assi
 |------|-------------|---------------|----------|
 | `get_all_tcm_test_cases_by_project` | Get ALL test cases (handles pagination) | `"Get all test cases for project MCP"` | Managers, Leads |
 | `get_all_tcm_test_cases_with_root_suite_id` | All test cases with hierarchy info | `"Get all test cases with their root suite information"` | Analysts |
+| `get_test_cases_by_suite_smart` | Smart suite test case retrieval with root/child auto-detection | `"Get test cases from suite 18824 in project MCP using smart mode"` | QA, Analysts |
 
 ### 🌳 Test Suite Hierarchy & Organization
 
@@ -515,6 +516,7 @@ Once connected, you can use these tools through natural language in your AI assi
 |------|-------------|---------------|----------|
 | `get_tcm_suite_by_id` | Find specific suite by ID | `"Get details for suite 17470"` | All roles |
 | `get_tcm_test_suites_by_project` | Comprehensive suite listing | `"Get all suites for project MCP with hierarchy"` | Managers |
+| `get_all_tcm_test_case_suites_by_project` | Get all TCM test case suites with pagination | `"Get all TCM test case suites for project MCP"` | Managers, Analysts |
 | `get_root_id_by_suite_id` | Find root suite for any suite | `"What's the root suite for suite 12345?"` | Analysts |
 
 ### 🔍 Test Coverage & Analysis
@@ -622,11 +624,14 @@ Once connected, you can use these tools through natural language in your AI assi
 | `get_bug_failure_info` | Comprehensive failure info by hashcode (alternative to auto-fetch) | `"Get failure info for hashcode 1051677506"` | **Developers, SDETs** |
 | `get_project_milestones` | Available milestones | `"Get all milestones for project MCP"` | **Managers, PMs** |
 
+**Period behavior for reporting widgets:** `period` is passed to Zebrunner widgets **as-is** (for example `Today`, `Month`, `Last 30 Days`). If a selected widget does not support a specific period label, the API will return an error.
+
 #### **Project Discovery**
 | Tool | Description | Example Usage | Best For |
 |------|-------------|---------------|----------|
 | `get_available_projects` | Discover all accessible projects | `"What projects can I access?"` | All roles |
 | `test_reporting_connection` | Test API connectivity | `"Test my connection to Zebrunner"` | All roles |
+| `about_mcp_tools` | Summarize all tools or show detailed info for one tool with examples, role value, and approximate token usage | `"Using Zebrunner MCP make a summary of all tools with examples"` | All roles |
 
 ### 🏃 Test Run Management
 

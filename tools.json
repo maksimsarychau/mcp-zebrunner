@@ -108,8 +108,16 @@
     "description": "Get all test suites for a project"
   },
   {
+    "name": "get_all_tcm_test_case_suites_by_project",
+    "description": "Get all TCM test case suites by project with pagination"
+  },
+  {
     "name": "get_root_id_by_suite_id",
     "description": "Find the root suite ID for any suite"
+  },
+  {
+    "name": "get_test_cases_by_suite_smart",
+    "description": "Smart test case retrieval by suite ID with automatic root/child suite detection"
   },
   {
     "name": "get_test_coverage_by_test_case_steps_by_key",
@@ -182,6 +190,10 @@
   {
     "name": "get_project_milestones",
     "description": "Get milestones for a project"
+  },
+  {
+    "name": "about_mcp_tools",
+    "description": "Summarize all MCP tools or show detailed info for a specific tool with examples and approximate token usage"
   },
   {
     "name": "get_available_projects",

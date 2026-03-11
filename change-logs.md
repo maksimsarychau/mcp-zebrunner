@@ -1,5 +1,11 @@
 # Change Logs
 
+## v6.2.0 (2026-03-11)
+- Added new `about_mcp_tools` tool for all-tools summary and per-tool details with examples
+- Added static approximate token usage estimation per tool in tool intelligence output
+- Added full 51-tool registry coverage tests (registration, schema key checks, and constraints)
+- Synced `tools.json`, `README.md`, and `TOOLS_CATALOG.md` with actual registered tools
+
 ## v6.1.1 (2026-03-01)
 - Excluded markdown files and docs/ from integrity 
 - Version bump and documentation updates

@@ -354,6 +354,15 @@ Weekly stability report for project MCP using:
 - "Show me test cases with hierarchy info"
 - "List all test cases with their parent suites"
 
+### `get_test_cases_by_suite_smart`
+
+**Description:** Smart suite-based test case retrieval. Automatically detects whether the suite is root or child and uses the right filtering strategy.
+
+**Example Prompts:**
+- "Get test cases from suite 18824 in project MCP using smart mode"
+- "Show all test cases for suite 17470 including sub-suites"
+- "Retrieve test cases for suite 491 in markdown format"
+
 ---
 
 ## Test Suite Hierarchy
@@ -411,6 +420,15 @@ Weekly stability report for project MCP using:
 - "Get all suites for project MCP with hierarchy"
 - "Show me all test suites in project MCP"
 - "List all suites for MCP"
+
+### `get_all_tcm_test_case_suites_by_project`
+
+**Description:** Retrieve all TCM test case suites in a project using comprehensive pagination, with optional hierarchy enrichment.
+
+**Example Prompts:**
+- "Get all TCM test case suites for project MCP"
+- "Export all suites for MCP in markdown format"
+- "List all suites for android with hierarchy enabled"
 
 ### `get_root_id_by_suite_id`
 
@@ -700,6 +718,29 @@ Weekly stability report for project MCP using:
 - "Check if I can connect to Zebrunner reporting"
 - "Verify my Zebrunner API access"
 
+### `about_mcp_tools`
+
+**Description:** Discover and understand Zebrunner MCP capabilities. Supports an all-tools summary and deep details for a single tool, with example prompts, role-based value, and approximate token usage.
+
+**Key Features:**
+- Summary mode for all registered tools
+- Detail mode for a single tool by name
+- Example prompts collected from existing catalog content
+- Role-based value summary (QA, automation, development, management, leadership)
+- Static approximate token usage ranges per tool
+
+**Parameters:**
+- `mode`: `summary` | `tool` (default: `summary`)
+- `tool_name`: required when `mode = tool`
+- `include_examples`: boolean (default: true)
+- `include_token_estimates`: boolean (default: true)
+- `include_role_benefits`: boolean (default: true)
+
+**Example Prompts:**
+- "Using Zebrunner MCP make a summary of all tools with examples"
+- "Using Zebrunner MCP give info for tool analyze_test_execution_video with examples"
+- "Show detailed info for get_bug_review including token usage estimation"
+
 ---
 
 ## 💡 Tips for Using Tools
@@ -826,7 +867,7 @@ For large datasets, you can specify filters and limits:
 
 ---
 
-**Last Updated:** v6.1.1 - March 2026
+**Last Updated:** v6.2.0 - March 2026
 
 For the latest features and updates, see [change-logs.md](change-logs.md).
 
