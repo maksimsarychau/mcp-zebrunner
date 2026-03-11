@@ -2,7 +2,12 @@ import { describe, it } from "node:test";
 import { strict as assert } from "node:assert";
 import fs from "node:fs";
 import path from "node:path";
-import { loadToolIntelSnapshot, markdownForAllTools, tokenEstimateForTool } from "../../src/utils/tool-intel.js";
+import {
+  loadToolIntelSnapshot,
+  markdownForAllTools,
+  markdownForToolDetails,
+  tokenEstimateForTool
+} from "../../src/utils/tool-intel.js";
 import { TOOL_SMOKE_INPUTS } from "../helpers/tool-coverage-matrix.js";
 
 function getProjectRoot() {
@@ -56,6 +61,7 @@ describe("Tool Registry Coverage (51 tools)", () => {
 describe("Critical Tool Intelligence Checks", () => {
   it("loads snapshot and includes newly added about tool", () => {
     const snapshot = loadToolIntelSnapshot();
+    assert.ok(snapshot.mcpVersion && snapshot.mcpVersion !== "unknown", "snapshot should include MCP version");
     assert.ok(snapshot.tools.length >= 51, "tool intel snapshot should include all tools");
     assert.ok(snapshot.tools.some(tool => tool.name === "about_mcp_tools"), "about_mcp_tools should be present in snapshot");
   });
@@ -81,6 +87,7 @@ describe("Critical Tool Intelligence Checks", () => {
       includeTokenEstimates: true,
       includeRoleBenefits: true
     });
+    assert.ok(markdown.includes(`MCP version: ${snapshot.mcpVersion}`), "summary should include MCP version");
 
     const lines = markdown.split("\n");
     for (let i = 0; i < lines.length; i++) {
@@ -94,5 +101,15 @@ describe("Critical Tool Intelligence Checks", () => {
       }
       assert.equal(rows, expected, `count mismatch for category "${heading[1]}"`);
     }
+  });
+
+  it("includes MCP version in tool-detail output", () => {
+    const snapshot = loadToolIntelSnapshot();
+    const markdown = markdownForToolDetails(snapshot, "about_mcp_tools", {
+      includeExamples: true,
+      includeTokenEstimates: true,
+      includeRoleBenefits: true
+    });
+    assert.ok(markdown.includes(`MCP version: ${snapshot.mcpVersion}`), "tool details should include MCP version");
   });
 });

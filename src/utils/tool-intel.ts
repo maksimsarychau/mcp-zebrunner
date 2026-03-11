@@ -10,6 +10,7 @@ export type ToolCatalogEntry = {
 };
 
 export type ToolIntelSnapshot = {
+  mcpVersion: string;
   tools: ToolCatalogEntry[];
   roleBenefits: Array<{ role: string; value: string }>;
 };
@@ -148,11 +149,22 @@ function parseRoleBenefits(raw: string): Array<{ role: string; value: string }> 
 
 export function loadToolIntelSnapshot(): ToolIntelSnapshot {
   const root = projectRoot();
+  const packageRaw = readTextSafe(path.join(root, "package.json"));
   const tools = parseToolsJson(readTextSafe(path.join(root, "tools.json")));
   const catalogByTool = parseToolsCatalog(readTextSafe(path.join(root, "TOOLS_CATALOG.md")));
   const roleBenefits = parseRoleBenefits(readTextSafe(path.join(root, "docs", "AI_MCP_BENEFITS.md")));
+  let mcpVersion = "unknown";
+  try {
+    const parsed = JSON.parse(packageRaw);
+    if (typeof parsed?.version === "string" && parsed.version.length > 0) {
+      mcpVersion = parsed.version;
+    }
+  } catch {
+    // keep "unknown"
+  }
 
   return {
+    mcpVersion,
     tools: tools.map(tool => {
       const catalog = catalogByTool.get(tool.name);
       return {
@@ -177,6 +189,8 @@ export function markdownForAllTools(snapshot: ToolIntelSnapshot, options: {
 }): string {
   const lines: string[] = [];
   lines.push("# Using Zebrunner MCP: Tools Summary");
+  lines.push("");
+  lines.push(`MCP version: ${snapshot.mcpVersion}`);
   lines.push("");
   lines.push(`Total tools: ${snapshot.tools.length}`);
   lines.push("");
@@ -238,6 +252,8 @@ export function markdownForToolDetails(snapshot: ToolIntelSnapshot, toolName: st
 
   const lines: string[] = [];
   lines.push(`# Using Zebrunner MCP: Tool Details`);
+  lines.push("");
+  lines.push(`MCP version: ${snapshot.mcpVersion}`);
   lines.push("");
   lines.push(`## \`${tool.name}\``);
   lines.push(`- Category: ${tool.category || "General"}`);
