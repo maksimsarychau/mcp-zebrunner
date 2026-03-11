@@ -1,5 +1,5 @@
 import sharp from 'sharp';
-import { createWorker, Worker } from 'tesseract.js';
+import type { Worker } from 'tesseract.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -97,6 +97,8 @@ export async function extractTextOCR(
   
   let worker: Worker | null = null;
   try {
+    // Lazy-load OCR dependency to avoid loading deprecated transitive modules at server startup
+    const { createWorker } = await import('tesseract.js');
     worker = await createWorker(lang, 1, {
       logger: () => {}, // Suppress logs
     });
