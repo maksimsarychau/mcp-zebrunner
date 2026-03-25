@@ -528,14 +528,33 @@ export class ZebrunnerApiClient {
   }
 
   async getTestCasesBySuite(projectKey: string, suiteId: number): Promise<ZebrunnerShortTestCase[]> {
-    return this.retryRequest(async () => {
-      const response = await this.http.get(`/test-suites/${suiteId}/test-cases`, {
-        params: { projectKey }
+    const allTestCases: ZebrunnerShortTestCase[] = [];
+    let pageToken: string | undefined;
+
+    do {
+      const result = await this.retryRequest(async () => {
+        const params: any = {
+          projectKey,
+          maxPageSize: 100,
+          filter: `testSuite.id = ${suiteId}`
+        };
+        if (pageToken) {
+          params.pageToken = pageToken;
+        }
+        const response = await this.http.get('/test-cases', { params });
+        const data = response.data;
+        const items = Array.isArray(data) ? data : data?.items || [];
+        return {
+          items: items.map((item: any) => ZebrunnerShortTestCaseSchema.parse(item)),
+          nextPageToken: data?._meta?.nextPageToken
+        };
       });
-      
-      const data = Array.isArray(response.data) ? response.data : response.data?.items || [];
-      return data.map((item: any) => ZebrunnerShortTestCaseSchema.parse(item));
-    });
+
+      allTestCases.push(...result.items);
+      pageToken = result.nextPageToken;
+    } while (pageToken);
+
+    return allTestCases;
   }
 
   async getTestCasesByRootSuite(projectKey: string, rootSuiteId: number): Promise<ZebrunnerShortTestCase[]> {

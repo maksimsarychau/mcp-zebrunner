@@ -42,6 +42,10 @@ export interface TestCaseSearchParams extends PaginationOptions {
   sortBy?: string; // Sorting parameter
   // RQL filter for advanced filtering
   filter?: string;
+  // Status filters — added to RQL when true
+  excludeDeprecated?: boolean;
+  excludeDraft?: boolean;
+  excludeDeleted?: boolean;
 }
 
 export interface TestSuiteSearchParams extends PaginationOptions {

@@ -1,5 +1,6 @@
 import { ZebrunnerTestCase, ZebrunnerCaseStep } from "../types/core.js";
 import { DynamicRulesParser, ValidationRuleSet, ValidationRule } from "./dynamic-rules-parser.js";
+import type { FieldsLayout } from "../api/reporting-client.js";
 
 /**
  * Test Case Validation Results
@@ -86,11 +87,10 @@ export class TestCaseValidator {
   /**
    * Validates a test case against the dynamic rule set
    */
-  async validateTestCase(testCase: ZebrunnerTestCase): Promise<ValidationResult> {
+  async validateTestCase(testCase: ZebrunnerTestCase, fieldsLayout?: FieldsLayout): Promise<ValidationResult> {
     const issues: ValidationIssue[] = [];
     const passedCheckpoints: string[] = [];
 
-    // Run validation based on enabled rules
     for (const rule of this.ruleSet.rules.filter(r => r.enabled)) {
       const validationFunction = this.validationFunctions.get(rule.checkFunction);
       if (validationFunction) {
@@ -114,7 +114,6 @@ export class TestCaseValidator {
       }
     }
 
-    // Calculate score
     const totalCheckpoints = issues.length + passedCheckpoints.length;
     const score = totalCheckpoints > 0 ? Math.round((passedCheckpoints.length / totalCheckpoints) * 100) : 0;
     
@@ -122,23 +121,20 @@ export class TestCaseValidator {
     const readyForAutomation = score >= this.ruleSet.scoreThresholds.good && !this.hasAutomationBlockers(issues);
     const readyForManualExecution = score >= this.ruleSet.scoreThresholds.needs_improvement;
 
-    // Extract automation status, priority, and status
     const automationStatus = testCase.automationState?.name || 'Unknown';
     const priority = testCase.priority?.name || undefined;
     
-    // Construct status from available boolean fields
     let status: string | undefined;
     if (testCase.draft) {
       status = 'Draft';
     } else if (testCase.deprecated) {
       status = 'Deprecated';
     } else {
-      // If neither draft nor deprecated, it's likely active
       status = 'Active';
     }
     
-    // Extract Manual Only from custom fields
-    const manualOnly = testCase.customField?.manualOnly || undefined;
+    // Discover "Manual Only" field dynamically from fields layout instead of hardcoding the key
+    const manualOnly = this.resolveManualOnlyField(testCase, fieldsLayout);
 
     return {
       testCaseKey: testCase.key || 'Unknown',
@@ -156,6 +152,40 @@ export class TestCaseValidator {
       readyForManualExecution,
       rulesUsed: `${this.ruleSet.name} v${this.ruleSet.version}`
     };
+  }
+
+  /**
+   * Resolves the "Manual Only" custom field value dynamically.
+   * Uses fields layout to find the correct API key instead of hardcoding "manualOnly".
+   */
+  private resolveManualOnlyField(testCase: ZebrunnerTestCase, fieldsLayout?: FieldsLayout): string | undefined {
+    if (!testCase.customField) return undefined;
+
+    // If we have layout metadata, find the field whose display name matches "Manual Only"
+    if (fieldsLayout) {
+      const manualOnlyField = fieldsLayout.fields.find(
+        f => f.type === 'CUSTOM' && f.name.toLowerCase().replace(/\s+/g, '') === 'manualonly'
+      );
+      if (manualOnlyField) {
+        // Try common key derivations from the display name
+        const candidates = [
+          manualOnlyField.name.charAt(0).toLowerCase() + manualOnlyField.name.slice(1).replace(/\s+(.)/g, (_, c) => c.toUpperCase()),
+          manualOnlyField.name.replace(/\s+/g, ''),
+          manualOnlyField.name.toLowerCase().replace(/\s+/g, '_'),
+        ];
+        for (const key of candidates) {
+          if ((testCase.customField as any)[key] != null) {
+            return String((testCase.customField as any)[key]);
+          }
+        }
+      }
+    }
+
+    // Fallback: try known common keys
+    return (testCase.customField as any).manualOnly
+      || (testCase.customField as any).manual_only
+      || (testCase.customField as any).ManualOnly
+      || undefined;
   }
 
   /**

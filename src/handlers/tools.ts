@@ -368,17 +368,14 @@ export class ZebrunnerToolHandlers {
   /**
    * Validate test case tool
    */
-  async validateTestCase(input: z.infer<typeof ValidateTestCaseInputSchema>) {
+  async validateTestCase(input: z.infer<typeof ValidateTestCaseInputSchema>, fieldsLayout?: import("../api/reporting-client.js").FieldsLayout) {
     const { projectKey, caseKey, rulesFilePath, checkpointsFilePath, format, improveIfPossible } = input;
     
     try {
-      // Get the test case data first
       const testCase = await this.client.getTestCaseByKey(projectKey, caseKey);
       
-      // Initialize validator with dynamic rules
       let validator: TestCaseValidator;
       if (rulesFilePath && checkpointsFilePath) {
-        // Use custom rules from files - validate paths first
         try {
           const resolvedRulesPath = validateFilePath(rulesFilePath, process.cwd());
           const resolvedCheckpointsPath = validateFilePath(checkpointsFilePath, process.cwd());
@@ -387,20 +384,17 @@ export class ZebrunnerToolHandlers {
           throw new Error(`Invalid file path provided: ${error instanceof Error ? error.message : error}`);
         }
       } else {
-        // Use default rules, but try to load from standard files if they exist
         const defaultRulesPath = path.resolve(process.cwd(), 'test_case_review_rules.md');
         const defaultCheckpointsPath = path.resolve(process.cwd(), 'test_case_analysis_checkpoints.md');
         
         try {
           validator = await TestCaseValidator.fromMarkdownFiles(defaultRulesPath, defaultCheckpointsPath);
         } catch (error) {
-          // Fall back to default rules if files don't exist
           validator = new TestCaseValidator();
         }
       }
       
-      // Validate the test case
-      const validationResult = await validator.validateTestCase(testCase);
+      const validationResult = await validator.validateTestCase(testCase, fieldsLayout);
       
       // Attempt improvement if requested
       let improvementResult = null;
@@ -697,17 +691,14 @@ export class ZebrunnerToolHandlers {
   /**
    * Improve test case tool - dedicated improvement functionality
    */
-  async improveTestCase(input: z.infer<typeof ImproveTestCaseInputSchema>) {
+  async improveTestCase(input: z.infer<typeof ImproveTestCaseInputSchema>, fieldsLayout?: import("../api/reporting-client.js").FieldsLayout) {
     const { projectKey, caseKey, rulesFilePath, checkpointsFilePath, format, applyHighConfidenceChanges } = input;
     
     try {
-      // Get the test case data first
       const testCase = await this.client.getTestCaseByKey(projectKey, caseKey);
       
-      // Initialize validator with dynamic rules
       let validator: TestCaseValidator;
       if (rulesFilePath && checkpointsFilePath) {
-        // Use custom rules from files - validate paths first
         try {
           const resolvedRulesPath = validateFilePath(rulesFilePath, process.cwd());
           const resolvedCheckpointsPath = validateFilePath(checkpointsFilePath, process.cwd());
@@ -716,20 +707,17 @@ export class ZebrunnerToolHandlers {
           throw new Error(`Invalid file path provided: ${error instanceof Error ? error.message : error}`);
         }
       } else {
-        // Use default rules, but try to load from standard files if they exist
         const defaultRulesPath = path.resolve(process.cwd(), 'test_case_review_rules.md');
         const defaultCheckpointsPath = path.resolve(process.cwd(), 'test_case_analysis_checkpoints.md');
         
         try {
           validator = await TestCaseValidator.fromMarkdownFiles(defaultRulesPath, defaultCheckpointsPath);
         } catch (error) {
-          // Fall back to default rules if files don't exist
           validator = new TestCaseValidator();
         }
       }
       
-      // Validate the test case first
-      const validationResult = await validator.validateTestCase(testCase);
+      const validationResult = await validator.validateTestCase(testCase, fieldsLayout);
       
       // Attempt improvement
       const improver = new TestCaseImprover();

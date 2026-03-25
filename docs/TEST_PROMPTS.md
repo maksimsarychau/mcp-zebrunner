@@ -1,6 +1,6 @@
 # Test Prompts for Zebrunner MCP Tools
 
-> **Version:** 6.5.0
+> **Version:** 6.5.4
 >
 > This document contains 1–3 test prompts per tool with expected behavior, plus end-to-end metric collection prompts. All prompts use generic platform references (iOS / Android / Web) without specific project keys, launch IDs, or milestones.
 
@@ -37,14 +37,24 @@
 ### `get_test_case_by_key`
 
 **Prompt 1 — Full details**
-> Get the full details of test case MFPAND-100 including suite hierarchy.
+> Get the full details of test case ANDROID-100 including suite hierarchy.
 
 **Expected:** Returns complete test case with steps, priority, automation state, suite path, and all metadata.
 
 **Prompt 2 — Markdown format**
-> Show me test case MFPIOS-500 in markdown format with clickable links.
+> Show me test case IOS-500 in markdown format with clickable links.
 
 **Expected:** Returns formatted markdown with a link to the Zebrunner web UI for the test case.
+
+**Prompt 3 — Custom fields with display names** *(v6.5.3)*
+> Get details for test case WEB-50. I want to see all custom fields with their proper display names, not API keys.
+
+**Expected:** Custom fields section shows human-readable display names (e.g., "Manual Only" instead of `manualOnly`) ordered by their configured position in the Zebrunner UI. System properties (Deprecated, Draft, Priority, Automation State) are listed prominently and separately from custom fields.
+
+**Prompt 4 — With execution history** *(v6.5.3)*
+> Get details for test case IOS-500 including its execution history. Show me the last manual and automated runs.
+
+**Expected:** Returns full test case details plus a table of up to 10 most recent TCM executions (manual and automated), each showing date, status, type (MANUAL/AUTOMATED), environment, and configurations (Platform, Build). Includes a pass rate summary.
 
 ---
 
@@ -67,12 +77,17 @@
 **Prompt 2 — By date and automation state**
 > Get test cases in the Web project that were modified in the last 7 days and are marked as "Automated".
 
-**Expected:** Combines `modified_after` with `automation_states` filter. Response includes `createdAt` for verification (v6.5.0).
+**Expected:** Combines `modified_after` with `automation_states` filter. Response includes `createdAt` for verification.
 
-**Prompt 3 — Excluding deprecated** *(v6.5.0)*
+**Prompt 3 — Excluding deprecated** *(v6.5.1)*
 > Get all non-deprecated, non-draft automated test cases in the Android project created after 2026-01-01.
 
 **Expected:** Uses `automation_states`, `created_after`, `exclude_deprecated: true`, `exclude_draft: true`. Server-side RQL filtering.
+
+**Prompt 4 — Count only** *(v6.5.4)*
+> How many test cases are in root suite 42 of the iOS project? Just the count.
+
+**Expected:** Uses `count_only: true` with `root_suite_id: 42`. Paginates through all pages accumulating only the count. Returns `{total_count: N}` without test case data.
 
 ---
 
@@ -95,17 +110,22 @@
 **Prompt 1 — Automated tests only**
 > Get all automated test cases in the Android project.
 
-**Expected:** Returns test cases with automation state "Automated". Resolves name to ID via API (v6.5.0 fix).
+**Expected:** Returns test cases with automation state "Automated". Resolves name to ID via API.
 
 **Prompt 2 — Not automated**
 > Get all test cases that are NOT automated in the iOS project. Show the first page.
 
 **Expected:** Returns test cases with "Not Automated" state (uses state IDs from `get_automation_states`).
 
-**Prompt 3 — Get all, excluding deprecated** *(v6.5.0)*
+**Prompt 3 — Get all, excluding deprecated** *(v6.5.1)*
 > Get ALL automated test cases in the Web project, excluding deprecated ones. I need the complete list, not just one page.
 
 **Expected:** Uses `get_all: true` to auto-paginate, `exclude_deprecated: true` for server-side filtering. Response includes `page_count` and `has_more_pages: false`.
+
+**Prompt 4 — Count only (efficient for metrics)** *(v6.5.4)*
+> How many automated test cases are in the Android project? Just the count, not the full data.
+
+**Expected:** Uses `get_all: true, count_only: true`. Returns `{total_count: N}` without fetching full payloads. Efficient for metrics collection on large projects.
 
 ---
 
@@ -130,6 +150,11 @@
 
 **Expected:** Uses `get_all: true` to auto-paginate through all matching test cases.
 
+**Prompt 3 — Count only** *(v6.5.4)*
+> How many test cases in the iOS project have "payment" in the title? Just the count.
+
+**Expected:** Uses `get_all: true, count_only: true`. Returns `{total_count: N}` without full payloads.
+
 ---
 
 ### `get_test_case_by_filter`
@@ -144,10 +169,15 @@
 
 **Expected:** Combines `priority_id` and `automation_state_id` filters.
 
-**Prompt 3 — Excluding deprecated and draft** *(v6.5.0)*
+**Prompt 3 — Excluding deprecated and draft** *(v6.5.1)*
 > Get all automated test cases in the Web project, excluding deprecated and draft ones.
 
 **Expected:** Uses `automation_state_id`, `exclude_deprecated: true`, `exclude_draft: true`. Server-side RQL filtering.
+
+**Prompt 4 — Count only for date range** *(v6.5.4)*
+> How many test cases were created in the Android project in the last 30 days? Just the count.
+
+**Expected:** Uses `get_all: true, count_only: true, created_after: <30 days ago>`. Returns `{total_count: N}` without full payloads.
 
 ---
 
@@ -203,10 +233,15 @@
 
 **Expected:** Auto-paginates through all test cases (up to 10,000). Response includes `total_fetched`, `was_truncated`, and `has_more_pages`.
 
-**Prompt 2 — Excluding deprecated/draft/deleted** *(v6.5.0)*
+**Prompt 2 — Excluding deprecated/draft/deleted** *(v6.5.1)*
 > Get all active test cases in the Android project, excluding deprecated, draft, and deleted ones. How many are there?
 
 **Expected:** Uses `exclude_deprecated: true`, `exclude_draft: true`, `exclude_deleted: true`. Server-side RQL filtering applied. Response includes `filters_applied` metadata.
+
+**Prompt 3 — Count only** *(v6.5.4)*
+> How many total test cases are in the Web project, excluding deleted ones? Just the count.
+
+**Expected:** Uses `count_only: true, exclude_deleted: true`. Returns `{total_count: N}` without fetching all test case objects. Efficient for coverage metrics.
 
 ---
 
@@ -216,6 +251,11 @@
 > Get all test cases in the Web project, and for each one, include which root suite it belongs to.
 
 **Expected:** Returns test cases enriched with `rootSuiteId` information for categorization.
+
+**Prompt 2 — Count only** *(v6.5.4)*
+> How many test cases are in the Android project? Just the count, skip the hierarchy enrichment.
+
+**Expected:** Uses `count_only: true`. Paginates to count but skips suite hierarchy processing for speed. Returns `{total_count: N}`.
 
 ---
 
@@ -240,21 +280,31 @@
 
 **Expected:** Uses `include_sub_suites: false` to return only direct children of suite 42.
 
+**Prompt 3 — Count only** *(v6.5.4)*
+> How many test cases are in suite 42 of the iOS project, including sub-suites? Just the count.
+
+**Expected:** Uses `count_only: true`. Auto-detects suite type, builds filter, and paginates to count without returning test case data. Returns `{total_count: N, suite_name: "...", is_root_suite: true/false}`.
+
 ---
 
 ### `validate_test_case`
 
 **Prompt 1 — Quality check**
-> Validate test case MFPIOS-200 against quality standards and suggest improvements.
+> Validate test case IOS-200 against quality standards and suggest improvements.
 
 **Expected:** Runs validation rules, generates quality score, and provides improvement suggestions in markdown.
+
+**Prompt 2 — Verify system vs custom field handling** *(v6.5.3)*
+> Validate test case ANDROID-300. Make sure the "Manual Only" custom field is detected correctly even if the project uses a different field name.
+
+**Expected:** Validator dynamically discovers the "Manual Only" field from the project's fields layout instead of hardcoding the API key. Validation result includes the `manualOnly` value if the field exists.
 
 ---
 
 ### `improve_test_case`
 
 **Prompt 1 — Auto-improve**
-> Analyze and improve test case MFPAND-300 with automatic high-confidence fixes.
+> Analyze and improve test case ANDROID-300 with automatic high-confidence fixes.
 
 **Expected:** Analyzes the test case, suggests improvements, and applies high-confidence changes automatically.
 
@@ -387,7 +437,7 @@
 ### `get_test_coverage_by_test_case_steps_by_key`
 
 **Prompt 1 — Full coverage analysis**
-> Analyze the test coverage of test case MFPAND-100 against its implementation. The test covers the login flow including username entry, password entry, and submit.
+> Analyze the test coverage of test case ANDROID-100 against its implementation. The test covers the login flow including username entry, password entry, and submit.
 
 **Expected:** Returns step-by-step coverage analysis with recommendations for gaps.
 
@@ -396,7 +446,7 @@
 ### `generate_draft_test_by_key`
 
 **Prompt 1 — Auto-detect framework**
-> Generate draft test code for test case MFPIOS-200. The implementation uses a mobile testing framework for iOS app testing.
+> Generate draft test code for test case IOS-200. The implementation uses a mobile testing framework for iOS app testing.
 
 **Expected:** Auto-detects the framework and generates test code with setup/teardown and assertion templates.
 
@@ -405,7 +455,7 @@
 ### `get_enhanced_test_coverage_with_rules`
 
 **Prompt 1 — With rules validation**
-> Analyze test coverage for MFPWEB-50 with rules validation enabled. The test covers the checkout page flow.
+> Analyze test coverage for WEB-50 with rules validation enabled. The test covers the checkout page flow.
 
 **Expected:** Returns coverage analysis with quality scoring and rules-based validation results.
 
@@ -431,6 +481,8 @@
 > Show the execution history for this test across the last 10 launches. What is its pass rate?
 
 **Expected:** Returns chronological pass/fail history with overall pass rate and stability assessment.
+
+> **Note:** For TCM-level execution history (including manual test runs), use `get_test_case_by_key` with `include_execution_history: true` instead. The `get_test_execution_history` tool is for launch-level automated test history.
 
 ---
 
@@ -617,7 +669,7 @@
 **Expected:** Uses LLM-powered step clustering for more intelligent duplicate detection than pure step matching.
 
 **Prompt 2 — Specific test cases**
-> Check if these test cases are duplicates: MFPAND-100, MFPAND-101, MFPAND-102.
+> Check if these test cases are duplicates: ANDROID-100, ANDROID-101, ANDROID-102.
 
 **Expected:** Uses `test_case_keys` array to analyze specific test cases for similarity.
 
@@ -694,7 +746,7 @@ These prompts combine multiple tools to collect real business metrics. The LLM s
 >
 > Targets: Track coverage trend — is the automation intake rate keeping up with new test case creation?
 
-**Expected tools:** `get_automation_states` to discover state IDs, then `get_test_cases_by_automation_state` with `get_all: true` for complete counts. For total excluding deprecated/draft: use `get_all_tcm_test_cases_by_project` with `exclude_deprecated: true` and `exclude_draft: true`. For the 30-day window, `get_test_case_by_filter` or `get_test_cases_advanced` with `created_after` + `exclude_deprecated: true`. The `createdAt` field is now available in responses for verification.
+**Expected tools:** `get_automation_states` to discover state IDs, then `get_test_cases_by_automation_state` with `get_all: true, count_only: true` for efficient total counts per state. For total excluding deprecated/draft: `get_all_tcm_test_cases_by_project` with `exclude_deprecated: true, count_only: true`. For 30-day window counts: `get_test_case_by_filter` with `created_after, get_all: true, count_only: true`. The `count_only` flag avoids the 1MB MCP response limit on large projects.
 
 **Expected output:** Per-platform table with total TCs, automated TCs, coverage %, coverage excluding manual/deprecated, new TCs in 30 days, new automated TCs, intake rate, and trend assessment.
 
@@ -713,7 +765,7 @@ These prompts combine multiple tools to collect real business metrics. The LLM s
 >
 > Present as a single structured report suitable for a weekly standup.
 
-**Expected tools:** Combination of `get_launch_test_summary`, `analyze_regression_runtime`, `get_top_bugs`, `get_automation_states` + `get_test_cases_advanced`, and `get_test_execution_history` for flaky test detection.
+**Expected tools:** Combination of `get_launch_test_summary`, `analyze_regression_runtime`, `get_top_bugs`, `get_automation_states` + `get_test_cases_by_automation_state` with `count_only: true` for coverage metrics, and `get_test_execution_history` for flaky test detection.
 
 **Expected output:** Structured executive report with sections for each metric area, cross-platform comparison tables, and actionable highlights.
 
@@ -732,6 +784,6 @@ These prompts combine multiple tools to collect real business metrics. The LLM s
 >
 > Provide a Go / No-Go recommendation with supporting evidence.
 
-**Expected tools:** `get_all_launches_with_filter` + `get_launch_test_summary` for pass rate, `detailed_analyze_launch_failures` for unlinked failures, `analyze_regression_runtime` with baseline comparison, `get_test_cases_by_automation_state` for coverage, `get_top_bugs` for defect patterns.
+**Expected tools:** `get_all_launches_with_filter` + `get_launch_test_summary` for pass rate, `detailed_analyze_launch_failures` for unlinked failures, `analyze_regression_runtime` with baseline comparison, `get_test_cases_by_automation_state` with `count_only: true` for coverage percentage, `get_top_bugs` for defect patterns.
 
 **Expected output:** Structured assessment with per-check status, evidence, and a clear Go/No-Go recommendation.

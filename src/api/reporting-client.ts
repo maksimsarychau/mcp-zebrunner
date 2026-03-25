@@ -35,6 +35,48 @@ import {
 } from "../types/reporting.js";
 import { maskToken, maskAuthHeader, validateFileUrl } from "../utils/security.js";
 
+/** Field metadata from the fields-layout API */
+export interface FieldLayoutItem {
+  id: number;
+  type: 'SYSTEM' | 'CUSTOM';
+  tabId: number | null;
+  relativePosition: number;
+  name: string;
+  enabled: boolean;
+  dataType: string;
+  description: string | null;
+}
+
+export interface FieldsLayout {
+  tabs: { id: number; name: string; relativePosition: number; displayMode: string }[];
+  fields: FieldLayoutItem[];
+}
+
+/** A single TCM test case execution (manual or automated) */
+export interface TestCaseExecution {
+  id: number;
+  trackedBy: number;
+  trackedAt: string;
+  status: {
+    id: number;
+    name: string;
+    colorHex: string;
+    isCompleted: boolean;
+    isFinal: boolean;
+  };
+  issueType: string | null;
+  issueId: string | null;
+  details: string | null;
+  elapsedTimeInMillis: number | null;
+  type: 'MANUAL' | 'AUTOMATED';
+  automationLaunchId: number | null;
+  automationExecutionId: number | null;
+  attachments: any[];
+  environment: { id: number; key: string; name: string } | null;
+  configurations: { groupId: number; groupName: string; optionId: number; optionName: string }[];
+  userId: number;
+}
+
 /**
  * Zebrunner Reporting API Client
  * 
@@ -47,6 +89,7 @@ export class ZebrunnerReportingClient {
   private bearerToken: string | null = null;
   private tokenExpiresAt: Date | null = null;
   private projectCache: Map<string, { project: ProjectResponse, timestamp: number }> = new Map();
+  private fieldsLayoutCache: Map<number, { data: FieldsLayout, timestamp: number }> = new Map();
   private jiraBaseUrlCache: string | null = null;
   private _jiraResolutionWarning: string | null = null;
 
@@ -677,6 +720,51 @@ export class ZebrunnerReportingClient {
     } catch (error) {
       throw new ZebrunnerReportingError(`Failed to parse projects limit data: ${error instanceof Error ? error.message : error}`);
     }
+  }
+
+  /**
+   * Get test case fields layout for a project (cached for 10 minutes).
+   * Returns system fields (Deprecated, Draft, Priority, etc.) and custom fields
+   * with their types and tab placement. Useful for distinguishing system vs custom fields.
+   */
+  async getFieldsLayout(projectId: number): Promise<FieldsLayout> {
+    const cached = this.fieldsLayoutCache.get(projectId);
+    if (cached && Date.now() - cached.timestamp < 10 * 60 * 1000) {
+      return cached.data;
+    }
+
+    const url = `/api/tcm/v1/test-case-settings/fields-layout?projectId=${projectId}`;
+    const response = await this.makeAuthenticatedRequest<any>('GET', url);
+    const data = response.data?.data || response.data || response;
+    const layout: FieldsLayout = {
+      tabs: data.tabs || [],
+      fields: (data.fields || []).map((f: any) => ({
+        id: f.id,
+        type: f.type,
+        tabId: f.tabId,
+        relativePosition: f.relativePosition,
+        name: f.name,
+        enabled: f.enabled,
+        dataType: f.dataType,
+        description: f.description || null
+      }))
+    };
+
+    this.fieldsLayoutCache.set(projectId, { data: layout, timestamp: Date.now() });
+    return layout;
+  }
+
+  /**
+   * Get TCM test case execution history (manual + automated).
+   * Endpoint: GET /api/tcm/v1/test-cases/{testCaseId}/executions?projectId={projectId}
+   * Returns the most recent executions, capped at `limit`.
+   */
+  async getTestCaseExecutions(testCaseId: number, projectId: number, limit: number = 10): Promise<TestCaseExecution[]> {
+    const url = `/api/tcm/v1/test-cases/${testCaseId}/executions?projectId=${projectId}`;
+    const response = await this.makeAuthenticatedRequest<any>('GET', url);
+    const data = response.data?.data || response.data || response;
+    const items: TestCaseExecution[] = (data.items || data || []).slice(0, limit);
+    return items;
   }
 
   /**

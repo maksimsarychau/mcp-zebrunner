@@ -116,7 +116,12 @@ export const ZebrunnerShortTestCaseSchema = z.object({
   }).optional(),
   deleted: z.boolean().optional(),
   deprecated: z.boolean().optional(),
-  draft: z.boolean().optional()
+  draft: z.boolean().optional(),
+  createdAt: z.string().optional(),
+  createdBy: ZebrunnerUserSchema.optional(),
+  lastModifiedAt: z.string().optional(),
+  lastModifiedBy: ZebrunnerUserSchema.optional(),
+  customField: z.record(z.any()).optional()
 });
 
 // Test execution item

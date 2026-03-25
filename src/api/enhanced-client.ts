@@ -36,12 +36,19 @@ import {
  * - Automatic response format detection
  * - Connection health checking
  */
+export type AutomationStatesResolver = (projectKey: string) => Promise<{ id: number; name: string }[]>;
+export type PrioritiesResolver = (projectKey: string) => Promise<{ id: number; name: string }[]>;
+
 export class EnhancedZebrunnerClient {
   private http: AxiosInstance;
   private config: ZebrunnerConfig;
   private suitesCache: Map<string, { suites: ZebrunnerTestSuite[], timestamp: number }> = new Map();
+  private automationStatesCache: Map<string, { states: { id: number; name: string }[], timestamp: number }> = new Map();
+  private prioritiesCache: Map<string, { priorities: { id: number; name: string }[], timestamp: number }> = new Map();
   private endpointHealth: Map<string, boolean> = new Map();
   private lastHealthCheck: Date | null = null;
+  private externalAutomationStatesResolver?: AutomationStatesResolver;
+  private externalPrioritiesResolver?: PrioritiesResolver;
 
   constructor(config: ZebrunnerConfig) {
     this.config = {
@@ -68,6 +75,21 @@ export class EnhancedZebrunnerClient {
     });
 
     this.setupInterceptors();
+  }
+
+  /**
+   * Inject an external resolver for automation states (from the Reporting/TCM API).
+   * Must be called before using tools that filter by automation state name.
+   */
+  setAutomationStatesResolver(resolver: AutomationStatesResolver): void {
+    this.externalAutomationStatesResolver = resolver;
+  }
+
+  /**
+   * Inject an external resolver for priorities (from the Reporting/TCM API).
+   */
+  setPrioritiesResolver(resolver: PrioritiesResolver): void {
+    this.externalPrioritiesResolver = resolver;
   }
 
   private setupInterceptors(): void {
@@ -424,14 +446,54 @@ export class EnhancedZebrunnerClient {
     return allItems;
   }
 
-  async getTestSuite(suiteId: number): Promise<ZebrunnerTestSuite> {
+  /**
+   * Finds a single test suite by ID using the List Test Suites endpoint + cache.
+   * The Public API v1 has no GET /test-suites/{id} — this method fetches all suites
+   * for the project and filters locally.
+   */
+  async getTestSuite(projectKey: string, suiteId: number): Promise<ZebrunnerTestSuite> {
+    if (!projectKey) {
+      throw new ZebrunnerApiError('Project key is required');
+    }
     if (!suiteId || suiteId <= 0) {
       throw new ZebrunnerApiError('Valid suite ID is required');
     }
 
+    const allSuites = await this.getAllSuitesWithCache(projectKey);
+    const suite = allSuites.find(s => s.id === suiteId);
+
+    if (!suite) {
+      throw new ZebrunnerNotFoundError('Test suite', `${suiteId} in project ${projectKey}`);
+    }
+
+    return suite;
+  }
+
+  async getTestCaseById(
+    projectKey: string,
+    id: number,
+    options: { includeSuiteHierarchy?: boolean } = {}
+  ): Promise<ZebrunnerTestCase> {
+    if (!projectKey) {
+      throw new ZebrunnerApiError('Project key is required');
+    }
+    if (!id || id <= 0) {
+      throw new ZebrunnerApiError('Valid numeric test case ID is required');
+    }
+
     return this.retryRequest(async () => {
-      const response = await this.http.get(`/test-suites/${suiteId}`);
-      return ZebrunnerTestSuiteSchema.parse(response.data);
+      const response = await this.http.get(`/test-cases/${id}`, {
+        params: { projectKey }
+      });
+
+      const data = response.data?.data || response.data;
+      let testCase = ZebrunnerTestCaseSchema.parse(data);
+
+      if (options.includeSuiteHierarchy) {
+        testCase = await this.enhanceWithSuiteHierarchy(testCase, projectKey);
+      }
+
+      return testCase;
     });
   }
 
@@ -455,7 +517,6 @@ export class EnhancedZebrunnerClient {
       const data = response.data?.data || response.data;
       let testCase = ZebrunnerTestCaseSchema.parse(data);
 
-      // Enhance with suite hierarchy information if requested
       if (options.includeSuiteHierarchy) {
         testCase = await this.enhanceWithSuiteHierarchy(testCase, projectKey);
       }
@@ -756,49 +817,147 @@ export class EnhancedZebrunnerClient {
   }
 
   /**
-   * Build RQL filter string from search parameters
+   * Fetch and cache automation states for a project.
+   * Delegates to the external resolver (Reporting/TCM API with Bearer auth)
+   * since this endpoint is not available on the Public API.
    */
-  private buildRQLFilter(options: TestCaseSearchParams): string {
+  async getAutomationStatesForProject(projectKey: string): Promise<{ id: number; name: string }[]> {
+    if (!this.externalAutomationStatesResolver) {
+      throw new ZebrunnerApiError(
+        'Automation states resolver not configured. Cannot resolve automation state names to IDs. ' +
+        'Use numeric automation state IDs instead, or call setAutomationStatesResolver() during initialization.'
+      );
+    }
+
+    const cacheKey = projectKey.toUpperCase();
+    const cached = this.automationStatesCache.get(cacheKey);
+    const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      return cached.states;
+    }
+
+    const states = await this.externalAutomationStatesResolver(projectKey);
+    this.automationStatesCache.set(cacheKey, { states, timestamp: Date.now() });
+    return states;
+  }
+
+  /**
+   * Fetch and cache priorities for a project.
+   * Delegates to the external resolver (Reporting/TCM API with Bearer auth).
+   */
+  async getPrioritiesForProject(projectKey: string): Promise<{ id: number; name: string }[]> {
+    if (!this.externalPrioritiesResolver) {
+      throw new ZebrunnerApiError(
+        'Priorities resolver not configured. Cannot resolve priority names to IDs. ' +
+        'Use numeric priority IDs instead, or call setPrioritiesResolver() during initialization.'
+      );
+    }
+
+    const cacheKey = projectKey.toUpperCase();
+    const cached = this.prioritiesCache.get(cacheKey);
+    const CACHE_TTL = 10 * 60 * 1000;
+
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      return cached.priorities;
+    }
+
+    const priorities = await this.externalPrioritiesResolver(projectKey);
+    this.prioritiesCache.set(cacheKey, { priorities, timestamp: Date.now() });
+    return priorities;
+  }
+
+  /**
+   * Resolve automation state name(s) to ID(s).
+   * Returns the original value unchanged if already numeric.
+   */
+  private async resolveAutomationStateIds(
+    projectKey: string,
+    value: string | number | (string | number)[]
+  ): Promise<number | number[]> {
+    if (typeof value === 'number') return value;
+
+    const states = await this.getAutomationStatesForProject(projectKey);
+    const nameToId = new Map(states.map(s => [s.name.toLowerCase(), s.id]));
+
+    if (typeof value === 'string') {
+      const id = nameToId.get(value.toLowerCase());
+      if (id === undefined) {
+        if (this.config.debug) {
+          console.error(`⚠️ [RQL] Unknown automation state name '${value}'. Available: ${states.map(s => s.name).join(', ')}`);
+        }
+        throw new ZebrunnerApiError(`Unknown automation state '${value}'. Available states: ${states.map(s => `${s.name} (id: ${s.id})`).join(', ')}`);
+      }
+      return id;
+    }
+
+    // Array of mixed types
+    const ids: number[] = [];
+    for (const item of value) {
+      if (typeof item === 'number') {
+        ids.push(item);
+      } else {
+        const id = nameToId.get(item.toLowerCase());
+        if (id === undefined) {
+          if (this.config.debug) {
+            console.error(`⚠️ [RQL] Unknown automation state name '${item}'. Available: ${states.map(s => s.name).join(', ')}`);
+          }
+          throw new ZebrunnerApiError(`Unknown automation state '${item}'. Available states: ${states.map(s => `${s.name} (id: ${s.id})`).join(', ')}`);
+        }
+        ids.push(id);
+      }
+    }
+    return ids;
+  }
+
+  /**
+   * Resolve priority name to ID.
+   */
+  private async resolvePriorityId(
+    projectKey: string,
+    value: string | number
+  ): Promise<number> {
+    if (typeof value === 'number') return value;
+
+    const priorities = await this.getPrioritiesForProject(projectKey);
+    const nameToId = new Map(priorities.map(p => [p.name.toLowerCase(), p.id]));
+    const id = nameToId.get(value.toLowerCase());
+
+    if (id === undefined) {
+      throw new ZebrunnerApiError(`Unknown priority '${value}'. Available priorities: ${priorities.map(p => `${p.name} (id: ${p.id})`).join(', ')}`);
+    }
+    return id;
+  }
+
+  /**
+   * Build RQL filter string from search parameters.
+   * Async because automation state / priority names must be resolved to IDs.
+   */
+  private async buildRQLFilter(options: TestCaseSearchParams, projectKey?: string): Promise<string> {
     const filters: string[] = [];
 
-    // Automation state filtering
+    // Automation state filtering — API only supports automationState.id in RQL
     if (options.automationState) {
-      if (Array.isArray(options.automationState)) {
-        if (options.automationState.length > 0) {
-          // Check if all values are numbers (IDs) or strings (names)
-          const allNumbers = options.automationState.every(state => typeof state === 'number');
-          const allStrings = options.automationState.every(state => typeof state === 'string');
-          
-          if (allNumbers) {
-            filters.push(`automationState.id IN [${options.automationState.join(', ')}]`);
-          } else if (allStrings) {
-            const quotedNames = options.automationState.map(state => `'${String(state).replace(/'/g, "\\'")}'`);
-            filters.push(`automationState.name IN [${quotedNames.join(', ')}]`);
-          } else {
-            // Mixed types - handle each separately
-            const ids = options.automationState.filter(state => typeof state === 'number');
-            const names = options.automationState.filter(state => typeof state === 'string');
-            
-            const subFilters: string[] = [];
-            if (ids.length > 0) {
-              subFilters.push(`automationState.id IN [${ids.join(', ')}]`);
-            }
-            if (names.length > 0) {
-              const quotedNames = names.map(name => `'${String(name).replace(/'/g, "\\'")}'`);
-              subFilters.push(`automationState.name IN [${quotedNames.join(', ')}]`);
-            }
-            
-            if (subFilters.length > 0) {
-              filters.push(`(${subFilters.join(' OR ')})`);
-            }
-          }
+      if (projectKey) {
+        const resolved = await this.resolveAutomationStateIds(projectKey, options.automationState);
+        const ids = Array.isArray(resolved) ? resolved : [resolved];
+        if (ids.length === 1) {
+          filters.push(`automationState.id = ${ids[0]}`);
+        } else if (ids.length > 1) {
+          filters.push(`automationState.id IN [${ids.join(', ')}]`);
         }
       } else {
-        // Single value
-        if (typeof options.automationState === 'number') {
-          filters.push(`automationState.id = ${options.automationState}`);
-        } else {
-          filters.push(`automationState.name = '${String(options.automationState).replace(/'/g, "\\'")}'`);
+        // No projectKey available — only numeric IDs can be used
+        const values = Array.isArray(options.automationState) ? options.automationState : [options.automationState];
+        const ids = values.filter((v): v is number => typeof v === 'number');
+        const names = values.filter((v): v is string => typeof v === 'string');
+        if (names.length > 0 && this.config.debug) {
+          console.error(`⚠️ [RQL] Cannot resolve automation state names without projectKey. Ignoring: ${names.join(', ')}`);
+        }
+        if (ids.length === 1) {
+          filters.push(`automationState.id = ${ids[0]}`);
+        } else if (ids.length > 1) {
+          filters.push(`automationState.id IN [${ids.join(', ')}]`);
         }
       }
     }
@@ -823,13 +982,27 @@ export class EnhancedZebrunnerClient {
       filters.push(`testSuite.id = ${options.suiteId}`);
     }
 
-    // Priority filtering
+    // Priority filtering — API only supports priority.id in RQL
     if (options.priority) {
       if (typeof options.priority === 'number') {
         filters.push(`priority.id = ${options.priority}`);
-      } else {
-        filters.push(`priority.name = '${String(options.priority).replace(/'/g, "\\'")}'`);
+      } else if (projectKey) {
+        const resolvedId = await this.resolvePriorityId(projectKey, options.priority);
+        filters.push(`priority.id = ${resolvedId}`);
+      } else if (this.config.debug) {
+        console.error(`⚠️ [RQL] Cannot resolve priority name '${options.priority}' without projectKey`);
       }
+    }
+
+    // Status exclusion filters
+    if (options.excludeDeprecated) {
+      filters.push(`deprecated = false`);
+    }
+    if (options.excludeDraft) {
+      filters.push(`draft = false`);
+    }
+    if (options.excludeDeleted) {
+      filters.push(`deleted = false`);
     }
 
     // Custom filter (if provided, it takes precedence)
@@ -924,8 +1097,8 @@ export class EnhancedZebrunnerClient {
         params.pageToken = options.pageToken;
       }
 
-      // Build RQL filter for advanced filtering
-      const rqlFilter = this.buildRQLFilter(options);
+      // Build RQL filter for advanced filtering (async: resolves names to IDs)
+      const rqlFilter = await this.buildRQLFilter(options, projectKey);
       if (rqlFilter) {
         params.filter = rqlFilter;
         if (this.config.debug) {
@@ -974,19 +1147,34 @@ export class EnhancedZebrunnerClient {
     });
   }
 
+  /**
+   * Gets all test cases belonging to a suite using RQL filter testSuite.id = {suiteId}.
+   * The Public API v1 has no GET /test-suites/{id}/test-cases — this method uses
+   * GET /test-cases with an RQL filter and paginates through all results.
+   */
   async getTestCasesBySuite(projectKey: string, suiteId: number): Promise<ZebrunnerShortTestCase[]> {
+    if (!projectKey) {
+      throw new ZebrunnerApiError('Project key is required');
+    }
     if (!suiteId || suiteId <= 0) {
       throw new ZebrunnerApiError('Valid suite ID is required');
     }
 
-    return this.retryRequest(async () => {
-      const response = await this.http.get(`/test-suites/${suiteId}/test-cases`, {
-        params: projectKey ? { projectKey } : {}
+    const allTestCases: ZebrunnerShortTestCase[] = [];
+    let pageToken: string | undefined;
+
+    do {
+      const result = await this.getTestCases(projectKey, {
+        filter: `testSuite.id = ${suiteId}`,
+        size: 100,
+        pageToken
       });
-      
-      const data = Array.isArray(response.data) ? response.data : response.data?.items || [];
-      return data.map((item: any) => ZebrunnerShortTestCaseSchema.parse(item));
-    });
+
+      allTestCases.push(...result.items);
+      pageToken = result._meta?.nextPageToken;
+    } while (pageToken);
+
+    return allTestCases;
   }
 
   async searchTestCases(
