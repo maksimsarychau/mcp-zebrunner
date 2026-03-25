@@ -287,11 +287,9 @@ export class ZebrunnerApiClient {
     projectKey: string, 
     rootSuiteId: number,
     allSuites: any[]
-  ): Promise<ZebrunnerShortTestCase[]> {
-    // Find all child suites (including the root suite itself if it has direct test cases)
+  ): Promise<{ items: ZebrunnerShortTestCase[]; warnings: string[] }> {
     const childSuiteIds: number[] = [];
     
-    // Find all suites that have this root suite as their root (after hierarchy processing)
     for (const suite of allSuites) {
       if (suite.rootSuiteId === rootSuiteId) {
         childSuiteIds.push(suite.id);
@@ -302,23 +300,24 @@ export class ZebrunnerApiClient {
       console.error(`🔍 [getTestCasesByRootSuiteWithFilter] Root suite ${rootSuiteId} has ${childSuiteIds.length} child suites: [${childSuiteIds.join(', ')}]`);
     }
     
-    // Split child suite IDs into smaller batches to avoid API limitations
-    const batchSize = 10; // Smaller batches to ensure API compatibility
+    const batchSize = 10;
     const allTestCases: ZebrunnerShortTestCase[] = [];
-    const seenIds = new Set<number>(); // Global deduplication across batches
+    const seenIds = new Set<number>();
+    const warnings: string[] = [];
+    const totalBatches = Math.ceil(childSuiteIds.length / batchSize);
     
     for (let i = 0; i < childSuiteIds.length; i += batchSize) {
       const batch = childSuiteIds.slice(i, i + batchSize);
+      const batchNum = Math.floor(i / batchSize) + 1;
       const filter = `testSuite.id IN [${batch.join(',')}]`;
       
       if (this.config.debug) {
-        console.error(`🔍 [getTestCasesByRootSuiteWithFilter] Batch ${Math.floor(i/batchSize) + 1}: ${filter}`);
+        console.error(`🔍 [getTestCasesByRootSuiteWithFilter] Batch ${batchNum}: ${filter}`);
       }
       
       try {
         const batchResults = await this.getAllTestCases(projectKey, { filter });
         
-        // Deduplicate across batches
         const newItems = batchResults.filter(item => {
           if (seenIds.has(item.id)) {
             return false;
@@ -330,19 +329,20 @@ export class ZebrunnerApiClient {
         allTestCases.push(...newItems);
         
         if (this.config.debug) {
-          console.error(`🔍 [getTestCasesByRootSuiteWithFilter] Batch ${Math.floor(i/batchSize) + 1}: ${batchResults.length} items, ${newItems.length} new (total: ${allTestCases.length})`);
+          console.error(`🔍 [getTestCasesByRootSuiteWithFilter] Batch ${batchNum}: ${batchResults.length} items, ${newItems.length} new (total: ${allTestCases.length})`);
         }
         
-        // Small delay between batches to avoid rate limiting
         if (i + batchSize < childSuiteIds.length) {
           await new Promise(resolve => setTimeout(resolve, 100));
         }
       } catch (error) {
-        console.error(`❌ [getTestCasesByRootSuiteWithFilter] Error in batch ${Math.floor(i/batchSize) + 1}: ${(error as Error).message}`);
+        const msg = `Batch ${batchNum}/${totalBatches} failed (suites ${batch.join(',')}): ${(error as Error).message}`;
+        warnings.push(msg);
+        console.error(`❌ [getTestCasesByRootSuiteWithFilter] ${msg}`);
       }
     }
     
-    return allTestCases;
+    return { items: allTestCases, warnings };
   }
 
   async getTestCaseByKey(projectKey: string, key: string): Promise<ZebrunnerTestCase> {

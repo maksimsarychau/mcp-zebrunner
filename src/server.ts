@@ -23,6 +23,7 @@ import {
   ZebrunnerTestResultResponse
 } from "./types/core.js";
 import { stealthIntegrityCheck } from "./stealth-integrity.js";
+import { sanitizeRqlString } from "./utils/security.js";
 import {
   loadToolIntelSnapshot,
   markdownForAllTools,
@@ -1933,8 +1934,7 @@ async function main() {
 
         const clickableLinkConfig = getClickableLinkConfig(include_clickable_links, ZEBRUNNER_URL);
 
-        const escapedTitle = title.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-        const filter = `title~="${escapedTitle}"`;
+        const filter = `title~="${sanitizeRqlString(title)}"`;
 
         if (get_all && count_only) {
           let totalCount = 0;

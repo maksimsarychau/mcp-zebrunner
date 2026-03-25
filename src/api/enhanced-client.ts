@@ -25,6 +25,7 @@ import {
   ZebrunnerTestRunSchema,
   ZebrunnerTestResultResponseSchema
 } from "../types/core.js";
+import { sanitizeRqlString } from "../utils/security.js";
 
 /**
  * Enhanced Zebrunner API Client with improved error handling
@@ -38,6 +39,8 @@ import {
  */
 export type AutomationStatesResolver = (projectKey: string) => Promise<{ id: number; name: string }[]>;
 export type PrioritiesResolver = (projectKey: string) => Promise<{ id: number; name: string }[]>;
+
+const MAX_CACHE_ENTRIES = 50;
 
 export class EnhancedZebrunnerClient {
   private http: AxiosInstance;
@@ -90,6 +93,22 @@ export class EnhancedZebrunnerClient {
    */
   setPrioritiesResolver(resolver: PrioritiesResolver): void {
     this.externalPrioritiesResolver = resolver;
+  }
+
+  /** Evict oldest entries when a cache exceeds MAX_CACHE_ENTRIES (LRU by timestamp). */
+  private evictCache<V extends { timestamp: number }>(cache: Map<string, V>): void {
+    while (cache.size > MAX_CACHE_ENTRIES) {
+      let oldestKey: string | undefined;
+      let oldestTs = Infinity;
+      for (const [key, val] of cache) {
+        if (val.timestamp < oldestTs) {
+          oldestTs = val.timestamp;
+          oldestKey = key;
+        }
+      }
+      if (oldestKey) cache.delete(oldestKey);
+      else break;
+    }
   }
 
   private setupInterceptors(): void {
@@ -250,9 +269,34 @@ export class EnhancedZebrunnerClient {
           message = responseData;
         }
         return new ZebrunnerApiError(`Bad request: ${message}`, status, responseData, endpoint);
+      case 403:
+        return new ZebrunnerApiError(
+          'Forbidden: your token does not have permission for this resource. Verify project-level access rights.',
+          status, responseData, endpoint
+        );
       case 429:
         const retryAfter = error.response?.headers['retry-after'];
         return new ZebrunnerRateLimitError(retryAfter ? parseInt(retryAfter) : undefined);
+      case 500:
+        return new ZebrunnerApiError(
+          'Internal server error on Zebrunner side. Retry later or contact Zebrunner support if the problem persists.',
+          status, responseData, endpoint
+        );
+      case 502:
+        return new ZebrunnerApiError(
+          'Bad gateway: Zebrunner API is temporarily unreachable. Retry in a few seconds.',
+          status, responseData, endpoint
+        );
+      case 503:
+        return new ZebrunnerApiError(
+          'Service unavailable: Zebrunner is under maintenance or overloaded. Retry later.',
+          status, responseData, endpoint
+        );
+      case 504:
+        return new ZebrunnerApiError(
+          'Gateway timeout: Zebrunner API did not respond in time. The request may be too large — try narrowing filters or using pagination.',
+          status, responseData, endpoint
+        );
       default:
         return new ZebrunnerApiError(
           error.message || 'API request failed',
@@ -400,19 +444,17 @@ export class EnhancedZebrunnerClient {
     let hasMore = true;
     let pageCount = 0;
 
-    while (hasMore && allItems.length < maxResults) {
+    while (hasMore && allItems.length < maxResults && pageCount < 1000) {
       const response = await this.getTestSuites(projectKey, { 
         ...searchOptions,
         pageToken: nextPageToken,
-        size: 100 // Use maximum allowed page size
+        size: 100
       });
 
-      // Limit items to maxResults
       const remainingSlots = maxResults - allItems.length;
       const itemsToAdd = response.items.slice(0, remainingSlots);
       allItems.push(...itemsToAdd);
 
-      // Call progress callback if provided
       if (onProgress) {
         onProgress(allItems.length, pageCount + 1);
       }
@@ -660,6 +702,7 @@ export class EnhancedZebrunnerClient {
       suites: allSuites,
       timestamp: Date.now()
     });
+    this.evictCache(this.suitesCache);
 
     return allSuites;
   }
@@ -839,6 +882,7 @@ export class EnhancedZebrunnerClient {
 
     const states = await this.externalAutomationStatesResolver(projectKey);
     this.automationStatesCache.set(cacheKey, { states, timestamp: Date.now() });
+    this.evictCache(this.automationStatesCache);
     return states;
   }
 
@@ -864,6 +908,7 @@ export class EnhancedZebrunnerClient {
 
     const priorities = await this.externalPrioritiesResolver(projectKey);
     this.prioritiesCache.set(cacheKey, { priorities, timestamp: Date.now() });
+    this.evictCache(this.prioritiesCache);
     return priorities;
   }
 
@@ -964,16 +1009,16 @@ export class EnhancedZebrunnerClient {
 
     // Date filtering
     if (options.createdAfter) {
-      filters.push(`createdAt >= '${options.createdAfter}'`);
+      filters.push(`createdAt >= '${sanitizeRqlString(options.createdAfter)}'`);
     }
     if (options.createdBefore) {
-      filters.push(`createdAt <= '${options.createdBefore}'`);
+      filters.push(`createdAt <= '${sanitizeRqlString(options.createdBefore)}'`);
     }
     if (options.modifiedAfter) {
-      filters.push(`lastModifiedAt >= '${options.modifiedAfter}'`);
+      filters.push(`lastModifiedAt >= '${sanitizeRqlString(options.modifiedAfter)}'`);
     }
     if (options.modifiedBefore) {
-      filters.push(`lastModifiedAt <= '${options.modifiedBefore}'`);
+      filters.push(`lastModifiedAt <= '${sanitizeRqlString(options.modifiedBefore)}'`);
     }
 
     // Suite filtering - try different field names for compatibility
@@ -1193,7 +1238,7 @@ export class EnhancedZebrunnerClient {
     const searchOptions: TestCaseSearchParams = {
       ...options,
       // Build RQL filter for title search
-      filter: `title ~= '${query.trim().replace(/'/g, "\\'")}'`
+      filter: `title ~= '${sanitizeRqlString(query.trim())}'`
     };
 
     return this.getTestCases(projectKey, searchOptions);

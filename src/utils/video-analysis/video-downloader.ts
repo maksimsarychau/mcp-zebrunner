@@ -89,6 +89,8 @@ export class VideoDownloader {
       const skipOnError = process.env.SKIP_URL_VALIDATION_ON_ERROR === 'true'; // Default false
       
       // Validate artifact value before constructing URL
+      // Note: allowedHost is intentionally omitted — video artifact URLs
+      // may reside on CDN or storage hosts that differ from the API hostname.
       const validatedPath = validateFileUrl(videoArtifact.value, {
         strictMode,
         skipOnError

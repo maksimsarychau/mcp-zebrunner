@@ -248,8 +248,24 @@ export class ZebrunnerReportingClient {
       ...(data && { data })
     };
 
-    const response = await this.http.request(config);
-    return response.data;
+    try {
+      const response = await this.http.request(config);
+      return response.data;
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        const status = error.response?.status;
+        if (status === 401) {
+          throw new ZebrunnerReportingAuthError('Reporting API authentication failed. Token may have expired.');
+        }
+        if (status === 404) {
+          throw new ZebrunnerReportingNotFoundError(`Resource not found: ${method} ${url}`);
+        }
+        throw new ZebrunnerReportingError(
+          `Reporting API error ${status || 'unknown'}: ${error.message} (${method} ${url})`
+        );
+      }
+      throw error;
+    }
   }
 
   /**
@@ -584,6 +600,8 @@ export class ZebrunnerReportingClient {
       const skipOnError = process.env.SKIP_URL_VALIDATION_ON_ERROR === 'true'; // Default false
       
       // Validate URL before processing
+      // Note: allowedHost is intentionally omitted — screenshot/video URLs
+      // may reside on CDN or storage hosts that differ from the API hostname.
       const validatedUrl = validateFileUrl(fileUrl, {
         strictMode,
         skipOnError

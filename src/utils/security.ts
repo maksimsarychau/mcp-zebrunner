@@ -112,11 +112,29 @@ export function maskAuthHeader(authHeader: string): string {
 }
 
 /**
+ * Sanitizes a string value before interpolation into an RQL filter expression.
+ * Prevents injection by escaping characters that have special meaning in RQL.
+ *
+ * @param value - Raw user-provided string
+ * @returns Escaped string safe for RQL interpolation
+ */
+export function sanitizeRqlString(value: string): string {
+  if (typeof value !== 'string') return String(value);
+  return value
+    .replace(/\\/g, '\\\\')   // backslashes first
+    .replace(/'/g, "\\'")      // single quotes (RQL string delimiter)
+    .replace(/"/g, '\\"')      // double quotes
+    .replace(/;/g, '')         // strip semicolons (statement separator)
+    .replace(/\0/g, '');       // strip null bytes
+}
+
+/**
  * Configuration for URL validation
  */
 export interface UrlValidationConfig {
   strictMode?: boolean;
   skipOnError?: boolean;
+  allowedHost?: string;
 }
 
 /**
@@ -131,7 +149,7 @@ export function validateFileUrl(
   fileUrl: string,
   config: UrlValidationConfig = {}
 ): string {
-  const { strictMode = true, skipOnError = false } = config;
+  const { strictMode = true, skipOnError = false, allowedHost } = config;
 
   try {
     // Check for null bytes
@@ -162,16 +180,18 @@ export function validateFileUrl(
           throw new Error('Security: Invalid URL - contains disallowed characters in artifacts path');
         }
       }
-      // Allow full URLs only if they're HTTPS
+      // Allow full URLs only if they're HTTPS and optionally pinned to allowed host
       else if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) {
-        // Parse URL to validate
         try {
           const url = new URL(fileUrl);
-          // Only allow https in production
           if (url.protocol !== 'https:' && process.env.NODE_ENV === 'production') {
             throw new Error('Security: Invalid URL - HTTPS required in production');
           }
+          if (allowedHost && url.hostname !== allowedHost) {
+            throw new Error(`Security: Invalid URL - host '${url.hostname}' does not match allowed host '${allowedHost}'`);
+          }
         } catch (e) {
+          if (e instanceof Error && e.message.startsWith('Security:')) throw e;
           throw new Error('Security: Invalid URL - malformed URL');
         }
       } else {
