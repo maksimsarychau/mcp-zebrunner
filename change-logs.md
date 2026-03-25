@@ -1,5 +1,189 @@
 # Change Logs
 
+## v6.5.4 (2026-03-25)
+
+### Count-Only Mode & Response Size Safety Net
+
+#### New: `count_only` parameter on 7 paginated tools
+
+Added `count_only: z.boolean().default(false)` to all tools that return potentially large test case result sets. When enabled, the tool paginates through all pages but only accumulates the **count** — never storing actual test case objects (O(1) memory). Returns a lightweight JSON summary (~200 bytes):
+
+```json
+{
+  "total_count": 3045,
+  "pages_traversed": 31,
+  "project_key": "ANDROID"
+}
+```
+
+**Affected tools (7 total):**
+
+| Tool | Trigger | Notes |
+|---|---|---|
+| `get_test_cases_by_automation_state` | `get_all: true, count_only: true` | Counts by automation state |
+| `get_test_case_by_title` | `get_all: true, count_only: true` | Counts title matches |
+| `get_test_case_by_filter` | `get_all: true, count_only: true` | Counts with RQL filters |
+| `get_test_cases_advanced` | `count_only: true` | Counts with advanced filters (page-based tool) |
+| `get_all_tcm_test_cases_by_project` | `count_only: true` | Counts all project test cases |
+| `get_all_tcm_test_cases_with_root_suite_id` | `count_only: true` | Counts all, skips hierarchy enrichment |
+| `get_test_cases_by_suite_smart` | `count_only: true` | Auto-detects suite type, then counts |
+
+**Why:** The Zebrunner Public API is cursor-based with no total count endpoint. E2E Prompt 3 (Automation Coverage Sustainability) needs **counts** across thousands of test cases, but `get_all=true` with `format=json` produces payloads exceeding the ~1MB MCP host limit. `count_only` solves this.
+
+#### New: Response size safety net (900KB truncation)
+
+For the non-count `get_all` path in 6 tools, added a size check before returning the final payload. If the serialized response exceeds 900KB, items are truncated with metadata:
+
+```
+Found 3045 total, returning first 412 (response truncated to stay under MCP 1MB limit).
+Use count_only=true with get_all=true to get just the count without data.
+```
+
+This prevents OOM and MCP 1MB errors even when the LLM forgets to use `count_only`.
+
+#### Documentation updates
+
+- **`TEST_PROMPTS.md`:** Added count_only example prompts for all 7 tools. Updated E2E Prompts 3, 4, and 5 expected tools to recommend `count_only: true`.
+- **Files:** `src/server.ts`, `docs/TEST_PROMPTS.md`
+
+## v6.5.3 (2026-03-25)
+
+### TCM Execution History & Test Infrastructure
+
+#### New: TCM execution history on `get_test_case_by_key`
+
+- **New parameter:** `include_execution_history` (boolean, default `false`) on the `get_test_case_by_key` tool. When enabled, fetches the last 10 TCM executions (manual + automated) via the Reporting API endpoint `GET /api/tcm/v1/test-cases/{id}/executions?projectId={projectId}`.
+- **Per execution:** Shows date, status (Passed/Failed/etc.), type (MANUAL/AUTOMATED), environment, and configurations (Platform, Build). Markdown format renders a summary table with pass rate.
+- **For json/dto formats:** Adds an `executionHistory` array to the response object.
+- **New client method:** `reportingClient.getTestCaseExecutions(testCaseId, projectId, limit)` with `TestCaseExecution` type.
+- **Files:** `src/api/reporting-client.ts`, `src/utils/formatter.ts`, `src/server.ts`
+
+#### API verification: R18 test added
+
+- New `R18: GET /api/tcm/v1/test-cases/{id}/executions` test in `tests/api-verify.sh`. Verified across all starred projects (174 checks, 0 failures).
+
+#### `npm run test:api` script
+
+- Added `"test:api": "bash tests/api-verify.sh"` to `package.json` for convenient curl-based API endpoint verification, separate from the TypeScript test suite (`npm test`).
+
+## v6.5.2 (2026-03-25)
+
+### Fields Layout Integration & Test Infrastructure
+
+#### Custom field display names via `getFieldsLayout` API
+
+- **Fields layout caching:** Added `getFieldsLayout(projectId)` to reporting client with per-project 10-minute cache. Returns system vs custom field metadata including display names, data types, and relative positions.
+- **Formatter upgrade:** `formatTestCaseMarkdown()` and `formatTestCase()` now accept optional `fieldsLayout` to:
+  - Show **display names** instead of raw API keys for custom fields (e.g., "Manual Only" instead of `manualOnly`)
+  - **Order custom fields** by their configured `relativePosition` from the Zebrunner UI
+- **Validator upgrade:** `validateTestCase()` no longer hardcodes `testCase.customField?.manualOnly`. It dynamically discovers the "Manual Only" field from the fields layout metadata, with fallback to common key variants.
+- **Wired into tools:** `get_test_case_by_key`, `validate_test_case`, and `improve_test_case` all automatically fetch and pass fields layout.
+- **New types:** Exported `FieldsLayout` and `FieldLayoutItem` interfaces from `reporting-client.ts`.
+- **Files:** `src/api/reporting-client.ts`, `src/utils/formatter.ts`, `src/utils/test-case-validator.ts`, `src/server.ts`, `src/handlers/tools.ts`
+
+#### Fixed integration test for `getTestSuite`
+
+- **Problem:** Test called `client.getTestSuite(999999)` with one argument, but the method was refactored in v6.5.1 to require `(projectKey, suiteId)`. Additionally, the "not found" path threw `ZebrunnerApiError` instead of `ZebrunnerNotFoundError`.
+- **Fix:** Updated test to use correct two-argument signature. Changed `getTestSuite` in `enhanced-client.ts` to throw `ZebrunnerNotFoundError` when a suite isn't found (semantically correct — 404).
+- **Files:** `tests/integration/api-client.test.ts`, `src/api/enhanced-client.ts`
+
+#### Added `npm run test:api` script
+
+- **New script:** `"test:api": "bash tests/api-verify.sh"` added to `package.json`. Runs the curl-based API endpoint verification separately from the TypeScript test suite.
+- **Test strategy:** `npm test` runs unit/integration/e2e TypeScript tests; `npm run test:api` runs live API verification (166 checks across all starred projects).
+
+## v6.5.1 (2026-03-25)
+
+### Get Test Case by ID & Tool Enhancements
+
+#### Extended `get_test_case_by_key` — now accepts numeric IDs and Zebrunner URLs
+
+- **New capability:** The `case_key` parameter now accepts both test case keys (`MFPAND-29`) and numeric IDs (`86280`). Auto-detects format and routes to the correct API endpoint (`/test-cases/key:{key}` or `/test-cases/{id}`).
+- **URL parsing hints:** Tool description now guides the LLM to extract `project_key` and `caseId` from Zebrunner URLs like `https://example.zebrunner.com/projects/MFPIOS/test-cases?caseId=86280`.
+- **New API method:** Added `getTestCaseById()` to `enhanced-client.ts` using `GET /api/public/v1/test-cases/{id}?projectKey=...` (verified working via API tests).
+
+#### Fixed `getTestSuite` and `getTestCasesBySuite` — non-existent API endpoints replaced
+
+- **Problem:** Both methods called Public API endpoints that don't exist: `GET /test-suites/{id}` and `GET /test-suites/{id}/test-cases` (confirmed 404 in API verification).
+- **Fix — `getTestSuite(projectKey, suiteId)`:** Now fetches all suites via `getAllSuitesWithCache()` and finds the suite by ID locally. Added `projectKey` as a required parameter.
+- **Fix — `getTestCasesBySuite(projectKey, suiteId)`:** Now uses `GET /test-cases` with RQL filter `testSuite.id = {suiteId}` and paginates through all results via `pageToken`. Same fix applied to `client.ts`.
+- **Files:** `src/api/enhanced-client.ts`, `src/api/client.ts`
+
+#### API Verification Script — Published & Enhanced
+
+- **Published to git:** `tests/api-verify.sh` removed from `.gitignore` — safe to publish (no hardcoded credentials, reads from `.env` at runtime).
+- **Auto-discovers starred projects:** No longer requires `ZEBRUNNER_TEST_PROJECT` in `.env`. Authenticates first, fetches projects via `/api/projects/v1/projects?extraFields=starred`, and runs tests against all starred projects.
+- **Dynamic automation state IDs:** RQL filter tests no longer hardcode `automationState.id = 12`. Discovers a valid ID from the test cases returned by each project.
+- **Coverage:** 160 checks across 3 starred projects (MFPAND, MFPWEB, MFPIOS), all passing.
+
+#### Documentation
+
+- **`TEST_PROMPTS.md`:** Removed all project-specific aliases (MFPAND/MFPIOS/MFPWEB), replaced with generic platform names (ANDROID/IOS/WEB).
+
+## v6.5.0 (2026-03-25)
+
+### TCM Tools Reliability & Coverage Metrics Fixes
+
+This release fixes 7 reported limitations and 1 newly discovered bug in TCM (Test Case Management) tools, based on live API verification against the [Zebrunner Public API documentation](https://your_domain.zebrunner.com/api/docs). Most limitations were tool-side issues — the Zebrunner API is more capable than the tools previously exposed.
+
+### Critical Bug Fix: automationState.name in RQL (Fix 8)
+
+- **Problem:** The `buildRQLFilter` method used `automationState.name` in RQL queries, but the Zebrunner API only supports `automationState.id`. This caused the ENTIRE filter (including date filters) to be rejected with "Malformed filter" when automation state names were passed as strings.
+- **Fix:** Automation state names are now resolved to IDs via the automation states API with per-project caching (10-minute TTL). Same fix applied to `priority.name` (only `priority.id` is supported in RQL).
+- **Files:** `src/api/enhanced-client.ts` — new methods: `getAutomationStatesForProject()`, `getPrioritiesForProject()`, `resolveAutomationStateIds()`, `resolvePriorityId()`
+
+### Expose createdAt and Metadata in List Responses (Fix 2)
+
+- **Problem:** `ZebrunnerShortTestCaseSchema` stripped `createdAt`, `createdBy`, `lastModifiedAt`, `lastModifiedBy`, and `customField` from API responses, making time-based metrics impossible.
+- **Fix:** Added these fields as optional to the schema. API confirmed to return all fields for every test case.
+- **Files:** `src/types/core.ts` — `ZebrunnerShortTestCaseSchema` expanded
+
+### Deprecated/Draft/Deleted Filter Parameters (Fix 7)
+
+- **Problem:** No way to exclude deprecated, draft, or deleted test cases via server-side filtering. Client-side filtering after fetching wasted the 1000-item cap.
+- **Fix:** Added `exclude_deprecated`, `exclude_draft`, `exclude_deleted` parameters to 4 tools. These generate RQL conditions (`deprecated = false`, `draft = false`, `deleted = false`) confirmed working by API testing.
+- **Affected tools:** `get_all_tcm_test_cases_by_project`, `get_test_cases_advanced`, `get_test_cases_by_automation_state`, `get_test_case_by_filter`
+- **Defaults:** `exclude_deleted` defaults to `true` (deleted TCs rarely wanted). Others default to `false` for backward compatibility.
+
+### Remove 1000 Hard Cap (Fix 1)
+
+- **Problem:** `get_all_tcm_test_cases_by_project` enforced `.max(1000)` in schema, silently truncating results for large projects.
+- **Fix:** Raised max to 10,000 and default to 5,000. Added `was_truncated` and `has_more_pages` fields to response for transparency. Response now includes `total_fetched`, `filters_applied` metadata.
+
+### Fix total_found and Add Pagination Support (Fix 3)
+
+- **Problem:** `get_test_cases_by_automation_state` reported `total_found: processedCases.length` (current page length), misleading users into thinking it was the total.
+- **Fix:** Renamed to `page_count`, added `has_more_pages: boolean`, and added `get_all: boolean` parameter for auto-pagination through all pages.
+
+### Improve Pagination Metadata (Fix 6)
+
+- **Problem:** `get_test_cases_advanced` response had no indication of whether more pages were available.
+- **Fix:** Added `page_count`, `has_more_pages`, and advisory `_notice` when more pages exist. Passes through `nextPageToken` for manual pagination.
+
+### Date Filters Now Work (Fix 4) — Auto-resolved
+
+- **Root cause:** The date filter itself was correct (`createdAt >= 'date'` in RQL works). The APPEARANCE of it being broken was caused by Fix 8 (malformed filter rejecting everything) and Fix 2 (createdAt stripped from response). Both are now resolved.
+
+### New Parameters Summary
+
+| Tool | New Parameters |
+|------|----------------|
+| `get_all_tcm_test_cases_by_project` | `exclude_deprecated`, `exclude_draft`, `exclude_deleted`, raised `max_results` to 10000 |
+| `get_test_cases_advanced` | `exclude_deprecated`, `exclude_draft`, `exclude_deleted` |
+| `get_test_cases_by_automation_state` | `exclude_deprecated`, `exclude_draft`, `exclude_deleted`, `get_all` |
+| `get_test_case_by_filter` | `exclude_deprecated`, `exclude_draft`, `exclude_deleted` |
+
+### Response Schema Additions (non-breaking)
+
+| Tool | New Response Fields |
+|------|---------------------|
+| `get_all_tcm_test_cases_by_project` | `total_fetched`, `was_truncated`, `has_more_pages`, `filters_applied` |
+| `get_test_cases_by_automation_state` | `page_count`, `has_more_pages` (replaces misleading `total_found`) |
+| `get_test_cases_advanced` | `page_count`, `has_more_pages`, `_notice` |
+| All bulk list tools | `createdAt`, `createdBy`, `lastModifiedAt`, `lastModifiedBy`, `customField` on test case objects |
+
+---
+
 ## v6.4.0 (2026-03-24)
 
 ### Configurable Duration Thresholds & Full Test Case Metrics

@@ -1,6 +1,6 @@
 {
   "name": "mcp-zebrunner",
-  "version": "6.4.0",
+  "version": "6.5.4",
   "type": "module",
   "description": "Unified Zebrunner MCP server for TCM test cases, suites, coverage analysis, launchers, etc.",
   "mcpName": "io.github.maksimsarychau/mcp-zebrunner",
@@ -49,6 +49,7 @@
     "test:reporting": "node --test --test-reporter=spec --import=tsx tests/integration/reporting-api.test.ts",
     "test:watch": "tsx tests/test-runner.ts all --watch",
     "test:health": "tsx tests/test-runner.ts --health",
+    "test:api": "bash tests/api-verify.sh",
     "test:verbose": "tsx tests/test-runner.ts all --verbose",
     "lint": "tsc --noEmit",
     "clean": "rm -rf dist",

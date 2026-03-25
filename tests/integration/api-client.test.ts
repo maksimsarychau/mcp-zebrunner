@@ -199,7 +199,7 @@ describe('EnhancedZebrunnerClient Integration Tests', () => {
   describe('Error Handling', () => {
     it('should handle 404 errors gracefully', async () => {
       try {
-        await client.getTestSuite(999999); // Non-existent suite ID
+        await client.getTestSuite(testProjectKey, 999999);
         assert.fail('Should have thrown an error');
       } catch (error: any) {
         assert.equal(error.name, 'ZebrunnerNotFoundError');

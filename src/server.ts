@@ -6,7 +6,7 @@ import { ConfigManager } from "./config/manager.js";
 
 // Enhanced imports
 import { EnhancedZebrunnerClient } from "./api/enhanced-client.js";
-import { ZebrunnerReportingClient } from "./api/reporting-client.js";
+import { ZebrunnerReportingClient, type FieldsLayout } from "./api/reporting-client.js";
 import { ZebrunnerReportingToolHandlers } from "./handlers/reporting-tools.js";
 import { FormatProcessor } from "./utils/formatter.js";
 import { HierarchyProcessor } from "./utils/hierarchy.js";
@@ -23,6 +23,7 @@ import {
   ZebrunnerTestResultResponse
 } from "./types/core.js";
 import { stealthIntegrityCheck } from "./stealth-integrity.js";
+import { sanitizeRqlString } from "./utils/security.js";
 import {
   loadToolIntelSnapshot,
   markdownForAllTools,
@@ -86,6 +87,17 @@ const reportingConfig: ZebrunnerReportingConfig = {
 
 const reportingClient = new ZebrunnerReportingClient(reportingConfig);
 const reportingHandlers = new ZebrunnerReportingToolHandlers(reportingClient, client);
+
+// Wire up resolvers: automation states and priorities live on the TCM API (Bearer auth),
+// not the Public API (Basic auth), so the enhanced client delegates to the reporting client.
+client.setAutomationStatesResolver(async (projectKey: string) => {
+  const { projectId } = await resolveProjectId(projectKey);
+  return reportingClient.getAutomationStates(projectId);
+});
+client.setPrioritiesResolver(async (projectKey: string) => {
+  const { projectId } = await resolveProjectId(projectKey);
+  return reportingClient.getPriorities(projectId);
+});
 
 // === Widget mini-config ===
 const WIDGET_BASE_URL = ZEBRUNNER_URL.replace('/api/public/v1', '');
@@ -520,6 +532,16 @@ function analyzeBugPriorities(bugs: any[]): {
 }
 
 /** Enhanced markdown rendering with debug info */
+async function getFieldsLayoutForProject(projectKey?: string): Promise<FieldsLayout | undefined> {
+  if (!projectKey) return undefined;
+  try {
+    const { projectId } = await resolveProjectId(projectKey);
+    return await reportingClient.getFieldsLayout(projectId);
+  } catch {
+    return undefined;
+  }
+}
+
 async function renderTestCaseMarkdown(
   testCase: ZebrunnerTestCase,
   includeDebugInfo: boolean = false,
@@ -527,7 +549,8 @@ async function renderTestCaseMarkdown(
   projectKey?: string,
   clickableLinkConfig?: any
 ): Promise<string> {
-  let markdown = FormatProcessor.formatTestCaseMarkdown(testCase);
+  const fieldsLayout = await getFieldsLayoutForProject(projectKey);
+  let markdown = FormatProcessor.formatTestCaseMarkdown(testCase, fieldsLayout);
 
   // Add clickable links to test case key if enabled
   if (clickableLinkConfig?.includeClickableLinks && projectKey) {
@@ -1038,45 +1061,82 @@ async function main() {
 
   server.tool(
     "get_test_case_by_key",
-    "🔍 Get detailed test case by key (✅ Verified Working)",
+    `🔍 Get detailed test case by key or numeric ID. Accepts:
+• Test case key: 'MCP-29', 'MCP-2'
+• Numeric ID: '86280' (requires project_key)
+• From Zebrunner URL: extract project_key and caseId from URLs like https://example.zebrunner.com/projects/MCP/test-cases?caseId=86280 → project_key='MCP', case_key='86280'`,
     {
-      project_key: z.string().min(1).optional().describe("Project key (e.g., 'android' or 'ANDROID') - auto-detected from case_key if not provided"),
-      case_key: z.string().min(1).describe("Test case key (e.g., 'ANDROID-29', 'IOS-2')"),
+      project_key: z.string().min(1).optional().describe("Project key (e.g., 'MCP', 'MCP'). Auto-detected from case_key if it contains a key pattern like 'MCP-29'. Required when case_key is a numeric ID."),
+      case_key: z.string().min(1).describe("Test case key (e.g., 'MCP-29') OR numeric test case ID (e.g., '86280'). When providing a numeric ID, project_key is required."),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
       include_debug: z.boolean().default(false).describe("Include debug information in markdown"),
       include_suite_hierarchy: z.boolean().default(false).describe("Include featureSuiteId and rootSuiteId with suite hierarchy path"),
-      include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI")
+      include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI"),
+      include_execution_history: z.boolean().default(false).describe("Include TCM execution history (manual + automated runs). Shows last 10 executions with status, environment, and configurations.")
     },
     async (args) => {
-      // Auto-detect project key if not provided
-      let resolvedArgs;
-      try {
-        resolvedArgs = FormatProcessor.resolveProjectKey(args);
-      } catch (error: any) {
+      const { case_key, format, include_debug, include_suite_hierarchy, include_clickable_links, include_execution_history } = args;
+
+      const isNumericId = /^\d+$/.test(case_key.trim());
+
+      let project_key = args.project_key;
+      if (!isNumericId) {
+        try {
+          const resolved = FormatProcessor.resolveProjectKey(args);
+          project_key = resolved.project_key;
+        } catch (error: any) {
+          return {
+            content: [{
+              type: "text" as const,
+              text: `❌ Error resolving project key: ${error.message}`
+            }]
+          };
+        }
+      }
+
+      if (!project_key) {
         return {
           content: [{
             type: "text" as const,
-            text: `❌ Error resolving project key: ${error.message}`
+            text: `❌ Error: project_key is required when case_key is a numeric ID. Provide the project key (e.g., 'MCP') along with the numeric ID.`
           }]
         };
       }
 
-      const { project_key, case_key, format, include_debug, include_suite_hierarchy, include_clickable_links } = resolvedArgs;
-
       try {
-        debugLog("Getting test case by key", { project_key, case_key, format, include_suite_hierarchy, include_clickable_links });
+        debugLog("Getting test case", { project_key, case_key, isNumericId, format, include_suite_hierarchy, include_clickable_links });
 
-        // Get clickable links configuration
         const clickableLinkConfig = getClickableLinkConfig(include_clickable_links, ZEBRUNNER_URL);
 
-        const testCase = await client.getTestCaseByKey(project_key, case_key, { includeSuiteHierarchy: include_suite_hierarchy });
+        let testCase;
+        if (isNumericId) {
+          testCase = await client.getTestCaseById(project_key, parseInt(case_key, 10), { includeSuiteHierarchy: include_suite_hierarchy });
+        } else {
+          testCase = await client.getTestCaseByKey(project_key, case_key, { includeSuiteHierarchy: include_suite_hierarchy });
+        }
 
         if (!testCase) {
           throw new Error(`Test case ${case_key} not found`);
         }
 
+        // Fetch execution history if requested
+        let executionHistory: import("./api/reporting-client.js").TestCaseExecution[] | undefined;
+        if (include_execution_history && testCase.id) {
+          try {
+            const { projectId } = await resolveProjectId(project_key);
+            executionHistory = await reportingClient.getTestCaseExecutions(testCase.id, projectId, 10);
+          } catch (err: any) {
+            debugLog("Failed to fetch execution history", { error: err.message });
+          }
+        }
+
         if (format === 'markdown') {
-          const markdown = await renderTestCaseMarkdown(testCase, include_debug, include_suite_hierarchy, project_key, clickableLinkConfig);
+          let markdown = await renderTestCaseMarkdown(testCase, include_debug, include_suite_hierarchy, project_key, clickableLinkConfig);
+          if (executionHistory && executionHistory.length > 0) {
+            markdown += '\n' + FormatProcessor.formatExecutionHistoryMarkdown(executionHistory);
+          } else if (include_execution_history) {
+            markdown += '\n## Execution History\n\nNo executions found.\n';
+          }
           return {
             content: [{
               type: "text" as const,
@@ -1085,9 +1145,12 @@ async function main() {
           };
         }
 
-        // Add webUrl for JSON/DTO formats if clickable links enabled
         const enhancedTestCase = addTestCaseWebUrl(testCase, project_key, clickableLinkConfig.baseWebUrl, clickableLinkConfig);
-        const formattedData = FormatProcessor.format(enhancedTestCase, format);
+        if (executionHistory) {
+          (enhancedTestCase as any).executionHistory = executionHistory;
+        }
+        const fieldsLayout = await getFieldsLayoutForProject(project_key);
+        const formattedData = FormatProcessor.format(enhancedTestCase, format, fieldsLayout);
 
         return {
           content: [{
@@ -1096,7 +1159,7 @@ async function main() {
           }]
         };
       } catch (error: any) {
-        debugLog("Error getting test case by key", { error: error.message, project_key, case_key });
+        debugLog("Error getting test case", { error: error.message, project_key, case_key });
         return {
           content: [{
             type: "text" as const,
@@ -1223,9 +1286,16 @@ async function main() {
       created_before: z.string().optional().describe("Filter test cases created before this date (ISO format: '2025-12-31' or '2025-12-31T23:59:59Z')"),
       modified_after: z.string().optional().describe("Filter test cases modified after this date (ISO format: '2025-01-01' or '2025-01-01T10:00:00Z')"),
       modified_before: z.string().optional().describe("Filter test cases modified before this date (ISO format: '2025-12-31' or '2025-12-31T23:59:59Z')"),
+      exclude_deprecated: z.boolean().default(false).describe("Exclude deprecated test cases from results"),
+      exclude_draft: z.boolean().default(false).describe("Exclude draft test cases from results"),
+      exclude_deleted: z.boolean().default(true).describe("Exclude deleted test cases from results (default: true)"),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
       page: z.number().int().nonnegative().default(0).describe("Page number (0-based)"),
       size: z.number().int().positive().max(100).default(10).describe("Page size (configurable via MAX_PAGE_SIZE env var)"),
+      count_only: z.boolean().default(false).describe(
+        "When true, paginates through all pages and returns only the total count without test case data. " +
+        "Efficient for metrics collection -- avoids 1MB response limit on large projects."
+      ),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI")
     },
     async (args) => {
@@ -1239,9 +1309,13 @@ async function main() {
         created_before,
         modified_after,
         modified_before,
+        exclude_deprecated,
+        exclude_draft,
+        exclude_deleted,
         format,
         page,
         size,
+        count_only,
         include_clickable_links
       } = args;
 
@@ -1258,6 +1332,37 @@ async function main() {
       try {
         debugLog("Getting advanced test cases with enhanced filtering", args);
 
+        if (count_only) {
+          let totalCount = 0;
+          let pageCount = 0;
+          let currentPageToken: string | undefined = undefined;
+          do {
+            const response = await client.getTestCases(project_key, {
+              size: MAX_PAGE_SIZE,
+              pageToken: currentPageToken,
+              suiteId: suite_id,
+              rootSuiteId: root_suite_id,
+              automationState: automation_states,
+              createdAfter: created_after,
+              createdBefore: created_before,
+              modifiedAfter: modified_after,
+              modifiedBefore: modified_before,
+              excludeDeprecated: exclude_deprecated,
+              excludeDraft: exclude_draft,
+              excludeDeleted: exclude_deleted
+            });
+            totalCount += (response.items || []).length;
+            pageCount++;
+            currentPageToken = response._meta?.nextPageToken;
+          } while (currentPageToken);
+
+          return { content: [{ type: "text" as const, text: JSON.stringify({
+            total_count: totalCount,
+            pages_traversed: pageCount,
+            project_key
+          }, null, 2) }] };
+        }
+
         const searchParams = {
           page,
           size,
@@ -1267,7 +1372,10 @@ async function main() {
           createdAfter: created_after,
           createdBefore: created_before,
           modifiedAfter: modified_after,
-          modifiedBefore: modified_before
+          modifiedBefore: modified_before,
+          excludeDeprecated: exclude_deprecated,
+          excludeDraft: exclude_draft,
+          excludeDeleted: exclude_deleted
         };
 
         const response = await client.getTestCases(project_key, searchParams);
@@ -1313,12 +1421,18 @@ async function main() {
           );
         }
 
-        // Add helpful information about API limitations
+        const hasMorePages = !!response._meta?.nextPageToken;
         const responseData = {
           items: processedCases,
-          _meta: response._meta, // Use corrected metadata from enhanced client
-          _notice: response._meta?.totalElements === 10 && response._meta?.hasNext === undefined ?
-            "⚠️  Note: Zebrunner API has known limitations with pagination and suite filtering. Results may be limited to available test cases." : undefined
+          page_count: processedCases.length,
+          has_more_pages: hasMorePages,
+          _meta: {
+            ...(response._meta || {}),
+            nextPageToken: response._meta?.nextPageToken || undefined
+          },
+          _notice: hasMorePages
+            ? "More pages available. Pass the nextPageToken value to the page_token parameter to fetch the next page. Note: the Zebrunner Public API does not provide a total count."
+            : undefined
         };
 
         const formattedData = FormatProcessor.format(responseData, format);
@@ -1415,7 +1529,7 @@ async function main() {
 
   server.tool(
     "get_test_cases_by_automation_state",
-    "🤖 Get test cases filtered by automation state (💡 Use get_automation_states to see available states)",
+    "🤖 Get test cases filtered by automation state with token-based pagination (💡 Use get_automation_states to see available states). Call repeatedly with page_token to paginate through all results.",
     {
       project_key: z.string().min(1).describe("Project key"),
       automation_states: z.union([
@@ -1425,40 +1539,140 @@ async function main() {
       ]).describe("Automation state(s) to filter by. Examples: 'Not Automated', ['Not Automated', 'To Be Automated'], [10, 12], or 'Automated'"),
       suite_id: z.number().int().positive().optional().describe("Optional: Filter by specific suite ID"),
       created_after: z.string().optional().describe("Optional: Filter test cases created after this date (ISO format: '2025-01-01')"),
+      exclude_deprecated: z.boolean().default(false).describe("Exclude deprecated test cases from results"),
+      exclude_draft: z.boolean().default(false).describe("Exclude draft test cases from results"),
+      exclude_deleted: z.boolean().default(true).describe("Exclude deleted test cases from results (default: true)"),
+      max_page_size: z.number().int().positive().max(100).default(100).describe("Maximum number of results per page"),
+      page_token: z.string().optional().describe("Token for pagination (from previous response next_page_token). On first call, omit this."),
+      get_all: z.boolean().default(false).describe("Get all matching test cases across all pages (uses page_token loop internally)"),
+      count_only: z.boolean().default(false).describe(
+        "When true with get_all, returns only the total count without test case data. " +
+        "Efficient for metrics collection -- avoids 1MB response limit on large projects."
+      ),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
-      page: z.number().int().nonnegative().default(0).describe("Page number (0-based)"),
-      size: z.number().int().positive().max(100).default(20).describe("Page size"),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI")
     },
     async (args) => {
-      const { project_key, automation_states, suite_id, created_after, format, page, size, include_clickable_links } = args;
+      const { project_key, automation_states, suite_id, created_after, exclude_deprecated, exclude_draft, exclude_deleted, max_page_size, page_token, get_all, count_only, format, include_clickable_links } = args;
 
       try {
         debugLog("Getting test cases by automation state", args);
 
-        // Get clickable links configuration
         const clickableLinkConfig = getClickableLinkConfig(include_clickable_links, ZEBRUNNER_URL);
 
-        const searchParams = {
-          page,
-          size,
-          suiteId: suite_id,
-          automationState: automation_states,
-          createdAfter: created_after
-        };
-
-        const response = await client.getTestCases(project_key, searchParams);
-
-        if (!validateApiResponse(response, 'array')) {
-          throw new Error('Invalid API response format');
-        }
-
-        let processedCases = response.items || response;
-
-        // Add automation state info to the output
         const automationStateInfo = Array.isArray(automation_states)
           ? automation_states.join(', ')
           : automation_states;
+
+        if (get_all && count_only) {
+          let totalCount = 0;
+          let pageCount = 0;
+          let currentPageToken = page_token;
+          do {
+            const response = await client.getTestCases(project_key, {
+              size: max_page_size,
+              pageToken: currentPageToken,
+              suiteId: suite_id,
+              automationState: automation_states,
+              createdAfter: created_after,
+              excludeDeprecated: exclude_deprecated,
+              excludeDraft: exclude_draft,
+              excludeDeleted: exclude_deleted
+            });
+            totalCount += (response.items || []).length;
+            pageCount++;
+            currentPageToken = response._meta?.nextPageToken;
+          } while (currentPageToken);
+
+          return { content: [{ type: "text" as const, text: JSON.stringify({
+            total_count: totalCount,
+            pages_traversed: pageCount,
+            automation_states: automationStateInfo,
+            project_key
+          }, null, 2) }] };
+        }
+
+        if (get_all) {
+          const allTestCases: any[] = [];
+          let currentPageToken = page_token;
+
+          do {
+            const searchParams = {
+              size: max_page_size,
+              pageToken: currentPageToken,
+              suiteId: suite_id,
+              automationState: automation_states,
+              createdAfter: created_after,
+              excludeDeprecated: exclude_deprecated,
+              excludeDraft: exclude_draft,
+              excludeDeleted: exclude_deleted
+            };
+
+            const response = await client.getTestCases(project_key, searchParams);
+            if (!validateApiResponse(response, 'array')) {
+              throw new Error('Invalid API response format');
+            }
+
+            const pageItems = response.items || response;
+            allTestCases.push(...pageItems);
+
+            currentPageToken = response._meta?.nextPageToken;
+          } while (currentPageToken);
+
+          let processedCases = allTestCases;
+          if (include_clickable_links && clickableLinkConfig.includeClickableLinks) {
+            processedCases = processedCases.map(testCase =>
+              addTestCaseWebUrl(testCase, project_key, clickableLinkConfig.baseWebUrl, clickableLinkConfig)
+            );
+          }
+
+          const formattedData = FormatProcessor.format(processedCases, format);
+          const resultText = typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2);
+
+          const MAX_RESPONSE_BYTES = 900_000;
+          if (resultText.length > MAX_RESPONSE_BYTES) {
+            const avgItemSize = resultText.length / processedCases.length;
+            const safeCount = Math.floor(MAX_RESPONSE_BYTES / avgItemSize * 0.9);
+            const truncated = processedCases.slice(0, Math.max(safeCount, 1));
+            const truncatedText = JSON.stringify(truncated, null, 2);
+            return { content: [{ type: "text" as const, text:
+              `Found ${processedCases.length} total for automation state(s): ${automationStateInfo}, returning first ${truncated.length} ` +
+              `(response truncated to stay under MCP 1MB limit).\n` +
+              `Use count_only=true with get_all=true to get just the count without data.\n\n${truncatedText}`
+            }] };
+          }
+
+          const summary = `Found ${processedCases.length} test case(s) total for automation state(s): ${automationStateInfo}`;
+
+          return {
+            content: [{
+              type: "text" as const,
+              text: `${summary}\n\n${resultText}`
+            }]
+          };
+        }
+
+        // Single page
+        const searchParams = {
+          size: max_page_size,
+          pageToken: page_token,
+          suiteId: suite_id,
+          automationState: automation_states,
+          createdAfter: created_after,
+          excludeDeprecated: exclude_deprecated,
+          excludeDraft: exclude_draft,
+          excludeDeleted: exclude_deleted
+        };
+
+        const response = await client.getTestCases(project_key, searchParams);
+        if (!validateApiResponse(response, 'array')) {
+          throw new Error('Invalid API response format');
+        }
+        const processedCases = response.items || response;
+        const hasMorePages = !!response._meta?.nextPageToken;
+        const nextPageToken = response._meta?.nextPageToken || undefined;
+
+        
 
         if (format === 'markdown') {
           let markdown = `# Test Cases by Automation State\n\n`;
@@ -1466,7 +1680,9 @@ async function main() {
           markdown += `**Automation State(s):** ${automationStateInfo}\n`;
           if (suite_id) markdown += `**Suite ID:** ${suite_id}\n`;
           if (created_after) markdown += `**Created After:** ${created_after}\n`;
-          markdown += `**Total Found:** ${processedCases.length}\n\n`;
+          markdown += `**Page Results:** ${processedCases.length}`;
+          if (hasMorePages) markdown += ` (more pages available)`;
+          markdown += `\n\n`;
 
           if (processedCases.length === 0) {
             markdown += `No test cases found matching the specified automation state(s).\n\n`;
@@ -1477,7 +1693,7 @@ async function main() {
           } else {
             markdown += `## Test Cases\n\n`;
             processedCases.forEach((testCase: any, index: number) => {
-              const num = page * size + index + 1;
+              const num = index + 1;
               const testCaseDisplay = generateTestCaseLink(
                 project_key,
                 testCase.key || 'N/A',
@@ -1507,6 +1723,10 @@ async function main() {
 
               markdown += `\n`;
             });
+
+            if (hasMorePages) {
+              markdown += `\n📄 **Pagination:** Use page_token="${nextPageToken}" to get next page, or set get_all=true to retrieve all results.\n`;
+            }
           }
 
           return {
@@ -1522,14 +1742,14 @@ async function main() {
           addTestCaseWebUrl(tc, project_key, clickableLinkConfig.baseWebUrl, clickableLinkConfig)
         );
 
-        const result = {
+        const result: any = {
           project_key,
           automation_states: automationStateInfo,
           suite_id,
           created_after,
-          total_found: processedCases.length,
-          page,
-          size,
+          page_count: processedCases.length,
+          has_more_pages: hasMorePages,
+          ...(nextPageToken ? { next_page_token: nextPageToken } : {}),
           test_cases: enhancedTestCases
         };
 
@@ -1539,13 +1759,15 @@ async function main() {
           output += `Automation State(s): ${automationStateInfo}\n`;
           if (suite_id) output += `Suite ID: ${suite_id}\n`;
           if (created_after) output += `Created After: ${created_after}\n`;
-          output += `Total Found: ${processedCases.length}\n\n`;
+          output += `Count: ${processedCases.length}`;
+          if (hasMorePages) output += ` (more pages available)`;
+          output += `\n\n`;
 
           if (processedCases.length === 0) {
             output += `No test cases found matching the specified automation state(s).\n`;
           } else {
             processedCases.forEach((testCase: any, index: number) => {
-              const num = page * size + index + 1;
+              const num = index + 1;
               const testCaseDisplay = generateTestCaseLink(
                 project_key,
                 testCase.key || 'N/A',
@@ -1562,6 +1784,10 @@ async function main() {
               }
               output += `\n`;
             });
+          }
+
+          if (hasMorePages) {
+            output += `\n📄 Pagination: Use page_token="${nextPageToken}" to get next page, or set get_all=true to retrieve all results.\n`;
           }
 
           return {
@@ -1691,27 +1917,49 @@ async function main() {
       project_key: z.string().min(1).describe("Project key"),
       title: z.string().min(1).describe("Title to search for (partial match)"),
       max_page_size: z.number().int().positive().max(100).default(10).describe("Maximum number of results per page"),
-      page_token: z.string().optional().describe("Token for pagination (from previous response _meta.nextPageToken)"),
-      get_all: z.boolean().default(false).describe("Get all matching test cases across all pages"),
+      page_token: z.string().optional().describe("Token for pagination (from previous response next_page_token). On first call, omit this."),
+      get_all: z.boolean().default(false).describe("Get all matching test cases across all pages (uses page_token loop internally)"),
+      count_only: z.boolean().default(false).describe(
+        "When true with get_all, returns only the total count without test case data. " +
+        "Efficient for metrics collection -- avoids 1MB response limit on large projects."
+      ),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI")
     },
     async (args) => {
-      const { project_key, title, max_page_size, page_token, get_all, format, include_clickable_links } = args;
+      const { project_key, title, max_page_size, page_token, get_all, count_only, format, include_clickable_links } = args;
 
       try {
         debugLog("Getting test case by title", args);
 
-        // Get clickable links configuration
         const clickableLinkConfig = getClickableLinkConfig(include_clickable_links, ZEBRUNNER_URL);
 
-        // Build RQL filter for title search using partial match
-        // Properly escape backslashes first, then quotes to prevent injection
-        const escapedTitle = title.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-        const filter = `title~="${escapedTitle}"`;
+        const filter = `title~="${sanitizeRqlString(title)}"`;
+
+        if (get_all && count_only) {
+          let totalCount = 0;
+          let pageCount = 0;
+          let currentPageToken = page_token;
+          do {
+            const response = await client.getTestCases(project_key, {
+              size: max_page_size,
+              filter,
+              pageToken: currentPageToken
+            });
+            totalCount += (response.items || []).length;
+            pageCount++;
+            currentPageToken = response._meta?.nextPageToken;
+          } while (currentPageToken);
+
+          return { content: [{ type: "text" as const, text: JSON.stringify({
+            total_count: totalCount,
+            pages_traversed: pageCount,
+            title_filter: title,
+            project_key
+          }, null, 2) }] };
+        }
 
         if (get_all) {
-          // Get all pages
           const allTestCases: any[] = [];
           let currentPageToken = page_token;
 
@@ -1731,11 +1979,9 @@ async function main() {
             const pageItems = response.items || response;
             allTestCases.push(...pageItems);
 
-            // Check for next page
             currentPageToken = response._meta?.nextPageToken;
           } while (currentPageToken);
 
-          // Add clickable links if requested
           let processedCases = allTestCases;
           if (include_clickable_links && clickableLinkConfig.includeClickableLinks) {
             processedCases = processedCases.map(testCase =>
@@ -1745,6 +1991,20 @@ async function main() {
 
           const formattedData = FormatProcessor.format(processedCases, format);
           const resultText = typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2);
+
+          const MAX_RESPONSE_BYTES = 900_000;
+          if (resultText.length > MAX_RESPONSE_BYTES) {
+            const avgItemSize = resultText.length / processedCases.length;
+            const safeCount = Math.floor(MAX_RESPONSE_BYTES / avgItemSize * 0.9);
+            const truncated = processedCases.slice(0, Math.max(safeCount, 1));
+            const truncatedText = JSON.stringify(truncated, null, 2);
+            return { content: [{ type: "text" as const, text:
+              `Found ${processedCases.length} total matching title "${title}", returning first ${truncated.length} ` +
+              `(response truncated to stay under MCP 1MB limit).\n` +
+              `Use count_only=true with get_all=true to get just the count without data.\n\n${truncatedText}`
+            }] };
+          }
+
           const summary = `Found ${processedCases.length} test case(s) total matching title "${title}"`;
 
           return {
@@ -1753,46 +2013,47 @@ async function main() {
               text: `${summary}\n\n${resultText}`
             }]
           };
-        } else {
-          // Single page
-          const searchParams = {
-            size: max_page_size,
-            filter: filter,
-            pageToken: page_token
-          };
-
-          const response = await client.getTestCases(project_key, searchParams);
-
-          if (!validateApiResponse(response, 'array')) {
-            throw new Error('Invalid API response format');
-          }
-
-          let processedCases = response.items || response;
-
-          // Add clickable links if requested
-          if (include_clickable_links && clickableLinkConfig.includeClickableLinks) {
-            processedCases = processedCases.map(testCase =>
-              addTestCaseWebUrl(testCase, project_key, clickableLinkConfig.baseWebUrl, clickableLinkConfig)
-            );
-          }
-
-          const formattedData = FormatProcessor.format(processedCases, format);
-          const resultText = typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2);
-
-          const summary = `Found ${processedCases.length} test case(s) on this page matching title "${title}"`;
-          let paginationInfo = '';
-
-          if (response._meta?.nextPageToken) {
-            paginationInfo = `\n\n📄 **Pagination:** Use page_token="${response._meta.nextPageToken}" to get next page, or set get_all=true to retrieve all results.`;
-          }
-
-          return {
-            content: [{
-              type: "text" as const,
-              text: `${summary}${paginationInfo}\n\n${resultText}`
-            }]
-          };
         }
+
+        // Single page
+        const searchParams = {
+          size: max_page_size,
+          filter: filter,
+          pageToken: page_token
+        };
+
+        const response = await client.getTestCases(project_key, searchParams);
+
+        if (!validateApiResponse(response, 'array')) {
+          throw new Error('Invalid API response format');
+        }
+
+        let processedCases = response.items || response;
+        const hasMorePages = !!response._meta?.nextPageToken;
+        const nextPageToken = response._meta?.nextPageToken || undefined;
+
+        if (include_clickable_links && clickableLinkConfig.includeClickableLinks) {
+          processedCases = processedCases.map(testCase =>
+            addTestCaseWebUrl(testCase, project_key, clickableLinkConfig.baseWebUrl, clickableLinkConfig)
+          );
+        }
+
+        const formattedData = FormatProcessor.format(processedCases, format);
+        const resultText = typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2);
+
+        const summary = `Found ${processedCases.length} test case(s) on this page matching title "${title}"`;
+        let paginationInfo = '';
+
+        if (hasMorePages) {
+          paginationInfo = `\n\n📄 **Pagination:** Use page_token="${nextPageToken}" to get next page, or set get_all=true to retrieve all results.`;
+        }
+
+        return {
+          content: [{
+            type: "text" as const,
+            text: `${summary}${paginationInfo}\n\n${resultText}`
+          }]
+        };
 
       } catch (error: any) {
         debugLog("Error getting test case by title", { error: error.message, args });
@@ -1818,9 +2079,16 @@ async function main() {
       last_modified_before: z.string().optional().describe("Filter test cases last modified before this date (ISO format: '2025-12-31T23:59:59Z')"),
       priority_id: z.number().int().positive().optional().describe("Filter by priority ID (use get_automation_priorities to see available priorities)"),
       automation_state_id: z.number().int().positive().optional().describe("Filter by automation state ID (use get_automation_states to see available states)"),
+      exclude_deprecated: z.boolean().default(false).describe("Exclude deprecated test cases from results"),
+      exclude_draft: z.boolean().default(false).describe("Exclude draft test cases from results"),
+      exclude_deleted: z.boolean().default(true).describe("Exclude deleted test cases from results (default: true)"),
       max_page_size: z.number().int().positive().max(100).default(20).describe("Maximum number of results per page"),
-      page_token: z.string().optional().describe("Token for pagination (from previous response _meta.nextPageToken)"),
-      get_all: z.boolean().default(false).describe("Get all matching test cases across all pages"),
+      page_token: z.string().optional().describe("Token for pagination (from previous response next_page_token). On first call, omit this."),
+      get_all: z.boolean().default(false).describe("Get all matching test cases across all pages (uses page_token loop internally)"),
+      count_only: z.boolean().default(false).describe(
+        "When true with get_all, returns only the total count without test case data. " +
+        "Efficient for metrics collection -- avoids 1MB response limit on large projects."
+      ),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI")
     },
@@ -1834,9 +2102,13 @@ async function main() {
         last_modified_before,
         priority_id,
         automation_state_id,
+        exclude_deprecated,
+        exclude_draft,
+        exclude_deleted,
         max_page_size,
         page_token,
         get_all,
+        count_only,
         format,
         include_clickable_links
       } = args;
@@ -1844,7 +2116,6 @@ async function main() {
       try {
         debugLog("Getting test cases by filter", args);
 
-        // Get clickable links configuration
         const clickableLinkConfig = getClickableLinkConfig(include_clickable_links, ZEBRUNNER_URL);
 
         // Build RQL filter from provided parameters
@@ -1878,14 +2149,46 @@ async function main() {
           filters.push(`automationState.id = ${automation_state_id}`);
         }
 
+        if (exclude_deprecated) {
+          filters.push(`deprecated = false`);
+        }
+        if (exclude_draft) {
+          filters.push(`draft = false`);
+        }
+        if (exclude_deleted) {
+          filters.push(`deleted = false`);
+        }
+
         if (filters.length === 0) {
           throw new Error('At least one filter parameter must be provided');
         }
 
         const filter = filters.join(' AND ');
 
+        if (get_all && count_only) {
+          let totalCount = 0;
+          let pageCount = 0;
+          let currentPageToken = page_token;
+          do {
+            const response = await client.getTestCases(project_key, {
+              size: max_page_size,
+              filter,
+              pageToken: currentPageToken
+            });
+            totalCount += (response.items || []).length;
+            pageCount++;
+            currentPageToken = response._meta?.nextPageToken;
+          } while (currentPageToken);
+
+          return { content: [{ type: "text" as const, text: JSON.stringify({
+            total_count: totalCount,
+            pages_traversed: pageCount,
+            filters_applied: filter,
+            project_key
+          }, null, 2) }] };
+        }
+
         if (get_all) {
-          // Get all pages
           const allTestCases: any[] = [];
           let currentPageToken = page_token;
 
@@ -1905,11 +2208,9 @@ async function main() {
             const pageItems = response.items || response;
             allTestCases.push(...pageItems);
 
-            // Check for next page
             currentPageToken = response._meta?.nextPageToken;
           } while (currentPageToken);
 
-          // Add clickable links if requested
           let processedCases = allTestCases;
           if (include_clickable_links && clickableLinkConfig.includeClickableLinks) {
             processedCases = processedCases.map(testCase =>
@@ -1919,6 +2220,21 @@ async function main() {
 
           const formattedData = FormatProcessor.format(processedCases, format);
           const resultText = typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2);
+
+          const MAX_RESPONSE_BYTES = 900_000;
+          if (resultText.length > MAX_RESPONSE_BYTES) {
+            const avgItemSize = resultText.length / processedCases.length;
+            const safeCount = Math.floor(MAX_RESPONSE_BYTES / avgItemSize * 0.9);
+            const truncated = processedCases.slice(0, Math.max(safeCount, 1));
+            const truncatedText = JSON.stringify(truncated, null, 2);
+            return { content: [{ type: "text" as const, text:
+              `Found ${processedCases.length} total matching filters, returning first ${truncated.length} ` +
+              `(response truncated to stay under MCP 1MB limit).\n` +
+              `Use count_only=true with get_all=true to get just the count without data.\n` +
+              `Applied filters: ${filter}\n\n${truncatedText}`
+            }] };
+          }
+
           const summary = `Found ${processedCases.length} test case(s) total matching the specified filters`;
           const filterSummary = `Applied filters: ${filter}`;
 
@@ -1928,47 +2244,48 @@ async function main() {
               text: `${summary}\n${filterSummary}\n\n${resultText}`
             }]
           };
-        } else {
-          // Single page
-          const searchParams = {
-            size: max_page_size,
-            filter: filter,
-            pageToken: page_token
-          };
-
-          const response = await client.getTestCases(project_key, searchParams);
-
-          if (!validateApiResponse(response, 'array')) {
-            throw new Error('Invalid API response format');
-          }
-
-          let processedCases = response.items || response;
-
-          // Add clickable links if requested
-          if (include_clickable_links && clickableLinkConfig.includeClickableLinks) {
-            processedCases = processedCases.map(testCase =>
-              addTestCaseWebUrl(testCase, project_key, clickableLinkConfig.baseWebUrl, clickableLinkConfig)
-            );
-          }
-
-          const formattedData = FormatProcessor.format(processedCases, format);
-          const resultText = typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2);
-
-          const summary = `Found ${processedCases.length} test case(s) on this page matching the specified filters`;
-          const filterSummary = `Applied filters: ${filter}`;
-          let paginationInfo = '';
-
-          if (response._meta?.nextPageToken) {
-            paginationInfo = `\n\n📄 **Pagination:** Use page_token="${response._meta.nextPageToken}" to get next page, or set get_all=true to retrieve all results.`;
-          }
-
-          return {
-            content: [{
-              type: "text" as const,
-              text: `${summary}\n${filterSummary}${paginationInfo}\n\n${resultText}`
-            }]
-          };
         }
+
+        // Single page
+        const searchParams = {
+          size: max_page_size,
+          filter: filter,
+          pageToken: page_token
+        };
+
+        const response = await client.getTestCases(project_key, searchParams);
+
+        if (!validateApiResponse(response, 'array')) {
+          throw new Error('Invalid API response format');
+        }
+
+        let processedCases = response.items || response;
+        const hasMorePages = !!response._meta?.nextPageToken;
+        const nextPageToken = response._meta?.nextPageToken || undefined;
+
+        if (include_clickable_links && clickableLinkConfig.includeClickableLinks) {
+          processedCases = processedCases.map(testCase =>
+            addTestCaseWebUrl(testCase, project_key, clickableLinkConfig.baseWebUrl, clickableLinkConfig)
+          );
+        }
+
+        const formattedData = FormatProcessor.format(processedCases, format);
+        const resultText = typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2);
+
+        const summary = `Found ${processedCases.length} test case(s) on this page matching the specified filters`;
+        const filterSummary = `Applied filters: ${filter}`;
+        let paginationInfo = '';
+
+        if (hasMorePages) {
+          paginationInfo = `\n\n📄 **Pagination:** Use page_token="${nextPageToken}" to get next page, or set get_all=true to retrieve all results.`;
+        }
+
+        return {
+          content: [{
+            type: "text" as const,
+            text: `${summary}\n${filterSummary}${paginationInfo}\n\n${resultText}`
+          }]
+        };
 
       } catch (error: any) {
         debugLog("Error getting test cases by filter", { error: error.message, args });
@@ -2779,13 +3096,50 @@ async function main() {
       project_key: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI"),
-      max_results: z.number().int().positive().max(1000).default(500).describe("Maximum number of results (configurable limit for performance)")
+      exclude_deprecated: z.boolean().default(false).describe("Exclude deprecated test cases from results"),
+      exclude_draft: z.boolean().default(false).describe("Exclude draft test cases from results"),
+      exclude_deleted: z.boolean().default(true).describe("Exclude deleted test cases from results (default: true)"),
+      max_results: z.number().int().positive().max(10000).default(5000).describe("Maximum number of results (configurable limit for performance)"),
+      count_only: z.boolean().default(false).describe(
+        "When true, returns only the total count without test case data. " +
+        "Efficient for metrics collection -- avoids 1MB response limit on large projects."
+      )
     },
     async (args) => {
       try {
-        const { project_key, format, include_clickable_links, max_results } = args;
+        const { project_key, format, include_clickable_links, exclude_deprecated, exclude_draft, exclude_deleted, max_results, count_only } = args;
 
-        debugLog("Getting all TCM test cases", { project_key, include_clickable_links, max_results });
+        debugLog("Getting all TCM test cases", { project_key, include_clickable_links, max_results, count_only });
+
+        // Build RQL filter for status exclusions
+        const filterParts: string[] = [];
+        if (exclude_deprecated) filterParts.push('deprecated = false');
+        if (exclude_draft) filterParts.push('draft = false');
+        if (exclude_deleted) filterParts.push('deleted = false');
+        const rqlFilter = filterParts.length > 0 ? filterParts.join(' AND ') : undefined;
+
+        if (count_only) {
+          let totalCount = 0;
+          let pageCount = 0;
+          let pageToken: string | undefined = undefined;
+          do {
+            const result = await client.getTestCases(project_key, {
+              size: MAX_PAGE_SIZE,
+              pageToken,
+              ...(rqlFilter && !pageToken ? { filter: rqlFilter } : {})
+            });
+            totalCount += (result.items || []).length;
+            pageCount++;
+            pageToken = result._meta?.nextPageToken;
+          } while (pageToken && pageCount < 100);
+
+          return { content: [{ type: "text" as const, text: JSON.stringify({
+            total_count: totalCount,
+            pages_traversed: pageCount,
+            filters_applied: rqlFilter || "none",
+            project_key
+          }, null, 2) }] };
+        }
 
         // Get clickable links configuration
         const clickableLinkConfig = getClickableLinkConfig(include_clickable_links, ZEBRUNNER_URL);
@@ -2794,12 +3148,15 @@ async function main() {
         let allTestCases: ZebrunnerTestCase[] = [];
         let pageToken: string | undefined = undefined;
         let pageCount = 0;
+        let wasTruncated = false;
+        let hasMorePages = false;
         const maxPages = 100; // Safety limit
 
         do {
           const result = await client.getTestCases(project_key, {
             size: MAX_PAGE_SIZE,
-            pageToken: pageToken
+            pageToken: pageToken,
+            ...(rqlFilter && !pageToken ? { filter: rqlFilter } : {})
           });
 
           allTestCases.push(...result.items);
@@ -2809,6 +3166,8 @@ async function main() {
           // Apply max_results limit for performance
           if (allTestCases.length >= max_results) {
             allTestCases = allTestCases.slice(0, max_results);
+            wasTruncated = true;
+            hasMorePages = !!pageToken;
             debugLog(`Limiting results to ${max_results} test cases for performance`);
             break;
           }
@@ -2822,6 +3181,11 @@ async function main() {
 
         } while (pageToken && pageCount < maxPages);
 
+        if (!wasTruncated && pageCount >= maxPages && pageToken) {
+          wasTruncated = true;
+          hasMorePages = true;
+        }
+
         console.error(`Found ${allTestCases.length} testcases.`);
 
         // Add clickable links to test cases if enabled
@@ -2829,12 +3193,39 @@ async function main() {
           addTestCaseWebUrl(tc, project_key, clickableLinkConfig.baseWebUrl, clickableLinkConfig)
         );
 
-        const formattedResult = FormatProcessor.format(enhancedTestCases, format as any);
+        const resultPayload = {
+          project_key,
+          total_fetched: allTestCases.length,
+          was_truncated: wasTruncated,
+          has_more_pages: hasMorePages,
+          filters_applied: {
+            exclude_deprecated,
+            exclude_draft,
+            exclude_deleted
+          },
+          test_cases: enhancedTestCases
+        };
+
+        const formattedResult = FormatProcessor.format(resultPayload, format as any);
+        const resultText = typeof formattedResult === 'string' ? formattedResult : JSON.stringify(formattedResult, null, 2);
+
+        const MAX_RESPONSE_BYTES = 900_000;
+        if (resultText.length > MAX_RESPONSE_BYTES) {
+          const avgItemSize = resultText.length / enhancedTestCases.length;
+          const safeCount = Math.floor(MAX_RESPONSE_BYTES / avgItemSize * 0.9);
+          const truncated = enhancedTestCases.slice(0, Math.max(safeCount, 1));
+          const truncatedText = JSON.stringify(truncated, null, 2);
+          return { content: [{ type: "text" as const, text:
+            `Found ${allTestCases.length} total test cases for ${project_key}, returning first ${truncated.length} ` +
+            `(response truncated to stay under MCP 1MB limit).\n` +
+            `Use count_only=true to get just the count without data.\n\n${truncatedText}`
+          }] };
+        }
 
         return {
           content: [{
             type: "text" as const,
-            text: typeof formattedResult === 'string' ? formattedResult : JSON.stringify(formattedResult, null, 2)
+            text: resultText
           }]
         };
 
@@ -2855,13 +3246,38 @@ async function main() {
     "🌳 Get ALL TCM test cases enriched with root suite ID information",
     {
       project_key: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
-      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format")
+      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
+      count_only: z.boolean().default(false).describe(
+        "When true, returns only the total count without test case data. " +
+        "Skips hierarchy enrichment for maximum efficiency."
+      )
     },
     async (args) => {
       try {
-        const { project_key, format } = args;
+        const { project_key, format, count_only } = args;
 
-        debugLog("Getting all TCM test cases with root suite ID", { project_key });
+        debugLog("Getting all TCM test cases with root suite ID", { project_key, count_only });
+
+        if (count_only) {
+          let totalCount = 0;
+          let pageCount = 0;
+          let pageToken: string | undefined = undefined;
+          do {
+            const result = await client.getTestCases(project_key, {
+              size: MAX_PAGE_SIZE,
+              pageToken
+            });
+            totalCount += (result.items || []).length;
+            pageCount++;
+            pageToken = result._meta?.nextPageToken;
+          } while (pageToken && pageCount < 100);
+
+          return { content: [{ type: "text" as const, text: JSON.stringify({
+            total_count: totalCount,
+            pages_traversed: pageCount,
+            project_key
+          }, null, 2) }] };
+        }
 
         // Get all test cases using proper token-based pagination
         let allTestCases: ZebrunnerTestCase[] = [];
@@ -2901,11 +3317,25 @@ async function main() {
         console.error(`Added ${enrichedTestCases.length} test cases with root suite IDs.`);
 
         const formattedResult = FormatProcessor.format(enrichedTestCases, format as any);
+        const resultText = typeof formattedResult === 'string' ? formattedResult : JSON.stringify(formattedResult, null, 2);
+
+        const MAX_RESPONSE_BYTES = 900_000;
+        if (resultText.length > MAX_RESPONSE_BYTES) {
+          const avgItemSize = resultText.length / enrichedTestCases.length;
+          const safeCount = Math.floor(MAX_RESPONSE_BYTES / avgItemSize * 0.9);
+          const truncated = enrichedTestCases.slice(0, Math.max(safeCount, 1));
+          const truncatedText = JSON.stringify(truncated, null, 2);
+          return { content: [{ type: "text" as const, text:
+            `Found ${enrichedTestCases.length} total test cases with root suite IDs for ${project_key}, returning first ${truncated.length} ` +
+            `(response truncated to stay under MCP 1MB limit).\n` +
+            `Use count_only=true to get just the count without data.\n\n${truncatedText}`
+          }] };
+        }
 
         return {
           content: [{
             type: "text" as const,
-            text: typeof formattedResult === 'string' ? formattedResult : JSON.stringify(formattedResult, null, 2)
+            text: resultText
           }]
         };
 
@@ -2985,12 +3415,16 @@ async function main() {
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
       get_all: z.boolean().default(true).describe("Get all test cases (true) or paginated results (false)"),
       include_sub_suites: z.boolean().default(true).describe("Include test cases from sub-suites (if any)"),
+      count_only: z.boolean().default(false).describe(
+        "When true, returns only the total count of test cases in the suite without fetching data. " +
+        "Efficient for metrics collection -- avoids 1MB response limit on large projects."
+      ),
       page: z.number().int().nonnegative().default(0).describe("Page number (0-based, only used if get_all=false)"),
       size: z.number().int().positive().max(100).default(50).describe("Page size (only used if get_all=false)")
     },
     async (args) => {
       try {
-        const { project_key, suite_id, include_steps, format, get_all, include_sub_suites, page, size } = args;
+        const { project_key, suite_id, include_steps, format, get_all, include_sub_suites, count_only, page, size } = args;
 
         debugLog("Smart test case retrieval by suite", { project_key, suite_id, include_steps, format, get_all, include_sub_suites, page, size });
 
@@ -3024,6 +3458,59 @@ async function main() {
           hasChildren,
           suiteName: targetSuite.name || targetSuite.title
         });
+
+        if (count_only) {
+          let filter: string;
+          if ((isRootSuite || hasChildren) && include_sub_suites) {
+            const childSuiteIds: number[] = [suite_id];
+            if (isRootSuite) {
+              for (const suite of processedSuites) {
+                if (suite.rootSuiteId === suite_id && suite.id !== suite_id) {
+                  childSuiteIds.push(suite.id);
+                }
+              }
+            } else {
+              function findDescendants(parentId: number): number[] {
+                const desc: number[] = [];
+                for (const s of processedSuites) {
+                  if (s.parentSuiteId === parentId) {
+                    desc.push(s.id);
+                    desc.push(...findDescendants(s.id));
+                  }
+                }
+                return desc;
+              }
+              childSuiteIds.push(...findDescendants(suite_id));
+            }
+            filter = `testSuite.id IN [${childSuiteIds.join(',')}]`;
+          } else {
+            filter = `testSuite.id=${suite_id}`;
+          }
+
+          let totalCount = 0;
+          let pageCount = 0;
+          let currentPageToken: string | undefined = undefined;
+          do {
+            const response = await client.getTestCases(project_key, {
+              size: MAX_PAGE_SIZE,
+              filter,
+              pageToken: currentPageToken
+            });
+            totalCount += (response.items || []).length;
+            pageCount++;
+            currentPageToken = response._meta?.nextPageToken;
+          } while (currentPageToken);
+
+          return { content: [{ type: "text" as const, text: JSON.stringify({
+            total_count: totalCount,
+            pages_traversed: pageCount,
+            suite_id,
+            suite_name: targetSuite.name || targetSuite.title,
+            is_root_suite: isRootSuite,
+            has_children: hasChildren,
+            project_key
+          }, null, 2) }] };
+        }
 
         // Step 5: Get test cases using appropriate method
         let testCases: any[];
@@ -3236,7 +3723,22 @@ async function main() {
           summaryMessage += `📝 Detailed steps included for first ${Math.min(5, testCases.length)} cases\n`;
         }
 
-        summaryMessage += `\n${typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2)}`;
+        const resultText = typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2);
+
+        const MAX_RESPONSE_BYTES = 900_000;
+        if (resultText.length > MAX_RESPONSE_BYTES) {
+          const avgItemSize = resultText.length / testCases.length;
+          const safeCount = Math.floor(MAX_RESPONSE_BYTES / avgItemSize * 0.9);
+          const truncated = testCases.slice(0, Math.max(safeCount, 1));
+          const truncatedText = JSON.stringify(truncated, null, 2);
+          return { content: [{ type: "text" as const, text:
+            `Found ${testCases.length} total test cases in suite ${suite_id}, returning first ${truncated.length} ` +
+            `(response truncated to stay under MCP 1MB limit).\n` +
+            `Use count_only=true to get just the count without data.\n\n${truncatedText}`
+          }] };
+        }
+
+        summaryMessage += `\n${resultText}`;
 
         return {
           content: [{
@@ -5035,12 +5537,12 @@ ${detailsInfo.map((detail, i) => {
 
         // Import handlers here to avoid circular dependencies
         const { ZebrunnerToolHandlers } = await import("./handlers/tools.js");
-        // Create a basic client instance for validation since enhanced client has different interface
         const { ZebrunnerApiClient } = await import("./api/client.js");
         const basicClient = new ZebrunnerApiClient(config);
         const toolHandlers = new ZebrunnerToolHandlers(basicClient);
 
-        return await toolHandlers.validateTestCase(args);
+        const fieldsLayout = await getFieldsLayoutForProject(args.projectKey);
+        return await toolHandlers.validateTestCase(args, fieldsLayout);
       } catch (error: any) {
         debugLog("Error in validate_test_case", { error: error.message, args });
         return {
@@ -5071,12 +5573,12 @@ ${detailsInfo.map((detail, i) => {
 
         // Import handlers here to avoid circular dependencies
         const { ZebrunnerToolHandlers } = await import("./handlers/tools.js");
-        // Create a basic client instance for improvement since enhanced client has different interface
         const { ZebrunnerApiClient } = await import("./api/client.js");
         const basicClient = new ZebrunnerApiClient(config);
         const toolHandlers = new ZebrunnerToolHandlers(basicClient);
 
-        return await toolHandlers.improveTestCase(args);
+        const fieldsLayout = await getFieldsLayoutForProject(args.projectKey);
+        return await toolHandlers.improveTestCase(args, fieldsLayout);
       } catch (error: any) {
         debugLog("Error in improve_test_case", { error: error.message, args });
         return {

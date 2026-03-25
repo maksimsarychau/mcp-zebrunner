@@ -1,5 +1,6 @@
 import { OutputFormat } from "../types/api.js";
 import { ZebrunnerTestCase, ZebrunnerTestSuite, ZebrunnerTestRun, ZebrunnerTestResultResponse } from "../types/core.js";
+import type { FieldsLayout, FieldLayoutItem, TestCaseExecution } from "../api/reporting-client.js";
 
 /**
  * Utility class for formatting output in different formats
@@ -8,14 +9,14 @@ export class FormatProcessor {
   /**
    * Format data according to specified output format
    */
-  static format<T>(data: T, format: OutputFormat): string | T {
+  static format<T>(data: T, format: OutputFormat, fieldsLayout?: FieldsLayout): string | T {
     switch (format) {
       case 'dto':
-        return data; // Return as TypeScript object
+        return data;
       case 'json':
         return JSON.stringify(data, null, 2) as any;
       case 'string':
-        return this.convertToReadableString(data) as any;
+        return this.convertToReadableString(data, fieldsLayout) as any;
       default:
         return data;
     }
@@ -24,28 +25,124 @@ export class FormatProcessor {
   /**
    * Format test case as markdown (public method for server use)
    */
-  static formatTestCaseMarkdown(testCase: any): string {
+  /**
+   * Build a lookup from customField API key → display name using fields layout.
+   * The API uses camelCase keys (e.g., "manualOnly") while the layout has display names ("Manual Only").
+   */
+  private static buildCustomFieldDisplayMap(fieldsLayout?: FieldsLayout): Map<string, FieldLayoutItem> {
+    if (!fieldsLayout) return new Map();
+
+    const map = new Map<string, FieldLayoutItem>();
+    for (const field of fieldsLayout.fields) {
+      if (field.type !== 'CUSTOM') continue;
+      // API key is typically camelCase of display name; build several candidate keys
+      const candidates = [
+        field.name,
+        field.name.replace(/\s+/g, ''),
+        field.name.charAt(0).toLowerCase() + field.name.slice(1).replace(/\s+(.)/g, (_, c) => c.toUpperCase()),
+        field.name.toLowerCase().replace(/\s+/g, '_'),
+        field.name.replace(/\s+/g, '_'),
+      ];
+      map.set(field.name, field);
+      for (const c of candidates) {
+        map.set(c, field);
+      }
+    }
+    return map;
+  }
+
+  static formatExecutionHistoryMarkdown(executions: TestCaseExecution[]): string {
+    if (!executions || executions.length === 0) {
+      return '## Execution History\n\nNo executions found.\n';
+    }
+
+    const lines: string[] = ['## Execution History\n'];
+    lines.push(`| # | Date | Status | Type | Environment | Configurations |`);
+    lines.push(`|---|------|--------|------|-------------|----------------|`);
+
+    executions.forEach((exec, idx) => {
+      const date = exec.trackedAt ? new Date(exec.trackedAt).toISOString().replace('T', ' ').slice(0, 19) : 'N/A';
+      const status = exec.status?.name || 'Unknown';
+      const type = exec.type || 'N/A';
+      const env = exec.environment?.name || '—';
+      const configs = exec.configurations
+        ?.map(c => `${c.groupName}: ${c.optionName}`)
+        .join(', ') || '—';
+      lines.push(`| ${idx + 1} | ${date} | ${status} | ${type} | ${env} | ${configs} |`);
+    });
+
+    const passCount = executions.filter(e => e.status?.name === 'Passed').length;
+    const failCount = executions.filter(e => e.status?.name === 'Failed').length;
+    const total = executions.length;
+    const passRate = total > 0 ? Math.round((passCount / total) * 100) : 0;
+    lines.push('');
+    lines.push(`**Summary:** ${total} execution(s) shown — ${passCount} passed, ${failCount} failed (${passRate}% pass rate)`);
+    lines.push('');
+
+    return lines.join('\n');
+  }
+
+  static formatTestCaseMarkdown(testCase: any, fieldsLayout?: FieldsLayout): string {
     const id = testCase?.id ?? "N/A";
     const key = testCase?.key ?? "N/A";
     const title = testCase?.title ?? "(no title)";
     const description = testCase?.description || "";
     const priority = testCase?.priority?.name ?? "N/A";
     const automationState = testCase?.automationState?.name ?? "N/A";
+    const deprecated = testCase?.deprecated === true ? "Yes" : testCase?.deprecated === false ? "No" : "N/A";
+    const draft = testCase?.draft === true ? "Yes" : testCase?.draft === false ? "No" : "N/A";
     const createdBy = testCase?.createdBy?.username ?? "N/A";
+    const createdAt = testCase?.createdAt ?? "";
     const lastModifiedBy = testCase?.lastModifiedBy?.username ?? "N/A";
+    const lastModifiedAt = testCase?.lastModifiedAt ?? "";
 
-    const header = `# Test Case: ${title}\n\n- **ID:** ${id}\n- **Key:** ${key}\n- **Priority:** ${priority}\n- **Automation State:** ${automationState}\n- **Created By:** ${createdBy}\n- **Last Modified By:** ${lastModifiedBy}\n\n`;
+    let header = `# Test Case: ${title}\n\n`;
+    header += `## System Properties\n\n`;
+    header += `- **ID:** ${id}\n`;
+    header += `- **Key:** ${key}\n`;
+    header += `- **Priority:** ${priority}\n`;
+    header += `- **Automation State:** ${automationState}\n`;
+    header += `- **Deprecated:** ${deprecated}\n`;
+    header += `- **Draft:** ${draft}\n`;
+    header += `- **Created By:** ${createdBy}${createdAt ? ` (${createdAt})` : ''}\n`;
+    header += `- **Last Modified By:** ${lastModifiedBy}${lastModifiedAt ? ` (${lastModifiedAt})` : ''}\n`;
+    header += `\n`;
+
     const descBlock = description ? `## Description\n\n${description}\n\n` : "";
 
-    // Handle custom fields
     let customFieldsBlock = "";
     if (testCase?.customField && typeof testCase.customField === 'object') {
-      const fields = Object.entries(testCase.customField)
-        .filter(([key, value]) => value !== null && value !== undefined && value !== "")
-        .map(([key, value]) => `- **${key}:** ${value}`)
+      const displayMap = this.buildCustomFieldDisplayMap(fieldsLayout);
+
+      // System field names that custom fields must never visually override
+      const systemFieldNames = ['deprecated', 'draft', 'priority', 'automationstate', 'automation state'];
+
+      const entries = Object.entries(testCase.customField)
+        .filter(([, value]) => value !== null && value !== undefined && value !== "")
+        .map(([apiKey, value]) => {
+          const meta = displayMap.get(apiKey);
+          const displayName = meta?.name || apiKey;
+          const position = meta?.relativePosition ?? 999;
+
+          // Detect if this custom field name collides with a system property
+          const nameNorm = displayName.toLowerCase().replace(/[_\-\s\d]+/g, '');
+          const isSystemOverlap = systemFieldNames.some(s => s.replace(/\s+/g, '') === nameNorm || nameNorm.startsWith(s.replace(/\s+/g, '')));
+
+          return { displayName, value, position, isSystemOverlap };
+        })
+        .sort((a, b) => a.position - b.position);
+
+      const fields = entries
+        .map(({ displayName, value, isSystemOverlap }) => {
+          if (isSystemOverlap) {
+            return `- **${displayName}:** ${value} _(custom field — does NOT override the system "${displayName.replace(/[_\d]+$/g, '').trim()}" property above)_`;
+          }
+          return `- **${displayName}:** ${value}`;
+        })
         .join('\n');
+
       if (fields) {
-        customFieldsBlock = `## Custom Fields\n\n${fields}\n\n`;
+        customFieldsBlock = `## Custom Fields (project-specific, not system properties)\n\nThese are project-specific metadata fields. The authoritative system properties (Deprecated, Draft, Priority, etc.) are listed above.\n\n${fields}\n\n`;
       }
     }
 
@@ -95,12 +192,11 @@ export class FormatProcessor {
   /**
    * Convert data to human-readable string format
    */
-  private static convertToReadableString(data: any): string {
+  private static convertToReadableString(data: any, fieldsLayout?: FieldsLayout): string {
     if (Array.isArray(data)) {
-      return data.map(item => this.convertToReadableString(item)).join('\n\n');
+      return data.map(item => this.convertToReadableString(item, fieldsLayout)).join('\n\n');
     }
 
-    // Check most specific types first
     if (this.isTestSuite(data)) {
       return this.formatTestSuite(data);
     }
@@ -114,28 +210,25 @@ export class FormatProcessor {
     }
 
     if (this.isTestCase(data)) {
-      return this.formatTestCase(data);
+      return this.formatTestCase(data, fieldsLayout);
     }
 
-    // Fallback to JSON for unknown types
     return JSON.stringify(data, null, 2);
   }
 
   /**
    * Format test case as readable string
    */
-  private static formatTestCase(testCase: ZebrunnerTestCase): string {
+  private static formatTestCase(testCase: ZebrunnerTestCase, fieldsLayout?: FieldsLayout): string {
     const lines: string[] = [];
     
     lines.push(`=== Test Case: ${testCase.title || 'Untitled'} ===`);
+    lines.push('');
+    lines.push('--- System Properties ---');
     lines.push(`ID: ${testCase.id}`);
     
     if (testCase.key) {
       lines.push(`Key: ${testCase.key}`);
-    }
-    
-    if (testCase.description) {
-      lines.push(`Description: ${testCase.description}`);
     }
     
     if (testCase.priority) {
@@ -143,8 +236,11 @@ export class FormatProcessor {
     }
     
     if (testCase.automationState) {
-      lines.push(`Automation: ${testCase.automationState.name}`);
+      lines.push(`Automation State: ${testCase.automationState.name}`);
     }
+
+    lines.push(`Deprecated: ${testCase.deprecated === true ? 'Yes' : testCase.deprecated === false ? 'No' : 'N/A'}`);
+    lines.push(`Draft: ${testCase.draft === true ? 'Yes' : testCase.draft === false ? 'No' : 'N/A'}`);
     
     if (testCase.createdBy) {
       lines.push(`Created by: ${testCase.createdBy.username} (${testCase.createdAt})`);
@@ -154,7 +250,12 @@ export class FormatProcessor {
       lines.push(`Last modified by: ${testCase.lastModifiedBy.username} (${testCase.lastModifiedAt})`);
     }
 
-    // Format steps
+    if (testCase.description) {
+      lines.push('');
+      lines.push('--- Description ---');
+      lines.push(testCase.description);
+    }
+
     if (testCase.steps && testCase.steps.length > 0) {
       lines.push('\n--- Steps ---');
       testCase.steps.forEach((step: any, index: number) => {
@@ -176,12 +277,29 @@ export class FormatProcessor {
       });
     }
 
-    // Format custom fields
     if (testCase.customField && Object.keys(testCase.customField).length > 0) {
-      lines.push('\n--- Custom Fields ---');
-      Object.entries(testCase.customField).forEach(([key, value]) => {
-        if (value !== null && value !== undefined && value !== '') {
-          lines.push(`${key}: ${value}`);
+      const displayMap = this.buildCustomFieldDisplayMap(fieldsLayout);
+      const systemFieldNames = ['deprecated', 'draft', 'priority', 'automationstate', 'automation state'];
+
+      const entries = Object.entries(testCase.customField)
+        .filter(([, value]) => value !== null && value !== undefined && value !== '')
+        .map(([apiKey, value]) => {
+          const meta = displayMap.get(apiKey);
+          const displayName = meta?.name || apiKey;
+          const position = meta?.relativePosition ?? 999;
+          const nameNorm = displayName.toLowerCase().replace(/[_\-\s\d]+/g, '');
+          const isSystemOverlap = systemFieldNames.some(s => s.replace(/\s+/g, '') === nameNorm || nameNorm.startsWith(s.replace(/\s+/g, '')));
+          return { displayName, value, position, isSystemOverlap };
+        })
+        .sort((a, b) => a.position - b.position);
+
+      lines.push('\n--- Custom Fields (project-specific, NOT system properties) ---');
+      lines.push('Note: These do NOT override the system properties above.');
+      entries.forEach(({ displayName, value, isSystemOverlap }) => {
+        if (isSystemOverlap) {
+          lines.push(`${displayName}: ${value} (custom field — does NOT override system "${displayName.replace(/[_\d]+$/g, '').trim()}")`);
+        } else {
+          lines.push(`${displayName}: ${value}`);
         }
       });
     }
