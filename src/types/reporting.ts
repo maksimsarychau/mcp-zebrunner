@@ -148,6 +148,31 @@ export const TestSessionsResponseSchema = z.object({
 
 export type TestSessionsResponse = z.infer<typeof TestSessionsResponseSchema>;
 
+export type SessionResolutionStrategy = 'auto' | 'per_test' | 'launch_level';
+
+export interface TestSessionBreakdown {
+  sessionId: number;
+  device: string | null;
+  platform: string | null;
+  platformVersion: string | null;
+  durationSeconds: number;
+  status: string;
+  testStatus: string;
+  passedManually: boolean;
+  isEffective: boolean;
+  isLongest: boolean;
+}
+
+export interface TestEffectiveDuration {
+  effectiveDurationSeconds: number;
+  longestSessionDurationSeconds: number;
+  totalRetryDurationSeconds: number;
+  wallClockDurationSeconds: number;
+  sessionCount: number;
+  effectiveSessionId: number;
+  sessions: TestSessionBreakdown[];
+}
+
 // Milestone response schema - matches actual API response
 export const MilestoneResponseSchema = z.object({
   id: z.number(),
@@ -257,10 +282,10 @@ export const TestRunResponseSchema = z.object({
   startTime: z.coerce.number(), // timestamp
   finishTime: z.coerce.number().optional(), // timestamp
   issueReferences: z.array(z.object({
-    id: z.coerce.number(),
+    id: z.coerce.number().optional(),
     type: z.string(),
     value: z.string()
-  })).optional(),
+  })).optional().default([]),
   knownIssue: z.boolean().optional(),
   passedManually: z.boolean().optional(),
   owner: z.string().optional(),
@@ -378,6 +403,34 @@ export type JiraIntegrationConfig = z.infer<typeof JiraIntegrationConfigSchema>;
 export type JiraProjectsMapping = z.infer<typeof JiraProjectsMappingSchema>;
 export type JiraIntegration = z.infer<typeof JiraIntegrationSchema>;
 export type JiraIntegrationsResponse = z.infer<typeof JiraIntegrationsResponseSchema>;
+
+// Launch attempt item schema (from launch attempts/re-run history API)
+export const LaunchAttemptItemSchema = z.object({
+  id: z.coerce.number(),
+  startedBy: z.object({
+    id: z.number(),
+    username: z.string(),
+    email: z.string()
+  }).optional(),
+  startedAt: z.string(),
+  finishedAt: z.string().nullable().optional(),
+  finishPassed: z.coerce.number().optional(),
+  finishPassedManually: z.coerce.number().optional(),
+  finishFailed: z.coerce.number().optional(),
+  finishKnownIssue: z.coerce.number().optional(),
+  finishSkipped: z.coerce.number().optional(),
+  finishBlocked: z.coerce.number().optional(),
+  finishAborted: z.coerce.number().optional()
+});
+
+export type LaunchAttemptItem = z.infer<typeof LaunchAttemptItemSchema>;
+
+// Launch attempts response (re-run history for a launch)
+export const LaunchAttemptsResponseSchema = z.object({
+  items: z.array(LaunchAttemptItemSchema)
+});
+
+export type LaunchAttemptsResponse = z.infer<typeof LaunchAttemptsResponseSchema>;
 
 // Error types for reporting API
 export class ZebrunnerReportingError extends Error {

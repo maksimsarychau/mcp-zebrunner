@@ -312,49 +312,15 @@ export class EnhancedZebrunnerClient {
         };
       }
 
-      // If root endpoint fails, try with a known project pattern (more permissive)
-      try {
-        const fallbackResponse = await this.http.get('/test-suites', {
-          params: { projectKey: 'INVALID', size: 1 },
-          timeout: Math.max(10000, this.config.timeout || 0)
-        });
-
-        return {
-          success: true,
-          message: 'Connection successful (via fallback)',
-          details: {
-            status: fallbackResponse.status,
-            baseUrl: this.config.baseUrl,
-            method: 'fallback'
-          }
-        };
-      } catch (fallbackError: any) {
-        // Even 400/403/404 responses indicate the server is reachable and auth is working
-        if (fallbackError.response?.status === 400 || 
-            fallbackError.response?.status === 403 || 
-            fallbackError.response?.status === 404) {
-          return {
-            success: true,
-            message: 'Connection successful (server reachable)',
-            details: {
-              status: fallbackError.response.status,
-              baseUrl: this.config.baseUrl,
-              note: 'Server is reachable and authentication works, but test project access is limited'
-            }
-          };
-        }
-
       return {
         success: false,
         message: `Connection failed: ${error.message}`,
         details: {
           status: error.response?.status,
           baseUrl: this.config.baseUrl,
-            error: error.response?.data,
-            fallbackStatus: fallbackError.response?.status
+          error: error.response?.data
         }
       };
-      }
     }
   }
 
@@ -699,7 +665,7 @@ export class EnhancedZebrunnerClient {
           };
         }
         
-        return { items: [] };
+        throw new Error(`Unexpected response format from /test-cases: ${JSON.stringify(data).slice(0, 200)}`);
       });
       
       allItems.push(...response.items);
@@ -1281,7 +1247,9 @@ export class EnhancedZebrunnerClient {
           await new Promise(resolve => setTimeout(resolve, 100));
         }
       } catch (error) {
-        console.error(`❌ [getTestCasesByRootSuiteWithFilter] Error in batch ${Math.floor(i/batchSize) + 1}: ${(error as Error).message}`);
+        throw new Error(
+          `[getTestCasesByRootSuiteWithFilter] Batch ${Math.floor(i/batchSize) + 1} failed: ${(error as Error).message}`
+        );
       }
     }
     

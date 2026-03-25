@@ -3301,7 +3301,9 @@ async function main() {
       summaryOnly: z.boolean().default(false).describe("Return only statistics without full test list (most lightweight)"),
       includeLabels: z.boolean().default(false).describe("Include labels array (increases token usage)"),
       includeTestCases: z.boolean().default(false).describe("Include testCases array (increases token usage)"),
-      format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format")
+      format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format"),
+      session_resolution: z.enum(['auto', 'per_test', 'launch_level']).default('auto').describe("Session duration resolution strategy: auto (launch-level first, fallback per-test), per_test, or launch_level"),
+      jira_base_url: z.string().url().optional().describe("Override JIRA base URL (e.g., 'https://myproject.atlassian.net'). If not set, resolved from Zebrunner integrations or JIRA_BASE_URL env var")
     },
     async (args) => {
       try {
@@ -3393,7 +3395,8 @@ async function main() {
       projectKey: z.string().min(1).optional().describe("Project key (e.g., 'android' or 'ANDROID') - alternative to projectId"),
       projectId: z.number().int().positive().optional().describe("Project ID (e.g., 7) - alternative to projectKey"),
       launchId: z.number().int().positive().describe("Launch ID (e.g., 118685)"),
-      format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format")
+      format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format"),
+      jira_base_url: z.string().url().optional().describe("Override JIRA base URL (e.g., 'https://myproject.atlassian.net'). If not set, resolved from Zebrunner integrations or JIRA_BASE_URL env var")
     },
     async (args) => {
       try {
@@ -3405,6 +3408,61 @@ async function main() {
           content: [{
             type: "text" as const,
             text: `❌ Error getting launcher summary: ${error.message}`
+          }]
+        };
+      }
+    }
+  );
+
+  server.tool(
+    "analyze_regression_runtime",
+    "📊 Analyze Regression Runtime Efficiency: collects per-launch elapsed time, attempt/re-run breakdown, per-test duration classification (Short / Medium / Long with configurable thresholds), Average Runtime per Test, and Weighted Runtime Index. Supports baseline comparison with a previous milestone or build to track deviation (%). Targets one project per call; aggregate across teams by calling multiple times.",
+    {
+      project: z.union([z.enum(["web","android","ios","api"]), z.string(), z.number()]).describe("Project alias (web/android/ios/api), project key, or project ID"),
+      milestone: z.string().optional().describe("Milestone name to find launches (e.g., 'develop-49771')"),
+      build: z.string().optional().describe("Build identifier / query to find launches"),
+      suite_names: z.array(z.string()).optional().describe("Array of suite names to filter launches (partial match, case-insensitive)"),
+      launch_ids: z.array(z.number().int().positive()).optional().describe("Explicit launch IDs to analyze (overrides milestone/build/suite_names)"),
+      previous_milestone: z.string().optional().describe("Previous milestone name for baseline comparison"),
+      previous_build: z.string().optional().describe("Previous build identifier for baseline comparison"),
+      include_test_details: z.boolean().default(false).describe("Include per-test duration listing within each duration class"),
+      include_attempts_details: z.boolean().default(true).describe("Include detailed re-run attempt breakdown per launch"),
+      format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format"),
+      session_resolution: z.enum(['auto', 'per_test', 'launch_level']).default('auto').describe("Session duration resolution strategy: auto (launch-level first, fallback per-test), per_test, or launch_level"),
+      medium_threshold_seconds: z.number().int().positive().default(300).describe("Duration threshold (seconds) above which a test is classified as Medium. Default: 300 (5 min)"),
+      long_threshold_seconds: z.number().int().positive().default(600).describe("Duration threshold (seconds) above which a test is classified as Long. Default: 600 (10 min)")
+    },
+    async (args) => {
+      try {
+        debugLog("analyze_regression_runtime called", args);
+
+        const { projectId } = await resolveProjectId(args.project);
+        const resolvedKey = typeof args.project === 'string'
+          ? (PROJECT_ALIASES[args.project] || args.project)
+          : undefined;
+
+        return await reportingHandlers.analyzeRegressionRuntime({
+          projectKey: resolvedKey,
+          projectId,
+          milestone: args.milestone,
+          build: args.build,
+          suiteNames: args.suite_names,
+          launchIds: args.launch_ids,
+          previousMilestone: args.previous_milestone,
+          previousBuild: args.previous_build,
+          includeTestDetails: args.include_test_details,
+          includeAttemptsDetails: args.include_attempts_details,
+          format: args.format,
+          session_resolution: args.session_resolution,
+          medium_threshold_seconds: args.medium_threshold_seconds,
+          long_threshold_seconds: args.long_threshold_seconds
+        });
+      } catch (error: any) {
+        debugLog("Error in analyze_regression_runtime", { error: error.message, args });
+        return {
+          content: [{
+            type: "text" as const,
+            text: `Error analyzing regression runtime: ${error.message}`
           }]
         };
       }
@@ -3435,7 +3493,8 @@ async function main() {
         includeVideo: z.boolean().optional().describe("Compare video frames (default: false)"),
         includeEnvironment: z.boolean().optional().describe("Compare environment (device, platform, etc.) (default: true)"),
         includeDuration: z.boolean().optional().describe("Compare execution duration (default: true)")
-      }).optional().describe("Compare current failure with last passed execution to identify what changed")
+      }).optional().describe("Compare current failure with last passed execution to identify what changed"),
+      jira_base_url: z.string().url().optional().describe("Override JIRA base URL (e.g., 'https://myproject.atlassian.net'). If not set, resolved from Zebrunner integrations or JIRA_BASE_URL env var")
     },
     async (args) => {
       try {

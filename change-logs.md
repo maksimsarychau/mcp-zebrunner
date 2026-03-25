@@ -1,5 +1,224 @@
 # Change Logs
 
+## v6.4.0 (2026-03-24)
+
+### Configurable Duration Thresholds & Full Test Case Metrics
+
+This release improves the `analyze_regression_runtime` tool with configurable duration classification thresholds and comprehensive test case metrics alongside test metrics at every level.
+
+### Configurable Test Duration Classification
+
+Updated default duration thresholds and made them configurable per request.
+
+#### Changed Defaults
+
+| Class  | Old Thresholds | New Thresholds |
+|--------|---------------|----------------|
+| Short  | < 60s         | < 300s (5 min) |
+| Medium | 60s – 300s    | 300s – 600s (5–10 min) |
+| Long   | > 300s        | ≥ 600s (10 min) |
+
+#### New Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `medium_threshold_seconds` | 300 | Duration (seconds) above which a test is classified as Medium |
+| `long_threshold_seconds` | 600 | Duration (seconds) above which a test is classified as Long |
+
+The output `durationClassThresholds` field dynamically reflects whatever thresholds were used.
+
+### Test Case Metrics Everywhere
+
+Every level of the regression runtime report now includes both **per-test** and **per-test-case** perspectives.
+
+#### Per-Bucket (Short / Medium / Long)
+
+| Field | Description |
+|-------|-------------|
+| `avgDuration` | Average duration per test (existing) |
+| `avgDurationPerTestCase` | Average duration per test case covered (new) |
+| `testCasesCovered` | Number of test cases in this bucket (existing) |
+
+#### Per-Launch Metrics
+
+| Field | Description |
+|-------|-------------|
+| `avgRuntimePerTest` / `avgRuntimePerTestCase` | Average runtime from both perspectives |
+| `weightedRuntimeIndex` | WRI weighted by test counts (existing) |
+| `weightedRuntimeIndexPerTestCase` | WRI weighted by test case counts (new) |
+
+#### Aggregated Metrics
+
+| Field | Description |
+|-------|-------------|
+| `overallWeightedRuntimeIndex` | Cross-launch WRI per test (existing) |
+| `overallWeightedRuntimeIndexPerTestCase` | Cross-launch WRI per test case (new) |
+| `shortTestCases` / `mediumTestCases` / `longTestCases` | Test case counts and percentages per duration bucket (new) |
+
+#### Baseline Comparison
+
+- `weightedIndexPerTestCaseChangePercent` — overall WRI per test case delta (new)
+- Per-suite deltas now include `currentWRI`, `previousWRI`, `deltaWRIPercent`, `currentWRIPerTestCase`, `previousWRIPerTestCase`, `deltaWRIPerTestCasePercent`
+
+### Usage Examples
+
+```
+Analyze regression runtime for the iOS project on the latest milestone.
+Show both average runtime per test and average runtime per test case,
+plus WRI and WRI per test case.
+```
+
+```
+Analyze regression runtime for the Android project on the latest milestone
+with include_test_details: true. For each duration class (Short/Medium/Long),
+show the number of tests, number of test cases covered, avgDuration per test,
+and avgDuration per test case.
+```
+
+```
+Run regression runtime analysis for all three projects (iOS, Android, Web)
+on their latest milestones. Compare how many test cases fall into
+Short vs Medium vs Long buckets per team.
+Which team has the best test case coverage ratio?
+```
+
+```
+Analyze regression runtime for the iOS project, latest milestone vs previous
+milestone. Show WRI and WRI per test case for both current and previous.
+Has the WRI per test case improved or degraded?
+```
+
+```
+Analyze regression runtime for the Android project on the latest milestone
+with medium_threshold_seconds: 120 and long_threshold_seconds: 300.
+Show which tests fall into each bucket and verify the durationClassThresholds
+in the output matches these custom values.
+```
+
+```
+Analyze regression runtime for the Web project on the latest milestone.
+Calculate the average time cost per test case in each duration bucket.
+Are long-running tests covering proportionally more test cases, or are they just slow?
+```
+
+### Tests
+
+- 638 unit tests, 0 failures
+
+---
+
+## v6.3.2 (2026-03-24)
+
+### Session-Aware Test Duration Fix
+
+Fixed incorrect test execution time reporting when tests have multiple sessions (retries). Previously, `finishTime - startTime` included queue/provisioning gaps between retries, inflating per-test duration metrics. Now uses session-level `durationInSeconds` for accurate duration calculation.
+
+#### Problem Solved
+
+When a test retries across devices (CI `retry > 0` or launch re-runs), the wall-clock span can be 2-5x the actual execution time. Example: a test with 2 sessions (7m 58s + 16m 19s actual) was reported as 40m 59s due to a 13-minute queue gap between sessions.
+
+#### New Infrastructure
+
+- **`getAllTestSessions`** method in `ZebrunnerReportingClient` — paginated version of `getTestSessions` for launch-level session retrieval
+- **`TestEffectiveDuration`** interface — structured type for effective vs wall-clock durations with per-session breakdown
+- **`resolveTestEffectiveDurations()`** helper — fetches sessions, groups by testId, picks the passed/last session as "effective", identifies the longest session, computes retry overhead
+- **`session_resolution` parameter** — configurable fetch strategy (`auto`, `per_test`, `launch_level`) on tools
+
+#### Updated Tools (5 tools)
+
+- **`get_launch_test_summary`** — uses effective duration; adds `wallClockDurationSeconds`, `longestSessionDurationSeconds`, `sessionCount`, `sessions` breakdown per test
+- **`analyze_regression_runtime`** — classifies tests by effective duration (not wall-clock); tracks `testsWithRetries` and `totalRetryOverheadSeconds`
+- **`analyze_test_failure`** — shows "Effective Duration" vs "Total with N retries" with per-session device/platform info
+- **Jira ticket generation** — uses effective duration in Duration row; adds "Retries" row with session count and total cost
+- **Last-passed comparison** — compares using effective duration instead of inflated wall-clock span
+
+#### Tests
+
+- 635 unit tests (up from 625), 0 failures
+- New test suites: Session-Aware Effective Duration Logic, Session-Aware Duration Classification
+- Tests cover: effective session selection (passed > manually-passed > last), longest session identification, retry overhead tracking, classification by effective duration
+
+#### Documentation
+
+- **`docs/TERMINOLOGY.md`** — added "Test Session" section with Effective Duration vs Wall-Clock Duration explanation, session_resolution parameter reference, and concrete example
+
+## v6.3.1 (2026-03-24)
+
+### Test Suite Updates & Documentation
+
+Comprehensive test and documentation refresh for v6.3.0 features, including the new `analyze_regression_runtime` tool and the Test vs Test Case distinction across all reporting tools.
+
+#### Updated Tests
+
+- **`tests/helpers/tool-coverage-matrix.ts`** — Added `analyze_regression_runtime` to `TOOL_SMOKE_INPUTS` (52 tools total)
+- **`tests/unit/tool-registry-coverage.test.ts`** — Updated tool count assertions from 51 → 52
+- **`tests/unit/launch-tools.test.ts`** — Added 3 new test suites:
+  - **Launch Attempts Schema** — `LaunchAttemptItemSchema` and `LaunchAttemptsResponseSchema` validation (full, minimal, multi-attempt, empty)
+  - **Test Case Coverage in Test Runs** — `TestRunResponseSchema` with linked test cases (0, 1, 2+) and test-vs-test-case counting logic
+- **`tests/unit/regression-runtime-tools.test.ts`** (new) — 8 test suites, 30+ test cases:
+  - Duration classification (Short/Medium/Long boundaries)
+  - Elapsed time formatting (seconds, minutes, hours)
+  - Attempt elapsed computation from ISO timestamps
+  - Average Runtime per Test and per Test Case calculations
+  - Weighted Runtime Index computation
+  - Test case coverage breakdown (0/1/2+ TCs per test)
+  - Baseline delta calculation (degraded/stable/improved detection, abnormal long-test degradation >20%)
+  - Tool parameter validation
+
+#### Documentation Updates
+
+- **`tools.json`** — Added `analyze_regression_runtime` entry (52 tools)
+- **`TOOLS_CATALOG.md`** — Full tool documentation: description, terminology note, parameters, key metrics, 6 example prompts
+- **`README.md`** — Added tool to Launches/Reporting table; added `docs/TERMINOLOGY.md` reference in Feature Documentation
+- **`docs/TERMINOLOGY.md`** (new) — Comprehensive glossary:
+  - **Launch** — execution of automated suites with attempts/re-runs
+  - **Test** — atomic execution item (pass/fail), may cover 0, 1, or many Test Cases
+  - **Test Case** — atomic TCM item with steps and expected results
+  - **Test Run** — manual execution of Test Cases, with automation result mapping
+  - **Counting rules** — "Number of Executed Tests" vs "Number of Test Cases Covered"
+  - **Coverage breakdown example** — concrete table showing tests with 0/1/2+ linked TCs
+
+#### Verification
+
+- TypeScript compilation: clean (`npx tsc --noEmit`)
+- Unit tests: **625 passed, 0 failures** (all new and updated tests green)
+- Tool registry: 52 tools registered, `tools.json` in sync, smoke coverage complete
+
+## v6.3.0 (2026-03-24)
+
+### New Tool: `analyze_regression_runtime`
+
+Comprehensive Regression Runtime Efficiency analysis tool for tracking test execution performance across teams (Android, iOS, Web).
+
+#### Key Features
+
+- **Launch resolution**: Find launches by milestone, build identifier, suite names (partial match), or explicit launch IDs
+- **Launch attempts / re-run breakdown**: Leverages the new Zebrunner `/launches/{id}/attempts` API to show initial run vs re-run timing, counts, and per-attempt results
+- **Per-test duration classification**: Classifies every test as Short (<300s), Medium (300–600s), or Long (≥600s) by default, with counts, averages, and totals per bucket. Thresholds are configurable via `medium_threshold_seconds` and `long_threshold_seconds` parameters
+- **Primary metric — Average Runtime per Test**: `launch.elapsed / totalExecutedTests` using the wall-clock `elapsed` field (avoids double-counting parallel execution)
+- **Supporting metric — Weighted Runtime Index** (trend analysis only): Experimental weighted formula `(avgShort×countShort×1 + avgMedium×countMedium×2 + avgLong×countLong×3) / totalWeightedCount`
+- **Cross-suite aggregation**: Rolls up metrics across all matched launches into a single aggregated summary with duration distribution percentages
+- **Baseline comparison**: Optionally compare against a previous milestone or build to calculate per-suite and overall delta (%), with automatic detection of abnormal degradation in long-running tests (>20% increase)
+- **Flexible output**: Supports `dto`, `json`, and `string` formats; optional `include_test_details` for per-test listings and `include_attempts_details` for re-run breakdown
+
+#### New API Support
+
+- Added `getLaunchAttempts()` to `ZebrunnerReportingClient` for `GET /api/reporting/v1/launches/{id}/attempts?projectId={projectId}`
+- Added `LaunchAttemptItemSchema` and `LaunchAttemptsResponseSchema` Zod types
+
+#### Example Usage
+
+```json
+{
+  "project": "android",
+  "milestone": "develop-49771",
+  "suite_names": ["Android-Social-AA", "Android-Core"],
+  "previous_milestone": "develop-49770",
+  "include_attempts_details": true,
+  "format": "json"
+}
+```
+
 ## v6.2.0 (2026-03-11)
 - Added new `about_mcp_tools` tool for all-tools summary and per-tool details with examples
 - Added static approximate token usage estimation per tool in tool intelligence output

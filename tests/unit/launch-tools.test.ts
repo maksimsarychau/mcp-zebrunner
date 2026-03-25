@@ -3,7 +3,10 @@ import { strict as assert } from 'node:assert';
 import { z } from 'zod';
 import {
   LaunchListItemSchema,
-  LaunchesResponseSchema
+  LaunchesResponseSchema,
+  LaunchAttemptItemSchema,
+  LaunchAttemptsResponseSchema,
+  TestRunResponseSchema
 } from '../../dist/types/reporting.js';
 
 /**
@@ -357,15 +360,13 @@ describe('Launch Tools Unit Tests', () => {
     });
 
     it('should handle missing optional display fields gracefully', () => {
-      const launchWithMissingFields = {
+      const launchWithMissingFields: Record<string, any> = {
         id: 12345,
         name: "Launch With Missing Fields",
         status: "PASSED",
         projectId: 7
-        // milestone, buildNumber, startedAt, finishedAt, duration all undefined
       };
 
-      // These should not throw errors when accessed
       assert.strictEqual(launchWithMissingFields.milestone, undefined);
       assert.strictEqual(launchWithMissingFields.buildNumber, undefined);
       assert.strictEqual(launchWithMissingFields.startedAt, undefined);
@@ -499,7 +500,6 @@ describe('Launch Tools Unit Tests', () => {
   describe('API Response Structure Validation', () => {
     
     it('should match actual API response structure for launches list', () => {
-      // This test validates that our schema matches the real API response
       const actualApiResponse = {
         items: [
           {
@@ -537,11 +537,237 @@ describe('Launch Tools Unit Tests', () => {
         }
       };
 
-      // Should parse without errors
       const result = LaunchesResponseSchema.parse(actualApiResponse);
       assert.strictEqual(result.items.length, 1);
       assert.strictEqual(result.items[0].name, "Android Regression Suite - 25.39.0");
       assert.strictEqual(result.items[0].milestone?.name, "25.39.0");
+    });
+  });
+
+  describe('Launch Attempts Schema', () => {
+
+    it('should validate LaunchAttemptItemSchema with full data', () => {
+      const attempt = {
+        id: 67544,
+        startedBy: { id: 90, username: "admin", email: "admin@example.com" },
+        startedAt: "2026-03-21T02:51:39.906764Z",
+        finishedAt: "2026-03-21T03:23:13.496575Z",
+        finishPassed: 84,
+        finishPassedManually: 0,
+        finishFailed: 37,
+        finishKnownIssue: 20,
+        finishSkipped: 25,
+        finishBlocked: 0,
+        finishAborted: 0
+      };
+
+      const result = LaunchAttemptItemSchema.parse(attempt);
+      assert.strictEqual(result.id, 67544);
+      assert.strictEqual(result.startedBy?.username, "admin");
+      assert.strictEqual(result.finishPassed, 84);
+      assert.strictEqual(result.finishFailed, 37);
+    });
+
+    it('should validate LaunchAttemptItemSchema with minimal data', () => {
+      const minimal = {
+        id: 100,
+        startedAt: "2026-03-21T10:00:00Z"
+      };
+
+      const result = LaunchAttemptItemSchema.parse(minimal);
+      assert.strictEqual(result.id, 100);
+      assert.strictEqual(result.finishedAt, undefined);
+    });
+
+    it('should validate LaunchAttemptsResponseSchema with multiple attempts', () => {
+      const response = {
+        items: [
+          {
+            id: 67544,
+            startedAt: "2026-03-21T02:51:39Z",
+            finishedAt: "2026-03-21T03:23:13Z",
+            finishPassed: 84, finishFailed: 37, finishSkipped: 25
+          },
+          {
+            id: 67630,
+            startedAt: "2026-03-23T11:02:05Z",
+            finishedAt: "2026-03-23T11:12:48Z",
+            finishPassed: 94, finishFailed: 34, finishSkipped: 18
+          },
+          {
+            id: 67752,
+            startedAt: "2026-03-24T11:45:52Z",
+            finishedAt: "2026-03-24T11:49:21Z",
+            finishPassed: 127, finishFailed: 19, finishSkipped: 0
+          }
+        ]
+      };
+
+      const result = LaunchAttemptsResponseSchema.parse(response);
+      assert.strictEqual(result.items.length, 3);
+      assert.strictEqual(result.items[0].id, 67544);
+      assert.strictEqual(result.items[2].finishPassed, 127);
+    });
+
+    it('should validate empty attempts response', () => {
+      const result = LaunchAttemptsResponseSchema.parse({ items: [] });
+      assert.strictEqual(result.items.length, 0);
+    });
+  });
+
+  describe('Test Case Coverage in Test Runs', () => {
+
+    it('should validate TestRunResponseSchema with linked test cases', () => {
+      const testRun = {
+        id: 5500001,
+        name: "topTest",
+        status: "PASSED",
+        startTime: 1774352800000,
+        finishTime: 1774353285000,
+        testRunId: 127644,
+        testCases: [
+          { testId: 5500001, tcmType: "ZEBRUNNER", testCaseId: "MCP-1859", resultStatus: null },
+          { testId: 5500001, tcmType: "ZEBRUNNER", testCaseId: "MCP-1860", resultStatus: null }
+        ]
+      };
+
+      const result = TestRunResponseSchema.parse(testRun);
+      assert.strictEqual(result.testCases?.length, 2);
+      assert.strictEqual(result.testCases?.[0].testCaseId, "MCP-1859");
+      assert.strictEqual(result.testCases?.[1].testCaseId, "MCP-1860");
+    });
+
+    it('should validate TestRunResponseSchema with zero test cases', () => {
+      const testRun = {
+        id: 5500002,
+        name: "simpleTest",
+        status: "PASSED",
+        startTime: 1774352800000,
+        finishTime: 1774352830000,
+        testRunId: 127644,
+        testCases: []
+      };
+
+      const result = TestRunResponseSchema.parse(testRun);
+      assert.strictEqual(result.testCases?.length, 0);
+    });
+
+    it('should validate TestRunResponseSchema without testCases field', () => {
+      const testRun = {
+        id: 5500003,
+        name: "legacyTest",
+        status: "FAILED",
+        startTime: 1774352800000,
+        testRunId: 127644
+      };
+
+      const result = TestRunResponseSchema.parse(testRun);
+      assert.strictEqual(result.testCases, undefined);
+    });
+
+    it('should correctly count tests vs test cases from mock data', () => {
+      const mockTests = [
+        { id: 1, testCases: [{ testCaseId: "A-1" }, { testCaseId: "A-2" }] },
+        { id: 2, testCases: [{ testCaseId: "A-3" }] },
+        { id: 3, testCases: [] },
+        { id: 4 }
+      ];
+
+      const totalTests = mockTests.length;
+      const totalTestCases = mockTests.reduce((sum, t) => sum + ((t as any).testCases?.length ?? 0), 0);
+      const withZero = mockTests.filter(t => ((t as any).testCases?.length ?? 0) === 0).length;
+      const withOne = mockTests.filter(t => ((t as any).testCases?.length ?? 0) === 1).length;
+      const withMultiple = mockTests.filter(t => ((t as any).testCases?.length ?? 0) > 1).length;
+
+      assert.strictEqual(totalTests, 4);
+      assert.strictEqual(totalTestCases, 3);
+      assert.strictEqual(withZero, 2);
+      assert.strictEqual(withOne, 1);
+      assert.strictEqual(withMultiple, 1);
+    });
+  });
+
+  describe('Session-Aware Effective Duration Logic', () => {
+
+    function pickEffectiveSession(
+      sessions: Array<{ durationSeconds: number; testStatus: string; passedManually: boolean; endedAt: string }>
+    ) {
+      const sorted = [...sessions].sort((a, b) =>
+        new Date(b.endedAt).getTime() - new Date(a.endedAt).getTime()
+      );
+      return sorted.find(s => s.testStatus === 'PASSED' && !s.passedManually)
+        ?? sorted.find(s => s.testStatus === 'PASSED')
+        ?? sorted[0];
+    }
+
+    it('should pick passed session as effective for multi-session test', () => {
+      const sessions = [
+        { durationSeconds: 478, testStatus: 'FAILED', passedManually: false, endedAt: '2026-03-22T16:54:54Z' },
+        { durationSeconds: 979, testStatus: 'PASSED', passedManually: true, endedAt: '2026-03-22T17:24:21Z' }
+      ];
+      const eff = pickEffectiveSession(sessions);
+      assert.strictEqual(eff.durationSeconds, 979);
+      assert.strictEqual(eff.testStatus, 'PASSED');
+    });
+
+    it('should prefer non-manually-passed session over manually passed', () => {
+      const sessions = [
+        { durationSeconds: 300, testStatus: 'PASSED', passedManually: true, endedAt: '2026-03-22T17:00:00Z' },
+        { durationSeconds: 500, testStatus: 'PASSED', passedManually: false, endedAt: '2026-03-22T17:30:00Z' }
+      ];
+      const eff = pickEffectiveSession(sessions);
+      assert.strictEqual(eff.durationSeconds, 500);
+      assert.strictEqual(eff.passedManually, false);
+    });
+
+    it('should fall back to last session when none passed', () => {
+      const sessions = [
+        { durationSeconds: 200, testStatus: 'FAILED', passedManually: false, endedAt: '2026-03-22T16:30:00Z' },
+        { durationSeconds: 350, testStatus: 'FAILED', passedManually: false, endedAt: '2026-03-22T17:00:00Z' }
+      ];
+      const eff = pickEffectiveSession(sessions);
+      assert.strictEqual(eff.durationSeconds, 350);
+    });
+
+    it('should compute correct totals for multi-session test', () => {
+      const sessions = [
+        { durationSeconds: 478, testStatus: 'FAILED', passedManually: false, endedAt: '2026-03-22T16:54:54Z' },
+        { durationSeconds: 979, testStatus: 'PASSED', passedManually: true, endedAt: '2026-03-22T17:24:21Z' }
+      ];
+      const eff = pickEffectiveSession(sessions);
+      const total = sessions.reduce((s, x) => s + x.durationSeconds, 0);
+      const longest = Math.max(...sessions.map(s => s.durationSeconds));
+      const wallClock = 2459;
+
+      assert.strictEqual(eff.durationSeconds, 979);
+      assert.strictEqual(total, 1457);
+      assert.strictEqual(longest, 979);
+      assert.ok(wallClock > total, 'wall-clock includes gaps');
+    });
+
+    it('should identify longest session even when it is not the effective one', () => {
+      const sessions = [
+        { durationSeconds: 1200, testStatus: 'FAILED', passedManually: false, endedAt: '2026-03-22T16:50:00Z' },
+        { durationSeconds: 400, testStatus: 'PASSED', passedManually: false, endedAt: '2026-03-22T17:10:00Z' }
+      ];
+      const eff = pickEffectiveSession(sessions);
+      const longest = sessions.reduce((best, s) => s.durationSeconds > best.durationSeconds ? s : best);
+
+      assert.strictEqual(eff.durationSeconds, 400, 'effective should be the passed session');
+      assert.strictEqual(longest.durationSeconds, 1200, 'longest should be the failed session');
+    });
+
+    it('single session should be effective, longest, and total', () => {
+      const sessions = [
+        { durationSeconds: 600, testStatus: 'PASSED', passedManually: false, endedAt: '2026-03-22T17:00:00Z' }
+      ];
+      const eff = pickEffectiveSession(sessions);
+      const total = sessions.reduce((s, x) => s + x.durationSeconds, 0);
+      const longest = Math.max(...sessions.map(s => s.durationSeconds));
+
+      assert.strictEqual(eff.durationSeconds, 600);
+      assert.strictEqual(total, 600);
+      assert.strictEqual(longest, 600);
     });
   });
 });

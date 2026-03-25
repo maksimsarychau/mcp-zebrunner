@@ -7,6 +7,8 @@ A **Model Context Protocol (MCP)** server that integrates with **Zebrunner Test 
 > 📖 **Need help with installation?** Check out our [**Step-by-Step Install Guide**](INSTALL-GUIDE.md) for detailed setup instructions.
 > 
 > 🚀 **Installing via npm?** See our [**MCP NPM Installation Guide**](MCP_NPM_INSTALLATION_GUIDE.md) for Claude Desktop, Cursor, IntelliJ IDEA, and ChatGPT Desktop configuration.
+>
+> 📚 **Test vs Test Case vs Launch?** See [**Terminology & Glossary**](docs/TERMINOLOGY.md) — definitions, counting rules, and how metrics are calculated.
 
 ## 📑 Table of Contents
 
@@ -558,6 +560,14 @@ Once connected, you can use these tools through natural language in your AI assi
 | `get_all_launches_for_project` | All launches with pagination | `"Get all launches for project MCP from last month"` | **Managers, Leads** |
 | `get_all_launches_with_filter` | Filter by milestone/build | `"Get launches for milestone 2.1.0 and build 'mcp-app-2.1.0'"` | **Managers, Leads** |
 | `generate_weekly_regression_stability_report` | Weekly regression stability report with WoW delta, linked issues, and strict Jira-ready output. Supports launch list or build-based auto-discovery (version-segment build lookup with `launch.build` validation when needed). | `"Weekly stability report for MCP: (120906 vs 120814), (120901 vs 120809)"` or `"Weekly stability report for builds 9117 vs 48886"` | **Managers, Leads** |
+| `analyze_regression_runtime` | Regression Runtime Efficiency — per-launch elapsed time, attempt/re-run breakdown, configurable duration classification (Short/Medium/Long), dual metrics for both Tests and Test Cases (Average Runtime, WRI), duration distribution with test case counts, and baseline comparison with delta tracking. | `"Analyze regression runtime for the iOS project on the latest milestone. Show WRI and WRI per test case."` or `"Compare runtime for latest vs previous milestone"` | **Managers, Leads, SDETs** |
+
+> **`analyze_regression_runtime` — Usage Examples:**
+> - *"Analyze regression runtime for the iOS project on the latest milestone. Show both average runtime per test and per test case, plus WRI and WRI per test case."*
+> - *"Run regression runtime analysis for all three projects on their latest milestones. Compare how many test cases fall into Short vs Medium vs Long buckets per team."*
+> - *"Analyze regression runtime for the Android project, latest vs previous milestone. Show WRI and WRI per test case for both. Has efficiency improved or degraded?"*
+> - *"Analyze regression runtime with medium_threshold_seconds: 120 and long_threshold_seconds: 300. Show which tests fall into each bucket."*
+> - *"What is the average time cost per test case in each duration bucket? Are long-running tests covering proportionally more test cases?"*
 
 ### 📊 Reporting & Analytics
 
@@ -1245,6 +1255,7 @@ Leverage intelligent validation:
 - **[change-logs.md](change-logs.md)** - 📝 **Version history and feature updates**
 
 ### 🛠️ Feature Documentation
+- **[docs/TERMINOLOGY.md](docs/TERMINOLOGY.md)** - 📖 **Test vs Test Case vs Test Run vs Launch — glossary and counting rules**
 - **[docs/NEW_LAUNCHER_TOOL.md](docs/NEW_LAUNCHER_TOOL.md)** - Detailed information about launch and reporting tools
 - **[docs/SUITE_HIERARCHY.md](docs/SUITE_HIERARCHY.md)** - Complete guide to suite hierarchy features
 - **[docs/TEST_CASE_VALIDATION_IMPLEMENTATION.md](docs/TEST_CASE_VALIDATION_IMPLEMENTATION.md)** - Test case validation system details

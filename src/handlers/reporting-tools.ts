@@ -4,6 +4,7 @@ import { EnhancedZebrunnerClient } from "../api/enhanced-client.js";
 import { FormatProcessor } from "../utils/formatter.js";
 import { GetLauncherDetailsInputSchema, AnalyzeTestExecutionVideoInput } from "../types/api.js";
 import { VideoAnalyzer } from "../utils/video-analysis/analyzer.js";
+import type { TestEffectiveDuration, TestSessionBreakdown, SessionResolutionStrategy, TestSessionResponse } from "../types/reporting.js";
 
 /**
  * MCP Tool handlers for Zebrunner Reporting API
@@ -79,25 +80,30 @@ export class ZebrunnerReportingToolHandlers {
             
             // Add summary statistics from test runs
             if (testRuns.items && testRuns.items.length > 0) {
-              const summary = {
+              const summary: any = {
                 totalTests: testRuns.items.length,
+                totalTestCasesCovered: 0,
+                testsWithZeroTestCases: 0,
+                testsWithOneTestCase: 0,
+                testsWithMultipleTestCases: 0,
                 statuses: {} as Record<string, number>,
                 owners: {} as Record<string, number>,
                 testClasses: {} as Record<string, number>
               };
 
               testRuns.items.forEach(testRun => {
-                // Count statuses
+                const tcCount = testRun.testCases?.length ?? 0;
+                summary.totalTestCasesCovered += tcCount;
+                if (tcCount === 0) summary.testsWithZeroTestCases++;
+                else if (tcCount === 1) summary.testsWithOneTestCase++;
+                else summary.testsWithMultipleTestCases++;
+
                 if (testRun.status) {
                   summary.statuses[testRun.status] = (summary.statuses[testRun.status] || 0) + 1;
                 }
-                
-                // Count owners
                 if (testRun.owner) {
                   summary.owners[testRun.owner] = (summary.owners[testRun.owner] || 0) + 1;
                 }
-                
-                // Count test classes
                 if (testRun.testClass) {
                   summary.testClasses[testRun.testClass] = (summary.testClasses[testRun.testClass] || 0) + 1;
                 }
@@ -171,9 +177,9 @@ export class ZebrunnerReportingToolHandlers {
   /**
    * Get launch test summary - lightweight aggregated test results with statistics
    */
-  async getLaunchTestSummary(input: { 
-    projectKey?: string; 
-    projectId?: number; 
+  async getLaunchTestSummary(input: {
+    projectKey?: string;
+    projectId?: number;
     launchId: number;
     statusFilter?: string[];
     minStability?: number;
@@ -184,10 +190,12 @@ export class ZebrunnerReportingToolHandlers {
     includeLabels?: boolean;
     includeTestCases?: boolean;
     format?: 'dto' | 'json' | 'string';
+    session_resolution?: SessionResolutionStrategy;
+    jira_base_url?: string;
   }) {
-    const { 
-      projectKey, 
-      projectId, 
+    const {
+      projectKey,
+      projectId,
       launchId,
       statusFilter,
       minStability,
@@ -197,7 +205,9 @@ export class ZebrunnerReportingToolHandlers {
       summaryOnly = false,
       includeLabels = false,
       includeTestCases = false,
-      format = 'json'
+      format = 'json',
+      session_resolution = 'auto',
+      jira_base_url
     } = input;
 
     try {
@@ -222,25 +232,42 @@ export class ZebrunnerReportingToolHandlers {
       
       // Fetch ALL test runs (auto-paginated)
       const testRuns = await this.reportingClient.getAllTestRuns(launchId, resolvedProjectId!);
-      
+
+      // Resolve session-aware effective durations for tests with retries
+      const effectiveDurations = await this.resolveTestEffectiveDurations(
+        launchId, resolvedProjectId!, testRuns.items, session_resolution
+      );
+
       // Extract essential fields only (configurable to exclude heavy arrays)
       const lightweightTests = await Promise.all(testRuns.items.map(async test => {
+        const linkedTestCases = test.testCases || [];
+        const wallClockDuration = test.finishTime && test.startTime
+          ? Math.round((test.finishTime - test.startTime) / 1000)
+          : 0;
+        const eff = effectiveDurations.get(test.id);
         const baseTest: any = {
           id: test.id,
           name: test.name,
           status: test.status,
-          durationSeconds: test.finishTime && test.startTime 
-            ? Math.round((test.finishTime - test.startTime) / 1000)
-            : 0,
+          durationSeconds: eff ? eff.effectiveDurationSeconds : wallClockDuration,
           startTime: test.startTime,
           finishTime: test.finishTime,
           issueReferences: test.issueReferences || [],
           knownIssue: test.knownIssue || false,
           testClass: test.testClass || 'Unknown',
           owner: test.owner,
-          stability: test.stability !== undefined ? Math.round((test.stability || 0) * 100) : 0, // Convert to percentage
+          stability: test.stability !== undefined ? Math.round((test.stability || 0) * 100) : 0,
           maintainerId: test.maintainerId,
-          testUrl: `${baseUrl}/projects/${resolvedProjectKey}/automation-launches/${launchId}/tests/${test.id}`
+          testCasesLinkedCount: linkedTestCases.length,
+          testCaseKeys: linkedTestCases.map((tc: any) => tc.testCaseId),
+          testUrl: `${baseUrl}/projects/${resolvedProjectKey}/automation-launches/${launchId}/tests/${test.id}`,
+          ...(eff ? {
+            wallClockDurationSeconds: eff.wallClockDurationSeconds,
+            longestSessionDurationSeconds: eff.longestSessionDurationSeconds,
+            totalRetryDurationSeconds: eff.totalRetryDurationSeconds,
+            sessionCount: eff.sessionCount,
+            sessions: eff.sessions
+          } : {})
         };
         
         // Add clickable JIRA issue references with resolved URLs
@@ -248,11 +275,12 @@ export class ZebrunnerReportingToolHandlers {
           baseTest.issueReferencesWithUrls = await Promise.all(
             test.issueReferences.map(async (issue: any) => {
               if (issue.type === 'JIRA') {
-                const jiraUrl = await this.reportingClient.buildJiraUrl(issue.value, resolvedProjectId);
-                return {
-                  ...issue,
-                  url: jiraUrl
-                };
+                try {
+                  const jiraUrl = await this.reportingClient.buildJiraUrl(issue.value, resolvedProjectId, jira_base_url);
+                  return { ...issue, url: jiraUrl };
+                } catch {
+                  return { ...issue, url: null, note: 'JIRA URL could not be resolved' };
+                }
               }
               return issue;
             })
@@ -336,7 +364,13 @@ export class ZebrunnerReportingToolHandlers {
         // Stability statistics
         avgStability: 0,
         minStability: 100,
-        maxStability: 0
+        maxStability: 0,
+
+        // Test case coverage (tests → TCM test cases)
+        totalTestCasesCovered: 0,
+        testsWithZeroTestCases: 0,
+        testsWithOneTestCase: 0,
+        testsWithMultipleTestCases: 0
       };
 
       // Calculate statistics
@@ -379,6 +413,13 @@ export class ZebrunnerReportingToolHandlers {
         stats.avgStability += test.stability;
         stats.minStability = Math.min(stats.minStability, test.stability);
         stats.maxStability = Math.max(stats.maxStability, test.stability);
+
+        // Test case coverage
+        const tcCount = test.testCasesLinkedCount || 0;
+        stats.totalTestCasesCovered += tcCount;
+        if (tcCount === 0) stats.testsWithZeroTestCases++;
+        else if (tcCount === 1) stats.testsWithOneTestCase++;
+        else stats.testsWithMultipleTestCases++;
       });
 
       // Calculate averages
@@ -452,7 +493,11 @@ export class ZebrunnerReportingToolHandlers {
         };
       }
 
-      // Format the output
+      const jiraWarning = this.reportingClient.jiraResolutionWarning;
+      if (jiraWarning) {
+        result.warnings = [...(result.warnings || []), jiraWarning];
+      }
+
       const formattedData = FormatProcessor.format(result, format);
       
       return {
@@ -759,7 +804,8 @@ export class ZebrunnerReportingToolHandlers {
     launchId: number,
     projectId: number,
     includeLinkedIssues: boolean,
-    linkedIssuesLimit: number
+    linkedIssuesLimit: number,
+    jira_base_url?: string
   ) {
     const launch = await this.reportingClient.getLaunch(launchId, projectId);
     const testRuns = await this.reportingClient.getAllTestRuns(launchId, projectId);
@@ -769,11 +815,13 @@ export class ZebrunnerReportingToolHandlers {
     let failed = 0;
     let skipped = 0;
     let flaky = 0;
+    let totalTestCasesCovered = 0;
     const linkedIssuesMap = new Map<string, { key: string; url?: string; type?: string }>();
     const testIdentifiers = new Set<string>();
 
     for (const test of items) {
       this.collectTestIdentifiers(test, testIdentifiers);
+      totalTestCasesCovered += test.testCases?.length ?? 0;
       const status = (test.status || '').toUpperCase();
       if (status === 'PASSED' || test.passedManually === true) {
         passed += 1;
@@ -802,8 +850,12 @@ export class ZebrunnerReportingToolHandlers {
           }
 
           if (issue?.type === 'JIRA') {
-            const jiraUrl = await this.reportingClient.buildJiraUrl(issueKey, projectId);
-            linkedIssuesMap.set(issueKey, { key: issueKey, url: jiraUrl, type: issue.type });
+            try {
+              const jiraUrl = await this.reportingClient.buildJiraUrl(issueKey, projectId, jira_base_url);
+              linkedIssuesMap.set(issueKey, { key: issueKey, url: jiraUrl, type: issue.type });
+            } catch {
+              linkedIssuesMap.set(issueKey, { key: issueKey, type: issue.type });
+            }
           } else {
             linkedIssuesMap.set(issueKey, { key: issueKey, type: issue?.type });
           }
@@ -818,6 +870,7 @@ export class ZebrunnerReportingToolHandlers {
       launchName: launch?.name || `Launch ${launchId}`,
       testIdentifiers,
       total,
+      totalTestCasesCovered,
       passed,
       failed,
       skipped,
@@ -1297,8 +1350,8 @@ export class ZebrunnerReportingToolHandlers {
   /**
    * Get launcher summary - quick overview without detailed test sessions
    */
-  async getLauncherSummary(input: { projectKey?: string; projectId?: number; launchId: number; format?: 'dto' | 'json' | 'string' }) {
-    const { projectKey, projectId, launchId, format = 'json' } = input;
+  async getLauncherSummary(input: { projectKey?: string; projectId?: number; launchId: number; format?: 'dto' | 'json' | 'string'; jira_base_url?: string }) {
+    const { projectKey, projectId, launchId, format = 'json', jira_base_url } = input;
 
     try {
       if (!projectKey && !projectId) {
@@ -1333,7 +1386,8 @@ export class ZebrunnerReportingToolHandlers {
           skipped: launch.skipped || 0,
           blocked: launch.blocked || 0,
           aborted: launch.aborted || 0,
-          total: (launch.passed || 0) + (launch.failed || 0) + (launch.skipped || 0) + (launch.blocked || 0) + (launch.aborted || 0)
+          total: (launch.passed || 0) + (launch.failed || 0) + (launch.skipped || 0) + (launch.blocked || 0) + (launch.aborted || 0),
+          note: 'These are test counts (not TCM test cases). Each test may cover 0, 1, or many test cases. Use get_launch_test_summary for test case coverage details.'
         }
       };
 
@@ -1542,6 +1596,7 @@ export class ZebrunnerReportingToolHandlers {
       includeEnvironment?: boolean;
       includeDuration?: boolean;
     };
+    jira_base_url?: string;
   }) {
     const {
       testId,
@@ -1557,7 +1612,8 @@ export class ZebrunnerReportingToolHandlers {
       analyzeScreenshotsWithAI = false,
       screenshotAnalysisType = 'detailed',
       format = 'detailed',
-      compareWithLastPassed
+      compareWithLastPassed,
+      jira_base_url
     } = input;
 
     try {
@@ -1575,18 +1631,20 @@ export class ZebrunnerReportingToolHandlers {
         resolvedProjectKey = await this.reportingClient.getProjectKey(projectId);
       }
 
-      // Fetch test run details to get test information
-      const testRuns = await this.reportingClient.getTestRuns(testRunId, resolvedProjectId!);
-      const testRun = testRuns.items.find(t => t.id === testId);
-      
+      const allTestRuns = await this.reportingClient.getAllTestRuns(testRunId, resolvedProjectId!);
+      const testRun = allTestRuns.items.find(t => t.id === testId);
       if (!testRun) {
-        throw new Error(`Test ID ${testId} not found in launch ${testRunId}`);
+        throw new Error(`Test ID ${testId} not found in launch ${testRunId} (${allTestRuns.items.length} tests scanned)`);
       }
 
-      // Fetch logs and screenshots
       let logsAndScreenshots;
+      let logsFetchError: string | null = null;
       if (includeLogs || includeScreenshots) {
-        logsAndScreenshots = await this.reportingClient.getTestLogsAndScreenshots(testRunId, testId);
+        try {
+          logsAndScreenshots = await this.reportingClient.getTestLogsAndScreenshots(testRunId, testId);
+        } catch (err) {
+          logsFetchError = `Failed to fetch logs/screenshots: ${err instanceof Error ? err.message : err}`;
+        }
       }
 
       // Parse logs for errors and key events
@@ -1614,7 +1672,6 @@ export class ZebrunnerReportingToolHandlers {
       // Classify the error
       const errorClassification = this.classifyError(testRun.message || '', logAnalysis?.errorLogs || []);
 
-      // Generate Jira format if requested
       if (format === 'jira') {
         const jiraTicket = await this.generateJiraTicketForTest({
           testRun,
@@ -1627,7 +1684,8 @@ export class ZebrunnerReportingToolHandlers {
           logAnalysis: logAnalysis || {},
           screenshots,
           similarFailures,
-          baseUrl: this.reportingClient['config'].baseUrl
+          baseUrl: this.reportingClient['config'].baseUrl,
+          jiraBaseUrlOverride: jira_base_url
         });
 
         return {
@@ -1684,7 +1742,6 @@ export class ZebrunnerReportingToolHandlers {
         }
       }
 
-      // Generate analysis report (detailed or summary)
       const analysisReport = await this.generateFailureAnalysisReport({
         testRun,
         testRunId,
@@ -1699,14 +1756,23 @@ export class ZebrunnerReportingToolHandlers {
         baseUrl: this.reportingClient['config'].baseUrl,
         analyzeScreenshotsWithAI,
         screenshotAnalysisType,
-        comparisonData
+        comparisonData,
+        jiraBaseUrlOverride: jira_base_url
       });
+
+      const warnings: string[] = [];
+      if (logsFetchError) warnings.push(logsFetchError);
+      const jiraWarning = this.reportingClient.jiraResolutionWarning;
+      if (jiraWarning) warnings.push(jiraWarning);
+      const warningBlock = warnings.length > 0
+        ? `\n\n---\n**Warnings:**\n${warnings.map(w => `- ${w}`).join('\n')}\n`
+        : '';
 
       return {
         content: [
           {
             type: "text" as const,
-            text: analysisReport
+            text: analysisReport + warningBlock
           }
         ]
       };
@@ -1957,12 +2023,27 @@ export class ZebrunnerReportingToolHandlers {
       return comparisonData;
     }
 
-    // Compare duration
+    // Compare duration (use session-aware effective duration when available)
     if (compareOptions.includeDuration !== false) {
-      const currentDuration = currentTestRun.finishTime - currentTestRun.startTime;
+      const wallClockMs = currentTestRun.finishTime - currentTestRun.startTime;
+      let currentDuration = wallClockMs;
+
+      try {
+        const effDurMap = await this.resolveTestEffectiveDurations(
+          params.testRunId, projectId,
+          [{ id: testId, startTime: currentTestRun.startTime, finishTime: currentTestRun.finishTime }],
+          'per_test'
+        );
+        const effDur = effDurMap.get(testId);
+        if (effDur) {
+          currentDuration = effDur.effectiveDurationSeconds * 1000;
+        }
+      } catch { /* fall back to wall-clock */ }
+
       const lastPassedDuration = lastPassedExecution.elapsed;
       const durationDiff = currentDuration - lastPassedDuration;
-      const durationDiffPercent = ((durationDiff / lastPassedDuration) * 100).toFixed(1);
+      const durationDiffPercent = lastPassedDuration > 0
+        ? ((durationDiff / lastPassedDuration) * 100).toFixed(1) : '0.0';
 
       comparisonData.duration = {
         current: currentDuration,
@@ -2054,6 +2135,7 @@ export class ZebrunnerReportingToolHandlers {
     analyzeScreenshotsWithAI?: boolean;
     screenshotAnalysisType?: 'basic' | 'detailed';
     comparisonData?: any;
+    jiraBaseUrlOverride?: string;
   }): Promise<string> {
     const {
       testRun,
@@ -2069,12 +2151,20 @@ export class ZebrunnerReportingToolHandlers {
       baseUrl,
       analyzeScreenshotsWithAI = false,
       screenshotAnalysisType = 'detailed',
-      comparisonData
+      comparisonData,
+      jiraBaseUrlOverride
     } = params;
 
-    const duration = testRun.finishTime && testRun.startTime
+    const wallClockDuration = testRun.finishTime && testRun.startTime
       ? Math.round((testRun.finishTime - testRun.startTime) / 1000)
       : 0;
+
+    // Resolve session-aware effective duration for this test
+    const effMap = await this.resolveTestEffectiveDurations(
+      testRunId, projectId, [{ id: testId, startTime: testRun.startTime, finishTime: testRun.finishTime }], 'per_test'
+    );
+    const eff = effMap.get(testId);
+    const duration = eff ? eff.effectiveDurationSeconds : wallClockDuration;
 
     const stability = testRun.stability ? Math.round(testRun.stability * 100) : 0;
 
@@ -2217,7 +2307,13 @@ export class ZebrunnerReportingToolHandlers {
     report += `- **Test ID:** [${testId}](${testSessionUrl})\n`;
     report += `- **Launch ID:** [${testRunId}](${launchUrl})\n`;
     report += `- **Test Class:** ${testRun.testClass || 'Unknown'}\n`;
-    report += `- **Duration:** ${Math.floor(duration / 60)}m ${duration % 60}s\n`;
+    if (eff && eff.sessionCount > 1) {
+      report += `- **Effective Duration:** ${Math.floor(duration / 60)}m ${duration % 60}s (session that produced the result)\n`;
+      report += `- **Longest Session:** ${Math.floor(eff.longestSessionDurationSeconds / 60)}m ${eff.longestSessionDurationSeconds % 60}s\n`;
+      report += `- **Total with ${eff.sessionCount} retries:** ${Math.floor(wallClockDuration / 60)}m ${wallClockDuration % 60}s\n`;
+    } else {
+      report += `- **Duration:** ${Math.floor(duration / 60)}m ${duration % 60}s\n`;
+    }
     report += `- **Started:** ${new Date(testRun.startTime).toISOString()}\n`;
     report += `- **Finished:** ${testRun.finishTime ? new Date(testRun.finishTime).toISOString() : 'N/A'}\n`;
     report += `- **Owner:** ${testRun.owner || 'Unknown'}\n\n`;
@@ -2452,10 +2548,13 @@ export class ZebrunnerReportingToolHandlers {
     if (testRun.issueReferences && testRun.issueReferences.length > 0) {
       report += `**Linked Issues:**\n\n`;
       for (const issue of testRun.issueReferences) {
-        // Build clickable JIRA URL if it's a JIRA issue
         if (issue.type === 'JIRA') {
-          const jiraUrl = await this.reportingClient.buildJiraUrl(issue.value, projectId);
-          report += `- **${issue.type}:** [${issue.value}](${jiraUrl})\n`;
+          try {
+            const jiraUrl = await this.reportingClient.buildJiraUrl(issue.value, projectId, jiraBaseUrlOverride);
+            report += `- **${issue.type}:** [${issue.value}](${jiraUrl})\n`;
+          } catch {
+            report += `- **${issue.type}:** ${issue.value}\n`;
+          }
         } else {
           report += `- **${issue.type}:** ${issue.value}\n`;
         }
@@ -3257,6 +3356,7 @@ export class ZebrunnerReportingToolHandlers {
     screenshots: any[];
     similarFailures: any[];
     baseUrl: string;
+    jiraBaseUrlOverride?: string;
   }): Promise<string> {
     const {
       testRun,
@@ -3272,9 +3372,16 @@ export class ZebrunnerReportingToolHandlers {
       baseUrl
     } = params;
 
-    const duration = testRun.finishTime && testRun.startTime
+    const wallClockDur = testRun.finishTime && testRun.startTime
       ? Math.round((testRun.finishTime - testRun.startTime) / 1000)
       : 0;
+
+    const jiraEffMap = await this.resolveTestEffectiveDurations(
+      testRunId, projectId, [{ id: testId, startTime: testRun.startTime, finishTime: testRun.finishTime }], 'per_test'
+    );
+    const jiraEff = jiraEffMap.get(testId);
+    const duration = jiraEff ? jiraEff.effectiveDurationSeconds : wallClockDur;
+
     const stability = testRun.stability ? Math.round(testRun.stability * 100) : 0;
 
     // Auto-generate title based on error and test name
@@ -3320,6 +3427,9 @@ export class ZebrunnerReportingToolHandlers {
     
     jiraContent += `|Stability|${stability}%|\n`;
     jiraContent += `|Duration|${Math.floor(duration / 60)}m ${duration % 60}s|\n`;
+    if (jiraEff && jiraEff.sessionCount > 1) {
+      jiraContent += `|Retries|${jiraEff.sessionCount} sessions (total: ${Math.floor(wallClockDur / 60)}m ${wallClockDur % 60}s, longest: ${Math.floor(jiraEff.longestSessionDurationSeconds / 60)}m ${jiraEff.longestSessionDurationSeconds % 60}s)|\n`;
+    }
     
     // Get device/OS info from sessions (FAILED first)
     const sessions = await this.getAllSessionsWithArtifacts(testRunId, testId, projectId);
@@ -5312,6 +5422,817 @@ async analyzeTestExecutionVideoTool(input: AnalyzeTestExecutionVideoInput): Prom
                 `2. FFmpeg is installed and accessible\n` +
                 `3. You have sufficient disk space for temporary video files\n\n` +
                 `Error details: ${error.stack || error}`
+        }]
+      };
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Regression Runtime Efficiency
+  // ---------------------------------------------------------------------------
+
+  static readonly DEFAULT_MEDIUM_THRESHOLD_S = 300;
+  static readonly DEFAULT_LONG_THRESHOLD_S = 600;
+
+  private classifyTestDuration(
+    durationSeconds: number,
+    mediumThreshold = ZebrunnerReportingToolHandlers.DEFAULT_MEDIUM_THRESHOLD_S,
+    longThreshold = ZebrunnerReportingToolHandlers.DEFAULT_LONG_THRESHOLD_S
+  ): 'short' | 'medium' | 'long' {
+    if (durationSeconds < mediumThreshold) return 'short';
+    if (durationSeconds < longThreshold) return 'medium';
+    return 'long';
+  }
+
+  private formatElapsed(totalSeconds: number): string {
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = Math.round(totalSeconds % 60);
+    const parts: string[] = [];
+    if (h > 0) parts.push(`${h}h`);
+    if (m > 0 || h > 0) parts.push(`${m}m`);
+    parts.push(`${s}s`);
+    return parts.join(' ');
+  }
+
+  private computeAttemptElapsed(attempt: { startedAt: string; finishedAt?: string | null }): number {
+    if (!attempt.finishedAt) return 0;
+    const start = new Date(attempt.startedAt).getTime();
+    const end = new Date(attempt.finishedAt).getTime();
+    return Math.max(0, (end - start) / 1000);
+  }
+
+  /**
+   * Build a TestEffectiveDuration for a single test given its sessions.
+   */
+  private buildEffectiveDuration(
+    testId: number,
+    sessions: Array<{ session: TestSessionResponse; testStatus: string; passedManually: boolean }>,
+    wallClockSeconds: number
+  ): TestEffectiveDuration {
+    const sortedByEnd = [...sessions].sort((a, b) => {
+      const aEnd = a.session.endedAt ? new Date(String(a.session.endedAt)).getTime() : 0;
+      const bEnd = b.session.endedAt ? new Date(String(b.session.endedAt)).getTime() : 0;
+      return bEnd - aEnd;
+    });
+
+    const totalRetry = sessions.reduce((sum, s) => sum + (s.session.durationInSeconds ?? 0), 0);
+    const longestEntry = sessions.reduce((best, s) =>
+      (s.session.durationInSeconds ?? 0) > (best.session.durationInSeconds ?? 0) ? s : best
+    , sessions[0]);
+
+    let effectiveEntry = sortedByEnd.find(s => s.testStatus === 'PASSED' && !s.passedManually)
+      ?? sortedByEnd.find(s => s.testStatus === 'PASSED')
+      ?? sortedByEnd[0];
+
+    const effectiveDur = effectiveEntry.session.durationInSeconds ?? 0;
+    const longestDur = longestEntry.session.durationInSeconds ?? 0;
+
+    const breakdowns: TestSessionBreakdown[] = sessions.map(s => ({
+      sessionId: s.session.id,
+      device: s.session.deviceName ?? s.session.device ?? null,
+      platform: s.session.platformName ?? s.session.platform ?? null,
+      platformVersion: s.session.platformVersion ?? null,
+      durationSeconds: s.session.durationInSeconds ?? 0,
+      status: s.session.status,
+      testStatus: s.testStatus,
+      passedManually: s.passedManually,
+      isEffective: s.session.id === effectiveEntry.session.id,
+      isLongest: s.session.id === longestEntry.session.id
+    }));
+
+    return {
+      effectiveDurationSeconds: effectiveDur,
+      longestSessionDurationSeconds: longestDur,
+      totalRetryDurationSeconds: totalRetry,
+      wallClockDurationSeconds: wallClockSeconds,
+      sessionCount: sessions.length,
+      effectiveSessionId: effectiveEntry.session.id,
+      sessions: breakdowns
+    };
+  }
+
+  /**
+   * Resolve session-aware effective durations for all tests in a launch.
+   *
+   * Strategy:
+   *  - "auto": launch-level fetch first, fall back to per-test for missing data
+   *  - "launch_level": single launch-level call only
+   *  - "per_test": individual call per test
+   *
+   * Returns a map keyed by testId for every test that has session data.
+   */
+  async resolveTestEffectiveDurations(
+    launchId: number,
+    projectId: number,
+    tests: Array<{ id: number; startTime?: number; finishTime?: number }>,
+    strategy: SessionResolutionStrategy = 'auto'
+  ): Promise<Map<number, TestEffectiveDuration>> {
+    const result = new Map<number, TestEffectiveDuration>();
+    if (tests.length === 0) return result;
+
+    const wallClockFor = (t: { startTime?: number; finishTime?: number }) =>
+      t.finishTime && t.startTime ? Math.round((t.finishTime - t.startTime) / 1000) : 0;
+
+    // -- Group sessions by testId from a sessions response --
+    const groupByTest = (sessions: TestSessionResponse[]) => {
+      const map = new Map<number, Array<{ session: TestSessionResponse; testStatus: string; passedManually: boolean }>>();
+      for (const session of sessions) {
+        for (const t of session.tests ?? []) {
+          const arr = map.get(t.id) ?? [];
+          arr.push({ session, testStatus: t.status, passedManually: t.passedManually });
+          map.set(t.id, arr);
+        }
+      }
+      return map;
+    };
+
+    if (strategy === 'per_test') {
+      for (const test of tests) {
+        try {
+          const resp = await this.reportingClient.getTestSessionsForTest(launchId, test.id, projectId);
+          if (resp.items.length >= 1) {
+            const grouped = groupByTest(resp.items);
+            const entries = grouped.get(test.id);
+            if (entries && entries.length >= 1) {
+              result.set(test.id, this.buildEffectiveDuration(test.id, entries, wallClockFor(test)));
+            }
+          }
+        } catch { /* skip on error */ }
+      }
+      return result;
+    }
+
+    // launch_level or auto: start with a launch-level call
+    try {
+      const allSessions = await this.reportingClient.getAllTestSessions(launchId, projectId);
+      const grouped = groupByTest(allSessions.items);
+
+      for (const test of tests) {
+        const entries = grouped.get(test.id);
+        if (entries && entries.length >= 1) {
+          result.set(test.id, this.buildEffectiveDuration(test.id, entries, wallClockFor(test)));
+        }
+      }
+
+      if (strategy === 'auto') {
+        const testIdsWithSessions = new Set(grouped.keys());
+        const missingTests = tests.filter(t => !testIdsWithSessions.has(t.id));
+        for (const test of missingTests) {
+          try {
+            const resp = await this.reportingClient.getTestSessionsForTest(launchId, test.id, projectId);
+            if (resp.items.length >= 1) {
+              const perTestGrouped = groupByTest(resp.items);
+              const entries = perTestGrouped.get(test.id);
+              if (entries && entries.length >= 1) {
+                result.set(test.id, this.buildEffectiveDuration(test.id, entries, wallClockFor(test)));
+              }
+            }
+          } catch { /* skip on error */ }
+        }
+      }
+    } catch {
+      if (strategy === 'auto') {
+        for (const test of tests) {
+          try {
+            const resp = await this.reportingClient.getTestSessionsForTest(launchId, test.id, projectId);
+            if (resp.items.length >= 1) {
+              const grouped = groupByTest(resp.items);
+              const entries = grouped.get(test.id);
+              if (entries && entries.length >= 1) {
+                result.set(test.id, this.buildEffectiveDuration(test.id, entries, wallClockFor(test)));
+              }
+            }
+          } catch { /* skip on error */ }
+        }
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Collect runtime metrics for a single launch (reusable for current & baseline).
+   */
+  private async collectLaunchRuntimeMetrics(
+    launchId: number,
+    projectId: number,
+    includeTestDetails: boolean,
+    includeAttemptsDetails: boolean,
+    sessionResolution: SessionResolutionStrategy = 'auto',
+    mediumThreshold = ZebrunnerReportingToolHandlers.DEFAULT_MEDIUM_THRESHOLD_S,
+    longThreshold = ZebrunnerReportingToolHandlers.DEFAULT_LONG_THRESHOLD_S
+  ) {
+    let attemptsFetchWarning: string | null = null;
+    const [launch, attempts, testRuns] = await Promise.all([
+      this.reportingClient.getLaunch(launchId, projectId),
+      this.reportingClient.getLaunchAttempts(launchId, projectId).catch((err) => {
+        attemptsFetchWarning = `Failed to fetch launch attempts: ${err instanceof Error ? err.message : err}`;
+        return { items: [] };
+      }),
+      this.reportingClient.getAllTestRuns(launchId, projectId)
+    ]);
+
+    const elapsedSeconds = launch.elapsed ?? 0;
+    const tests = testRuns.items || [];
+
+    // Resolve session-aware effective durations
+    const effectiveDurations = await this.resolveTestEffectiveDurations(
+      launchId, projectId, tests, sessionResolution
+    );
+
+    // --- Per-test duration classification + test case coverage ---
+    const durationBuckets: Record<'short' | 'medium' | 'long', { count: number; totalDuration: number; testCaseCount: number; tests: any[] }> = {
+      short:  { count: 0, totalDuration: 0, testCaseCount: 0, tests: [] },
+      medium: { count: 0, totalDuration: 0, testCaseCount: 0, tests: [] },
+      long:   { count: 0, totalDuration: 0, testCaseCount: 0, tests: [] }
+    };
+
+    let totalTestCasesCovered = 0;
+    let testsWithZeroTCs = 0;
+    let testsWithOneTc = 0;
+    let testsWithMultipleTCs = 0;
+    let testsWithRetries = 0;
+    let totalRetryOverheadSeconds = 0;
+
+    for (const test of tests) {
+      const wallClock = test.finishTime && test.startTime
+        ? Math.round((test.finishTime - test.startTime) / 1000)
+        : 0;
+      const eff = effectiveDurations.get(test.id);
+      const dur = eff ? eff.effectiveDurationSeconds : wallClock;
+
+      if (eff) {
+        testsWithRetries++;
+        totalRetryOverheadSeconds += eff.totalRetryDurationSeconds - eff.effectiveDurationSeconds;
+      }
+
+      const bucket = this.classifyTestDuration(dur, mediumThreshold, longThreshold);
+      const tcCount = test.testCases?.length ?? 0;
+
+      durationBuckets[bucket].count += 1;
+      durationBuckets[bucket].totalDuration += dur;
+      durationBuckets[bucket].testCaseCount += tcCount;
+      totalTestCasesCovered += tcCount;
+
+      if (tcCount === 0) testsWithZeroTCs++;
+      else if (tcCount === 1) testsWithOneTc++;
+      else testsWithMultipleTCs++;
+
+      if (includeTestDetails) {
+        const detail: any = {
+          id: test.id,
+          name: test.name,
+          status: test.status,
+          durationSeconds: dur,
+          testCasesLinked: tcCount,
+          testCaseKeys: test.testCases?.map((tc: any) => tc.testCaseId) ?? []
+        };
+        if (eff) {
+          detail.wallClockDurationSeconds = eff.wallClockDurationSeconds;
+          detail.longestSessionDurationSeconds = eff.longestSessionDurationSeconds;
+          detail.totalRetryDurationSeconds = eff.totalRetryDurationSeconds;
+          detail.sessionCount = eff.sessionCount;
+          detail.sessions = eff.sessions;
+        }
+        durationBuckets[bucket].tests.push(detail);
+      }
+    }
+
+    const classificationSummary = Object.fromEntries(
+      (['short', 'medium', 'long'] as const).map(k => [k, {
+        count: durationBuckets[k].count,
+        totalDuration: durationBuckets[k].totalDuration,
+        avgDuration: durationBuckets[k].count > 0
+          ? Math.round(durationBuckets[k].totalDuration / durationBuckets[k].count)
+          : 0,
+        testCasesCovered: durationBuckets[k].testCaseCount,
+        avgDurationPerTestCase: durationBuckets[k].testCaseCount > 0
+          ? Math.round(durationBuckets[k].totalDuration / durationBuckets[k].testCaseCount)
+          : 0,
+        ...(includeTestDetails ? { tests: durationBuckets[k].tests } : {})
+      }])
+    );
+
+    // --- Attempts summary ---
+    const sortedAttempts = [...attempts.items].sort(
+      (a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime()
+    );
+
+    const initialRun = sortedAttempts.length > 0 ? sortedAttempts[0] : null;
+    const reRuns = sortedAttempts.slice(1);
+
+    const initialElapsed = initialRun ? this.computeAttemptElapsed(initialRun) : 0;
+    const totalReRunElapsed = reRuns.reduce((sum, a) => sum + this.computeAttemptElapsed(a), 0);
+
+    const attemptsSummary: any = {
+      totalAttempts: sortedAttempts.length,
+      initialRunElapsedSeconds: Math.round(initialElapsed),
+      initialRunElapsedFormatted: this.formatElapsed(initialElapsed),
+      reRunCount: reRuns.length,
+      totalReRunElapsedSeconds: Math.round(totalReRunElapsed),
+      totalReRunElapsedFormatted: this.formatElapsed(totalReRunElapsed)
+    };
+
+    if (includeAttemptsDetails && sortedAttempts.length > 0) {
+      attemptsSummary.initialRun = {
+        id: initialRun!.id,
+        startedAt: initialRun!.startedAt,
+        finishedAt: initialRun!.finishedAt,
+        passed: initialRun!.finishPassed ?? 0,
+        failed: initialRun!.finishFailed ?? 0,
+        skipped: initialRun!.finishSkipped ?? 0,
+        knownIssue: initialRun!.finishKnownIssue ?? 0
+      };
+      attemptsSummary.reRuns = reRuns.map((a, idx) => ({
+        attempt: idx + 2,
+        id: a.id,
+        startedAt: a.startedAt,
+        finishedAt: a.finishedAt,
+        elapsedSeconds: Math.round(this.computeAttemptElapsed(a)),
+        passed: a.finishPassed ?? 0,
+        failed: a.finishFailed ?? 0,
+        skipped: a.finishSkipped ?? 0,
+        knownIssue: a.finishKnownIssue ?? 0
+      }));
+    }
+
+    // --- Metrics ---
+    const totalExecutedTests = (launch.passed ?? 0) + (launch.failed ?? 0)
+      + (launch.skipped ?? 0) + (launch.aborted ?? 0) + (launch.blocked ?? 0);
+    const avgRuntimePerTest = totalExecutedTests > 0
+      ? Math.round((elapsedSeconds / totalExecutedTests) * 100) / 100
+      : 0;
+    const avgRuntimePerTestCase = totalTestCasesCovered > 0
+      ? Math.round((elapsedSeconds / totalTestCasesCovered) * 100) / 100
+      : 0;
+
+    // Weighted Runtime Index (experimental, trend-analysis only)
+    const wShort = 1, wMedium = 2, wLong = 3;
+    const sc = classificationSummary.short as any;
+    const mc = classificationSummary.medium as any;
+    const lc = classificationSummary.long as any;
+
+    const weightedSum = sc.avgDuration * sc.count * wShort
+      + mc.avgDuration * mc.count * wMedium
+      + lc.avgDuration * lc.count * wLong;
+    const weightedCount = sc.count * wShort + mc.count * wMedium + lc.count * wLong;
+    const weightedRuntimeIndex = weightedCount > 0
+      ? Math.round((weightedSum / weightedCount) * 100) / 100
+      : 0;
+
+    const weightedSumPerTC = sc.avgDurationPerTestCase * sc.testCasesCovered * wShort
+      + mc.avgDurationPerTestCase * mc.testCasesCovered * wMedium
+      + lc.avgDurationPerTestCase * lc.testCasesCovered * wLong;
+    const weightedCountPerTC = sc.testCasesCovered * wShort + mc.testCasesCovered * wMedium + lc.testCasesCovered * wLong;
+    const weightedRuntimeIndexPerTestCase = weightedCountPerTC > 0
+      ? Math.round((weightedSumPerTC / weightedCountPerTC) * 100) / 100
+      : 0;
+
+    return {
+      launchId: launch.id,
+      name: launch.name,
+      suiteName: launch.testSuite?.name ?? launch.name,
+      status: launch.status,
+      elapsedSeconds,
+      elapsedFormatted: this.formatElapsed(elapsedSeconds),
+      attempts: attemptsSummary,
+      testDurationClassification: classificationSummary,
+      testCaseCoverage: {
+        totalTestCasesCovered,
+        testsWithZeroTestCases: testsWithZeroTCs,
+        testsWithOneTestCase: testsWithOneTc,
+        testsWithMultipleTestCases: testsWithMultipleTCs
+      },
+      sessionAwareDuration: {
+        testsWithRetries,
+        totalRetryOverheadSeconds: Math.round(totalRetryOverheadSeconds),
+        totalRetryOverheadFormatted: this.formatElapsed(totalRetryOverheadSeconds),
+        note: 'Durations use session-level effective time (passed/last session) instead of wall-clock span'
+      },
+      metrics: {
+        totalExecutedTests,
+        totalTestCasesCovered,
+        totalElapsedSeconds: elapsedSeconds,
+        avgRuntimePerTest,
+        avgRuntimePerTestFormatted: this.formatElapsed(avgRuntimePerTest),
+        avgRuntimePerTestCase,
+        avgRuntimePerTestCaseFormatted: this.formatElapsed(avgRuntimePerTestCase),
+        weightedRuntimeIndex,
+        weightedRuntimeIndexPerTestCase,
+        weightedRuntimeIndexNote: 'Experimental – trend analysis only'
+      },
+      ...(attemptsFetchWarning ? { warnings: [attemptsFetchWarning] } : {})
+    };
+  }
+
+  /**
+   * Resolve launches matching the provided filters for a project.
+   */
+  private async resolveLaunches(
+    projectId: number,
+    opts: {
+      milestone?: string;
+      build?: string;
+      suiteNames?: string[];
+      launchIds?: number[];
+    }
+  ) {
+    if (opts.launchIds && opts.launchIds.length > 0) {
+      return opts.launchIds;
+    }
+
+    const launchIds: number[] = [];
+    let page = 1;
+    const pageSize = 50;
+    const maxPages = 10;
+    const seenIds = new Set<number>();
+
+    while (page <= maxPages) {
+      const resp = await this.reportingClient.getLaunches(projectId, {
+        page,
+        pageSize,
+        milestone: opts.milestone,
+        query: opts.build
+      });
+
+      for (const l of resp.items) {
+        if (seenIds.has(l.id)) continue;
+        seenIds.add(l.id);
+
+        if (opts.suiteNames && opts.suiteNames.length > 0) {
+          const lowerName = l.name.toLowerCase();
+          const matches = opts.suiteNames.some(s => lowerName.includes(s.toLowerCase()));
+          if (!matches) continue;
+        }
+
+        launchIds.push(l.id);
+      }
+
+      if (page >= (resp._meta?.totalPages ?? 1)) break;
+      page++;
+    }
+
+    return launchIds;
+  }
+
+  /**
+   * Analyze Regression Runtime Efficiency across launches for a project.
+   *
+   * Collects per-launch timing, attempt/re-run breakdown, per-test duration
+   * classification, and calculates Average Runtime per Test and Weighted Runtime
+   * Index with optional baseline comparison.
+   */
+  async analyzeRegressionRuntime(input: {
+    projectKey?: string;
+    projectId?: number;
+    milestone?: string;
+    build?: string;
+    suiteNames?: string[];
+    launchIds?: number[];
+    previousMilestone?: string;
+    previousBuild?: string;
+    includeTestDetails?: boolean;
+    includeAttemptsDetails?: boolean;
+    format?: 'dto' | 'json' | 'string';
+    session_resolution?: SessionResolutionStrategy;
+    medium_threshold_seconds?: number;
+    long_threshold_seconds?: number;
+  }) {
+    const {
+      projectKey,
+      projectId,
+      milestone,
+      build,
+      suiteNames,
+      launchIds,
+      previousMilestone,
+      previousBuild,
+      includeTestDetails = false,
+      includeAttemptsDetails = true,
+      format = 'json',
+      session_resolution = 'auto',
+      medium_threshold_seconds = ZebrunnerReportingToolHandlers.DEFAULT_MEDIUM_THRESHOLD_S,
+      long_threshold_seconds = ZebrunnerReportingToolHandlers.DEFAULT_LONG_THRESHOLD_S
+    } = input;
+
+    try {
+      if (!projectKey && !projectId) {
+        throw new Error('Either projectKey or projectId must be provided');
+      }
+
+      let resolvedProjectId = projectId;
+      let projectInfo: any = null;
+
+      if (projectKey) {
+        projectInfo = await this.reportingClient.getProject(projectKey);
+        resolvedProjectId = projectInfo.id;
+      }
+
+      if (!resolvedProjectId) {
+        throw new Error('Could not resolve project ID');
+      }
+
+      // --- Resolve current launches ---
+      const currentLaunchIds = await this.resolveLaunches(resolvedProjectId, {
+        milestone,
+        build,
+        suiteNames,
+        launchIds
+      });
+
+      if (currentLaunchIds.length === 0) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: 'No launches found matching the provided filters. ' +
+              'Try adjusting milestone, build, suite_names, or launch_ids parameters.'
+          }]
+        };
+      }
+
+      // --- Collect metrics for each current launch (parallel) ---
+      const currentResults = await Promise.all(
+        currentLaunchIds.map(id =>
+          this.collectLaunchRuntimeMetrics(id, resolvedProjectId!, includeTestDetails, includeAttemptsDetails, session_resolution, medium_threshold_seconds, long_threshold_seconds)
+        )
+      );
+
+      // --- Aggregate across launches ---
+      const totalTests = currentResults.reduce((s, r) => s + r.metrics.totalExecutedTests, 0);
+      const totalTCsCovered = currentResults.reduce((s, r) => s + r.metrics.totalTestCasesCovered, 0);
+      const totalElapsed = currentResults.reduce((s, r) => s + r.metrics.totalElapsedSeconds, 0);
+      const overallAvgRuntime = totalTests > 0
+        ? Math.round((totalElapsed / totalTests) * 100) / 100
+        : 0;
+      const overallAvgRuntimePerTC = totalTCsCovered > 0
+        ? Math.round((totalElapsed / totalTCsCovered) * 100) / 100
+        : 0;
+
+      const allShort = currentResults.reduce((s, r) => s + (r.testDurationClassification.short as any).count, 0);
+      const allMedium = currentResults.reduce((s, r) => s + (r.testDurationClassification.medium as any).count, 0);
+      const allLong = currentResults.reduce((s, r) => s + (r.testDurationClassification.long as any).count, 0);
+      const allTestsCount = allShort + allMedium + allLong;
+
+      const aggZeroTCs = currentResults.reduce((s, r) => s + r.testCaseCoverage.testsWithZeroTestCases, 0);
+      const aggOneTc = currentResults.reduce((s, r) => s + r.testCaseCoverage.testsWithOneTestCase, 0);
+      const aggMultiTCs = currentResults.reduce((s, r) => s + r.testCaseCoverage.testsWithMultipleTestCases, 0);
+
+      const wShort = 1, wMedium = 2, wLong = 3;
+      const aggWeightedSum = currentResults.reduce((s, r) => {
+        const sc = r.testDurationClassification.short as any;
+        const mc = r.testDurationClassification.medium as any;
+        const lc = r.testDurationClassification.long as any;
+        return s + sc.avgDuration * sc.count * wShort
+                 + mc.avgDuration * mc.count * wMedium
+                 + lc.avgDuration * lc.count * wLong;
+      }, 0);
+      const aggWeightedCount = allShort * wShort + allMedium * wMedium + allLong * wLong;
+      const overallWeightedIndex = aggWeightedCount > 0
+        ? Math.round((aggWeightedSum / aggWeightedCount) * 100) / 100
+        : 0;
+
+      const allShortTCs = currentResults.reduce((s, r) => s + (r.testDurationClassification.short as any).testCasesCovered, 0);
+      const allMediumTCs = currentResults.reduce((s, r) => s + (r.testDurationClassification.medium as any).testCasesCovered, 0);
+      const allLongTCs = currentResults.reduce((s, r) => s + (r.testDurationClassification.long as any).testCasesCovered, 0);
+      const allTCsCount = allShortTCs + allMediumTCs + allLongTCs;
+
+      const aggWeightedSumPerTC = currentResults.reduce((s, r) => {
+        const sc = r.testDurationClassification.short as any;
+        const mc = r.testDurationClassification.medium as any;
+        const lc = r.testDurationClassification.long as any;
+        return s + sc.avgDurationPerTestCase * sc.testCasesCovered * wShort
+                 + mc.avgDurationPerTestCase * mc.testCasesCovered * wMedium
+                 + lc.avgDurationPerTestCase * lc.testCasesCovered * wLong;
+      }, 0);
+      const aggWeightedCountPerTC = allShortTCs * wShort + allMediumTCs * wMedium + allLongTCs * wLong;
+      const overallWeightedIndexPerTC = aggWeightedCountPerTC > 0
+        ? Math.round((aggWeightedSumPerTC / aggWeightedCountPerTC) * 100) / 100
+        : 0;
+
+      const aggregated: any = {
+        totalLaunches: currentResults.length,
+        totalTests,
+        totalTestCasesCovered: totalTCsCovered,
+        totalElapsedSeconds: totalElapsed,
+        totalElapsedFormatted: this.formatElapsed(totalElapsed),
+        overallAvgRuntimePerTest: overallAvgRuntime,
+        overallAvgRuntimePerTestFormatted: this.formatElapsed(overallAvgRuntime),
+        overallAvgRuntimePerTestCase: overallAvgRuntimePerTC,
+        overallAvgRuntimePerTestCaseFormatted: this.formatElapsed(overallAvgRuntimePerTC),
+        overallWeightedRuntimeIndex: overallWeightedIndex,
+        overallWeightedRuntimeIndexPerTestCase: overallWeightedIndexPerTC,
+        testCaseCoverage: {
+          totalTestCasesCovered: totalTCsCovered,
+          testsWithZeroTestCases: aggZeroTCs,
+          testsWithOneTestCase: aggOneTc,
+          testsWithMultipleTestCases: aggMultiTCs
+        },
+        durationDistribution: {
+          shortCount: allShort,
+          shortPercent: allTestsCount > 0 ? Math.round((allShort / allTestsCount) * 100) : 0,
+          shortTestCases: allShortTCs,
+          shortTestCasesPercent: allTCsCount > 0 ? Math.round((allShortTCs / allTCsCount) * 100) : 0,
+          mediumCount: allMedium,
+          mediumPercent: allTestsCount > 0 ? Math.round((allMedium / allTestsCount) * 100) : 0,
+          mediumTestCases: allMediumTCs,
+          mediumTestCasesPercent: allTCsCount > 0 ? Math.round((allMediumTCs / allTCsCount) * 100) : 0,
+          longCount: allLong,
+          longPercent: allTestsCount > 0 ? Math.round((allLong / allTestsCount) * 100) : 0,
+          longTestCases: allLongTCs,
+          longTestCasesPercent: allTCsCount > 0 ? Math.round((allLongTCs / allTCsCount) * 100) : 0,
+        }
+      };
+
+      // --- Baseline comparison (optional) ---
+      let baselineComparison: any = null;
+      if (previousMilestone || previousBuild) {
+        const prevLaunchIds = await this.resolveLaunches(resolvedProjectId, {
+          milestone: previousMilestone,
+          build: previousBuild,
+          suiteNames
+        });
+
+        if (prevLaunchIds.length > 0) {
+          const prevResults = await Promise.all(
+            prevLaunchIds.map(id =>
+              this.collectLaunchRuntimeMetrics(id, resolvedProjectId!, false, false, session_resolution, medium_threshold_seconds, long_threshold_seconds)
+            )
+          );
+
+          const prevTotalTests = prevResults.reduce((s, r) => s + r.metrics.totalExecutedTests, 0);
+          const prevTotalTCs = prevResults.reduce((s, r) => s + r.metrics.totalTestCasesCovered, 0);
+          const prevTotalElapsed = prevResults.reduce((s, r) => s + r.metrics.totalElapsedSeconds, 0);
+          const prevAvgRuntime = prevTotalTests > 0
+            ? Math.round((prevTotalElapsed / prevTotalTests) * 100) / 100
+            : 0;
+          const prevAvgRuntimePerTC = prevTotalTCs > 0
+            ? Math.round((prevTotalElapsed / prevTotalTCs) * 100) / 100
+            : 0;
+
+          const prevShort = prevResults.reduce((s, r) => s + (r.testDurationClassification.short as any).count, 0);
+          const prevMedium = prevResults.reduce((s, r) => s + (r.testDurationClassification.medium as any).count, 0);
+          const prevLong = prevResults.reduce((s, r) => s + (r.testDurationClassification.long as any).count, 0);
+          const prevWeightedSum = prevResults.reduce((s, r) => {
+            const sc = r.testDurationClassification.short as any;
+            const mc = r.testDurationClassification.medium as any;
+            const lc = r.testDurationClassification.long as any;
+            return s + sc.avgDuration * sc.count * wShort
+                     + mc.avgDuration * mc.count * wMedium
+                     + lc.avgDuration * lc.count * wLong;
+          }, 0);
+          const prevWeightedCount = prevShort * wShort + prevMedium * wMedium + prevLong * wLong;
+          const prevWeightedIndex = prevWeightedCount > 0
+            ? Math.round((prevWeightedSum / prevWeightedCount) * 100) / 100
+            : 0;
+
+          const prevWeightedSumPerTC = prevResults.reduce((s, r) => {
+            const sc = r.testDurationClassification.short as any;
+            const mc = r.testDurationClassification.medium as any;
+            const lc = r.testDurationClassification.long as any;
+            return s + sc.avgDurationPerTestCase * sc.testCasesCovered * wShort
+                     + mc.avgDurationPerTestCase * mc.testCasesCovered * wMedium
+                     + lc.avgDurationPerTestCase * lc.testCasesCovered * wLong;
+          }, 0);
+          const prevShortTCs = prevResults.reduce((s, r) => s + (r.testDurationClassification.short as any).testCasesCovered, 0);
+          const prevMediumTCs = prevResults.reduce((s, r) => s + (r.testDurationClassification.medium as any).testCasesCovered, 0);
+          const prevLongTCs = prevResults.reduce((s, r) => s + (r.testDurationClassification.long as any).testCasesCovered, 0);
+          const prevWeightedCountPerTC = prevShortTCs * wShort + prevMediumTCs * wMedium + prevLongTCs * wLong;
+          const prevWeightedIndexPerTC = prevWeightedCountPerTC > 0
+            ? Math.round((prevWeightedSumPerTC / prevWeightedCountPerTC) * 100) / 100
+            : 0;
+
+          const avgDelta = prevAvgRuntime > 0
+            ? Math.round(((overallAvgRuntime - prevAvgRuntime) / prevAvgRuntime) * 10000) / 100
+            : 0;
+          const avgDeltaPerTC = prevAvgRuntimePerTC > 0
+            ? Math.round(((overallAvgRuntimePerTC - prevAvgRuntimePerTC) / prevAvgRuntimePerTC) * 10000) / 100
+            : 0;
+          const weightedDelta = prevWeightedIndex > 0
+            ? Math.round(((overallWeightedIndex - prevWeightedIndex) / prevWeightedIndex) * 10000) / 100
+            : 0;
+          const weightedDeltaPerTC = prevWeightedIndexPerTC > 0
+            ? Math.round(((overallWeightedIndexPerTC - prevWeightedIndexPerTC) / prevWeightedIndexPerTC) * 10000) / 100
+            : 0;
+
+          // Per-suite delta (match by suiteName)
+          const perSuiteDeltas: any[] = [];
+          for (const curr of currentResults) {
+            const prev = prevResults.find(p => p.suiteName === curr.suiteName);
+            if (prev) {
+              const suiteAvgDelta = prev.metrics.avgRuntimePerTest > 0
+                ? Math.round(((curr.metrics.avgRuntimePerTest - prev.metrics.avgRuntimePerTest) / prev.metrics.avgRuntimePerTest) * 10000) / 100
+                : 0;
+              const suiteTcDelta = prev.metrics.avgRuntimePerTestCase > 0
+                ? Math.round(((curr.metrics.avgRuntimePerTestCase - prev.metrics.avgRuntimePerTestCase) / prev.metrics.avgRuntimePerTestCase) * 10000) / 100
+                : 0;
+              const suiteWriDelta = prev.metrics.weightedRuntimeIndex > 0
+                ? Math.round(((curr.metrics.weightedRuntimeIndex - prev.metrics.weightedRuntimeIndex) / prev.metrics.weightedRuntimeIndex) * 10000) / 100
+                : 0;
+              const suiteWriTcDelta = prev.metrics.weightedRuntimeIndexPerTestCase > 0
+                ? Math.round(((curr.metrics.weightedRuntimeIndexPerTestCase - prev.metrics.weightedRuntimeIndexPerTestCase) / prev.metrics.weightedRuntimeIndexPerTestCase) * 10000) / 100
+                : 0;
+              perSuiteDeltas.push({
+                suiteName: curr.suiteName,
+                currentAvgRuntimePerTest: curr.metrics.avgRuntimePerTest,
+                previousAvgRuntimePerTest: prev.metrics.avgRuntimePerTest,
+                deltaPerTestPercent: suiteAvgDelta,
+                currentAvgRuntimePerTestCase: curr.metrics.avgRuntimePerTestCase,
+                previousAvgRuntimePerTestCase: prev.metrics.avgRuntimePerTestCase,
+                deltaPerTestCasePercent: suiteTcDelta,
+                currentWRI: curr.metrics.weightedRuntimeIndex,
+                previousWRI: prev.metrics.weightedRuntimeIndex,
+                deltaWRIPercent: suiteWriDelta,
+                currentWRIPerTestCase: curr.metrics.weightedRuntimeIndexPerTestCase,
+                previousWRIPerTestCase: prev.metrics.weightedRuntimeIndexPerTestCase,
+                deltaWRIPerTestCasePercent: suiteWriTcDelta,
+                currentTestCasesCovered: curr.metrics.totalTestCasesCovered,
+                previousTestCasesCovered: prev.metrics.totalTestCasesCovered,
+                status: Math.abs(suiteAvgDelta) <= 5 ? 'stable' : suiteAvgDelta > 0 ? 'degraded' : 'improved'
+              });
+            }
+          }
+
+          // Flag abnormal degradation in long-running tests
+          const longTestDegradations: any[] = [];
+          for (const curr of currentResults) {
+            const prev = prevResults.find(p => p.suiteName === curr.suiteName);
+            if (!prev) continue;
+            const currLong = (curr.testDurationClassification.long as any);
+            const prevLong = (prev.testDurationClassification.long as any);
+            if (prevLong.avgDuration > 0 && currLong.count > 0) {
+              const longDelta = ((currLong.avgDuration - prevLong.avgDuration) / prevLong.avgDuration) * 100;
+              if (longDelta > 20) {
+                longTestDegradations.push({
+                  suiteName: curr.suiteName,
+                  currentAvgLongDuration: currLong.avgDuration,
+                  previousAvgLongDuration: prevLong.avgDuration,
+                  degradationPercent: Math.round(longDelta * 100) / 100,
+                  warning: 'Abnormal degradation detected in long-running tests (>20% increase)'
+                });
+              }
+            }
+          }
+
+          baselineComparison = {
+            previous: {
+              totalLaunches: prevResults.length,
+              totalTests: prevTotalTests,
+              totalTestCasesCovered: prevTotalTCs,
+              overallAvgRuntimePerTest: prevAvgRuntime,
+              overallAvgRuntimePerTestCase: prevAvgRuntimePerTC,
+              overallWeightedRuntimeIndex: prevWeightedIndex,
+              overallWeightedRuntimeIndexPerTestCase: prevWeightedIndexPerTC
+            },
+            delta: {
+              avgRuntimePerTestChangePercent: avgDelta,
+              avgRuntimePerTestCaseChangePercent: avgDeltaPerTC,
+              weightedIndexChangePercent: weightedDelta,
+              weightedIndexPerTestCaseChangePercent: weightedDeltaPerTC,
+              overallStatus: Math.abs(avgDelta) <= 5 ? 'stable' : avgDelta > 0 ? 'degraded' : 'improved'
+            },
+            perSuiteDeltas,
+            ...(longTestDegradations.length > 0 ? { longTestDegradations } : {})
+          };
+        }
+      }
+
+      // --- Build final result ---
+      const result: any = {
+        project: projectInfo ? {
+          id: projectInfo.id,
+          key: projectInfo.key,
+          name: projectInfo.name
+        } : { id: resolvedProjectId },
+        filters: {
+          ...(milestone ? { milestone } : {}),
+          ...(build ? { build } : {}),
+          ...(suiteNames ? { suiteNames } : {}),
+          ...(launchIds ? { launchIds } : {})
+        },
+        launches: currentResults,
+        aggregated,
+        ...(baselineComparison ? { baselineComparison } : {}),
+        durationClassThresholds: {
+          short: `< ${medium_threshold_seconds}s`,
+          medium: `${medium_threshold_seconds}s - ${long_threshold_seconds}s`,
+          long: `>= ${long_threshold_seconds}s`
+        }
+      };
+
+      const formattedData = FormatProcessor.format(result, format);
+
+      return {
+        content: [{
+          type: 'text' as const,
+          text: typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2)
+        }]
+      };
+    } catch (error: any) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `Error analyzing regression runtime: ${error.message}`
         }]
       };
     }
