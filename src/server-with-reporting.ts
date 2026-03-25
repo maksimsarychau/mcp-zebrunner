@@ -93,10 +93,11 @@ async function main() {
 
   // ========== EXISTING TCM PUBLIC API TOOLS ==========
 
-  server.tool(
+  server.registerTool(
     "get_test_cases",
-    "📋 Retrieve test cases from Zebrunner with advanced filtering and pagination",
     {
+      description: "📋 Retrieve test cases from Zebrunner with advanced filtering and pagination",
+    inputSchema: {
       projectKey: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
       suiteId: z.number().int().positive().optional().describe("Filter by specific suite ID"),
       rootSuiteId: z.number().int().positive().optional().describe("Filter by root suite ID"),
@@ -104,26 +105,30 @@ async function main() {
       format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format"),
       page: z.number().int().nonnegative().optional().describe("Page number for pagination"),
       size: z.number().int().positive().max(200).optional().describe("Page size (max 200)")
+    }
     },
     async (args) => toolHandlers.getTestCases(args)
   );
 
-  server.tool(
+  server.registerTool(
     "find_test_case_by_key",
-    "🔍 Find a specific test case by its key with detailed information",
     {
+      description: "🔍 Find a specific test case by its key with detailed information",
+    inputSchema: {
       projectKey: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
       caseKey: z.string().min(1).describe("Test case key (e.g., 'ANDROID-29')"),
       includeSteps: z.boolean().default(true).describe("Include detailed test steps"),
       format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format")
+    }
     },
     async (args) => toolHandlers.findTestCaseByKey(args)
   );
 
-  server.tool(
+  server.registerTool(
     "get_test_suites",
-    "📂 Retrieve test suites from Zebrunner with pagination support",
     {
+      description: "📂 Retrieve test suites from Zebrunner with pagination support",
+    inputSchema: {
       projectKey: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
       rootOnly: z.boolean().default(false).describe("Return only root suites"),
       includeHierarchy: z.boolean().default(false).describe("Include hierarchy information"),
@@ -131,54 +136,62 @@ async function main() {
       format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format"),
       page: z.number().int().nonnegative().optional().describe("Page number for pagination"),
       size: z.number().int().positive().max(200).optional().describe("Page size (max 200)")
+    }
     },
     async (args) => toolHandlers.getTestSuites(args)
   );
 
-  server.tool(
+  server.registerTool(
     "get_suite_hierarchy",
-    "🌳 Get hierarchical view of test suites with depth control",
     {
+      description: "🌳 Get hierarchical view of test suites with depth control",
+    inputSchema: {
       projectKey: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
       rootSuiteId: z.number().int().positive().optional().describe("Root suite ID to start from"),
       maxDepth: z.number().int().positive().max(10).default(5).describe("Maximum hierarchy depth"),
       format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format")
+    }
     },
     async (args) => toolHandlers.getSuiteHierarchy(args)
   );
 
   // ========== NEW REPORTING API TOOLS ==========
 
-  server.tool(
+  server.registerTool(
     "get_launch_details",
-    "🚀 Get comprehensive launch details including test sessions (uses new reporting API with enhanced authentication)",
     {
+      description: "🚀 Get comprehensive launch details including test sessions (uses new reporting API with enhanced authentication)",
+    inputSchema: {
       projectKey: z.string().min(1).optional().describe("Project key (e.g., 'android' or 'ANDROID') - alternative to projectId"),
       projectId: z.number().int().positive().optional().describe("Project ID (e.g., 7) - alternative to projectKey"),
       launchId: z.number().int().positive().describe("Launch ID (e.g., 118685)"),
       includeLaunchDetails: z.boolean().default(true).describe("Include detailed launch information"),
       includeTestSessions: z.boolean().default(true).describe("Include test sessions data"),
       format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format")
+    }
     },
     async (args) => reportingHandlers.getLauncherDetails(args)
   );
 
-  server.tool(
+  server.registerTool(
     "get_launch_summary",
-    "📊 Get quick launcher summary without detailed test sessions (uses new reporting API)",
     {
+      description: "📊 Get quick launcher summary without detailed test sessions (uses new reporting API)",
+    inputSchema: {
       projectKey: z.string().min(1).optional().describe("Project key (e.g., 'android' or 'ANDROID') - alternative to projectId"),
       projectId: z.number().int().positive().optional().describe("Project ID (e.g., 7) - alternative to projectKey"),
       launchId: z.number().int().positive().describe("Launch ID (e.g., 118685)"),
       format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format")
+    }
     },
     async (args) => reportingHandlers.getLauncherSummary(args)
   );
 
-  server.tool(
+  server.registerTool(
     "analyze_test_failure",
-    "🔍 Deep forensic analysis of a failed test including logs, screenshots, error classification, and similar failures",
     {
+      description: "🔍 Deep forensic analysis of a failed test including logs, screenshots, error classification, and similar failures",
+    inputSchema: {
       testId: z.number().int().positive().describe("Test ID (e.g., 5451420)"),
       testRunId: z.number().int().positive().describe("Test Run ID / Launch ID (e.g., 120806)"),
       projectKey: z.string().min(1).optional().describe("Project key (e.g., 'MCP') - alternative to projectId"),
@@ -190,16 +203,18 @@ async function main() {
       includeVideo: z.boolean().default(false).describe("Include video URL"),
       analyzeSimilarFailures: z.boolean().default(true).describe("Find similar failures in the launch"),
       format: z.enum(['detailed', 'summary']).default('detailed').describe("Output format: detailed or summary")
+    }
     },
     async (args) => reportingHandlers.analyzeTestFailureById(args)
   );
 
   // ========== CONNECTION TEST TOOLS ==========
 
-  server.tool(
+  server.registerTool(
     "test_tcm_connection",
-    "🔌 Test connection to Zebrunner TCM Public API",
-    {},
+    {
+      description: "🔌 Test connection to Zebrunner TCM Public API",
+    },
     async () => {
       try {
         // Simple test by trying to get test suites for a known project
@@ -228,10 +243,11 @@ async function main() {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "test_reporting_connection",
-    "🔌 Test connection to Zebrunner Reporting API with new authentication",
-    {},
+    {
+      description: "🔌 Test connection to Zebrunner Reporting API with new authentication",
+    },
     async () => {
       try {
         const result = await reportingClient.testConnection();

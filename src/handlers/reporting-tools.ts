@@ -192,6 +192,7 @@ export class ZebrunnerReportingToolHandlers {
     format?: 'dto' | 'json' | 'string';
     session_resolution?: SessionResolutionStrategy;
     jira_base_url?: string;
+    count_only?: boolean;
   }) {
     const {
       projectKey,
@@ -207,7 +208,8 @@ export class ZebrunnerReportingToolHandlers {
       includeTestCases = false,
       format = 'json',
       session_resolution = 'auto',
-      jira_base_url
+      jira_base_url,
+      count_only = false
     } = input;
 
     try {
@@ -232,6 +234,34 @@ export class ZebrunnerReportingToolHandlers {
       
       // Fetch ALL test runs (auto-paginated)
       const testRuns = await this.reportingClient.getAllTestRuns(launchId, resolvedProjectId!);
+
+      if (count_only) {
+        const allItems = testRuns.items || [];
+        let filtered = allItems;
+        if (statusFilter && statusFilter.length > 0) {
+          filtered = filtered.filter((t: any) => statusFilter.includes(t.status));
+        }
+        if (minStability !== undefined) {
+          filtered = filtered.filter((t: any) => {
+            const stab = t.stability !== undefined ? Math.round((t.stability || 0) * 100) : 0;
+            return stab >= minStability;
+          });
+        }
+        if (maxStability !== undefined) {
+          filtered = filtered.filter((t: any) => {
+            const stab = t.stability !== undefined ? Math.round((t.stability || 0) * 100) : 0;
+            return stab <= maxStability;
+          });
+        }
+        const byStatus: Record<string, number> = {};
+        allItems.forEach((t: any) => { byStatus[t.status] = (byStatus[t.status] || 0) + 1; });
+        return { content: [{ type: "text" as const, text: JSON.stringify({
+          total_count: allItems.length,
+          filtered_count: filtered.length,
+          by_status: byStatus,
+          launch_id: launchId
+        }, null, 2) }] };
+      }
 
       // Resolve session-aware effective durations for tests with retries
       const effectiveDurations = await this.resolveTestEffectiveDurations(
@@ -548,6 +578,7 @@ export class ZebrunnerReportingToolHandlers {
     };
     outputStyle?: 'strict' | 'default';
     outputFormat?: 'jira' | 'json' | 'dto' | 'summary' | 'detailed';
+    count_only?: boolean;
   }) {
     const {
       projectKey,
@@ -556,7 +587,8 @@ export class ZebrunnerReportingToolHandlers {
       thresholds,
       linkedIssues,
       outputStyle = 'strict',
-      outputFormat = 'jira'
+      outputFormat = 'jira',
+      count_only = false
     } = input;
 
     try {
@@ -565,6 +597,26 @@ export class ZebrunnerReportingToolHandlers {
       }
       if ((!suites || suites.length === 0) && !builds) {
         throw new Error("At least one suite is required");
+      }
+
+      if (count_only) {
+        const projectId = await this.reportingClient.getProjectId(projectKey);
+        if (builds) {
+          const buildResolution = await this.resolveSuitesFromBuilds(projectId, builds);
+          return { content: [{ type: "text" as const, text: JSON.stringify({
+            suites_found: buildResolution.suites.length,
+            current_build: builds.current,
+            previous_build: builds.previous,
+            matched_suites: buildResolution.summary.matchedSuites.length,
+            unmatched_current: buildResolution.summary.unmatchedCurrent.length,
+            unmatched_previous: buildResolution.summary.unmatchedPrevious.length,
+            project_key: projectKey
+          }, null, 2) }] };
+        }
+        return { content: [{ type: "text" as const, text: JSON.stringify({
+          suites_provided: suites.length,
+          project_key: projectKey
+        }, null, 2) }] };
       }
 
       const normalizedThresholds = this.normalizeStabilityThresholds(thresholds);
@@ -1424,6 +1476,7 @@ export class ZebrunnerReportingToolHandlers {
     projectId?: number;
     limit?: number;
     format?: 'dto' | 'json' | 'string';
+    count_only?: boolean;
   }) {
     const {
       testId,
@@ -1431,7 +1484,8 @@ export class ZebrunnerReportingToolHandlers {
       projectKey,
       projectId,
       limit = 10,
-      format = 'string'
+      format = 'string',
+      count_only = false
     } = input;
 
     try {
@@ -1456,6 +1510,21 @@ export class ZebrunnerReportingToolHandlers {
         resolvedProjectId!,
         limit
       );
+
+      if (count_only) {
+        const items = history.items || [];
+        const passed = items.filter((i: any) => i.status === 'PASSED' && !i.passedManually).length;
+        const failed = items.filter((i: any) => i.status === 'FAILED').length;
+        return { content: [{ type: "text" as const, text: JSON.stringify({
+          total_executions: items.length,
+          passed,
+          failed,
+          pass_rate: items.length > 0 ? `${Math.round((passed / items.length) * 100)}%` : '0%',
+          test_id: testId,
+          launch_id: testRunId,
+          limit_used: limit
+        }, null, 2) }] };
+      }
 
       const baseUrl = this.reportingClient['config'].baseUrl;
 
@@ -4099,6 +4168,7 @@ export class ZebrunnerReportingToolHandlers {
     batchSize?: number;
     offset?: number;
     limit?: number;
+    count_only?: boolean;
   }) {
     const {
       testRunId,
@@ -4112,7 +4182,8 @@ export class ZebrunnerReportingToolHandlers {
       executionMode = 'sequential',
       batchSize = 5,
       offset = 0,
-      limit = 10
+      limit = 10,
+      count_only = false
     } = input;
 
     try {
@@ -4154,6 +4225,15 @@ export class ZebrunnerReportingToolHandlers {
       }
 
       const totalFailedTests = failedTests.length;
+
+      if (count_only) {
+        return { content: [{ type: "text" as const, text: JSON.stringify({
+          total_tests: allTests.length,
+          total_failed: totalFailedTests,
+          filter_type: filterType,
+          launch_id: testRunId
+        }, null, 2) }] };
+      }
 
       // Smart limit: analyze all if <= 10, otherwise use limit parameter (default 10)
       const effectiveLimit = totalFailedTests <= 10 ? totalFailedTests : limit;

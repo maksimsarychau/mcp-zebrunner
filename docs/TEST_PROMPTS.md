@@ -32,6 +32,11 @@
 
 **Expected:** Returns suites with `include_hierarchy: true`, showing parent-child relationships.
 
+**Prompt 3 — Count only**
+> How many test suites are in the Android project? Just the count.
+
+**Expected:** Uses `count_only: true`. Paginates through all pages via pageToken loop. Returns `{total_count: N, pages_traversed: M}` without suite data.
+
 ---
 
 ### `get_test_case_by_key`
@@ -64,6 +69,11 @@
 > Get all subsuites under root suite 1 in the Android project as a flat list.
 
 **Expected:** Returns all nested suites under the given root as a flat paginated array.
+
+**Prompt 2 — Count only**
+> How many subsuites are under root suite 1 in the Android project? Just the count.
+
+**Expected:** Uses `count_only: true`. Returns `{total_count: N, root_suite_id: 1, root_suite_name: "..."}` without suite data.
 
 ---
 
@@ -197,6 +207,11 @@
 
 **Expected:** Returns paginated suite list with `nextPageToken` for continuation.
 
+**Prompt 2 — Count only**
+> How many TCM test suites are in the Web project? Just the count.
+
+**Expected:** Uses `count_only: true`. Paginates through all pages and returns `{total_count: N, pages_traversed: M}`.
+
 ---
 
 ### `get_all_tcm_test_case_suites_by_project`
@@ -205,6 +220,11 @@
 > Get ALL test case suites for the iOS project, including their hierarchy information.
 
 **Expected:** Auto-paginates through all suites and returns them with parent/child relationships.
+
+**Prompt 2 — Count only**
+> How many total suites are in the iOS project? Just the count, skip hierarchy processing.
+
+**Expected:** Uses `count_only: true`. Paginates internally, returns `{total_count: N, pages_traversed: M}` without hierarchy processing or formatting.
 
 ---
 
@@ -347,6 +367,11 @@
 
 **Expected:** Uses `statusFilter: ['FAILED']`, `sortBy: 'stability'` to return failed tests ordered by flakiness.
 
+**Prompt 3 — Count only**
+> How many tests ran in launch 119783 of the MCP project? Just give me the total and per-status breakdown.
+
+**Expected:** Uses `count_only: true`. Fetches all test runs but skips session resolution and JIRA URL lookups. Returns `{total_count: N, filtered_count: N, by_status: {PASSED: X, FAILED: Y, ...}}`.
+
 ---
 
 ### `generate_weekly_regression_stability_report`
@@ -355,6 +380,11 @@
 > Generate a weekly regression stability report for the Android project comparing the current build to the previous one.
 
 **Expected:** Produces a formatted report (default: Jira-ready) showing pass rate deltas, suite-level comparison, and status indicators.
+
+**Prompt 2 — Count only (build pre-check)**
+> How many suites will be matched for the Android project comparing build 49117 vs 48886? Don't generate the full report.
+
+**Expected:** Uses `count_only: true` with `builds`. Resolves launches from build identifiers, returns `{suites_found: N, matched_suites: M}` without generating the comparison report.
 
 ---
 
@@ -388,6 +418,11 @@
 
 **Expected:** Returns paginated list of launches with names, dates, and status.
 
+**Prompt 2 — Count only**
+> How many total launches are in the Android project? Just the count.
+
+**Expected:** Uses `count_only: true`. Single API call with `pageSize=1`, returns `{total_count: N}` from `_meta.total`.
+
 ---
 
 ### `get_all_launches_with_filter`
@@ -401,6 +436,11 @@
 > Find all iOS launches for build 26.6.0.
 
 **Expected:** Uses query/milestone filter to find launches matching the build number.
+
+**Prompt 3 — Count only**
+> How many launches for the Web project match milestone "26.0.0"? Just the count.
+
+**Expected:** Uses `count_only: true`. Returns `{total_count: N, filter: "milestone \"26.0.0\""}` from API metadata.
 
 ---
 
@@ -429,6 +469,11 @@
 > Show all milestones for the Android project, including completed ones.
 
 **Expected:** Uses `status: 'all'` to return every milestone regardless of status.
+
+**Prompt 3 — Count only**
+> How many overdue milestones does the Web project have? Just the count.
+
+**Expected:** Uses `count_only: true, status: 'overdue'`. Paginates through incomplete milestones, applies client-side overdue filter, returns `{total_count: N, status: "overdue"}`.
 
 ---
 
@@ -484,6 +529,11 @@
 
 > **Note:** For TCM-level execution history (including manual test runs), use `get_test_case_by_key` with `include_execution_history: true` instead. The `get_test_execution_history` tool is for launch-level automated test history.
 
+**Prompt 2 — Count only**
+> What is the pass rate and execution count for this test? Just the numbers, no history details.
+
+**Expected:** Uses `count_only: true`. Returns `{total_executions: N, passed: X, failed: Y, pass_rate: "Z%"}` without formatted per-execution output.
+
 ---
 
 ### `download_test_screenshot`
@@ -524,6 +574,11 @@
 > Analyze all failures in the latest Web launch. Include screenshot analysis for each.
 
 **Expected:** Uses `filterType: 'all'`, `includeScreenshotAnalysis: true` for comprehensive failure analysis.
+
+**Prompt 3 — Count only**
+> How many failed tests without linked Jira issues are in launch 120806? Just the count, don't analyze them.
+
+**Expected:** Uses `count_only: true`. Fetches all tests and filters to failed/aborted without issues, returns `{total_tests: N, total_failed: M, filter_type: "without_issues"}` without performing expensive per-test analysis.
 
 ---
 
@@ -606,6 +661,11 @@
 > List all test runs in the iOS project for a specific milestone.
 
 **Expected:** Uses `milestoneFilter` to narrow results to a specific release cycle.
+
+**Prompt 3 — Count only**
+> How many test runs are in the Android project? Just the count.
+
+**Expected:** Uses `count_only: true`. Paginates through all pages via pageToken loop, returns `{total_count: N, pages_traversed: M}`.
 
 ---
 

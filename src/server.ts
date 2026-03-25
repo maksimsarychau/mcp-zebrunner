@@ -966,10 +966,11 @@ async function main() {
 
   // ========== CORE WORKING FEATURES ==========
 
-  server.tool(
+  server.registerTool(
     "list_test_suites",
-    "📋 List test suites for a project (✅ Verified Working)",
     {
+      description: "📋 List test suites for a project (✅ Verified Working)",
+    inputSchema: {
       project_key: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
       project_id: z.number().int().positive().optional().describe("Project ID (alternative to project_key)"),
       format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format"),
@@ -977,12 +978,43 @@ async function main() {
       page: z.number().int().nonnegative().default(0).describe("Page number (0-based)"),
       size: z.number().int().positive().max(1000).default(50).describe("Page size (configurable via MAX_PAGE_SIZE env var)"),
       page_token: z.string().optional().describe("Page token for pagination"),
+      count_only: z.boolean().default(false).describe(
+        "When true, paginates through all pages and returns only the total count of suites without data. " +
+        "Useful for metrics and dashboards. Bypasses MCP response size limits."
+      ),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI")
+    }
     },
     async (args) => {
-      const { project_key, project_id, format, include_hierarchy, page, size, page_token, include_clickable_links } = args;
+      const { project_key, project_id, format, include_hierarchy, page, size, page_token, count_only, include_clickable_links } = args;
 
       try {
+        if (!project_key && !project_id) {
+          throw new Error('Either project_key or project_id must be provided');
+        }
+
+        if (count_only) {
+          let totalCount = 0;
+          let pageCount = 0;
+          let currentPageToken: string | undefined = undefined;
+          do {
+            const response = await client.getTestSuites(project_key || '', {
+              projectId: project_id,
+              size: MAX_PAGE_SIZE,
+              pageToken: currentPageToken
+            });
+            totalCount += (response.items || []).length;
+            pageCount++;
+            currentPageToken = response._meta?.nextPageToken;
+          } while (currentPageToken && pageCount < 1000);
+
+          return { content: [{ type: "text" as const, text: JSON.stringify({
+            total_count: totalCount,
+            pages_traversed: pageCount,
+            project_key: project_key || String(project_id)
+          }, null, 2) }] };
+        }
+
         // Get clickable links configuration
         const clickableLinkConfig = getClickableLinkConfig(include_clickable_links, ZEBRUNNER_URL);
 
@@ -997,10 +1029,6 @@ async function main() {
         }
 
         debugLog("Listing test suites", { project_key, project_id, format, include_hierarchy, page, size, page_token });
-
-        if (!project_key && !project_id) {
-          throw new Error('Either project_key or project_id must be provided');
-        }
 
         const searchParams = {
           projectId: project_id,
@@ -1059,13 +1087,14 @@ async function main() {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "get_test_case_by_key",
-    `🔍 Get detailed test case by key or numeric ID. Accepts:
+    {
+      description: `🔍 Get detailed test case by key or numeric ID. Accepts:
 • Test case key: 'MCP-29', 'MCP-2'
 • Numeric ID: '86280' (requires project_key)
 • From Zebrunner URL: extract project_key and caseId from URLs like https://example.zebrunner.com/projects/MCP/test-cases?caseId=86280 → project_key='MCP', case_key='86280'`,
-    {
+    inputSchema: {
       project_key: z.string().min(1).optional().describe("Project key (e.g., 'MCP', 'MCP'). Auto-detected from case_key if it contains a key pattern like 'MCP-29'. Required when case_key is a numeric ID."),
       case_key: z.string().min(1).describe("Test case key (e.g., 'MCP-29') OR numeric test case ID (e.g., '86280'). When providing a numeric ID, project_key is required."),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
@@ -1073,6 +1102,7 @@ async function main() {
       include_suite_hierarchy: z.boolean().default(false).describe("Include featureSuiteId and rootSuiteId with suite hierarchy path"),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI"),
       include_execution_history: z.boolean().default(false).describe("Include TCM execution history (manual + automated runs). Shows last 10 executions with status, environment, and configurations.")
+    }
     },
     async (args) => {
       const { case_key, format, include_debug, include_suite_hierarchy, include_clickable_links, include_execution_history } = args;
@@ -1172,22 +1202,28 @@ async function main() {
 
   // ========== ENHANCED FEATURES ==========
 
-  server.tool(
+  server.registerTool(
     "get_all_subsuites",
-    "📋 Get all subsuites from a root suite as flat list with pagination",
     {
+      description: "📋 Get all subsuites from a root suite as flat list with pagination",
+    inputSchema: {
       project_key: z.string().min(1).describe("Project key"),
       root_suite_id: z.number().int().positive().describe("Root suite ID to get all subsuites from"),
       include_root: z.boolean().default(true).describe("Include the root suite in results"),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
       page: z.number().int().nonnegative().default(0).describe("Page number (0-based)"),
-      size: z.number().int().positive().max(1000).default(50).describe("Page size (configurable via MAX_PAGE_SIZE env var)")
+      size: z.number().int().positive().max(1000).default(50).describe("Page size (configurable via MAX_PAGE_SIZE env var)"),
+      count_only: z.boolean().default(false).describe(
+        "When true, returns only the total count of subsuites without data. " +
+        "Loads all suites internally to compute the count, but skips formatting and pagination."
+      )
+    }
     },
     async (args) => {
-      const { project_key, root_suite_id, include_root, format, page, size } = args;
+      const { project_key, root_suite_id, include_root, format, page, size, count_only } = args;
 
       // Runtime validation for configured MAX_PAGE_SIZE
-      if (size > MAX_PAGE_SIZE) {
+      if (!count_only && size > MAX_PAGE_SIZE) {
         return {
           content: [{
             type: "text" as const,
@@ -1220,6 +1256,16 @@ async function main() {
 
         // Combine root + descendants if include_root is true
         let allSubsuites = include_root ? [rootSuite, ...descendants] : descendants;
+
+        if (count_only) {
+          return { content: [{ type: "text" as const, text: JSON.stringify({
+            total_count: allSubsuites.length,
+            project_key,
+            root_suite_id,
+            root_suite_name: rootSuite.title || rootSuite.name,
+            includes_root: include_root
+          }, null, 2) }] };
+        }
 
         // Sort by ID for consistent ordering
         allSubsuites.sort((a, b) => a.id - b.id);
@@ -1265,12 +1311,13 @@ async function main() {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "get_test_cases_advanced",
-    "📊 Advanced test case retrieval with filtering and pagination (✨ Enhanced with automation state and date filtering)\n" +
+    {
+      description: "📊 Advanced test case retrieval with filtering and pagination (✨ Enhanced with automation state and date filtering)\n" +
     "⚠️  IMPORTANT: Use 'suite_id' for direct parent suites, 'root_suite_id' for root suites that contain sub-suites.\n" +
     "💡 TIP: Use 'get_test_cases_by_suite_smart' for automatic suite type detection!",
-    {
+    inputSchema: {
       project_key: z.string().min(1).describe("Project key"),
       suite_id: z.number().int().positive().optional().describe("Filter by direct parent suite ID (for child suites)"),
       root_suite_id: z.number().int().positive().optional().describe("Filter by root suite ID (includes all sub-suites)"),
@@ -1291,12 +1338,13 @@ async function main() {
       exclude_deleted: z.boolean().default(true).describe("Exclude deleted test cases from results (default: true)"),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
       page: z.number().int().nonnegative().default(0).describe("Page number (0-based)"),
-      size: z.number().int().positive().max(100).default(10).describe("Page size (configurable via MAX_PAGE_SIZE env var)"),
+      size: z.number().int().positive().max(100).default(100).describe("Page size (configurable via MAX_PAGE_SIZE env var)"),
       count_only: z.boolean().default(false).describe(
         "When true, paginates through all pages and returns only the total count without test case data. " +
         "Efficient for metrics collection -- avoids 1MB response limit on large projects."
       ),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI")
+    }
     },
     async (args) => {
       const {
@@ -1455,15 +1503,17 @@ async function main() {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "get_suite_hierarchy",
-    "🌳 Get hierarchical test suite tree with configurable depth",
     {
+      description: "🌳 Get hierarchical test suite tree with configurable depth",
+    inputSchema: {
       project_key: z.string().min(1).describe("Project key"),
       root_suite_id: z.number().int().positive().optional().describe("Start from specific root suite"),
       max_depth: z.number().int().positive().max(10).default(5).describe("Maximum tree depth"),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI")
+    }
     },
     async (args) => {
       const { project_key, root_suite_id, max_depth, format, include_clickable_links } = args;
@@ -1527,10 +1577,11 @@ async function main() {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "get_test_cases_by_automation_state",
-    "🤖 Get test cases filtered by automation state with token-based pagination (💡 Use get_automation_states to see available states). Call repeatedly with page_token to paginate through all results.",
     {
+      description: "🤖 Get test cases filtered by automation state with token-based pagination (💡 Use get_automation_states to see available states). Call repeatedly with page_token to paginate through all results.",
+    inputSchema: {
       project_key: z.string().min(1).describe("Project key"),
       automation_states: z.union([
         z.string(),
@@ -1551,6 +1602,7 @@ async function main() {
       ),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI")
+    }
     },
     async (args) => {
       const { project_key, automation_states, suite_id, created_after, exclude_deprecated, exclude_draft, exclude_deleted, max_page_size, page_token, get_all, count_only, format, include_clickable_links } = args;
@@ -1817,12 +1869,14 @@ async function main() {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "get_automation_states",
-    "🔧 Get available automation states for a project (names and IDs)",
     {
+      description: "🔧 Get available automation states for a project (names and IDs)",
+    inputSchema: {
       project: z.union([z.enum(["web","android","ios","api"]), z.string(), z.number()]).describe("Project alias (web/android/ios/api), project key, or project ID"),
       format: z.enum(['json', 'markdown']).default('json').describe("Output format")
+    }
     },
     async (args) => {
       try {
@@ -1910,10 +1964,11 @@ async function main() {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "get_test_case_by_title",
-    "🔍 Get test cases by title using partial match search with pagination support",
     {
+      description: "🔍 Get test cases by title using partial match search with pagination support",
+    inputSchema: {
       project_key: z.string().min(1).describe("Project key"),
       title: z.string().min(1).describe("Title to search for (partial match)"),
       max_page_size: z.number().int().positive().max(100).default(10).describe("Maximum number of results per page"),
@@ -1925,6 +1980,7 @@ async function main() {
       ),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI")
+    }
     },
     async (args) => {
       const { project_key, title, max_page_size, page_token, get_all, count_only, format, include_clickable_links } = args;
@@ -2067,10 +2123,11 @@ async function main() {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "get_test_case_by_filter",
-    "🔍 Get test cases using advanced filtering options with exact matching",
     {
+      description: "🔍 Get test cases using advanced filtering options with exact matching",
+    inputSchema: {
       project_key: z.string().min(1).describe("Project key"),
       test_suite_id: z.number().int().positive().optional().describe("Filter by exact test suite ID"),
       created_after: z.string().optional().describe("Filter test cases created after this date (ISO format: '2025-01-01T00:00:00Z')"),
@@ -2091,6 +2148,7 @@ async function main() {
       ),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI")
+    }
     },
     async (args) => {
       const {
@@ -2299,12 +2357,14 @@ async function main() {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "get_automation_priorities",
-    "🎯 Get available priorities for a project (names and IDs)",
     {
+      description: "🎯 Get available priorities for a project (names and IDs)",
+    inputSchema: {
       project: z.union([z.enum(["web","android","ios","api"]), z.string(), z.number()]).describe("Project alias (web/android/ios/api), project key, or project ID"),
       format: z.enum(['json', 'markdown']).default('json').describe("Output format")
+    }
     },
     async (args) => {
       try {
@@ -2389,10 +2449,11 @@ async function main() {
   //
   // This improves reliability and reduces maintenance overhead.
 
-  server.tool(
+  server.registerTool(
     "get_test_coverage_by_test_case_steps_by_key",
-    "🔍 Analyze test case coverage against actual implementation with recommendations",
     {
+      description: "🔍 Analyze test case coverage against actual implementation with recommendations",
+    inputSchema: {
       project_key: z.string().min(1).optional().describe("Project key (auto-detected from case_key if not provided)"),
       case_key: z.string().min(1).describe("Test case key (e.g., 'ANDROID-6')"),
       implementation_context: z.string().min(10).describe("Actual implementation details (code snippets, file paths, or implementation description)"),
@@ -2402,6 +2463,7 @@ async function main() {
       include_suite_hierarchy: z.boolean().default(false).describe("Include featureSuiteId and rootSuiteId in analysis"),
       file_path: z.string().optional().describe("File path for adding code comments or saving markdown (optional)"),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI")
+    }
     },
     async (args) => {
       try {
@@ -2448,10 +2510,11 @@ async function main() {
 
   // ========== NEW ENHANCED TOOLS ==========
 
-  server.tool(
+  server.registerTool(
     "generate_draft_test_by_key",
-    "🧪 Generate draft test code from Zebrunner test case with intelligent framework detection",
     {
+      description: "🧪 Generate draft test code from Zebrunner test case with intelligent framework detection",
+    inputSchema: {
       project_key: z.string().min(1).optional().describe("Project key (auto-detected from case_key if not provided)"),
       case_key: z.string().min(1).describe("Test case key (e.g., 'ANDROID-6')"),
       implementation_context: z.string().min(10).describe("Implementation context (existing code, file paths, or framework hints)"),
@@ -2463,6 +2526,7 @@ async function main() {
       include_data_providers: z.boolean().default(false).describe("Include data provider templates"),
       include_suite_hierarchy: z.boolean().default(false).describe("Include featureSuiteId and rootSuiteId information"),
       file_path: z.string().optional().describe("File path for saving generated code (optional)")
+    }
     },
     async (args) => {
       try {
@@ -2630,10 +2694,11 @@ async function main() {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "get_enhanced_test_coverage_with_rules",
-    "🔍 Enhanced test coverage analysis with configurable rules validation and quality scoring",
     {
+      description: "🔍 Enhanced test coverage analysis with configurable rules validation and quality scoring",
+    inputSchema: {
       project_key: z.string().min(1).optional().describe("Project key (auto-detected from case_key if not provided)"),
       case_key: z.string().min(1).describe("Test case key (e.g., 'ANDROID-6')"),
       implementation_context: z.string().min(10).describe("Actual implementation details (code snippets, file paths, or implementation description)"),
@@ -2644,6 +2709,7 @@ async function main() {
       show_framework_detection: z.boolean().default(true).describe("Show detected framework and patterns"),
       include_suite_hierarchy: z.boolean().default(false).describe("Include featureSuiteId and rootSuiteId in analysis"),
       file_path: z.string().optional().describe("File path for adding code comments or saving markdown (optional)")
+    }
     },
     async (args) => {
       try {
@@ -2842,18 +2908,45 @@ async function main() {
   // ========== COMPREHENSIVE JAVA METHODOLOGY TOOLS ==========
   // Based on Zebrunner_MCP_API.md implementation guide
 
-  server.tool(
+  server.registerTool(
     "get_tcm_test_suites_by_project",
-    "📋 Get TCM test suites by project with pagination (Java methodology)",
     {
+      description: "📋 Get TCM test suites by project with pagination (Java methodology)",
+    inputSchema: {
       project_key: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
       max_page_size: z.number().int().positive().max(1000).default(100).describe("Maximum page size for pagination"),
       page_token: z.string().optional().describe("Page token for pagination"),
+      count_only: z.boolean().default(false).describe(
+        "When true, paginates through all pages and returns only the total count of suites without data. " +
+        "Useful for metrics and dashboards. Bypasses MCP response size limits."
+      ),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format")
+    }
     },
     async (args) => {
       try {
-        const { project_key, max_page_size, page_token, format } = args;
+        const { project_key, max_page_size, page_token, count_only, format } = args;
+
+        if (count_only) {
+          let totalCount = 0;
+          let pageCount = 0;
+          let currentPageToken: string | undefined = undefined;
+          do {
+            const response = await client.getTestSuites(project_key, {
+              size: MAX_PAGE_SIZE,
+              pageToken: currentPageToken
+            });
+            totalCount += (response.items || []).length;
+            pageCount++;
+            currentPageToken = response._meta?.nextPageToken;
+          } while (currentPageToken && pageCount < 1000);
+
+          return { content: [{ type: "text" as const, text: JSON.stringify({
+            total_count: totalCount,
+            pages_traversed: pageCount,
+            project_key
+          }, null, 2) }] };
+        }
 
         // Validate page size against configured maximum
         if (max_page_size > MAX_PAGE_SIZE) {
@@ -2894,19 +2987,25 @@ async function main() {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "get_all_tcm_test_case_suites_by_project",
-    "📋 Get ALL TCM test case suites by project using comprehensive pagination",
     {
+      description: "📋 Get ALL TCM test case suites by project using comprehensive pagination",
+    inputSchema: {
       project_key: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
       include_hierarchy: z.boolean().default(true).describe("Include hierarchy information (rootSuiteId, parentSuiteName, etc.)"),
+      count_only: z.boolean().default(false).describe(
+        "When true, returns only the total count of suites without data. " +
+        "Paginates internally to count all suites, but skips hierarchy processing and formatting."
+      ),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format")
+    }
     },
     async (args) => {
       try {
-        const { project_key, include_hierarchy, format } = args;
+        const { project_key, include_hierarchy, count_only, format } = args;
 
-        debugLog("Getting all TCM test case suites", { project_key, include_hierarchy });
+        debugLog("Getting all TCM test case suites", { project_key, include_hierarchy, count_only });
 
         // Get all suites with pagination (use large page size to get all)
         let allSuites: ZebrunnerTestSuite[] = [];
@@ -2922,15 +3021,21 @@ async function main() {
 
           allSuites.push(...result.items);
 
-          // Check if we have more pages (simple heuristic: if we got less than pageSize, we're done)
           hasMore = result.items.length === pageSize;
           page++;
 
-          // Safety check to prevent infinite loops
           if (page > 100) {
             console.error(`⚠️ Stopped pagination after 100 pages for project ${project_key}`);
             break;
           }
+        }
+
+        if (count_only) {
+          return { content: [{ type: "text" as const, text: JSON.stringify({
+            total_count: allSuites.length,
+            pages_traversed: page,
+            project_key
+          }, null, 2) }] };
         }
 
         // Apply hierarchy processing if requested
@@ -2962,12 +3067,14 @@ async function main() {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "get_root_suites",
-    "🌳 Get root suites (suites with no parent) from project",
     {
+      description: "🌳 Get root suites (suites with no parent) from project",
+    inputSchema: {
       project_key: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format")
+    }
     },
     async (args) => {
       try {
@@ -3005,15 +3112,17 @@ async function main() {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "get_tcm_suite_by_id",
-    "🔍 Find TCM suite by ID with comprehensive search",
     {
+      description: "🔍 Find TCM suite by ID with comprehensive search",
+    inputSchema: {
       project_key: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
       suite_id: z.number().int().positive().describe("Suite ID to find"),
       only_root_suites: z.boolean().default(false).describe("Search only in root suites"),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI")
+    }
     },
     async (args) => {
       try {
@@ -3089,10 +3198,11 @@ async function main() {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "get_all_tcm_test_cases_by_project",
-    "📋 Get ALL TCM test cases by project using comprehensive pagination",
     {
+      description: "📋 Get ALL TCM test cases by project using comprehensive pagination",
+    inputSchema: {
       project_key: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI"),
@@ -3104,6 +3214,7 @@ async function main() {
         "When true, returns only the total count without test case data. " +
         "Efficient for metrics collection -- avoids 1MB response limit on large projects."
       )
+    }
     },
     async (args) => {
       try {
@@ -3241,16 +3352,18 @@ async function main() {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "get_all_tcm_test_cases_with_root_suite_id",
-    "🌳 Get ALL TCM test cases enriched with root suite ID information",
     {
+      description: "🌳 Get ALL TCM test cases enriched with root suite ID information",
+    inputSchema: {
       project_key: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
       count_only: z.boolean().default(false).describe(
         "When true, returns only the total count without test case data. " +
         "Skips hierarchy enrichment for maximum efficiency."
       )
+    }
     },
     async (args) => {
       try {
@@ -3351,13 +3464,15 @@ async function main() {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "get_root_id_by_suite_id",
-    "🔍 Get root suite ID for a specific suite ID",
     {
+      description: "🔍 Get root suite ID for a specific suite ID",
+    inputSchema: {
       project_key: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
       suite_id: z.number().int().positive().describe("Suite ID to find root for"),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format")
+    }
     },
     async (args) => {
       try {
@@ -3405,10 +3520,11 @@ async function main() {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "get_test_cases_by_suite_smart",
-    "🧠 Smart test case retrieval by suite ID - automatically detects if suite is root suite and uses appropriate filtering with enhanced pagination",
     {
+      description: "🧠 Smart test case retrieval by suite ID - automatically detects if suite is root suite and uses appropriate filtering with enhanced pagination",
+    inputSchema: {
       project_key: z.string().min(1).describe("Project key (e.g., 'MCP')"),
       suite_id: z.number().int().positive().describe("Suite ID to get test cases from"),
       include_steps: z.boolean().default(false).describe("Include detailed test steps for first few cases"),
@@ -3421,6 +3537,7 @@ async function main() {
       ),
       page: z.number().int().nonnegative().default(0).describe("Page number (0-based, only used if get_all=false)"),
       size: z.number().int().positive().max(100).default(50).describe("Page size (only used if get_all=false)")
+    }
     },
     async (args) => {
       try {
@@ -3761,16 +3878,18 @@ async function main() {
 
   // ========== NEW REPORTING API TOOLS ==========
 
-  server.tool(
+  server.registerTool(
     "get_launch_details",
-    "🚀 Get comprehensive launch details including test sessions (uses new reporting API with enhanced authentication)",
     {
+      description: "🚀 Get comprehensive launch details including test sessions (uses new reporting API with enhanced authentication)",
+    inputSchema: {
       projectKey: z.string().min(1).optional().describe("Project key (e.g., 'android' or 'ANDROID') - alternative to projectId"),
       projectId: z.number().int().positive().optional().describe("Project ID (e.g., 7) - alternative to projectKey"),
       launchId: z.number().int().positive().describe("Launch ID (e.g., 118685)"),
       includeLaunchDetails: z.boolean().default(true).describe("Include detailed launch information"),
       includeTestSessions: z.boolean().default(true).describe("Include test sessions data"),
       format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format")
+    }
     },
     async (args) => {
       try {
@@ -3788,10 +3907,11 @@ async function main() {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "get_launch_test_summary",
-    "📊 Get lightweight launch test summary with statistics (auto-paginated, token-optimized)",
     {
+      description: "📊 Get lightweight launch test summary with statistics (auto-paginated, token-optimized)",
+    inputSchema: {
       projectKey: z.string().min(1).optional().describe("Project key (e.g., 'MCP') - alternative to projectId"),
       projectId: z.number().int().positive().optional().describe("Project ID (e.g., 7) - alternative to projectKey"),
       launchId: z.number().int().positive().describe("Launch ID (e.g., 119783)"),
@@ -3805,7 +3925,12 @@ async function main() {
       includeTestCases: z.boolean().default(false).describe("Include testCases array (increases token usage)"),
       format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format"),
       session_resolution: z.enum(['auto', 'per_test', 'launch_level']).default('auto').describe("Session duration resolution strategy: auto (launch-level first, fallback per-test), per_test, or launch_level"),
-      jira_base_url: z.string().url().optional().describe("Override JIRA base URL (e.g., 'https://myproject.atlassian.net'). If not set, resolved from Zebrunner integrations or JIRA_BASE_URL env var")
+      jira_base_url: z.string().url().optional().describe("Override JIRA base URL (e.g., 'https://myproject.atlassian.net'). If not set, resolved from Zebrunner integrations or JIRA_BASE_URL env var"),
+      count_only: z.boolean().default(false).describe(
+        "When true, returns only the total and per-status count of tests in the launch without full data. " +
+        "Skips session resolution, JIRA URL lookup, and formatting. Much faster than full summary."
+      )
+    }
     },
     async (args) => {
       try {
@@ -3823,10 +3948,11 @@ async function main() {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "generate_weekly_regression_stability_report",
-    "📌 Generate weekly regression stability report with pass rates, WoW deltas, and Jira-ready output",
     {
+      description: "📌 Generate weekly regression stability report with pass rates, WoW deltas, and Jira-ready output",
+    inputSchema: {
       project_key: z.string().min(1).describe("Project key (e.g., 'MCP')"),
       suites: z.array(z.object({
         name: z.string().min(1).describe("Human-readable suite name"),
@@ -3853,7 +3979,12 @@ async function main() {
       output_style: z.enum(['strict', 'default']).default('strict').describe("Output style: strict (no narrative) or default"),
       output_format: z.enum(['jira', 'json', 'dto', 'summary', 'detailed'])
         .default('jira')
-        .describe("Output format: jira (default), json, dto, summary, or detailed")
+        .describe("Output format: jira (default), json, dto, summary, or detailed"),
+      count_only: z.boolean().default(false).describe(
+        "When true, resolves builds/suites but returns only the count of matched suites without generating the full report. " +
+        "Useful for pre-checking how many suites will be included."
+      )
+    }
     },
     async (args) => {
       try {
@@ -3876,7 +4007,8 @@ async function main() {
           thresholds: args.thresholds,
           linkedIssues: args.linked_issues,
           outputStyle: args.output_style,
-          outputFormat: args.output_format
+          outputFormat: args.output_format,
+          count_only: args.count_only
         });
       } catch (error: any) {
         debugLog("Error in generate_weekly_regression_stability_report", { error: error.message, args });
@@ -3890,15 +4022,17 @@ async function main() {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "get_launch_summary",
-    "📋 Get quick launch summary without detailed test sessions (uses new reporting API)",
     {
+      description: "📋 Get quick launch summary without detailed test sessions (uses new reporting API)",
+    inputSchema: {
       projectKey: z.string().min(1).optional().describe("Project key (e.g., 'android' or 'ANDROID') - alternative to projectId"),
       projectId: z.number().int().positive().optional().describe("Project ID (e.g., 7) - alternative to projectKey"),
       launchId: z.number().int().positive().describe("Launch ID (e.g., 118685)"),
       format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format"),
       jira_base_url: z.string().url().optional().describe("Override JIRA base URL (e.g., 'https://myproject.atlassian.net'). If not set, resolved from Zebrunner integrations or JIRA_BASE_URL env var")
+    }
     },
     async (args) => {
       try {
@@ -3916,10 +4050,11 @@ async function main() {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "analyze_regression_runtime",
-    "📊 Analyze Regression Runtime Efficiency: collects per-launch elapsed time, attempt/re-run breakdown, per-test duration classification (Short / Medium / Long with configurable thresholds), Average Runtime per Test, and Weighted Runtime Index. Supports baseline comparison with a previous milestone or build to track deviation (%). Targets one project per call; aggregate across teams by calling multiple times.",
     {
+      description: "📊 Analyze Regression Runtime Efficiency: collects per-launch elapsed time, attempt/re-run breakdown, per-test duration classification (Short / Medium / Long with configurable thresholds), Average Runtime per Test, and Weighted Runtime Index. Supports baseline comparison with a previous milestone or build to track deviation (%). Targets one project per call; aggregate across teams by calling multiple times.",
+    inputSchema: {
       project: z.union([z.enum(["web","android","ios","api"]), z.string(), z.number()]).describe("Project alias (web/android/ios/api), project key, or project ID"),
       milestone: z.string().optional().describe("Milestone name to find launches (e.g., 'develop-49771')"),
       build: z.string().optional().describe("Build identifier / query to find launches"),
@@ -3933,6 +4068,7 @@ async function main() {
       session_resolution: z.enum(['auto', 'per_test', 'launch_level']).default('auto').describe("Session duration resolution strategy: auto (launch-level first, fallback per-test), per_test, or launch_level"),
       medium_threshold_seconds: z.number().int().positive().default(300).describe("Duration threshold (seconds) above which a test is classified as Medium. Default: 300 (5 min)"),
       long_threshold_seconds: z.number().int().positive().default(600).describe("Duration threshold (seconds) above which a test is classified as Long. Default: 600 (10 min)")
+    }
     },
     async (args) => {
       try {
@@ -3971,10 +4107,11 @@ async function main() {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "analyze_test_failure",
-    "🔍 Deep forensic analysis of failed test including logs, screenshots, error classification, and similar failures. 💡 NEW: Compare with last passed execution to see what changed! 💡 TIP: Can be auto-invoked from Zebrunner test URLs like: https://workspace.zebrunner.com/projects/PROJECT/automation-launches/LAUNCH_ID/tests/TEST_ID",
     {
+      description: "🔍 Deep forensic analysis of failed test including logs, screenshots, error classification, and similar failures. 💡 NEW: Compare with last passed execution to see what changed! 💡 TIP: Can be auto-invoked from Zebrunner test URLs like: https://workspace.zebrunner.com/projects/PROJECT/automation-launches/LAUNCH_ID/tests/TEST_ID",
+    inputSchema: {
       testId: z.number().int().positive().describe("Test ID (e.g., 5451420)"),
       testRunId: z.number().int().positive().describe("Test Run ID / Launch ID (e.g., 120806)"),
       projectKey: z.string().min(1).optional().describe("Project key (e.g., 'MCP') - alternative to projectId"),
@@ -3997,6 +4134,7 @@ async function main() {
         includeDuration: z.boolean().optional().describe("Compare execution duration (default: true)")
       }).optional().describe("Compare current failure with last passed execution to identify what changed"),
       jira_base_url: z.string().url().optional().describe("Override JIRA base URL (e.g., 'https://myproject.atlassian.net'). If not set, resolved from Zebrunner integrations or JIRA_BASE_URL env var")
+    }
     },
     async (args) => {
       try {
@@ -4014,16 +4152,22 @@ async function main() {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "get_test_execution_history",
-    "📊 Get execution history for a test across multiple launches - shows pass/fail history, last passed execution, and pass rate",
     {
+      description: "📊 Get execution history for a test across multiple launches - shows pass/fail history, last passed execution, and pass rate",
+    inputSchema: {
       testId: z.number().int().positive().describe("Test ID"),
       testRunId: z.number().int().positive().describe("Test Run ID / Launch ID containing the test"),
       projectKey: z.string().min(1).optional().describe("Project key (e.g., 'MCP') - alternative to projectId"),
       projectId: z.number().int().positive().optional().describe("Project ID - alternative to projectKey"),
       limit: z.number().int().positive().default(10).describe("Number of history items to return (default: 10, max: 50)"),
+      count_only: z.boolean().default(false).describe(
+        "When true, returns only the total execution count and pass rate without full history data. " +
+        "Skips formatting and detailed per-execution output."
+      ),
       format: z.enum(['dto', 'json', 'string']).default('string').describe("Output format: dto (structured), json, or string (markdown table)")
+    }
     },
     async (args) => {
       try {
@@ -4041,15 +4185,17 @@ async function main() {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "download_test_screenshot",
-    "📸 Download test screenshot with authentication from Zebrunner",
     {
+      description: "📸 Download test screenshot with authentication from Zebrunner",
+    inputSchema: {
       screenshotUrl: z.string().describe("Screenshot URL (e.g., 'https://your-workspace.zebrunner.com/files/abc123' or '/files/abc123')"),
       testId: z.number().int().positive().optional().describe("Test ID for context"),
       projectKey: z.string().min(1).optional().describe("Project key for context"),
       outputPath: z.string().optional().describe("Custom output path (default: temp directory)"),
       returnBase64: z.boolean().default(false).describe("Return base64 encoded image")
+    }
     },
     async (args) => {
       try {
@@ -4067,16 +4213,18 @@ async function main() {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "analyze_screenshot",
-    "🔍 Analyze test screenshot with OCR and visual analysis - returns image to Claude Vision for detailed analysis",
     {
+      description: "🔍 Analyze test screenshot with OCR and visual analysis - returns image to Claude Vision for detailed analysis",
+    inputSchema: {
       screenshotUrl: z.string().optional().describe("Screenshot URL to download and analyze"),
       screenshotPath: z.string().optional().describe("Local path to screenshot file"),
       testId: z.number().int().positive().optional().describe("Test ID for context"),
       enableOCR: z.boolean().default(false).describe("Enable OCR text extraction (slower)"),
       analysisType: z.enum(['basic', 'detailed']).default('detailed').describe("basic=metadata+OCR only, detailed=includes image for Claude Vision"),
       expectedState: z.string().optional().describe("Expected UI state for comparison")
+    }
     },
     async (args) => {
       try {
@@ -4094,10 +4242,11 @@ async function main() {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "analyze_test_execution_video",
-    "🎬 Download and analyze test execution video with Claude Vision - extracts frames, compares with test case, and predicts if failure is bug or test issue. NEW: Analysis depth modes (quick/standard/detailed), parallel frame extraction, similar failures search, and historical trends analysis!",
     {
+      description: "🎬 Download and analyze test execution video with Claude Vision - extracts frames, compares with test case, and predicts if failure is bug or test issue. NEW: Analysis depth modes (quick/standard/detailed), parallel frame extraction, similar failures search, and historical trends analysis!",
+    inputSchema: {
       testId: z.number().int().positive().describe("Test ID from Zebrunner"),
       testRunId: z.number().int().positive().describe("Launch ID / Test Run ID"),
       projectKey: z.string().min(1).optional().describe("Project key (MCP, etc.)"),
@@ -4114,6 +4263,7 @@ async function main() {
       includeLogCorrelation: z.boolean().default(true).describe("Correlate frames with log timestamps"),
       format: z.enum(['detailed', 'summary', 'jira']).default('detailed').describe("Output format"),
       generateVideoReport: z.boolean().default(true).describe("Generate timestamped report")
+    }
     },
     async (args) => {
       try {
@@ -4135,10 +4285,11 @@ async function main() {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "detailed_analyze_launch_failures",
-    "🚀 Analyze failed tests WITHOUT linked issues in a launch with grouping, statistics, and recommendations. Automatically analyzes all tests if ≤10, otherwise first 10 (use offset/limit for more). Use filterType: 'all' to include tests with issues. Supports pagination and screenshot analysis. **NEW:** Jira format with smart grouping - creates combined tickets for similar errors! 💡 TIP: Can be auto-invoked from Zebrunner launch URLs like: https://workspace.zebrunner.com/projects/PROJECT/automation-launches/LAUNCH_ID",
     {
+      description: "🚀 Analyze failed tests WITHOUT linked issues in a launch with grouping, statistics, and recommendations. Automatically analyzes all tests if ≤10, otherwise first 10 (use offset/limit for more). Use filterType: 'all' to include tests with issues. Supports pagination and screenshot analysis. **NEW:** Jira format with smart grouping - creates combined tickets for similar errors! 💡 TIP: Can be auto-invoked from Zebrunner launch URLs like: https://workspace.zebrunner.com/projects/PROJECT/automation-launches/LAUNCH_ID",
+    inputSchema: {
       testRunId: z.number().int().positive().describe("Launch ID / Test Run ID (e.g., 120806)"),
       projectKey: z.string().min(1).optional().describe("Project key (e.g., 'MCP') - alternative to projectId"),
       projectId: z.number().int().positive().optional().describe("Project ID - alternative to projectKey"),
@@ -4150,7 +4301,12 @@ async function main() {
       executionMode: z.enum(['sequential', 'parallel', 'batches']).default('sequential').describe("Execution mode: sequential (safe), parallel (fast), or batches (balanced)"),
       batchSize: z.number().int().positive().default(5).describe("Batch size if executionMode is 'batches' (default: 5)"),
       offset: z.number().int().min(0).default(0).describe("Pagination offset - start from test N (e.g., 0 for first 20, 20 for next 20)"),
-      limit: z.number().int().positive().default(20).describe("Number of tests to analyze (default: 20, max recommended: 30)")
+      limit: z.number().int().positive().default(20).describe("Number of tests to analyze (default: 20, max recommended: 30)"),
+      count_only: z.boolean().default(false).describe(
+        "When true, returns only the total count of failed tests (with or without issues) without performing analysis. " +
+        "Skips expensive per-test analysis, session lookups, and screenshot processing."
+      )
+    }
     },
     async (args) => {
       try {
@@ -4168,14 +4324,20 @@ async function main() {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "get_all_launches_for_project",
-    "📋 Get all launches for a project with pagination (uses new reporting API)",
     {
+      description: "📋 Get all launches for a project with pagination (uses new reporting API)",
+    inputSchema: {
       project: z.union([z.enum(["web","android","ios","api"]), z.string(), z.number()]).describe("Project alias (web/android/ios/api), project key, or project ID"),
       page: z.number().int().positive().default(1).describe("Page number (starts from 1)"),
       pageSize: z.number().int().positive().max(100).default(20).describe("Number of launches per page (max 100)"),
+      count_only: z.boolean().default(false).describe(
+        "When true, returns only the total count of launches without full data. " +
+        "Uses API metadata for an efficient single-request count. Bypasses MCP response size limits."
+      ),
       format: z.enum(['raw', 'formatted']).default('formatted').describe("Output format - 'raw' for full API response, 'formatted' for user-friendly display")
+    }
     },
     async (args) => {
       try {
@@ -4183,6 +4345,14 @@ async function main() {
 
         // Resolve project ID using the same logic as other tools
         const { projectId } = await resolveProjectId(args.project);
+
+        if (args.count_only) {
+          const countData = await reportingClient.getLaunches(projectId, { page: 1, pageSize: 1 });
+          return { content: [{ type: "text" as const, text: JSON.stringify({
+            total_count: countData._meta.total,
+            project: args.project
+          }, null, 2) }] };
+        }
 
         // Get launches using the new API method
         const launchesData = await reportingClient.getLaunches(projectId, {
@@ -4272,16 +4442,22 @@ async function main() {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "get_all_launches_with_filter",
-    "🔍 Get launches with filtering by milestone, build number, or launch name (uses new reporting API)",
     {
+      description: "🔍 Get launches with filtering by milestone, build number, or launch name (uses new reporting API)",
+    inputSchema: {
       project: z.union([z.enum(["web","android","ios","api"]), z.string(), z.number()]).describe("Project alias (web/android/ios/api), project key, or project ID"),
       milestone: z.string().optional().describe("Filter by milestone name (e.g., '25.39.0')"),
       query: z.string().optional().describe("Search query for build number or launch name (e.g., 'your-app-25.39.0-45915' or 'Performance')"),
       page: z.number().int().positive().default(1).describe("Page number (starts from 1)"),
       pageSize: z.number().int().positive().max(100).default(20).describe("Number of launches per page (max 100)"),
+      count_only: z.boolean().default(false).describe(
+        "When true, returns only the total count of matching launches without full data. " +
+        "Uses API metadata for an efficient single-request count. Bypasses MCP response size limits."
+      ),
       format: z.enum(['raw', 'formatted']).default('formatted').describe("Output format - 'raw' for full API response, 'formatted' for user-friendly display")
+    }
     },
     async (args) => {
       try {
@@ -4299,6 +4475,23 @@ async function main() {
 
         // Resolve project ID using the same logic as other tools
         const { projectId } = await resolveProjectId(args.project);
+
+        if (args.count_only) {
+          const countData = await reportingClient.getLaunches(projectId, {
+            page: 1, pageSize: 1,
+            milestone: args.milestone,
+            query: args.query
+          });
+          let filterDesc = '';
+          if (args.milestone && args.query) filterDesc = `milestone "${args.milestone}" and query "${args.query}"`;
+          else if (args.milestone) filterDesc = `milestone "${args.milestone}"`;
+          else if (args.query) filterDesc = `query "${args.query}"`;
+          return { content: [{ type: "text" as const, text: JSON.stringify({
+            total_count: countData._meta.total,
+            project: args.project,
+            filter: filterDesc
+          }, null, 2) }] };
+        }
 
         // Get launches using the new API method with filters
         const launchesData = await reportingClient.getLaunches(projectId, {
@@ -4401,10 +4594,11 @@ async function main() {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "test_reporting_connection",
-    "🔌 Test connection to Zebrunner Reporting API with new authentication",
-    {},
+    {
+      description: "🔌 Test connection to Zebrunner Reporting API with new authentication",
+    },
     async () => {
       try {
         debugLog("test_reporting_connection called");
@@ -4432,20 +4626,22 @@ async function main() {
   );
 
   // === Tool: About MCP Tools (discovery and guidance) ===
-  server.tool(
+  server.registerTool(
     "about_mcp_tools",
-    "📚 Summarize Zebrunner MCP tools or show detailed info for one tool with examples and approximate token usage",
     {
-      mode: z.enum(["summary", "tool"]).default("summary")
-        .describe("summary: all tools overview; tool: detailed view for one tool"),
-      tool_name: z.string().optional()
-        .describe("Tool name for detailed mode, e.g. analyze_test_execution_video"),
-      include_examples: z.boolean().default(true)
-        .describe("Include example prompts"),
-      include_token_estimates: z.boolean().default(true)
-        .describe("Include approximate token usage ranges"),
-      include_role_benefits: z.boolean().default(true)
-        .describe("Include role-based value summary")
+      description: "📚 Summarize Zebrunner MCP tools or show detailed info for one tool with examples and approximate token usage",
+      inputSchema: {
+        mode: z.enum(["summary", "tool"]).default("summary")
+          .describe("summary: all tools overview; tool: detailed view for one tool"),
+        tool_name: z.string().optional()
+          .describe("Tool name for detailed mode, e.g. analyze_test_execution_video"),
+        include_examples: z.boolean().default(true)
+          .describe("Include example prompts"),
+        include_token_estimates: z.boolean().default(true)
+          .describe("Include approximate token usage ranges"),
+        include_role_benefits: z.boolean().default(true)
+          .describe("Include role-based value summary")
+      }
     },
     async (args) => {
       try {
@@ -4491,10 +4687,11 @@ async function main() {
   // ========== ZEBRUNNER WIDGET TOOLS ==========
 
   // === Tool #1: Platform test results by period ===
-  server.tool(
+  server.registerTool(
     "get_platform_results_by_period",
-    "📊 Get test results by platform for a given period (SQL widget, templateId: 8)",
     {
+      description: "📊 Get test results by platform for a given period (SQL widget, templateId: 8)",
+    inputSchema: {
       project: z.union([z.enum(["web","android","ios","api"]), z.string(), z.number()])
         .default("web")
         .describe("Project alias ('web', 'android', 'ios', 'api'), project key, or numeric projectId"),
@@ -4517,6 +4714,7 @@ async function main() {
         .describe("Override dashboard title"),
       format: z.enum(['raw', 'formatted']).default('formatted')
         .describe("Output format: raw widget response or formatted data")
+    }
     },
     async (args) => {
       try {
@@ -4574,10 +4772,11 @@ async function main() {
   );
 
   // === Tool #2: Top N most frequent bugs (with optional links) ===
-  server.tool(
+  server.registerTool(
     "get_top_bugs",
-    "🐞 Top N most frequent defects with optional issue links (SQL widget, templateId: 4)",
     {
+      description: "🐞 Top N most frequent defects with optional issue links (SQL widget, templateId: 4)",
+    inputSchema: {
       project: z.union([z.enum(["web","android","ios","api"]), z.string(), z.number()])
         .default("web")
         .describe("Project alias ('web', 'android', 'ios', 'api'), project key, or numeric projectId"),
@@ -4600,6 +4799,7 @@ async function main() {
         .describe("Optional MILESTONE filter, e.g., ['25.39.0'] for milestone filtering"),
       format: z.enum(['raw', 'formatted']).default('formatted')
         .describe("Output format: raw widget response or formatted data")
+    }
     },
     async (args) => {
       try {
@@ -4738,10 +4938,11 @@ async function main() {
   );
 
   // === Tool #2.1: Get detailed bug review for project and period ===
-  server.tool(
+  server.registerTool(
     "get_bug_review",
-    "🔍 Get detailed bug review with failures, defects, reproduction dates, and optional automatic failure detail fetching (SQL widget, templateId: 9)",
     {
+      description: "🔍 Get detailed bug review with failures, defects, reproduction dates, and optional automatic failure detail fetching (SQL widget, templateId: 9)",
+    inputSchema: {
       project: z.union([z.enum(["web","android","ios","api"]), z.string(), z.number()])
         .default("web")
         .describe("Project alias ('web', 'android', 'ios', 'api'), project key, or numeric projectId"),
@@ -4765,6 +4966,7 @@ async function main() {
         .describe("Override templateId if needed (default: 9 for Bug Review)"),
       format: z.enum(['detailed', 'summary', 'json']).default('detailed')
         .describe("Output format: detailed (full info with markdown links), summary (concise), or json (raw data)")
+    }
     },
     async (args) => {
       try {
@@ -5092,10 +5294,11 @@ ${priorityAnalysis.statistics.withoutDefects > 0 ? `- **Tracking Gap:** ${priori
   );
 
   // === Tool #2.2: Get detailed failure information by hashcode ===
-  server.tool(
+  server.registerTool(
     "get_bug_failure_info",
-    "🔬 Get comprehensive failure information including failure summary and detailed test runs (SQL widgets, templateId: 6 & 10)",
     {
+      description: "🔬 Get comprehensive failure information including failure summary and detailed test runs (SQL widgets, templateId: 6 & 10)",
+    inputSchema: {
       project: z.union([z.enum(["web","android","ios","api"]), z.string(), z.number()])
         .default("web")
         .describe("Project alias ('web', 'android', 'ios', 'api'), project key, or numeric projectId"),
@@ -5108,6 +5311,7 @@ ${priorityAnalysis.statistics.withoutDefects > 0 ? `- **Tracking Gap:** ${priori
         .describe("Time period for failure analysis (passed to widget as-is)"),
       format: z.enum(['detailed', 'summary', 'json']).default('detailed')
         .describe("Output format: detailed (full info), summary (concise), or json (raw data)")
+    }
     },
     async (args) => {
       try {
@@ -5266,10 +5470,11 @@ ${detailsInfo.map((detail, i) => {
   );
 
   // === Tool #3: Get project milestones ===
-  server.tool(
+  server.registerTool(
     "get_project_milestones",
-    "🎯 Get available milestones for a project with pagination and filtering",
     {
+      description: "🎯 Get available milestones for a project with pagination and filtering",
+    inputSchema: {
       project: z.union([z.enum(["web","android","ios","api"]), z.string(), z.number()])
         .default("web")
         .describe("Project alias ('web', 'android', 'ios', 'api'), project key, or numeric projectId"),
@@ -5282,8 +5487,13 @@ ${detailsInfo.map((detail, i) => {
       status: z.enum(["incomplete", "completed", "overdue", "all"])
         .default("incomplete")
         .describe("Filter by completion status: incomplete (default, excludes overdue), completed, overdue (incomplete but past due date), or all"),
+      count_only: z.boolean().default(false).describe(
+        "When true, returns only the total count of milestones matching the status filter. " +
+        "For 'all'/'completed' uses efficient API metadata; for 'incomplete'/'overdue' paginates to apply client-side filter."
+      ),
       format: z.enum(['raw', 'formatted']).default('formatted')
         .describe("Output format: raw API response or formatted data")
+    }
     },
     async (args) => {
       try {
@@ -5291,6 +5501,18 @@ ${detailsInfo.map((detail, i) => {
 
         // Resolve project ID with enhanced discovery and suggestions
         const { projectId } = await resolveProjectId(args.project);
+
+        // Helper function to check if a milestone is overdue
+        const isOverdue = (milestone: any): boolean => {
+          if (!milestone.dueDate || milestone.completed) {
+            return false;
+          }
+          const now = new Date();
+          const dueDate = new Date(milestone.dueDate);
+          const nowDateOnly = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+          const dueDateOnly = new Date(Date.UTC(dueDate.getUTCFullYear(), dueDate.getUTCMonth(), dueDate.getUTCDate()));
+          return dueDateOnly < nowDateOnly;
+        };
 
         // Convert status to API parameter - get raw data first, then filter client-side
         let completed: boolean | "all";
@@ -5303,38 +5525,52 @@ ${detailsInfo.map((detail, i) => {
           completed = false;
         }
 
+        if (args.count_only) {
+          if (args.status === "all" || args.status === "completed") {
+            const countData = await reportingClient.getMilestones(projectId, { page: 1, pageSize: 1, completed });
+            return { content: [{ type: "text" as const, text: JSON.stringify({
+              total_count: countData._meta.total,
+              project: args.project,
+              status: args.status
+            }, null, 2) }] };
+          }
+          // For "incomplete"/"overdue", need to paginate and apply client-side filter
+          let totalFiltered = 0;
+          let page = 1;
+          let hasMore = true;
+          while (hasMore) {
+            const pageData = await reportingClient.getMilestones(projectId, { page, pageSize: 100, completed });
+            const items = pageData.items || [];
+            if (args.status === "incomplete") {
+              totalFiltered += items.filter((m: any) => !m.completed && !isOverdue(m)).length;
+            } else {
+              totalFiltered += items.filter((m: any) => !m.completed && isOverdue(m)).length;
+            }
+            hasMore = items.length === 100;
+            page++;
+            if (page > 100) break;
+          }
+          return { content: [{ type: "text" as const, text: JSON.stringify({
+            total_count: totalFiltered,
+            project: args.project,
+            status: args.status,
+            pages_traversed: page - 1
+          }, null, 2) }] };
+        }
+
         const milestonesData = await reportingClient.getMilestones(projectId, {
           page: args.page,
           pageSize: args.pageSize,
           completed
         });
 
-        // Helper function to check if a milestone is overdue
-        const isOverdue = (milestone: any): boolean => {
-          if (!milestone.dueDate || milestone.completed) {
-            return false; // No due date or already completed = not overdue
-          }
-
-          // Get current date in user's timezone
-          const now = new Date();
-          const dueDate = new Date(milestone.dueDate);
-
-          // Compare dates using UTC to avoid timezone issues (ignore time, just check if due date has passed)
-          const nowDateOnly = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-          const dueDateOnly = new Date(Date.UTC(dueDate.getUTCFullYear(), dueDate.getUTCMonth(), dueDate.getUTCDate()));
-
-          return dueDateOnly < nowDateOnly;
-        };
-
         // Filter milestones based on status if needed
         let filteredItems = milestonesData.items;
         if (args.status === "incomplete") {
-          // Show only incomplete milestones that are NOT overdue
           filteredItems = milestonesData.items.filter(milestone =>
             !milestone.completed && !isOverdue(milestone)
           );
         } else if (args.status === "overdue") {
-          // Show only overdue milestones (incomplete but past due date)
           filteredItems = milestonesData.items.filter(milestone =>
             !milestone.completed && isOverdue(milestone)
           );
@@ -5411,10 +5647,11 @@ ${detailsInfo.map((detail, i) => {
   );
 
   // === Tool #4: Get available projects ===
-  server.tool(
+  server.registerTool(
     "get_available_projects",
-    "🏗️ Discover available projects with their keys and IDs for dynamic project selection",
     {
+      description: "🏗️ Discover available projects with their keys and IDs for dynamic project selection",
+    inputSchema: {
       starred: z.boolean().optional()
         .describe("Filter by starred projects (true=only starred, false=only non-starred, undefined=all)"),
       publiclyAccessible: z.boolean().optional()
@@ -5423,6 +5660,7 @@ ${detailsInfo.map((detail, i) => {
         .describe("Output format: raw API response or formatted data"),
       includePaginationInfo: z.boolean().default(false)
         .describe("Include pagination metadata from projects-limit endpoint")
+    }
     },
     async (args) => {
       try {
@@ -5519,10 +5757,11 @@ ${detailsInfo.map((detail, i) => {
 
   // ========== TEST CASE VALIDATION TOOL ==========
 
-  server.tool(
+  server.registerTool(
     "validate_test_case",
-    "🔍 Validate a test case against quality standards and best practices (Dynamic Rules Support + Improvement)",
     {
+      description: "🔍 Validate a test case against quality standards and best practices (Dynamic Rules Support + Improvement)",
+    inputSchema: {
       projectKey: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
       caseKey: z.string().min(1).describe("Test case key (e.g., 'ANDROID-29')"),
       rulesFilePath: z.string().optional().describe("Path to custom rules markdown file"),
@@ -5530,6 +5769,7 @@ ${detailsInfo.map((detail, i) => {
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('markdown').describe("Output format"),
       improveIfPossible: z.boolean().default(true).describe("Attempt to automatically improve the test case"),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI")
+    }
     },
     async (args) => {
       try {
@@ -5555,10 +5795,11 @@ ${detailsInfo.map((detail, i) => {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "improve_test_case",
-    "🔧 Analyze and improve a test case with detailed suggestions and optional automatic fixes",
     {
+      description: "🔧 Analyze and improve a test case with detailed suggestions and optional automatic fixes",
+    inputSchema: {
       projectKey: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
       caseKey: z.string().min(1).describe("Test case key (e.g., 'ANDROID-29')"),
       rulesFilePath: z.string().optional().describe("Path to custom rules markdown file"),
@@ -5566,6 +5807,7 @@ ${detailsInfo.map((detail, i) => {
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('markdown').describe("Output format"),
       applyHighConfidenceChanges: z.boolean().default(true).describe("Automatically apply high-confidence improvements"),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI")
+    }
     },
     async (args) => {
       try {
@@ -5593,10 +5835,11 @@ ${detailsInfo.map((detail, i) => {
 
   // ========== PUBLIC API TEST RUN TOOLS ==========
 
-  server.tool(
+  server.registerTool(
     "list_test_runs",
-    "🏃 List Test Runs from Public API with advanced filtering",
     {
+      description: "🏃 List Test Runs from Public API with advanced filtering",
+    inputSchema: {
       project: z.union([z.enum(["web","android","ios","api"]), z.string()])
         .default("web")
         .describe("Project alias ('web', 'android', 'ios', 'api') or project key"),
@@ -5616,8 +5859,13 @@ ${detailsInfo.map((detail, i) => {
       sortBy: z.enum(["-createdAt", "createdAt", "-title", "title"])
         .default("-createdAt")
         .describe("Sort order: -createdAt (newest first), createdAt (oldest first), -title (Z-A), title (A-Z)"),
+      count_only: z.boolean().default(false).describe(
+        "When true, paginates through all pages and returns only the total count of test runs without data. " +
+        "Useful for metrics and dashboards. Bypasses MCP response size limits."
+      ),
       format: z.enum(['raw', 'formatted']).default('formatted')
         .describe("Output format: raw API response or formatted data")
+    }
     },
     async (args) => {
       try {
@@ -5627,7 +5875,6 @@ ${detailsInfo.map((detail, i) => {
         const { projectId, suggestions } = await resolveProjectId(args.project);
 
         // For Public API, we need the project key, not the project ID
-        // First check if it's a known alias, otherwise treat as direct project key
         const projectKey = typeof args.project === 'string'
           ? (PROJECT_ALIASES[args.project] || args.project)
           : undefined;
@@ -5648,15 +5895,13 @@ ${detailsInfo.map((detail, i) => {
           let milestoneId: number;
 
           if (typeof args.milestoneFilter === 'number') {
-            // Already an ID
             milestoneId = args.milestoneFilter;
           } else {
-            // It's a name, need to look up the ID
             try {
               const milestonesData = await reportingClient.getMilestones(projectId, {
                 page: 1,
                 pageSize: 100,
-                completed: 'all' // Get all milestones to find the one we need
+                completed: 'all'
               });
 
               const milestone = milestonesData.items.find((m: any) => m.name === args.milestoneFilter);
@@ -5673,8 +5918,6 @@ ${detailsInfo.map((detail, i) => {
         }
 
         if (args.buildNumberFilter) {
-          // Search in configurations.optionName for build numbers (this is where build info is typically stored)
-          // Also search in title and description as fallback
           filters.push(`(configurations.optionName ~= '${args.buildNumberFilter.replace(/'/g, "\\'")}' OR title ~= '${args.buildNumberFilter.replace(/'/g, "\\'")}' OR description ~= '${args.buildNumberFilter.replace(/'/g, "\\'")}')`);
         }
 
@@ -5683,6 +5926,31 @@ ${detailsInfo.map((detail, i) => {
         }
 
         const filter = filters.length > 0 ? filters.join(' AND ') : undefined;
+
+        if (args.count_only) {
+          let totalCount = 0;
+          let pageCount = 0;
+          let currentPageToken: string | undefined = undefined;
+          do {
+            const response = await client.listPublicTestRuns({
+              projectKey,
+              pageToken: currentPageToken,
+              maxPageSize: 100,
+              filter,
+              sortBy: args.sortBy
+            });
+            totalCount += (response.items || []).length;
+            pageCount++;
+            currentPageToken = response._meta?.nextPageToken;
+          } while (currentPageToken && pageCount < 1000);
+
+          return { content: [{ type: "text" as const, text: JSON.stringify({
+            total_count: totalCount,
+            pages_traversed: pageCount,
+            project_key: projectKey,
+            ...(filter ? { filter } : {})
+          }, null, 2) }] };
+        }
 
         const testRunsData = await client.listPublicTestRuns({
           projectKey,
@@ -5757,10 +6025,11 @@ ${detailsInfo.map((detail, i) => {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "get_test_run_by_id",
-    "🔍 Get detailed Test Run information by ID from Public API",
     {
+      description: "🔍 Get detailed Test Run information by ID from Public API",
+    inputSchema: {
       id: z.number().int().positive()
         .describe("Test Run ID"),
       project: z.union([z.enum(["web","android","ios","api"]), z.string()])
@@ -5768,6 +6037,7 @@ ${detailsInfo.map((detail, i) => {
         .describe("Project alias ('web', 'android', 'ios', 'api') or project key"),
       format: z.enum(['raw', 'formatted']).default('formatted')
         .describe("Output format: raw API response or formatted data")
+    }
     },
     async (args) => {
       try {
@@ -5866,10 +6136,11 @@ ${detailsInfo.map((detail, i) => {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "list_test_run_test_cases",
-    "📝 List all Test Cases in a Test Run from Public API",
     {
+      description: "📝 List all Test Cases in a Test Run from Public API",
+    inputSchema: {
       testRunId: z.number().int().positive()
         .describe("Test Run ID"),
       project: z.union([z.enum(["web","android","ios","api"]), z.string()])
@@ -5877,6 +6148,7 @@ ${detailsInfo.map((detail, i) => {
         .describe("Project alias ('web', 'android', 'ios', 'api') or project key"),
       format: z.enum(['raw', 'formatted']).default('formatted')
         .describe("Output format: raw API response or formatted data")
+    }
     },
     async (args) => {
       try {
@@ -5974,13 +6246,15 @@ ${detailsInfo.map((detail, i) => {
 
   // ========== TEST RUN SETTINGS TOOLS ==========
 
-  server.tool(
+  server.registerTool(
     "get_test_run_result_statuses",
-    "Get list of Result Statuses configured for a project. These statuses are used when assigning results to Test Cases.",
     {
+      description: "Get list of Result Statuses configured for a project. These statuses are used when assigning results to Test Cases.",
+    inputSchema: {
       project: z.union([z.enum(["web","android","ios","api"]), z.string()])
         .describe("Project alias ('web', 'android', 'ios', 'api') or project key"),
       format: z.enum(["raw", "formatted"]).default("formatted").describe("Output format")
+    }
     },
     async (args) => {
       debugLog("get_test_run_result_statuses called", args);
@@ -6045,13 +6319,15 @@ ${detailsInfo.map((detail, i) => {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "get_test_run_configuration_groups",
-    "Get list of Configuration Groups and their Options for a project. These are used to configure Test Runs.",
     {
+      description: "Get list of Configuration Groups and their Options for a project. These are used to configure Test Runs.",
+    inputSchema: {
       project: z.union([z.enum(["web","android","ios","api"]), z.string()])
         .describe("Project alias ('web', 'android', 'ios', 'api') or project key"),
       format: z.enum(["raw", "formatted"]).default("formatted").describe("Output format")
+    }
     },
     async (args) => {
       debugLog("get_test_run_configuration_groups called", args);
@@ -6118,10 +6394,11 @@ ${detailsInfo.map((detail, i) => {
 
   // ========== DUPLICATE ANALYSIS TOOL ==========
 
-  server.tool(
+  server.registerTool(
     "analyze_test_cases_duplicates",
-    "🔍 Analyze test cases for duplicates and group similar ones by step similarity (80-90%)",
     {
+      description: "🔍 Analyze test cases for duplicates and group similar ones by step similarity (80-90%)",
+    inputSchema: {
       project_key: z.string().min(1).describe("Project key (e.g., 'ANDROID', 'IOS')"),
       suite_id: z.number().optional().describe("Optional: Analyze specific test suite ID"),
       test_case_keys: z.array(z.string()).optional().describe("Optional: Analyze specific test case keys instead of suite"),
@@ -6129,6 +6406,7 @@ ${detailsInfo.map((detail, i) => {
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('markdown').describe("Output format"),
       include_similarity_matrix: z.boolean().default(false).describe("Include detailed similarity matrix in output"),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI (markdown format only)")
+    }
     },
     async (args) => {
       try {
@@ -6436,10 +6714,11 @@ ${detailsInfo.map((detail, i) => {
 
   // ========== SEMANTIC DUPLICATE ANALYSIS TOOL ==========
 
-  server.tool(
+  server.registerTool(
     "analyze_test_cases_duplicates_semantic",
-    "🧠 Advanced semantic duplicate analysis using LLM-powered step clustering and two-phase analysis",
     {
+      description: "🧠 Advanced semantic duplicate analysis using LLM-powered step clustering and two-phase analysis",
+    inputSchema: {
       project_key: z.string().min(1).describe("Project key (e.g., 'ANDROID', 'IOS')"),
       suite_id: z.number().optional().describe("Optional: Analyze specific test suite ID"),
       test_case_keys: z.array(z.string()).optional().describe("Optional: Analyze specific test case keys instead of suite"),
@@ -6452,6 +6731,7 @@ ${detailsInfo.map((detail, i) => {
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('markdown').describe("Output format"),
       include_similarity_matrix: z.boolean().default(false).describe("Include detailed similarity matrix in output"),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI (markdown format only)")
+    }
     },
     async (args) => {
       try {
@@ -6861,13 +7141,14 @@ ${detailsInfo.map((detail, i) => {
 
   // ========== AGGREGATE TEST CASES BY FEATURE ==========
 
-  server.tool(
+  server.registerTool(
     "aggregate_test_cases_by_feature",
-    "🔍 Find ALL test cases related to a specific feature across the project.\n" +
+    {
+      description: "🔍 Find ALL test cases related to a specific feature across the project.\n" +
     "Searches in title, description, preconditions, and test steps (case-insensitive, partial match).\n" +
     "Groups results by Root Suite and Feature Suite, avoiding duplicates.\n" +
     "Output formats: detailed (full hierarchy), short (summary), dto (JSON), test_run_rules (for automation tags)",
-    {
+    inputSchema: {
       project_key: z.string().min(1).describe("Project key (e.g., 'MCPAND', 'MCP')"),
       feature_keyword: z.string().min(1).describe("Feature keyword to search for (case-insensitive, partial match)"),
       output_format: z.enum(['detailed', 'short', 'dto', 'test_run_rules']).default('short').describe(
@@ -6877,6 +7158,7 @@ ${detailsInfo.map((detail, i) => {
         "TAGS output format: by_root_suite (separate TAGS line per root suite, default) or single_line (all combined on one line)"
       ),
       max_results: z.number().int().positive().max(2000).default(500).describe("Maximum test cases to process")
+    }
     },
     async (args) => {
       const { project_key, feature_keyword, output_format, tags_format, max_results } = args;
