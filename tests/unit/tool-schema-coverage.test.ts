@@ -10,7 +10,7 @@ function readServerSource() {
 
 function schemaBlockForTool(source: string, toolName: string): string | null {
   const escapedName = toolName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const startPattern = new RegExp(`server\\.tool\\(\\s*"${escapedName}"`, "m");
+  const startPattern = new RegExp(`server\\.registerTool\\(\\s*"${escapedName}"`, "m");
   const startMatch = source.match(startPattern);
   if (!startMatch || startMatch.index === undefined) return null;
 
@@ -18,7 +18,14 @@ function schemaBlockForTool(source: string, toolName: string): string | null {
   const asyncIndex = source.indexOf(",\n    async", startIndex);
   if (asyncIndex === -1) return null;
 
-  const schemaStart = source.indexOf("{", startIndex);
+  // Look for inputSchema: { within the config object
+  const inputSchemaIdx = source.indexOf("inputSchema:", startIndex);
+  if (inputSchemaIdx === -1 || inputSchemaIdx > asyncIndex) {
+    // Tool has no inputSchema (zero-arg tool) — return empty string
+    return "";
+  }
+
+  const schemaStart = source.indexOf("{", inputSchemaIdx);
   if (schemaStart === -1 || schemaStart > asyncIndex) return null;
 
   let depth = 0;

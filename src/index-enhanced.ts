@@ -86,10 +86,11 @@ async function main() {
   // ========== ENHANCED TOOLS (Based on Analysis Document) ==========
 
   // Test Cases Tools
-  server.tool(
+  server.registerTool(
     "get_test_cases",
-    "Retrieve test cases from Zebrunner with advanced filtering and pagination",
     {
+      description: "Retrieve test cases from Zebrunner with advanced filtering and pagination",
+    inputSchema: {
       projectKey: z.string().min(1),
       suiteId: z.number().int().positive().optional(),
       rootSuiteId: z.number().int().positive().optional(),
@@ -97,28 +98,32 @@ async function main() {
       format: z.enum(['dto', 'json', 'string']).default('json'),
       page: z.number().int().nonnegative().optional(),
       size: z.number().int().positive().max(200).optional()
+    }
     },
     async (args) => toolHandlers.getTestCases(args)
   );
 
-  server.tool(
+  server.registerTool(
     "find_test_case_by_key",
-    "Find a specific test case by its key with detailed information",
     {
+      description: "Find a specific test case by its key with detailed information",
+    inputSchema: {
       projectKey: z.string().min(1),
       caseKey: z.string().min(1),
       includeSteps: z.boolean().default(true),
       format: z.enum(['dto', 'json', 'string']).default('json')
+    }
     },
     async (args) => toolHandlers.findTestCaseByKey(args)
   );
 
 
   // Test Suites Tools
-  server.tool(
+  server.registerTool(
     "get_test_suites",
-    "Retrieve test suites with hierarchy support and filtering",
     {
+      description: "Retrieve test suites with hierarchy support and filtering",
+    inputSchema: {
       projectKey: z.string().min(1),
       parentSuiteId: z.number().int().positive().optional(),
       rootOnly: z.boolean().default(false),
@@ -126,37 +131,43 @@ async function main() {
       format: z.enum(['dto', 'json', 'string']).default('json'),
       page: z.number().int().nonnegative().optional(),
       size: z.number().int().positive().max(200).optional()
+    }
     },
     async (args) => toolHandlers.getTestSuites(args)
   );
 
-  server.tool(
+  server.registerTool(
     "get_suite_hierarchy",
-    "Get hierarchical test suite tree with configurable depth",
     {
+      description: "Get hierarchical test suite tree with configurable depth",
+    inputSchema: {
       projectKey: z.string().min(1),
       rootSuiteId: z.number().int().positive().optional(),
       maxDepth: z.number().int().positive().max(10).default(5),
       format: z.enum(['dto', 'json', 'string']).default('json')
+    }
     },
     async (args) => toolHandlers.getSuiteHierarchy(args)
   );
 
-  server.tool(
+  server.registerTool(
     "get_root_suites",
-    "Get only root-level test suites with hierarchy information",
     {
+      description: "Get only root-level test suites with hierarchy information",
+    inputSchema: {
       projectKey: z.string().min(1),
       format: z.enum(['dto', 'json', 'string']).default('json')
+    }
     },
     async (args) => toolHandlers.getRootSuites(args.projectKey, args.format)
   );
 
   // Test Runs and Results Tools
-  server.tool(
+  server.registerTool(
     "get_test_runs",
-    "Retrieve test execution runs with filtering by status, milestone, build, etc.",
     {
+      description: "Retrieve test execution runs with filtering by status, milestone, build, etc.",
+    inputSchema: {
       projectKey: z.string().min(1),
       status: z.string().optional(),
       milestone: z.string().optional(),
@@ -165,42 +176,49 @@ async function main() {
       format: z.enum(['dto', 'json', 'string']).default('json'),
       page: z.number().int().nonnegative().optional(),
       size: z.number().int().positive().max(200).optional()
+    }
     },
     async (args) => toolHandlers.getTestRuns(args)
   );
 
-  server.tool(
+  server.registerTool(
     "get_test_results",
-    "Get test results for a specific test run",
     {
+      description: "Get test results for a specific test run",
+    inputSchema: {
       projectKey: z.string().min(1),
       runId: z.number().int().positive(),
       status: z.string().optional(),
       format: z.enum(['dto', 'json', 'string']).default('json')
+    }
     },
     async (args) => toolHandlers.getTestResults(args)
   );
 
   // Utility Tools
-  server.tool(
+  server.registerTool(
     "get_test_cases_by_suite",
-    "Get all test cases belonging to a specific test suite",
     {
+      description: "Get all test cases belonging to a specific test suite",
+    inputSchema: {
       projectKey: z.string().min(1),
       suiteId: z.number().int().positive(),
       format: z.enum(['dto', 'json', 'string']).default('json')
+    }
     },
     async (args) => toolHandlers.getTestCasesBySuite(args.projectKey, args.suiteId, args.format)
   );
 
   // ========== LEGACY TOOLS (Backward Compatibility) ==========
 
-  server.tool(
+  server.registerTool(
     "list_test_suites",
-    "Legacy: Return list of Zebrunner test suites for a project",
     {
+      description: "Legacy: Return list of Zebrunner test suites for a project",
+    inputSchema: {
       project_key: z.string().optional(),
       project_id: z.number().int().positive().optional()
+    }
     },
     async (args) => {
       const { project_key, project_id } = args;
@@ -229,11 +247,13 @@ async function main() {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "get_test_suite",
-    "Legacy: Return detailed info of a test suite by suite_id (Limited availability)",
     {
+      description: "Legacy: Return detailed info of a test suite by suite_id (Limited availability)",
+    inputSchema: {
       suite_id: z.number().int().positive()
+    }
     },
     async (args) => {
       const { suite_id } = args;
@@ -253,11 +273,13 @@ async function main() {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "list_test_cases",
-    "Legacy: Return list of test cases for a given test suite (Limited availability)",
     {
+      description: "Legacy: Return list of test cases for a given test suite (Limited availability)",
+    inputSchema: {
       suite_id: z.number().int().positive()
+    }
     },
     async (args) => {
       const { suite_id } = args;
@@ -279,11 +301,13 @@ async function main() {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "get_test_case",
-    "Legacy: Return detailed info of a test case by case_id",
     {
+      description: "Legacy: Return detailed info of a test case by case_id",
+    inputSchema: {
       case_id: z.number().int().positive()
+    }
     },
     async (args) => {
       const { case_id } = args;
@@ -309,12 +333,14 @@ async function main() {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "get_test_case_by_key",
-    "Legacy: Return detailed info of a test case by case_key and project_key (✅ Working)",
     {
+      description: "Legacy: Return detailed info of a test case by case_key and project_key (✅ Working)",
+    inputSchema: {
       case_key: z.string().min(1),
       project_key: z.string().min(1)
+    }
     },
     async (args) => {
       const { case_key, project_key } = args;

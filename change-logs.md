@@ -4,9 +4,9 @@
 
 ### Count-Only Mode & Response Size Safety Net
 
-#### New: `count_only` parameter on 7 paginated tools
+#### New: `count_only` parameter on 18 paginated tools
 
-Added `count_only: z.boolean().default(false)` to all tools that return potentially large test case result sets. When enabled, the tool paginates through all pages but only accumulates the **count** — never storing actual test case objects (O(1) memory). Returns a lightweight JSON summary (~200 bytes):
+Added `count_only: z.boolean().default(false)` to all tools that return potentially large paginated result sets. When enabled, the tool returns only the **count** — skipping expensive formatting, analysis, and data serialization. Returns a lightweight JSON summary (~200 bytes):
 
 ```json
 {
@@ -16,7 +16,7 @@ Added `count_only: z.boolean().default(false)` to all tools that return potentia
 }
 ```
 
-**Affected tools (7 total):**
+**Test case tools (7 — original batch):**
 
 | Tool | Trigger | Notes |
 |---|---|---|
@@ -28,7 +28,24 @@ Added `count_only: z.boolean().default(false)` to all tools that return potentia
 | `get_all_tcm_test_cases_with_root_suite_id` | `count_only: true` | Counts all, skips hierarchy enrichment |
 | `get_test_cases_by_suite_smart` | `count_only: true` | Auto-detects suite type, then counts |
 
-**Why:** The Zebrunner Public API is cursor-based with no total count endpoint. E2E Prompt 3 (Automation Coverage Sustainability) needs **counts** across thousands of test cases, but `get_all=true` with `format=json` produces payloads exceeding the ~1MB MCP host limit. `count_only` solves this.
+**Suite, launch, milestone, test run, and analytical tools (11 — new batch):**
+
+| Tool | Trigger | Pattern | Notes |
+|---|---|---|---|
+| `list_test_suites` | `count_only: true` | Pagination loop | Counts all suites via pageToken loop |
+| `get_all_subsuites` | `count_only: true` | In-memory count | Loads all, returns descendant count |
+| `get_tcm_test_suites_by_project` | `count_only: true` | Pagination loop | Counts suites via pageToken loop |
+| `get_all_tcm_test_case_suites_by_project` | `count_only: true` | In-memory count | Counts all suites, skips hierarchy |
+| `get_all_launches_for_project` | `count_only: true` | API `_meta.total` | Single cheap API call |
+| `get_all_launches_with_filter` | `count_only: true` | API `_meta.total` | Single cheap API call with filters |
+| `get_project_milestones` | `count_only: true` | API `_meta.total` / pagination | Uses API total for all/completed; paginates for incomplete/overdue |
+| `list_test_runs` | `count_only: true` | Pagination loop | Counts test runs via pageToken loop with filters |
+| `get_launch_test_summary` | `count_only: true` | Handler early-return | Returns total + per-status counts, skips session/JIRA resolution |
+| `get_test_execution_history` | `count_only: true` | Handler early-return | Returns execution count + pass rate without formatting |
+| `detailed_analyze_launch_failures` | `count_only: true` | Handler early-return | Returns failed test count, skips expensive analysis |
+| `generate_weekly_regression_stability_report` | `count_only: true` | Handler early-return | Resolves builds, returns matched suite count without full report |
+
+**Why:** The Zebrunner Public API is cursor-based with no total count endpoint. E2E Prompt 3 (Automation Coverage Sustainability) needs **counts** across thousands of test cases, but `get_all=true` with `format=json` produces payloads exceeding the ~1MB MCP host limit. `count_only` solves this. The 11 new tools extend this to suites, launches, milestones, test runs, and analytical tools — enabling questions like "how many suites in MFPAND?" without fetching all 1,189 suite objects.
 
 #### New: Response size safety net (900KB truncation)
 

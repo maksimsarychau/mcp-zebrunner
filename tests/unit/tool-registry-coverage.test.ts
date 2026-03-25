@@ -15,7 +15,7 @@ function getProjectRoot() {
 }
 
 function extractServerTools(serverSource: string): string[] {
-  const regex = /server\.tool\(\s*"([^"]+)"/g;
+  const regex = /server\.registerTool\(\s*"([^"]+)"/g;
   const tools: string[] = [];
   let match: RegExpExecArray | null;
   while ((match = regex.exec(serverSource)) !== null) {

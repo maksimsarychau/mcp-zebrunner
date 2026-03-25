@@ -69,10 +69,11 @@ async function main() {
 
   // ========== ENHANCED TOOLS ==========
 
-  server.tool(
+  server.registerTool(
     "get_test_cases_enhanced",
-    "Retrieve test cases with advanced filtering, pagination, and multiple output formats",
     {
+      description: "Retrieve test cases with advanced filtering, pagination, and multiple output formats",
+    inputSchema: {
       projectKey: z.string().min(1),
       suiteId: z.number().int().positive().optional(),
       rootSuiteId: z.number().int().positive().optional(),
@@ -80,6 +81,7 @@ async function main() {
       format: z.enum(['dto', 'json', 'string']).default('json'),
       page: z.number().int().nonnegative().optional(),
       size: z.number().int().positive().max(200).optional()
+    }
     },
     async (args) => {
       try {
@@ -142,10 +144,11 @@ async function main() {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "get_test_suites_enhanced",
-    "Retrieve test suites with hierarchy support and multiple output formats",
     {
+      description: "Retrieve test suites with hierarchy support and multiple output formats",
+    inputSchema: {
       projectKey: z.string().min(1),
       parentSuiteId: z.number().int().positive().optional(),
       rootOnly: z.boolean().default(false),
@@ -153,6 +156,7 @@ async function main() {
       format: z.enum(['dto', 'json', 'string']).default('json'),
       page: z.number().int().nonnegative().optional(),
       size: z.number().int().positive().max(200).optional()
+    }
     },
     async (args) => {
       try {
@@ -204,14 +208,16 @@ async function main() {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "get_suite_hierarchy",
-    "Get hierarchical test suite tree with configurable depth",
     {
+      description: "Get hierarchical test suite tree with configurable depth",
+    inputSchema: {
       projectKey: z.string().min(1),
       rootSuiteId: z.number().int().positive().optional(),
       maxDepth: z.number().int().positive().max(10).default(5),
       format: z.enum(['dto', 'json', 'string']).default('json')
+    }
     },
     async (args) => {
       try {
@@ -266,14 +272,16 @@ async function main() {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "find_test_case_by_key_enhanced",
-    "Find a specific test case by its key with enhanced formatting and multiple output formats",
     {
+      description: "Find a specific test case by its key with enhanced formatting and multiple output formats",
+    inputSchema: {
       projectKey: z.string().min(1),
       caseKey: z.string().min(1),
       includeSteps: z.boolean().default(true),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json')
+    }
     },
     async (args) => {
       try {
@@ -319,12 +327,14 @@ async function main() {
 
   // ========== LEGACY TOOLS (Backward Compatibility) ==========
 
-  server.tool(
+  server.registerTool(
     "list_test_suites",
-    "Legacy: Return list of Zebrunner test suites for a project",
     {
+      description: "Legacy: Return list of Zebrunner test suites for a project",
+    inputSchema: {
       project_key: z.string().optional(),
       project_id: z.number().int().positive().optional()
+    }
     },
     async (args) => {
       const { project_key, project_id } = args;
@@ -353,12 +363,14 @@ async function main() {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "get_test_case_by_key",
-    "Legacy: Return detailed info of a test case by case_key and project_key (✅ Working)",
     {
+      description: "Legacy: Return detailed info of a test case by case_key and project_key (✅ Working)",
+    inputSchema: {
       case_key: z.string().min(1),
       project_key: z.string().min(1)
+    }
     },
     async (args) => {
       const { case_key, project_key } = args;

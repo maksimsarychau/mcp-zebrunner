@@ -126,12 +126,14 @@ async function main() {
   );
 
   // Register tools
-  server.tool(
+  server.registerTool(
     "list_test_suites",
-    "Return list of Zebrunner test suites for a project (requires project_key or project_id)",
     {
+      description: "Return list of Zebrunner test suites for a project (requires project_key or project_id)",
+    inputSchema: {
       project_key: z.string().optional(),
       project_id: z.number().int().positive().optional()
+    }
     },
     async (args) => {
       const { project_key, project_id } = args;
@@ -147,11 +149,13 @@ async function main() {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "get_test_suite",
-    "Return detailed info of a test suite by suite_id (Note: Individual suite details may not be available)",
     {
+      description: "Return detailed info of a test suite by suite_id (Note: Individual suite details may not be available)",
+    inputSchema: {
       suite_id: z.number().int().positive()
+    }
     },
     async (args) => {
       const { suite_id } = args;
@@ -171,11 +175,13 @@ async function main() {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "list_test_cases",
-    "Return list of test cases for a given test suite (Note: May not be available for all suites)",
     {
+      description: "Return list of test cases for a given test suite (Note: May not be available for all suites)",
+    inputSchema: {
       suite_id: z.number().int().positive()
+    }
     },
     async (args) => {
       const { suite_id } = args;
@@ -197,11 +203,13 @@ async function main() {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "get_test_case",
-    "Return detailed info of a test case by case_id. Also returns a Markdown export of steps.",
     {
+      description: "Return detailed info of a test case by case_id. Also returns a Markdown export of steps.",
+    inputSchema: {
       case_id: z.number().int().positive()
+    }
     },
     async (args) => {
       const { case_id } = args;
@@ -218,12 +226,14 @@ async function main() {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "get_test_case_by_key",
-    "Return detailed info of a test case by case_key and project_key (✅ Working). Also returns a Markdown export of steps.",
     {
+      description: "Return detailed info of a test case by case_key and project_key (✅ Working). Also returns a Markdown export of steps.",
+    inputSchema: {
       case_key: z.string().min(1),
       project_key: z.string().min(1)
+    }
     },
     async (args) => {
       const { case_key, project_key } = args;
@@ -240,15 +250,17 @@ async function main() {
     }
   );
 
-  server.tool(
+  server.registerTool(
     "search_test_cases",
-    "Search test cases by query (requires project_key or project_id, supports pagination: page, size)",
     {
+      description: "Search test cases by query (requires project_key or project_id, supports pagination: page, size)",
+    inputSchema: {
       project_key: z.string().optional(),
       project_id: z.number().int().positive().optional(),
       query: z.string().min(1),
       page: z.number().int().nonnegative().optional(),   // 0-based
       size: z.number().int().positive().max(200).optional()
+    }
     },
     async (args) => {
       const { project_key, project_id, query, page, size } = args;
