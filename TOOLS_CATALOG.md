@@ -238,6 +238,44 @@ Weekly stability report for project MCP using:
 - "Show me launches for build 'mcp-app-2.1.0'"
 - "Find launches for milestone 2.1.0 and build 'release-46975'"
 
+### `analyze_regression_runtime`
+
+**Description:** Comprehensive Regression Runtime Efficiency analysis. Collects per-launch elapsed time, attempt/re-run breakdown, per-test duration classification (Short / Medium / Long), and calculates metrics from both **test** and **test case** perspectives: Average Runtime, Weighted Runtime Index (WRI), and duration distribution. Supports configurable duration thresholds and optional baseline comparison with delta tracking.
+
+> **Terminology Note:** A "Test" is an atomic item in a launch (pass/fail). A "Test Case" is an atomic item from the Test Case Management (TCM) system. One Test may cover 0, 1, or many Test Cases. See [docs/TERMINOLOGY.md](docs/TERMINOLOGY.md) for full glossary.
+
+**Parameters:**
+- `project` (required) — Project key or alias (e.g., `"android"`, `"MCPAND"`)
+- `milestone` — Filter launches by milestone name (e.g., `"develop-49771"`)
+- `build` — Filter launches by build number
+- `suite_names` — Array of suite names to include
+- `launch_ids` — Array of specific launch IDs
+- `previous_milestone` — Previous milestone for baseline comparison
+- `previous_build` — Previous build for baseline comparison
+- `include_test_details` — Include per-test duration details (default: `false`)
+- `include_attempts_details` — Include per-attempt re-run details (default: `false`)
+- `format` — Output format: `"dto"`, `"json"`, `"string"` (default: `"json"`)
+- `session_resolution` — Session duration resolution strategy: `"auto"`, `"per_test"`, `"launch_level"` (default: `"auto"`)
+- `medium_threshold_seconds` — Duration threshold above which a test is classified as Medium (default: `300` = 5 min)
+- `long_threshold_seconds` — Duration threshold above which a test is classified as Long (default: `600` = 10 min)
+
+**Key Metrics (per test AND per test case):**
+- **Average Runtime per Test** = Total Elapsed / Number of Executed Tests
+- **Average Runtime per Test Case** = Total Elapsed / Number of Test Cases Covered
+- **WRI (per Test)** = Weighted average across Short (×1), Medium (×2), Long (×3) using test counts
+- **WRI (per Test Case)** = Same formula using test case counts and avgDurationPerTestCase
+- **Duration Distribution** — count, avg, and test case count per class (Short <300s, Medium 300–600s, Long ≥600s by default; configurable)
+- **Attempt Summary** — initial run + re-runs with elapsed time per attempt
+- **Test Case Coverage Breakdown** — tests with 0, 1, or 2+ linked test cases
+
+**Example Prompts:**
+- "Analyze regression runtime for the iOS project on the latest milestone. Show both average runtime per test and per test case, plus WRI and WRI per test case."
+- "Analyze regression runtime for the Android project with include_test_details: true. For each duration class, show number of tests, test cases covered, and avgDuration per test vs per test case."
+- "Run regression runtime analysis for all three projects on their latest milestones. Compare how many test cases fall into Short vs Medium vs Long buckets per team."
+- "Analyze regression runtime for the iOS project, latest vs previous milestone. Show WRI and WRI per test case for both. Has the WRI per test case improved or degraded?"
+- "Analyze regression runtime for the Web project with medium_threshold_seconds: 120 and long_threshold_seconds: 300. Show which tests fall into each bucket."
+- "Analyze regression runtime for the Android project on the latest milestone. What is the average time cost per test case in each duration bucket? Are long-running tests covering proportionally more test cases?"
+
 ---
 
 ## Video & Screenshot Analysis
@@ -867,7 +905,7 @@ For large datasets, you can specify filters and limits:
 
 ---
 
-**Last Updated:** v6.2.0 - March 2026
+**Last Updated:** v6.4.0 - March 2026
 
 For the latest features and updates, see [change-logs.md](change-logs.md).
 

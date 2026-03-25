@@ -9,6 +9,8 @@ import {
   ProjectResponseSchema,
   TestSessionsResponse,
   TestSessionsResponseSchema,
+  TestRunResponse,
+  TestRunResponseSchema,
   TestRunsResponse,
   TestRunsResponseSchema,
   TestExecutionHistoryResponse,
@@ -25,6 +27,8 @@ import {
   LogsAndScreenshotsResponseSchema,
   JiraIntegrationsResponse,
   JiraIntegrationsResponseSchema,
+  LaunchAttemptsResponse,
+  LaunchAttemptsResponseSchema,
   ZebrunnerReportingError,
   ZebrunnerReportingAuthError,
   ZebrunnerReportingNotFoundError
@@ -43,7 +47,8 @@ export class ZebrunnerReportingClient {
   private bearerToken: string | null = null;
   private tokenExpiresAt: Date | null = null;
   private projectCache: Map<string, { project: ProjectResponse, timestamp: number }> = new Map();
-  private jiraBaseUrlCache: string | null = null; // Cached JIRA base URL for session
+  private jiraBaseUrlCache: string | null = null;
+  private _jiraResolutionWarning: string | null = null;
 
   constructor(config: ZebrunnerReportingConfig) {
     this.config = {
@@ -218,6 +223,22 @@ export class ZebrunnerReportingClient {
   }
 
   /**
+   * Get launch attempts (re-run history) for a launch
+   * Returns the sequence of execution attempts including initial run and all re-runs
+   */
+  async getLaunchAttempts(launchId: number, projectId: number): Promise<LaunchAttemptsResponse> {
+    const url = `/api/reporting/v1/launches/${launchId}/attempts?projectId=${projectId}`;
+
+    if (this.config.debug) {
+      console.log(`[ZebrunnerReportingClient] Fetching launch attempts for launch ${launchId}`);
+    }
+
+    const response = await this.makeAuthenticatedRequest<any>('GET', url);
+    const data = response.data || response;
+    return LaunchAttemptsResponseSchema.parse(data);
+  }
+
+  /**
    * Test connection to the reporting API
    */
   async testConnection(): Promise<{ success: boolean; message: string; details?: any }> {
@@ -327,6 +348,57 @@ export class ZebrunnerReportingClient {
   }
 
   /**
+   * Get ALL test sessions for a launch (auto-paginate through all pages)
+   */
+  async getAllTestSessions(launchId: number, projectId: number, pageSize: number = 200): Promise<TestSessionsResponse> {
+    const firstPage = await this.getTestSessions(launchId, projectId);
+    const totalElements = firstPage.totalElements ?? firstPage.items.length;
+
+    if (firstPage.items.length >= totalElements) {
+      return firstPage;
+    }
+
+    const allItems = [...firstPage.items];
+    let currentPage = 2;
+    const totalPages = firstPage.totalPages ?? Math.ceil(totalElements / pageSize);
+
+    while (currentPage <= totalPages) {
+      const url = `/api/reporting/v1/launches/${launchId}/test-sessions?projectId=${projectId}&page=${currentPage}&size=${pageSize}`;
+      const response = await this.makeAuthenticatedRequest<any>('GET', url);
+      const data = response.data || response;
+      const parsed = TestSessionsResponseSchema.parse(data);
+      allItems.push(...parsed.items);
+
+      if (this.config.debug) {
+        console.log(`[ZebrunnerReportingClient] Sessions page ${currentPage}: ${parsed.items.length} items (total: ${allItems.length}/${totalElements})`);
+      }
+      currentPage++;
+    }
+
+    return {
+      items: allItems,
+      totalElements: allItems.length,
+      totalPages: 1,
+      page: 1,
+      size: allItems.length
+    };
+  }
+
+  /**
+   * Get a single test by ID from a launch (full detail including issueReferences).
+   */
+  async getTestById(
+    launchId: number,
+    testId: number,
+    projectId: number
+  ): Promise<TestRunResponse> {
+    const url = `/api/reporting/v1/launches/${launchId}/tests/${testId}?projectId=${projectId}`;
+    const response = await this.makeAuthenticatedRequest<any>('GET', url);
+    const data = response.data || response;
+    return TestRunResponseSchema.parse(data);
+  }
+
+  /**
    * Get test runs (test executions) for a launch
    */
   async getTestRuns(
@@ -432,28 +504,9 @@ export class ZebrunnerReportingClient {
     const { maxPageSize = 1000 } = options;
     const url = `/api/test-execution-logs/v1/test-runs/${testRunId}/tests/${testId}/logs-and-screenshots?maxPageSize=${maxPageSize}`;
     
-    try {
-      const response = await this.makeAuthenticatedRequest<any>('GET', url);
-      
-      // Handle different response structures
-      const logsData = response.data || response;
-      
-      try {
-        return LogsAndScreenshotsResponseSchema.parse(logsData);
-      } catch (parseError) {
-        if (this.config.debug) {
-          console.warn(`[ZebrunnerReportingClient] Failed to parse logs/screenshots, returning empty: ${parseError}`);
-        }
-        // Return empty but valid response
-        return { items: [] };
-      }
-    } catch (error) {
-      if (this.config.debug) {
-        console.warn(`[ZebrunnerReportingClient] Failed to fetch logs/screenshots: ${error}`);
-      }
-      // Return empty but valid response instead of throwing
-      return { items: [] };
-    }
+    const response = await this.makeAuthenticatedRequest<any>('GET', url);
+    const logsData = response.data || response;
+    return LogsAndScreenshotsResponseSchema.parse(logsData);
   }
 
   /**
@@ -466,30 +519,14 @@ export class ZebrunnerReportingClient {
   ): Promise<TestSessionsResponse> {
     const url = `/api/reporting/v1/launches/${launchId}/test-sessions?testId=${testId}&projectId=${projectId}`;
     
-    try {
-      const response = await this.makeAuthenticatedRequest<any>('GET', url);
-      const sessionsData = response.data || response;
-      
-      if (this.config.debug) {
-        console.log(`[ZebrunnerReportingClient] Test sessions response for test ${testId}:`, JSON.stringify(sessionsData, null, 2));
-      }
-      
-      try {
-        return TestSessionsResponseSchema.parse(sessionsData);
-      } catch (parseError) {
-        if (this.config.debug) {
-          console.warn(`[ZebrunnerReportingClient] Failed to parse test sessions: ${parseError}`);
-        }
-        // Return empty but valid response
-        return { items: [] };
-      }
-    } catch (error) {
-      if (this.config.debug) {
-        console.warn(`[ZebrunnerReportingClient] Failed to fetch test sessions: ${error}`);
-      }
-      // Return empty but valid response instead of throwing
-      return { items: [] };
+    const response = await this.makeAuthenticatedRequest<any>('GET', url);
+    const sessionsData = response.data || response;
+    
+    if (this.config.debug) {
+      console.log(`[ZebrunnerReportingClient] Test sessions response for test ${testId}:`, JSON.stringify(sessionsData, null, 2));
     }
+    
+    return TestSessionsResponseSchema.parse(sessionsData);
   }
 
   /**
@@ -693,28 +730,24 @@ export class ZebrunnerReportingClient {
   async getAutomationStates(projectId: number): Promise<{ id: number; name: string }[]> {
     const url = `/api/tcm/v1/test-case-settings/system-fields/automation-states?projectId=${projectId}`;
     
-    try {
-      const response = await this.makeAuthenticatedRequest<any>('GET', url);
-      const data = response.data || response;
-      
-      // Expected format: array of { id: number, name: string } objects
-      if (Array.isArray(data)) {
-        return data.map((item: any) => ({
-          id: item.id,
-          name: item.name
-        }));
-      }
-      
-      throw new ZebrunnerReportingError('Unexpected response format for automation states');
-    } catch (error) {
-      // If the API call fails, return default mapping
-      console.warn('Failed to fetch automation states from API, using default mapping:', error);
-      return [
-        { id: 10, name: "Not Automated" },
-        { id: 11, name: "To Be Automated" },
-        { id: 12, name: "Automated" }
-      ];
+    const response = await this.makeAuthenticatedRequest<any>('GET', url);
+    const data = response.data || response;
+    
+    let statesArray: any[] = [];
+    if (data && Array.isArray(data.items)) {
+      statesArray = data.items;
+    } else if (Array.isArray(data)) {
+      statesArray = data;
+    } else {
+      throw new ZebrunnerReportingError(
+        `Unexpected response format for automation states: ${JSON.stringify(data).slice(0, 200)}`
+      );
     }
+    
+    return statesArray.map((item: any) => ({
+      id: item.id,
+      name: item.name
+    }));
   }
 
   /**
@@ -757,23 +790,9 @@ export class ZebrunnerReportingClient {
       
       return priorities;
     } catch (error) {
-      // Enhanced error logging
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      console.warn(`❌ Failed to fetch priorities from API (${url}):`, errorMessage);
-      
-      if (this.config.debug && error instanceof Error) {
-        console.error('Full error details:', error);
-      }
-      
-      // Return fallback priorities based on your actual system
-      console.warn('Using fallback priority mapping based on actual system values');
-      return [
-        { id: 15, name: "High" },
-        { id: 16, name: "Medium" },
-        { id: 17, name: "Low" },
-        { id: 18, name: "Trivial" },
-        { id: 35, name: "Critical" }
-      ];
+      throw new ZebrunnerReportingError(
+        `Failed to fetch priorities: ${error instanceof Error ? error.message : error}`
+      );
     }
   }
 
@@ -795,51 +814,48 @@ export class ZebrunnerReportingClient {
    * Fetch JIRA integrations from Zebrunner
    */
   async getJiraIntegrations(): Promise<JiraIntegrationsResponse> {
-    try {
-      const response = await this.makeAuthenticatedRequest<any>(
-        'GET',
-        '/api/integrations/v2/integrations/tool:jira'
-      );
+    const response = await this.makeAuthenticatedRequest<any>(
+      'GET',
+      '/api/integrations/v2/integrations/tool:jira'
+    );
 
-      const integrationsData = response.data || response;
-      return JiraIntegrationsResponseSchema.parse(integrationsData);
-    } catch (error) {
-      if (this.config.debug) {
-        console.warn(`[ZebrunnerReportingClient] Failed to fetch JIRA integrations: ${error}`);
-      }
-      // Return empty response on error
-      return { items: [] };
-    }
+    const integrationsData = response.data || response;
+    return JiraIntegrationsResponseSchema.parse(integrationsData);
   }
 
   /**
-   * Resolve JIRA base URL with caching
+   * Resolve JIRA base URL with caching.
    * Priority: 
-   * 1. Cached value (session-level cache)
-   * 2. Zebrunner integrations API (match by projectId, fallback to any enabled)
-   * 3. Environment variable (JIRA_BASE_URL)
-   * 4. Placeholder (https://jira.com)
+   * 1. Explicit override (from tool parameter)
+   * 2. Cached value (session-level cache)
+   * 3. Zebrunner integrations API (match by projectId, fallback to any enabled)
+   * 4. Environment variable (JIRA_BASE_URL)
+   * @throws {ZebrunnerReportingError} if no JIRA URL can be resolved
    */
-  async resolveJiraBaseUrl(projectId?: number): Promise<string> {
-    // Return cached value if available
+  async resolveJiraBaseUrl(projectId?: number, override?: string): Promise<string> {
+    this._jiraResolutionWarning = null;
+
+    if (override) {
+      const url = override.replace(/\/+$/, '');
+      this.jiraBaseUrlCache = url;
+      return url;
+    }
+
     if (this.jiraBaseUrlCache) {
       return this.jiraBaseUrlCache;
     }
 
     try {
-      // Try to fetch from Zebrunner integrations API
       const integrations = await this.getJiraIntegrations();
       
       if (integrations.items.length > 0) {
-        // Filter to enabled JIRA integrations only
         const enabledIntegrations = integrations.items.filter(
           (integration) => integration.enabled && integration.tool === 'JIRA'
         );
 
         if (enabledIntegrations.length > 0) {
-          let selectedIntegration = enabledIntegrations[0]; // Default to first
+          let selectedIntegration = enabledIntegrations[0];
 
-          // If projectId provided, try to find matching integration
           if (projectId) {
             const projectMatch = enabledIntegrations.find((integration) =>
               integration.projectsMapping.enabledForZebrunnerProjectIds.includes(projectId)
@@ -851,47 +867,49 @@ export class ZebrunnerReportingClient {
 
           const jiraUrl = selectedIntegration.config.url;
           if (jiraUrl) {
-            // Cache and return
-            this.jiraBaseUrlCache = jiraUrl.replace(/\/+$/, ''); // Remove trailing slash
-            if (this.config.debug) {
-              console.log(`[ZebrunnerReportingClient] Resolved JIRA URL from integrations: ${this.jiraBaseUrlCache}`);
-            }
+            this.jiraBaseUrlCache = jiraUrl.replace(/\/+$/, '');
             return this.jiraBaseUrlCache;
           }
         }
       }
-    } catch (error) {
-      if (this.config.debug) {
-        console.warn(`[ZebrunnerReportingClient] Failed to resolve JIRA URL from integrations: ${error}`);
+    } catch (error: any) {
+      const status = error?.response?.status ?? error?.status;
+      if (status === 403 || status === 401) {
+        this._jiraResolutionWarning =
+          'Your Zebrunner token does not have permission to read JIRA integrations. ' +
+          'Set JIRA_BASE_URL in your MCP server environment or pass jira_base_url as a tool parameter.';
+      } else {
+        this._jiraResolutionWarning =
+          `Failed to fetch JIRA integrations from Zebrunner: ${error instanceof Error ? error.message : error}. ` +
+          'Set JIRA_BASE_URL in your MCP server environment or pass jira_base_url as a tool parameter.';
       }
     }
 
-    // Fallback to environment variable
     const envJiraUrl = process.env.JIRA_BASE_URL;
     if (envJiraUrl) {
       this.jiraBaseUrlCache = envJiraUrl.replace(/\/+$/, '');
-      if (this.config.debug) {
-        console.log(`[ZebrunnerReportingClient] Resolved JIRA URL from env var: ${this.jiraBaseUrlCache}`);
-      }
       return this.jiraBaseUrlCache;
     }
 
-    // Final fallback to placeholder
-    this.jiraBaseUrlCache = 'https://jira.com';
-    if (this.config.debug) {
-      console.warn(`[ZebrunnerReportingClient] No JIRA URL found, using placeholder: ${this.jiraBaseUrlCache}`);
-    }
-    return this.jiraBaseUrlCache;
+    const hint = this._jiraResolutionWarning
+      ? this._jiraResolutionWarning
+      : 'No JIRA integrations found in Zebrunner and JIRA_BASE_URL env var is not set. ' +
+        'Configure JIRA_BASE_URL in your MCP server environment or pass jira_base_url as a tool parameter.';
+    throw new ZebrunnerReportingError(hint);
+  }
+
+  get jiraResolutionWarning(): string | null {
+    return this._jiraResolutionWarning;
   }
 
   /**
    * Build a JIRA issue URL
    * @param issueKey - JIRA issue key (e.g., "QAS-22939", "APPS-2771")
    * @param projectId - Optional project ID for project-specific JIRA integration
-   * @returns Full JIRA URL (e.g., "https://your-workspace.atlassian.net/browse/QAS-22939")
+   * @param jiraBaseUrlOverride - Optional explicit JIRA base URL (skips API lookup)
    */
-  async buildJiraUrl(issueKey: string, projectId?: number): Promise<string> {
-    const jiraBaseUrl = await this.resolveJiraBaseUrl(projectId);
+  async buildJiraUrl(issueKey: string, projectId?: number, jiraBaseUrlOverride?: string): Promise<string> {
+    const jiraBaseUrl = await this.resolveJiraBaseUrl(projectId, jiraBaseUrlOverride);
     return `${jiraBaseUrl}/browse/${issueKey}`;
   }
 }

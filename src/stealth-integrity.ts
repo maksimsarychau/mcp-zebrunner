@@ -139,7 +139,7 @@ function verifyRepositoryOrigin(root: string): boolean {
     }).trim();
     return ALLOWED_ORIGINS.some(o => remoteUrl === o);
   } catch {
-    return true;
+    return false;
   }
 }
 

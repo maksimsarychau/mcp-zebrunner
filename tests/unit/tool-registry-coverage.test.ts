@@ -24,17 +24,17 @@ function extractServerTools(serverSource: string): string[] {
   return tools;
 }
 
-describe("Tool Registry Coverage (51 tools)", () => {
+describe("Tool Registry Coverage (52 tools)", () => {
   it("ensures every registered server tool has smoke coverage metadata", () => {
     const root = getProjectRoot();
     const serverSource = fs.readFileSync(path.join(root, "src", "server.ts"), "utf-8");
     const serverTools = extractServerTools(serverSource);
 
-    assert.equal(serverTools.length, 51, "server.ts should register exactly 51 tools");
-    assert.equal(new Set(serverTools).size, 51, "all registered tools should be unique");
+    assert.equal(serverTools.length, 52, "server.ts should register exactly 52 tools");
+    assert.equal(new Set(serverTools).size, 52, "all registered tools should be unique");
 
     const coverageKeys = Object.keys(TOOL_SMOKE_INPUTS);
-    assert.equal(coverageKeys.length, 51, "smoke coverage map should include 51 tools");
+    assert.equal(coverageKeys.length, 52, "smoke coverage map should include 52 tools");
 
     const missingCoverage = serverTools.filter(tool => !(tool in TOOL_SMOKE_INPUTS));
     assert.deepEqual(missingCoverage, [], `missing smoke coverage for: ${missingCoverage.join(", ")}`);
@@ -62,7 +62,7 @@ describe("Critical Tool Intelligence Checks", () => {
   it("loads snapshot and includes newly added about tool", () => {
     const snapshot = loadToolIntelSnapshot();
     assert.ok(snapshot.mcpVersion && snapshot.mcpVersion !== "unknown", "snapshot should include MCP version");
-    assert.ok(snapshot.tools.length >= 51, "tool intel snapshot should include all tools");
+    assert.ok(snapshot.tools.length >= 52, "tool intel snapshot should include all tools");
     assert.ok(snapshot.tools.some(tool => tool.name === "about_mcp_tools"), "about_mcp_tools should be present in snapshot");
   });
 

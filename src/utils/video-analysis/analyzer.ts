@@ -154,10 +154,17 @@ export class VideoAnalyzer {
         frameExtractionError = `Frame extraction skipped (analysisDepth: ${params.analysisDepth})`;
       }
 
-      // Step 4: Fetch logs and parse execution steps
-      const logsResponse = await this.reportingClient.getTestLogsAndScreenshots(params.testRunId, params.testId, { maxPageSize: 1000 });
-      const logItems = logsResponse.items.filter(item => item.kind === 'log');
-      const logSteps = this.parseLogsToSteps(logItems);
+      let logItems: any[] = [];
+      let logSteps: any[] = [];
+      try {
+        const logsResponse = await this.reportingClient.getTestLogsAndScreenshots(params.testRunId, params.testId, { maxPageSize: 1000 });
+        logItems = logsResponse.items.filter(item => item.kind === 'log');
+        logSteps = this.parseLogsToSteps(logItems);
+      } catch (logErr) {
+        if (this.debug) {
+          console.warn(`[VideoAnalyzer] Failed to fetch logs: ${logErr instanceof Error ? logErr.message : logErr}`);
+        }
+      }
 
       if (this.debug) {
         console.log(`[VideoAnalyzer] Parsed ${logSteps.length} log steps`);

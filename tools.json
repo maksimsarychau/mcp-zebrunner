@@ -202,6 +202,10 @@
   {
     "name": "test_reporting_connection",
     "description": "Test the connection to Zebrunner reporting API"
+  },
+  {
+    "name": "analyze_regression_runtime",
+    "description": "Analyze Regression Runtime Efficiency: per-launch elapsed time, attempt/re-run breakdown, per-test duration classification (Short/Medium/Long), Average Runtime per Test, Average Runtime per Test Case, Weighted Runtime Index, and optional baseline comparison with delta tracking"
   }
 ]
 

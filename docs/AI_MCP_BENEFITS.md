@@ -1,7 +1,7 @@
 # AI + MCP: Benefits for Test Management
 
 **Author:** Maksim Sarychau
-**Current Version:** 6.2.0
+**Current Version:** 6.4.0
 
 ---
 
@@ -44,6 +44,7 @@ Go beyond raw data with intelligent analysis:
 Generate stakeholder-ready reports in seconds:
 
 - Weekly regression stability reports
+- Regression Runtime Efficiency analysis with configurable duration thresholds, dual test/test-case metrics (Average Runtime, WRI), and baseline comparison
 - Platform-specific breakdowns (iOS, Android, Web)
 - Milestone and build tracking
 - Customizable output formats (Markdown, JSON, Jira-ready)
@@ -99,7 +100,7 @@ Accelerate automation with AI-generated test code:
 Available across multiple channels:
 
 - **npm** — `npm install -g mcp-zebrunner`
-- **Docker** — `msarychau/mcp-zebrunner:6.2.0`
+- **Docker** — `msarychau/mcp-zebrunner:6.4.0`
 - **GitHub** — [github.com/maksimsarychau/mcp-zebrunner](https://github.com/maksimsarychau/mcp-zebrunner)
 - **MCP Registry** — discoverable at [registry.modelcontextprotocol.io](https://registry.modelcontextprotocol.io)
 

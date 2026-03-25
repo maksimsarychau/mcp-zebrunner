@@ -49,7 +49,8 @@ export const TOOL_SMOKE_INPUTS: Record<string, Record<string, unknown>> = {
   get_test_run_configuration_groups: { project: "android" },
   analyze_test_cases_duplicates: { project_key: "MCP", suite_id: 1 },
   analyze_test_cases_duplicates_semantic: { project_key: "MCP", suite_id: 1 },
-  aggregate_test_cases_by_feature: { project_key: "MCP", feature_keyword: "login" }
+  aggregate_test_cases_by_feature: { project_key: "MCP", feature_keyword: "login" },
+  analyze_regression_runtime: { project: "android", milestone: "develop-49771" }
 };
 
 export const TOOL_SCHEMA_REQUIRED_KEYS: Record<string, string[]> = Object.fromEntries(

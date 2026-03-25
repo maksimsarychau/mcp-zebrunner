@@ -223,7 +223,6 @@ export class ZebrunnerApiClient {
       const response = await this.http.get('/test-cases', { params });
       const data = response.data;
       
-      // Handle different response formats
       if (Array.isArray(data)) {
         return { items: data.map(item => ZebrunnerShortTestCaseSchema.parse(item)) };
       } else if (data.items) {
@@ -233,7 +232,7 @@ export class ZebrunnerApiClient {
         };
       }
       
-      return { items: [] };
+      throw new Error(`Unexpected response format from /test-cases: ${JSON.stringify(data).slice(0, 200)}`);
     });
   }
 
@@ -396,7 +395,7 @@ export class ZebrunnerApiClient {
         };
       }
       
-      return { items: [] };
+      throw new Error(`Unexpected response format from /test-suites: ${JSON.stringify(data).slice(0, 200)}`);
     });
   }
 
@@ -469,7 +468,7 @@ export class ZebrunnerApiClient {
         };
       }
       
-      return { items: [] };
+      throw new Error(`Unexpected response format from /test-runs: ${JSON.stringify(data).slice(0, 200)}`);
     });
   }
 
@@ -524,7 +523,7 @@ export class ZebrunnerApiClient {
         };
       }
       
-      return { items: [] };
+      throw new Error(`Unexpected response format from /test-cases/search: ${JSON.stringify(data).slice(0, 200)}`);
     });
   }
 

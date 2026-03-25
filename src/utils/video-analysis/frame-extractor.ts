@@ -91,15 +91,14 @@ export class FrameExtractor {
             console.warn(`[FrameExtractor] Failed to process frame ${frame.frameNumber}:`, error);
           }
           
-          // Return placeholder analysis on error
           return {
             timestamp: frame.timestamp,
             frameNumber: frame.frameNumber,
             framePath: frame.localPath,
-            visualAnalysis: 'Frame processing failed',
+            visualAnalysis: `ERROR: Frame processing failed — ${error instanceof Error ? error.message : error}`,
             detectedElements: [],
-            appState: 'Unknown',
-            anomaliesDetected: []
+            appState: 'ERROR',
+            anomaliesDetected: [`Frame ${frame.frameNumber} could not be processed`]
           };
         }
       });
