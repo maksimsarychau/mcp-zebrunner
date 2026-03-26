@@ -2,6 +2,71 @@
 
 ## v6.5.4 (2026-03-25)
 
+### LLM Evaluation Testing Framework
+
+#### New: LLM-based evaluation framework for all 52 MCP tools
+
+Added an automated evaluation framework that uses a real LLM (Claude) and real Zebrunner data to verify that AI assistants correctly select tools, provide arguments, and produce quality output. Runs as `npm run test:eval` alongside the existing test infrastructure.
+
+**Three evaluation layers:**
+
+| Layer | What It Tests | LLM Calls | Speed |
+|-------|--------------|-----------|-------|
+| **L1 — Tool Selection** | Does the LLM pick the right tool from 52 options? | 1 per prompt | ~3s/prompt |
+| **L2 — Argument Correctness** | Does the LLM provide required parameters? | 1 per prompt | ~3s/prompt |
+| **L3 — Full Execution + Judge** | Does the tool output actually answer the question? Uses LLM-as-Judge scoring (relevance, completeness, format on 1–5 scale) | 2 per prompt + MCP exec | ~15s/prompt |
+
+**74 evaluation prompts (57 positive + 17 negative):**
+
+| Category | Prompts | Description |
+|----------|---------|-------------|
+| TCM (Test Case Management) | 26 | Suites, test cases, hierarchy, filtering |
+| Launch | 9 | Launches, milestones, regression reports |
+| Analysis | 8 | Coverage, validation, code generation |
+| Utility | 4 | Connection test, tool info, projects |
+| Test Run | 5 | Test runs, statuses, configurations |
+| Duplicate | 2 | Duplicate detection (step + semantic) |
+| E2E Metrics | 3 | Multi-tool complex scenarios |
+| **Negative** | **17** | Out-of-scope, ambiguous, invalid data, tool confusion, prompt injection |
+
+**Negative testing (5 categories):**
+
+- **Out-of-scope** (4): Verifies LLM refuses unrelated requests (weather, recipes, math)
+- **Ambiguous** (3): Verifies LLM asks for clarification on vague prompts ("Show me the tests")
+- **Invalid data** (4, Layer 3): Verifies MCP tools return errors for fake IDs/projects
+- **Tool confusion** (3): Verifies LLM picks correct tool and avoids forbidden alternatives
+- **Prompt injection** (3): Verifies LLM resists attempts to override system instructions
+
+**Debug mode with `EVAL_FILTER`:**
+
+Run only specific tests by ID pattern for fast iteration:
+
+```bash
+EVAL_FILTER="neg.ambig,e2e.pass_rate" npm run test:eval:debug
+```
+
+Supports exact match and substring match. Only matching tests appear in output.
+
+**Dynamic data discovery:** All test data (project keys, suite IDs, launch IDs, test case keys) is dynamically discovered from Zebrunner at startup — nothing hardcoded. Progressive: L1/L2 use ~4 API calls, L3 uses ~12–15.
+
+**Output:** Console scorecard + JSON + Markdown reports in `tests/eval/results/` (gitignored). Markdown includes full Layer 3 diagnostics (prompt, selected tool/args, judge scores with reasoning, MCP output snippet).
+
+**Scripts:**
+
+| Command | Description |
+|---------|-------------|
+| `npm run test:eval` | Full run (all layers, default L3) |
+| `npm run test:eval:l1` | Layer 1 only (fastest, ~$1.50) |
+| `npm run test:eval:l2` | Layers 1+2 (~$3.50) |
+| `npm run test:eval:l3` | All layers (~$5.00) |
+| `npm run test:eval:debug` | With EVAL_FILTER for targeted debug |
+
+**Latest results:** 100% tool selection, 100% argument correctness, 4.61/5.0 judge score, 94–100% negative test accuracy.
+
+**Files:** `tests/eval/eval-config.ts`, `tests/eval/eval-discovery.ts`, `tests/eval/eval-prompts.ts`, `tests/eval/eval-mcp-client.ts`, `tests/eval/eval-judges.ts`, `tests/eval/eval-report.ts`, `tests/eval/eval-runner.test.ts`, `docs/EVALUATION_FRAMEWORK.md`
+
+---
+
 ### Count-Only Mode & Response Size Safety Net
 
 #### New: `count_only` parameter on 18 paginated tools
@@ -45,7 +110,7 @@ Added `count_only: z.boolean().default(false)` to all tools that return potentia
 | `detailed_analyze_launch_failures` | `count_only: true` | Handler early-return | Returns failed test count, skips expensive analysis |
 | `generate_weekly_regression_stability_report` | `count_only: true` | Handler early-return | Resolves builds, returns matched suite count without full report |
 
-**Why:** The Zebrunner Public API is cursor-based with no total count endpoint. E2E Prompt 3 (Automation Coverage Sustainability) needs **counts** across thousands of test cases, but `get_all=true` with `format=json` produces payloads exceeding the ~1MB MCP host limit. `count_only` solves this. The 11 new tools extend this to suites, launches, milestones, test runs, and analytical tools — enabling questions like "how many suites in MFPAND?" without fetching all 1,189 suite objects.
+**Why:** The Zebrunner Public API is cursor-based with no total count endpoint. E2E Prompt 3 (Automation Coverage Sustainability) needs **counts** across thousands of test cases, but `get_all=true` with `format=json` produces payloads exceeding the ~1MB MCP host limit. `count_only` solves this. The 11 new tools extend this to suites, launches, milestones, test runs, and analytical tools — enabling questions like "how many suites in MY_PROJECT?" without fetching all 1,189 suite objects.
 
 #### New: Response size safety net (900KB truncation)
 
@@ -115,8 +180,8 @@ This prevents OOM and MCP 1MB errors even when the LLM forgets to use `count_onl
 
 #### Extended `get_test_case_by_key` — now accepts numeric IDs and Zebrunner URLs
 
-- **New capability:** The `case_key` parameter now accepts both test case keys (`MFPAND-29`) and numeric IDs (`86280`). Auto-detects format and routes to the correct API endpoint (`/test-cases/key:{key}` or `/test-cases/{id}`).
-- **URL parsing hints:** Tool description now guides the LLM to extract `project_key` and `caseId` from Zebrunner URLs like `https://example.zebrunner.com/projects/MFPIOS/test-cases?caseId=86280`.
+- **New capability:** The `case_key` parameter now accepts both test case keys (`PROJECT-29`) and numeric IDs (`86280`). Auto-detects format and routes to the correct API endpoint (`/test-cases/key:{key}` or `/test-cases/{id}`).
+- **URL parsing hints:** Tool description now guides the LLM to extract `project_key` and `caseId` from Zebrunner URLs like `https://example.zebrunner.com/projects/MY_PROJECT/test-cases?caseId=86280`.
 - **New API method:** Added `getTestCaseById()` to `enhanced-client.ts` using `GET /api/public/v1/test-cases/{id}?projectKey=...` (verified working via API tests).
 
 #### Fixed `getTestSuite` and `getTestCasesBySuite` — non-existent API endpoints replaced
@@ -131,11 +196,11 @@ This prevents OOM and MCP 1MB errors even when the LLM forgets to use `count_onl
 - **Published to git:** `tests/api-verify.sh` removed from `.gitignore` — safe to publish (no hardcoded credentials, reads from `.env` at runtime).
 - **Auto-discovers starred projects:** No longer requires `ZEBRUNNER_TEST_PROJECT` in `.env`. Authenticates first, fetches projects via `/api/projects/v1/projects?extraFields=starred`, and runs tests against all starred projects.
 - **Dynamic automation state IDs:** RQL filter tests no longer hardcode `automationState.id = 12`. Discovers a valid ID from the test cases returned by each project.
-- **Coverage:** 160 checks across 3 starred projects (MFPAND, MFPWEB, MFPIOS), all passing.
+- **Coverage:** 160 checks across 3 starred projects, all passing.
 
 #### Documentation
 
-- **`TEST_PROMPTS.md`:** Removed all project-specific aliases (MFPAND/MFPIOS/MFPWEB), replaced with generic platform names (ANDROID/IOS/WEB).
+- **`TEST_PROMPTS.md`:** Removed all project-specific aliases, replaced with generic platform names (ANDROID/IOS/WEB).
 
 ## v6.5.0 (2026-03-25)
 
