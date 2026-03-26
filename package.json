@@ -50,6 +50,11 @@
     "test:watch": "tsx tests/test-runner.ts all --watch",
     "test:health": "tsx tests/test-runner.ts --health",
     "test:api": "bash tests/api-verify.sh",
+    "test:eval": "tsx tests/test-runner.ts eval",
+    "test:eval:l1": "EVAL_LAYER=1 tsx tests/test-runner.ts eval",
+    "test:eval:l2": "EVAL_LAYER=2 tsx tests/test-runner.ts eval",
+    "test:eval:l3": "EVAL_LAYER=3 tsx tests/test-runner.ts eval",
+    "test:eval:debug": "tsx tests/test-runner.ts eval",
     "test:verbose": "tsx tests/test-runner.ts all --verbose",
     "lint": "tsc --noEmit",
     "clean": "rm -rf dist",
@@ -69,6 +74,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@anthropic-ai/sdk": "^0.80.0",
     "@types/fluent-ffmpeg": "^2.1.24",
     "@types/node": "^22.0.0",
     "tsx": "^4.17.0",

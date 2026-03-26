@@ -22,6 +22,7 @@ interface TestConfig {
   description: string;
   requiresBuild?: boolean;
   requiresEnv?: boolean;
+  excludeDirs?: string[];
 }
 
 const testConfigs: Record<string, TestConfig> = {
@@ -46,12 +47,20 @@ const testConfigs: Record<string, TestConfig> = {
     requiresBuild: true,
     requiresEnv: true
   },
+  eval: {
+    name: 'LLM Evaluation Tests',
+    pattern: 'tests/eval/**/*.test.ts',
+    description: 'LLM-based tool selection and execution evaluation (requires ANTHROPIC_API_KEY)',
+    requiresBuild: true,
+    requiresEnv: true
+  },
   all: {
     name: 'All Tests',
     pattern: 'tests/**/*.test.ts',
-    description: 'Complete test suite',
+    description: 'Complete test suite (excludes eval)',
     requiresBuild: true,
-    requiresEnv: true
+    requiresEnv: true,
+    excludeDirs: ['tests/eval']
   }
 };
 
@@ -63,7 +72,7 @@ class TestRunner {
   /**
    * Expand glob patterns to actual file paths
    */
-  private expandGlobPattern(pattern: string): string[] {
+  private expandGlobPattern(pattern: string, excludeDirs?: string[]): string[] {
     const files: string[] = [];
     
     // Handle patterns like 'tests/unit/**/*.test.ts'
@@ -71,6 +80,9 @@ class TestRunner {
       const baseDir = pattern.replace('/**/*.test.ts', '');
       if (existsSync(baseDir)) {
         const findTestFiles = (dir: string): void => {
+          if (excludeDirs?.some(ex => dir === ex || dir.startsWith(ex + '/'))) {
+            return;
+          }
           const items = readdirSync(dir);
           for (const item of items) {
             const fullPath = join(dir, item);
@@ -145,10 +157,10 @@ class TestRunner {
     return allGood;
   }
 
-  private async runNodeTest(pattern: string): Promise<boolean> {
+  private async runNodeTest(pattern: string, excludeDirs?: string[]): Promise<boolean> {
     return new Promise((resolve) => {
       // Expand glob patterns to actual file paths
-      const testFiles = this.expandGlobPattern(pattern);
+      const testFiles = this.expandGlobPattern(pattern, excludeDirs);
       
       if (testFiles.length === 0) {
         this.log(`No test files found for pattern: ${pattern}`, 'error');
@@ -211,7 +223,7 @@ class TestRunner {
 
     // Run tests
     const startTime = Date.now();
-    const success = await this.runNodeTest(config.pattern);
+    const success = await this.runNodeTest(config.pattern, config.excludeDirs);
     const duration = Date.now() - startTime;
 
     if (success) {
