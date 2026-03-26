@@ -13,3 +13,6 @@ private.pem
 RELEASE_SIGNING_GUIDE.md
 TODO-code-review.md
 
+# LLM eval results (contain real Zebrunner project data)
+tests/eval/results/
+
