@@ -1,7 +1,103 @@
 # Change Logs
 
-## v6.5.4 (2026-03-25)
+## v6.6.0 (2026-03-26)
 
+### Generic Field-Path Filtering for Test Cases
+
+#### New: `field_path` / `field_value` / `field_match` parameters on `get_test_cases_advanced` and `get_test_case_by_filter`
+
+Added the ability to filter test cases by **any field** — including custom fields, nested objects, and top-level properties — using dot-notation paths. The Zebrunner Public API does not support RQL filtering on `customField` or many nested fields, so this feature paginates all server-side results and applies client-side matching.
+
+**Dot-notation field paths:**
+
+| Path | Example |
+|------|---------|
+| Top-level | `title`, `key`, `deprecated`, `draft` |
+| Nested | `priority.name`, `automationState.name`, `testSuite.id` |
+| User | `createdBy.username`, `lastModifiedBy.email` |
+| Custom | `customField.manualOnly`, `customField.caseStatus`, `customField.testrailId` |
+
+**Four match modes:**
+
+| Mode | Behavior |
+|------|----------|
+| `exact` | Case-insensitive equality (default) |
+| `contains` | Substring match |
+| `regex` | Regular expression pattern |
+| `exists` | Field is present and non-null (no `field_value` needed) |
+
+**Safety features:**
+- Fuzzy key resolution for custom fields — handles camelCase (`manualOnly`), snake_case (`manual_only`), PascalCase (`ManualOnly`), display names (`Manual Only`), and case-insensitive fallback
+- Defensive against null, undefined, missing fields, unexpected types, and malformed objects — a single bad item never crashes the entire filter
+- Works across projects with different custom field schemas
+
+**New file:** `src/utils/custom-field-filter.ts` — `resolveFieldPath()`, `matchesField()`, `filterByField()`, `discoverFieldPaths()`
+
+---
+
+### Flaky Test Detection Tool
+
+#### New: `find_flaky_tests` — cross-launch flaky test analysis with 3-phase detection
+
+Identifies flaky tests across multiple launches using a comprehensive 3-phase approach:
+
+- **Phase 1 — Launch Stability Scan**: Fetches launches within a configurable time window (default 14 days, max 90), collects all test runs, and builds a cross-launch test map to detect flip-flop patterns (PASSED→FAILED→PASSED). Computes flip count, pass rate, stability trend (improving/degrading/volatile), and average stability per test.
+- **Phase 2 — Manual Test Case Scan**: Scans manual-only test cases in discovered suites via TCM execution history (`getTestCaseExecutions`). Identifies manual tests that flip between pass/fail across executions. Concurrency-limited to batches of 5 to avoid API overload.
+- **Phase 3 — Dual-Perspective Enrichment**: For the top N automated flaky tests, fetches their TCM execution history to compare automation stability vs manual pass rate. Flags tests that "pass manually but are flaky in automation" (or vice versa).
+
+**Parameters:** `project`, `period_days`, `min_flip_count`, `stability_threshold`, `milestone`, `build`, `suite_names`, `include_manual`, `enrich_top_n`, `limit`, `include_history`, `format` (json/string/jira), `count_only`, `chart`.
+
+**Output:** Unified report with automated and manual flaky tests sorted by flip count, including stability trends and optional execution timelines. Supports JSON, markdown, and Jira wiki markup formats.
+
+**Files:** `src/server.ts` (tool registration), `src/handlers/reporting-tools.ts` (`findFlakyTests` handler)
+
+---
+
+### Built-in Chart Visualization
+
+#### New: `chart` and `chart_type` parameters on 17 tools for inline chart output
+
+Added `chart` (output format) and `chart_type` (chart shape override) to 17 tools that produce chartable data. When `chart` is set, the tool returns a chart visualization instead of verbose text output.
+
+**Output format (`chart` parameter):**
+
+| Format | Output | Best for |
+|--------|--------|----------|
+| `png` | Base64 PNG image via SVG→sharp rasterization | Claude Desktop, Cursor (MCP `image` content block) |
+| `html` | Self-contained HTML with embedded Chart.js | Browser viewing, sharing |
+| `text` | Markdown table + ASCII bar chart | Any MCP client, text-only environments |
+
+**Chart type (`chart_type` parameter):**
+
+| Value | Behavior |
+|-------|----------|
+| `auto` | Tool picks the best chart type for its data (default) |
+| `pie` | Force pie/donut chart |
+| `bar` | Force vertical bar chart |
+| `stacked_bar` | Force stacked bar chart |
+| `horizontal_bar` | Force horizontal bar chart |
+| `line` | Force line chart |
+
+**Default chart types by tool (when `chart_type: 'auto'`):**
+
+| Chart Type | Tools |
+|------------|-------|
+| **Pie** | `get_launch_test_summary`, `get_launch_summary`, `get_test_run_by_id`, `list_test_run_test_cases`, `get_bug_review` |
+| **Bar** | `generate_weekly_regression_stability_report`, `detailed_analyze_launch_failures`, `find_flaky_tests`, `get_top_bugs`, `analyze_regression_runtime`, `aggregate_test_cases_by_feature` |
+| **Line** | `get_test_execution_history` |
+| **Stacked Bar** | `get_all_launches_for_project`, `get_all_launches_with_filter`, `list_test_runs`, `get_launch_details`, `get_platform_results_by_period` |
+
+Any `chart_type` can be used with any tool — e.g., `get_platform_results_by_period` with `chart_type: 'pie'` renders a pie chart instead of its default stacked bar.
+
+**Additional fix:** `get_platform_results_by_period` chart rendering now auto-discovers column names from the SQL widget response instead of hardcoding `PLATFORM`/`PASSED`/`FAILED` — fixes "Unknown" label bug.
+
+**Implementation:** Pure TypeScript SVG generation + `sharp` PNG rasterization (no new dependencies). Chart.js loaded from CDN only in HTML output.
+
+**New file:** `src/utils/chart-generator.ts` — SVG rendering engine (pie, bar, horizontal_bar, line, stacked_bar), Chart.js HTML templates, ASCII/markdown text charts, and `buildChartResponse()` helper.
+
+---
+
+## v6.5.4 (2026-03-25)
 ### LLM Evaluation Testing Framework
 
 #### New: LLM-based evaluation framework for all 52 MCP tools

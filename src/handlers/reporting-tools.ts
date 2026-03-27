@@ -5,6 +5,7 @@ import { FormatProcessor } from "../utils/formatter.js";
 import { GetLauncherDetailsInputSchema, AnalyzeTestExecutionVideoInput } from "../types/api.js";
 import { VideoAnalyzer } from "../utils/video-analysis/analyzer.js";
 import type { TestEffectiveDuration, TestSessionBreakdown, SessionResolutionStrategy, TestSessionResponse } from "../types/reporting.js";
+import { buildChartResponse, type ChartConfig } from "../utils/chart-generator.js";
 
 /**
  * MCP Tool handlers for Zebrunner Reporting API
@@ -193,6 +194,8 @@ export class ZebrunnerReportingToolHandlers {
     session_resolution?: SessionResolutionStrategy;
     jira_base_url?: string;
     count_only?: boolean;
+    chart?: 'none' | 'png' | 'html' | 'text';
+    chart_type?: 'auto' | 'pie' | 'bar' | 'stacked_bar' | 'horizontal_bar' | 'line';
   }) {
     const {
       projectKey,
@@ -209,11 +212,12 @@ export class ZebrunnerReportingToolHandlers {
       format = 'json',
       session_resolution = 'auto',
       jira_base_url,
-      count_only = false
+      count_only = false,
+      chart = 'none',
+      chart_type = 'auto' as const,
     } = input;
 
     try {
-      // Validate input
       if (!projectKey && !projectId) {
         throw new Error("Either projectKey or projectId must be provided");
       }
@@ -224,16 +228,25 @@ export class ZebrunnerReportingToolHandlers {
         resolvedProjectId = await this.reportingClient.getProjectId(projectKey);
       }
 
-      // Get launch details and project key for URL generation
       const launch = await this.reportingClient.getLaunch(launchId, resolvedProjectId!);
       const resolvedProjectKey = projectKey || await this.reportingClient.getProjectKey(resolvedProjectId!);
       const baseUrl = this.reportingClient['config'].baseUrl;
-      
-      // Build launch URL
       const launchUrl = `${baseUrl}/projects/${resolvedProjectKey}/automation-launches/${launchId}`;
       
-      // Fetch ALL test runs (auto-paginated)
       const testRuns = await this.reportingClient.getAllTestRuns(launchId, resolvedProjectId!);
+
+      if (chart && chart !== 'none') {
+        const allItems = testRuns.items || [];
+        const byStatus: Record<string, number> = {};
+        allItems.forEach((t: any) => { byStatus[t.status] = (byStatus[t.status] || 0) + 1; });
+        const chartConfig: ChartConfig = {
+          type: (chart_type && chart_type !== 'auto') ? chart_type : 'pie',
+          title: `Test Status — Launch ${launchId} (${launch.name || ''})`,
+          labels: Object.keys(byStatus),
+          datasets: [{ label: 'Tests', values: Object.values(byStatus) }],
+        };
+        return buildChartResponse(chartConfig, chart as 'png' | 'html' | 'text', `Launch ${launchId}: ${allItems.length} tests — ${Object.entries(byStatus).map(([k, v]) => `${k}: ${v}`).join(', ')}`);
+      }
 
       if (count_only) {
         const allItems = testRuns.items || [];
@@ -579,6 +592,8 @@ export class ZebrunnerReportingToolHandlers {
     outputStyle?: 'strict' | 'default';
     outputFormat?: 'jira' | 'json' | 'dto' | 'summary' | 'detailed';
     count_only?: boolean;
+    chart?: 'none' | 'png' | 'html' | 'text';
+    chart_type?: 'auto' | 'pie' | 'bar' | 'stacked_bar' | 'horizontal_bar' | 'line';
   }) {
     const {
       projectKey,
@@ -588,7 +603,9 @@ export class ZebrunnerReportingToolHandlers {
       linkedIssues,
       outputStyle = 'strict',
       outputFormat = 'jira',
-      count_only = false
+      count_only = false,
+      chart = 'none',
+      chart_type = 'auto' as const,
     } = input;
 
     try {
@@ -743,7 +760,7 @@ export class ZebrunnerReportingToolHandlers {
                 format: 'summary',
                 limit: 10
               });
-              const reportText = failureSummary?.content?.find((c: any) => c.type === 'text')?.text;
+              const reportText = (failureSummary?.content?.find((c: any) => c.type === 'text') as any)?.text;
               note = this.extractExecutiveFailureNote(reportText);
             } catch (error: any) {
               note = `Failure summary unavailable: ${error?.message || String(error)}`;
@@ -775,6 +792,18 @@ export class ZebrunnerReportingToolHandlers {
             note: `Error fetching launch metrics: ${error?.message || String(error)}`
           });
         }
+      }
+
+      if (chart && chart !== 'none') {
+        const validSuites = suiteResults.filter(s => s.passRate !== null);
+        const chartConfig: ChartConfig = {
+          type: (chart_type && chart_type !== 'auto') ? chart_type : 'bar',
+          title: `Weekly Regression Stability — ${projectKey}`,
+          labels: validSuites.map(s => s.suite),
+          datasets: [{ label: 'Pass Rate %', values: validSuites.map(s => s.passRate!) }],
+        };
+        const summary = `${validSuites.length} suites — Stable: ${validSuites.filter(s => s.status === 'STABLE').length}, Watch: ${validSuites.filter(s => s.status === 'WATCH').length}, Unstable: ${validSuites.filter(s => s.status === 'UNSTABLE').length}`;
+        return buildChartResponse(chartConfig, chart as 'png' | 'html' | 'text', summary);
       }
 
       if (outputFormat === 'json' || outputFormat === 'dto') {
@@ -1402,8 +1431,8 @@ export class ZebrunnerReportingToolHandlers {
   /**
    * Get launcher summary - quick overview without detailed test sessions
    */
-  async getLauncherSummary(input: { projectKey?: string; projectId?: number; launchId: number; format?: 'dto' | 'json' | 'string'; jira_base_url?: string }) {
-    const { projectKey, projectId, launchId, format = 'json', jira_base_url } = input;
+  async getLauncherSummary(input: { projectKey?: string; projectId?: number; launchId: number; format?: 'dto' | 'json' | 'string'; jira_base_url?: string; chart?: 'none' | 'png' | 'html' | 'text'; chart_type?: 'auto' | 'pie' | 'bar' | 'stacked_bar' | 'horizontal_bar' | 'line' }) {
+    const { projectKey, projectId, launchId, format = 'json', jira_base_url, chart = 'none', chart_type = 'auto' as const } = input;
 
     try {
       if (!projectKey && !projectId) {
@@ -1443,6 +1472,18 @@ export class ZebrunnerReportingToolHandlers {
         }
       };
 
+      if (chart && chart !== 'none') {
+        const r = summary.testResults;
+        const entries = Object.entries({ Passed: r.passed, Failed: r.failed, Skipped: r.skipped, Blocked: r.blocked, Aborted: r.aborted }).filter(([_, v]) => v > 0);
+        const chartConfig: ChartConfig = {
+          type: (chart_type && chart_type !== 'auto') ? chart_type : 'pie',
+          title: `Test Results — ${summary.name} (Launch ${launchId})`,
+          labels: entries.map(([k]) => k),
+          datasets: [{ label: 'Tests', values: entries.map(([_, v]) => v) }],
+        };
+        return buildChartResponse(chartConfig, chart as 'png' | 'html' | 'text', `Launch ${launchId}: ${r.total} tests — Passed: ${r.passed}, Failed: ${r.failed}, Skipped: ${r.skipped}`);
+      }
+
       const formattedData = FormatProcessor.format(summary, format);
       
       return {
@@ -1477,6 +1518,8 @@ export class ZebrunnerReportingToolHandlers {
     limit?: number;
     format?: 'dto' | 'json' | 'string';
     count_only?: boolean;
+    chart?: 'none' | 'png' | 'html' | 'text';
+    chart_type?: 'auto' | 'pie' | 'bar' | 'stacked_bar' | 'horizontal_bar' | 'line';
   }) {
     const {
       testId,
@@ -1485,7 +1528,9 @@ export class ZebrunnerReportingToolHandlers {
       projectId,
       limit = 10,
       format = 'string',
-      count_only = false
+      count_only = false,
+      chart = 'none',
+      chart_type = 'auto' as const,
     } = input;
 
     try {
@@ -1524,6 +1569,24 @@ export class ZebrunnerReportingToolHandlers {
           launch_id: testRunId,
           limit_used: limit
         }, null, 2) }] };
+      }
+
+      if (chart && chart !== 'none') {
+        const items = history.items || [];
+        const labels = items.map((i: any) => new Date(i.startTime).toLocaleDateString());
+        const durations = items.map((i: any) => Math.round(i.elapsed / 1000));
+        const statusValues = items.map((i: any) => i.status === 'PASSED' && !i.passedManually ? 1 : 0);
+        const chartConfig: ChartConfig = {
+          type: (chart_type && chart_type !== 'auto') ? chart_type : 'line',
+          title: `Test Execution History — Test ${testId}`,
+          labels: labels.reverse(),
+          datasets: [
+            { label: 'Pass (1) / Fail (0)', values: statusValues.reverse(), color: '#4e79a7' },
+            { label: 'Duration (s)', values: durations.reverse(), color: '#f28e2b' },
+          ],
+        };
+        const passed = items.filter((i: any) => i.status === 'PASSED' && !i.passedManually).length;
+        return buildChartResponse(chartConfig, chart as 'png' | 'html' | 'text', `Test ${testId}: ${items.length} executions, ${Math.round((passed / (items.length || 1)) * 100)}% pass rate`);
       }
 
       const baseUrl = this.reportingClient['config'].baseUrl;
@@ -4169,6 +4232,8 @@ export class ZebrunnerReportingToolHandlers {
     offset?: number;
     limit?: number;
     count_only?: boolean;
+    chart?: 'none' | 'png' | 'html' | 'text';
+    chart_type?: 'auto' | 'pie' | 'bar' | 'stacked_bar' | 'horizontal_bar' | 'line';
   }) {
     const {
       testRunId,
@@ -4233,6 +4298,19 @@ export class ZebrunnerReportingToolHandlers {
           filter_type: filterType,
           launch_id: testRunId
         }, null, 2) }] };
+      }
+
+      const { chart = 'none', chart_type = 'auto' as const } = input;
+      if (chart && chart !== 'none') {
+        const statusCounts: Record<string, number> = {};
+        allTests.forEach((t: any) => { statusCounts[t.status] = (statusCounts[t.status] || 0) + 1; });
+        const chartConfig: ChartConfig = {
+          type: (chart_type && chart_type !== 'auto') ? chart_type : 'bar',
+          title: `Launch Failures — Launch ${testRunId}`,
+          labels: Object.keys(statusCounts),
+          datasets: [{ label: 'Tests', values: Object.values(statusCounts) }],
+        };
+        return buildChartResponse(chartConfig, chart as 'png' | 'html' | 'text', `Launch ${testRunId}: ${allTests.length} total tests, ${totalFailedTests} failed`);
       }
 
       // Smart limit: analyze all if <= 10, otherwise use limit parameter (default 10)
@@ -5978,6 +6056,8 @@ async analyzeTestExecutionVideoTool(input: AnalyzeTestExecutionVideoInput): Prom
     session_resolution?: SessionResolutionStrategy;
     medium_threshold_seconds?: number;
     long_threshold_seconds?: number;
+    chart?: 'none' | 'png' | 'html' | 'text';
+    chart_type?: 'auto' | 'pie' | 'bar' | 'stacked_bar' | 'horizontal_bar' | 'line';
   }) {
     const {
       projectKey,
@@ -6300,6 +6380,18 @@ async analyzeTestExecutionVideoTool(input: AnalyzeTestExecutionVideoInput): Prom
         }
       };
 
+      const { chart = 'none', chart_type = 'auto' as const } = input;
+      if (chart && chart !== 'none') {
+        const dist = aggregated.durationDistribution;
+        const chartConfig: ChartConfig = {
+          type: (chart_type && chart_type !== 'auto') ? chart_type : 'bar',
+          title: `Runtime Distribution — ${input.projectKey || input.projectId}`,
+          labels: ['Short', 'Medium', 'Long'],
+          datasets: [{ label: 'Tests', values: [dist.short, dist.medium, dist.long] }],
+        };
+        return buildChartResponse(chartConfig, chart as 'png' | 'html' | 'text', `Runtime analysis: ${aggregated.totalTests} tests — Avg: ${aggregated.avgRuntimePerTest}s, Short: ${dist.short}, Medium: ${dist.medium}, Long: ${dist.long}`);
+      }
+
       const formattedData = FormatProcessor.format(result, format);
 
       return {
@@ -6314,6 +6406,409 @@ async analyzeTestExecutionVideoTool(input: AnalyzeTestExecutionVideoInput): Prom
           type: 'text' as const,
           text: `Error analyzing regression runtime: ${error.message}`
         }]
+      };
+    }
+  }
+
+  // ─── Flaky Test Detection ───────────────────────────────────────────────────
+
+  async findFlakyTests(input: {
+    projectKey?: string;
+    projectId?: number;
+    period_days?: number;
+    min_flip_count?: number;
+    stability_threshold?: number;
+    milestone?: string;
+    build?: string;
+    suite_names?: string[];
+    include_manual?: boolean;
+    enrich_top_n?: number;
+    limit?: number;
+    include_history?: boolean;
+    format?: 'json' | 'string' | 'jira';
+    count_only?: boolean;
+    chart?: 'none' | 'png' | 'html' | 'text';
+    chart_type?: 'auto' | 'pie' | 'bar' | 'stacked_bar' | 'horizontal_bar' | 'line';
+  }) {
+    const {
+      projectKey,
+      projectId,
+      period_days = 14,
+      min_flip_count = 2,
+      stability_threshold = 80,
+      milestone,
+      build,
+      suite_names,
+      include_manual = true,
+      enrich_top_n = 10,
+      limit = 50,
+      include_history = false,
+      format = 'json',
+      count_only = false,
+      chart = 'none',
+      chart_type = 'auto' as const,
+    } = input;
+
+    try {
+      if (!projectKey && !projectId) {
+        throw new Error('Either projectKey or projectId must be provided');
+      }
+
+      let resolvedProjectId = projectId;
+      let resolvedProjectKey = projectKey;
+
+      if (projectKey && !projectId) {
+        resolvedProjectId = await this.reportingClient.getProjectId(projectKey);
+      } else if (projectId && !projectKey) {
+        resolvedProjectKey = await this.reportingClient.getProjectKey(projectId);
+      }
+
+      const cutoffDate = Date.now() - period_days * 24 * 60 * 60 * 1000;
+
+      // ── Phase 1: Launch Stability Scan ──────────────────────────────────
+
+      const maxLaunches = 50;
+      let allLaunches: any[] = [];
+      let page = 1;
+
+      while (allLaunches.length < maxLaunches) {
+        const opts: any = { page, pageSize: 20 };
+        if (milestone) opts.milestone = milestone;
+        if (build) opts.query = build;
+        const resp = await this.reportingClient.getLaunches(resolvedProjectId!, opts);
+        const items = resp.items || [];
+        if (items.length === 0) break;
+        allLaunches.push(...items);
+        if (page >= (resp._meta?.totalPages ?? 1)) break;
+        page++;
+      }
+
+      allLaunches = allLaunches
+        .filter((l: any) => l.startedAt && l.startedAt >= cutoffDate)
+        .slice(0, maxLaunches);
+
+      // Map: testName → array of {launchId, status, stability, date, testClass, testCaseIds}
+      const testMap = new Map<string, Array<{
+        launchId: number; status: string; stability: number; date: number;
+        testClass: string; testCaseIds: number[];
+      }>>();
+
+      const discoveredSuiteNames = new Set<string>();
+
+      for (const launch of allLaunches) {
+        try {
+          const runs = await this.reportingClient.getAllTestRuns(launch.id, resolvedProjectId!);
+          for (const t of (runs.items || [])) {
+            const name = t.name || 'Unknown';
+            if (!testMap.has(name)) testMap.set(name, []);
+            testMap.get(name)!.push({
+              launchId: launch.id,
+              status: t.status,
+              stability: t.stability !== undefined ? Math.round((t.stability || 0) * 100) : 0,
+              date: t.startTime || launch.startedAt || 0,
+              testClass: t.testClass || '',
+              testCaseIds: (t.testCases || []).map((tc: any) => tc.testCaseId || tc.id).filter(Boolean),
+            });
+            if (launch.name) discoveredSuiteNames.add(launch.name.split(/[\s/|\\]/)[0]);
+          }
+        } catch { /* skip launches that fail to load */ }
+      }
+
+      // Compute flaky metrics for automated tests
+      type FlakyEntry = {
+        test_name: string; test_class: string; source: string;
+        flip_count: number; appearances: number; pass_rate: string;
+        avg_stability: number; stability_trend: string; last_status: string;
+        tcm_enriched?: boolean; tcm_pass_rate?: string; tcm_executions?: number;
+        manual_vs_auto?: string; test_case_key?: string;
+        history?: Array<{ date: string; status: string; type: string; launch_id?: number; environment?: string }>;
+      };
+
+      const automatedFlaky: FlakyEntry[] = [];
+
+      for (const [name, entries] of testMap.entries()) {
+        if (entries.length < 2) continue;
+        const sorted = [...entries].sort((a, b) => a.date - b.date);
+        let flips = 0;
+        for (let i = 1; i < sorted.length; i++) {
+          const prev = sorted[i - 1].status;
+          const curr = sorted[i].status;
+          if ((prev === 'PASSED' && curr === 'FAILED') || (prev === 'FAILED' && curr === 'PASSED')) {
+            flips++;
+          }
+        }
+        if (flips < min_flip_count) continue;
+
+        const passed = sorted.filter(e => e.status === 'PASSED').length;
+        const avgStab = Math.round(sorted.reduce((s, e) => s + e.stability, 0) / sorted.length);
+        if (avgStab > stability_threshold) continue;
+
+        const first = sorted.slice(0, Math.ceil(sorted.length / 2));
+        const second = sorted.slice(Math.ceil(sorted.length / 2));
+        const avgFirst = first.reduce((s, e) => s + e.stability, 0) / (first.length || 1);
+        const avgSecond = second.reduce((s, e) => s + e.stability, 0) / (second.length || 1);
+        const diff = avgSecond - avgFirst;
+        const trend = diff > 5 ? 'improving' : diff < -5 ? 'degrading' : 'volatile';
+
+        const entry: FlakyEntry = {
+          test_name: name,
+          test_class: sorted[0].testClass,
+          source: 'automated',
+          flip_count: flips,
+          appearances: sorted.length,
+          pass_rate: `${Math.round((passed / sorted.length) * 100)}%`,
+          avg_stability: avgStab,
+          stability_trend: trend,
+          last_status: sorted[sorted.length - 1].status,
+        };
+
+        if (include_history) {
+          entry.history = sorted.map(e => ({
+            date: new Date(e.date).toISOString().slice(0, 10),
+            status: e.status,
+            type: 'AUTOMATED',
+            launch_id: e.launchId,
+          }));
+        }
+
+        automatedFlaky.push(entry);
+      }
+
+      automatedFlaky.sort((a, b) => b.flip_count - a.flip_count || a.avg_stability - b.avg_stability);
+
+      if (count_only) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              automated_flaky_count: automatedFlaky.length,
+              total_tests_analyzed: testMap.size,
+              launches_scanned: allLaunches.length,
+              period_days,
+              project: resolvedProjectKey || resolvedProjectId,
+            }, null, 2),
+          }],
+        };
+      }
+
+      // ── Phase 2: Manual Test Case Scan ──────────────────────────────────
+
+      const manualFlaky: FlakyEntry[] = [];
+      let manualChecked = 0;
+      let suitesScanned = 0;
+
+      if (include_manual && this.tcmClient && resolvedProjectKey) {
+        const targetSuites = suite_names && suite_names.length > 0
+          ? suite_names
+          : Array.from(discoveredSuiteNames).slice(0, 10);
+
+        try {
+          const allSuites = await this.tcmClient.getAllTestSuites(resolvedProjectKey);
+          const matchedSuites = allSuites.filter(s =>
+            targetSuites.some(t => (s as any).name?.toLowerCase().includes(t.toLowerCase()) || (s as any).title?.toLowerCase().includes(t.toLowerCase()))
+          );
+          suitesScanned = matchedSuites.length;
+
+          for (const suite of matchedSuites) {
+            try {
+              let pageToken: string | undefined;
+              let hasMore = true;
+              while (hasMore) {
+                const resp = await this.tcmClient.getTestCases(resolvedProjectKey, {
+                  suiteId: (suite as any).id,
+                  size: 100,
+                  pageToken,
+                });
+                const manualCases = (resp.items || []).filter((tc: any) => {
+                  const state = tc.automationState?.name?.toLowerCase() || '';
+                  return state === '' || state.includes('manual') || state.includes('not automated') || !tc.automationState;
+                });
+
+                const batch = 5;
+                for (let i = 0; i < manualCases.length; i += batch) {
+                  const chunk = manualCases.slice(i, i + batch);
+                  const results = await Promise.allSettled(
+                    chunk.map(async (tc: any) => {
+                      manualChecked++;
+                      const execs = await this.reportingClient.getTestCaseExecutions(tc.id, resolvedProjectId!, 30);
+                      const inPeriod = execs.filter(e => {
+                        const tracked = new Date(e.trackedAt).getTime();
+                        return tracked >= cutoffDate;
+                      });
+                      if (inPeriod.length < 2) return null;
+
+                      let flips = 0;
+                      for (let j = 1; j < inPeriod.length; j++) {
+                        const prevPassed = inPeriod[j - 1].status?.isCompleted;
+                        const currPassed = inPeriod[j].status?.isCompleted;
+                        if (prevPassed !== currPassed) flips++;
+                      }
+                      if (flips < min_flip_count) return null;
+
+                      const passed = inPeriod.filter(e => e.status?.isCompleted).length;
+                      const rate = Math.round((passed / inPeriod.length) * 100);
+
+                      const entry: FlakyEntry = {
+                        test_name: `Manual: ${tc.title || tc.key || tc.id}`,
+                        test_case_key: tc.key,
+                        test_class: '',
+                        source: 'manual_only',
+                        flip_count: flips,
+                        appearances: inPeriod.length,
+                        pass_rate: `${rate}%`,
+                        avg_stability: rate,
+                        stability_trend: 'volatile',
+                        last_status: inPeriod[inPeriod.length - 1].status?.isCompleted ? 'PASSED' : 'FAILED',
+                      };
+
+                      if (include_history) {
+                        entry.history = inPeriod.map(e => ({
+                          date: new Date(e.trackedAt).toISOString().slice(0, 10),
+                          status: e.status?.name || (e.status?.isCompleted ? 'PASSED' : 'FAILED'),
+                          type: e.type,
+                          environment: e.environment?.name,
+                        }));
+                      }
+                      return entry;
+                    })
+                  );
+                  for (const r of results) {
+                    if (r.status === 'fulfilled' && r.value) manualFlaky.push(r.value);
+                  }
+                }
+
+                pageToken = resp._meta?.nextPageToken;
+                hasMore = !!pageToken;
+              }
+            } catch { /* skip suites that fail */ }
+          }
+        } catch { /* TCM scan failed, continue with automated results only */ }
+      }
+
+      // ── Phase 3: Dual-Perspective Enrichment ────────────────────────────
+
+      if (enrich_top_n > 0 && this.tcmClient && resolvedProjectKey) {
+        const toEnrich = automatedFlaky.slice(0, enrich_top_n);
+        for (const entry of toEnrich) {
+          const mapEntries = testMap.get(entry.test_name) || [];
+          const tcIds = [...new Set(mapEntries.flatMap(e => e.testCaseIds))];
+          if (tcIds.length === 0) continue;
+
+          try {
+            const execs = await this.reportingClient.getTestCaseExecutions(tcIds[0], resolvedProjectId!, 30);
+            const inPeriod = execs.filter(e => new Date(e.trackedAt).getTime() >= cutoffDate);
+            if (inPeriod.length > 0) {
+              const passed = inPeriod.filter(e => e.status?.isCompleted).length;
+              entry.tcm_enriched = true;
+              entry.tcm_pass_rate = `${Math.round((passed / inPeriod.length) * 100)}%`;
+              entry.tcm_executions = inPeriod.length;
+
+              const manualExecs = inPeriod.filter(e => e.type === 'MANUAL');
+              const manualPassed = manualExecs.filter(e => e.status?.isCompleted).length;
+              if (manualExecs.length > 0) {
+                const manualRate = Math.round((manualPassed / manualExecs.length) * 100);
+                const autoRate = parseInt(entry.pass_rate);
+                if (manualRate > 80 && autoRate < 60) {
+                  entry.manual_vs_auto = 'passes manually, flaky in automation';
+                } else if (manualRate < 60 && autoRate > 80) {
+                  entry.manual_vs_auto = 'passes in automation, flaky manually';
+                } else {
+                  entry.manual_vs_auto = 'flaky in both';
+                }
+              }
+
+              if (include_history && entry.history) {
+                const manualHistory = inPeriod
+                  .filter(e => e.type === 'MANUAL')
+                  .map(e => ({
+                    date: new Date(e.trackedAt).toISOString().slice(0, 10),
+                    status: e.status?.name || (e.status?.isCompleted ? 'PASSED' : 'FAILED'),
+                    type: 'MANUAL' as const,
+                    environment: e.environment?.name,
+                  }));
+                entry.history = [...entry.history, ...manualHistory].sort(
+                  (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+                );
+              }
+            }
+          } catch { /* enrichment failure is non-fatal */ }
+        }
+      }
+
+      // ── Merge + Output ──────────────────────────────────────────────────
+
+      const allFlaky = [...automatedFlaky, ...manualFlaky]
+        .sort((a, b) => b.flip_count - a.flip_count || a.avg_stability - b.avg_stability)
+        .slice(0, limit);
+
+      const periodStart = new Date(cutoffDate).toISOString().slice(0, 10);
+      const periodEnd = new Date().toISOString().slice(0, 10);
+
+      const summary = {
+        total_tests_analyzed: testMap.size,
+        automated_flaky_found: automatedFlaky.length,
+        manual_flaky_found: manualFlaky.length,
+        period: `${periodStart} to ${periodEnd}`,
+        launches_scanned: allLaunches.length,
+        suites_scanned_for_manual: suitesScanned,
+        manual_test_cases_checked: manualChecked,
+      };
+
+      // Chart output
+      if (chart !== 'none') {
+        const topN = allFlaky.slice(0, 15);
+        const chartConfig: ChartConfig = {
+          type: (chart_type && chart_type !== 'auto') ? chart_type : 'bar',
+          title: `Top Flaky Tests — ${resolvedProjectKey || resolvedProjectId} (${periodStart} to ${periodEnd})`,
+          labels: topN.map(t => t.test_name.length > 30 ? t.test_name.slice(0, 27) + '...' : t.test_name),
+          datasets: [{
+            label: 'Flip Count',
+            values: topN.map(t => t.flip_count),
+          }],
+          width: 900,
+          height: 500,
+        };
+        const summaryText = `Found ${allFlaky.length} flaky tests (${automatedFlaky.length} automated, ${manualFlaky.length} manual) over ${period_days} days`;
+        return buildChartResponse(chartConfig, chart as 'png' | 'html' | 'text', summaryText);
+      }
+
+      const result = { summary, flaky_tests: allFlaky };
+
+      if (format === 'jira') {
+        let jira = `h2. Flaky Test Report — ${resolvedProjectKey}\n`;
+        jira += `Period: ${periodStart} → ${periodEnd} | Launches: ${allLaunches.length}\n`;
+        jira += `Automated flaky: *${automatedFlaky.length}* | Manual flaky: *${manualFlaky.length}*\n\n`;
+        jira += `||Test||Source||Flips||Pass Rate||Stability||Trend||Last Status||\n`;
+        for (const t of allFlaky) {
+          jira += `|${t.test_name}|${t.source}|${t.flip_count}|${t.pass_rate}|${t.avg_stability}%|${t.stability_trend}|${t.last_status}|\n`;
+        }
+        return { content: [{ type: 'text' as const, text: jira }] };
+      }
+
+      if (format === 'string') {
+        let md = `# Flaky Test Report — ${resolvedProjectKey}\n\n`;
+        md += `**Period:** ${periodStart} → ${periodEnd} | **Launches:** ${allLaunches.length}\n`;
+        md += `**Automated flaky:** ${automatedFlaky.length} | **Manual flaky:** ${manualFlaky.length}\n\n`;
+        md += `| # | Test | Source | Flips | Pass Rate | Stability | Trend | Last |\n`;
+        md += `|---|------|--------|-------|-----------|-----------|-------|------|\n`;
+        allFlaky.forEach((t, i) => {
+          md += `| ${i + 1} | ${t.test_name} | ${t.source} | ${t.flip_count} | ${t.pass_rate} | ${t.avg_stability}% | ${t.stability_trend} | ${t.last_status} |\n`;
+        });
+        return { content: [{ type: 'text' as const, text: md }] };
+      }
+
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify(result, null, 2),
+        }],
+      };
+    } catch (error: any) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `Error finding flaky tests: ${error.message}`,
+        }],
       };
     }
   }

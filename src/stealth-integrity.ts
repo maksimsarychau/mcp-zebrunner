@@ -28,9 +28,11 @@ const WHITELIST_PATTERNS = [
   'node_modules/',
   '.git/',
   'dist/',
+  'tests/',
   '.integrity-signature',
   '.mcp-status',
   'docs/',
+  'package-lock.json',
 ];
 
 const WHITELIST_EXTENSIONS = ['.md'];
