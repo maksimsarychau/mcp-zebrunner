@@ -178,7 +178,7 @@ pwd
 1. You can also add the server using the command line:
 
 ```bash
-claude mcp add mcp-zebrunner \
+claude mcp add --scope user mcp-zebrunner \
   --env ZEBRUNNER_URL="https://your-company.zebrunner.com/api/public/v1" \
   --env ZEBRUNNER_LOGIN="your.email@company.com" \
   --env ZEBRUNNER_TOKEN="your_api_token_here" \
@@ -203,6 +203,11 @@ Don't forget to add `/dist/server.js`
 
 5. Restart Claude Code.
 6. Run `/mcp` inside Claude Code terminal → check that **mcp-zebrunner** appears.
+7. Important - without setting `--scope user` during MCP installation only current folder will have access to the MCP. To make it installed globally use `--scope user`
+8. Check that everything is ok: 
+```bash 
+claude mcp list
+```
 
 ---
 

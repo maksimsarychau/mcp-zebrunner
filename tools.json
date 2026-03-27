@@ -57,7 +57,7 @@
   },
   {
     "name": "get_test_cases_advanced",
-    "description": "Advanced test case search with multiple filters"
+    "description": "Advanced test case search with multiple filters. Supports field_path/field_value/field_match for generic field-path filtering including custom fields."
   },
   {
     "name": "get_test_cases_by_automation_state",
@@ -65,7 +65,7 @@
   },
   {
     "name": "get_test_case_by_filter",
-    "description": "Filter test cases by various criteria"
+    "description": "Filter test cases by various criteria. Supports field_path/field_value/field_match for generic field-path filtering including custom fields."
   },
   {
     "name": "get_automation_states",
@@ -206,6 +206,10 @@
   {
     "name": "analyze_regression_runtime",
     "description": "Analyze Regression Runtime Efficiency: per-launch elapsed time, attempt/re-run breakdown, per-test duration classification (Short/Medium/Long), Average Runtime per Test, Average Runtime per Test Case, Weighted Runtime Index, and optional baseline comparison with delta tracking"
+  },
+  {
+    "name": "find_flaky_tests",
+    "description": "Find flaky tests across launches using a 3-phase approach: cross-launch flip-flop analysis, manual test case scan via TCM execution history, and dual-perspective enrichment of top flaky tests with TCM data"
   }
 ]
 
