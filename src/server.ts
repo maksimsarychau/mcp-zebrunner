@@ -24,6 +24,8 @@ import {
 } from "./types/core.js";
 import { stealthIntegrityCheck } from "./stealth-integrity.js";
 import { sanitizeRqlString } from "./utils/security.js";
+import { buildChartResponse, type ChartConfig } from "./utils/chart-generator.js";
+import { matchesField, filterByField, type FieldFilter, type FieldMatchMode } from "./utils/custom-field-filter.js";
 import {
   loadToolIntelSnapshot,
   markdownForAllTools,
@@ -1336,6 +1338,9 @@ async function main() {
       exclude_deprecated: z.boolean().default(false).describe("Exclude deprecated test cases from results"),
       exclude_draft: z.boolean().default(false).describe("Exclude draft test cases from results"),
       exclude_deleted: z.boolean().default(true).describe("Exclude deleted test cases from results (default: true)"),
+      field_path: z.string().optional().describe("Filter by any field using dot-notation path. Top-level: 'title', 'key', 'deprecated'. Nested: 'priority.name', 'automationState.name', 'testSuite.id', 'createdBy.username'. Custom fields: 'customField.manualOnly', 'customField.caseStatus'. Triggers client-side filtering (paginates all pages)."),
+      field_value: z.string().optional().describe("Value to match against the field. Required for 'exact', 'contains', and 'regex' modes. Not needed for 'exists' mode."),
+      field_match: z.enum(["exact", "contains", "regex", "exists"]).default("exact").describe("Match mode: 'exact' (case-insensitive equality), 'contains' (substring), 'regex' (pattern), 'exists' (field is present and non-null)"),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
       page: z.number().int().nonnegative().default(0).describe("Page number (0-based)"),
       size: z.number().int().positive().max(100).default(100).describe("Page size (configurable via MAX_PAGE_SIZE env var)"),
@@ -1360,6 +1365,9 @@ async function main() {
         exclude_deprecated,
         exclude_draft,
         exclude_deleted,
+        field_path,
+        field_value,
+        field_match,
         format,
         page,
         size,
@@ -1380,24 +1388,84 @@ async function main() {
       try {
         debugLog("Getting advanced test cases with enhanced filtering", args);
 
+        const hasFieldFilter = !!field_path;
+        const fFilter: FieldFilter | null = hasFieldFilter
+          ? { fieldPath: field_path!, fieldValue: field_value, matchMode: (field_match || "exact") as FieldMatchMode }
+          : null;
+
+        if (hasFieldFilter && fFilter!.matchMode !== "exists" && !field_value) {
+          return { content: [{ type: "text" as const,
+            text: `❌ Error: field_value is required when field_match is '${fFilter!.matchMode}'. Use 'exists' mode to check field presence only.`
+          }] };
+        }
+
+        const baseSearchParams = {
+          suiteId: suite_id,
+          rootSuiteId: root_suite_id,
+          automationState: automation_states,
+          createdAfter: created_after,
+          createdBefore: created_before,
+          modifiedAfter: modified_after,
+          modifiedBefore: modified_before,
+          excludeDeprecated: exclude_deprecated,
+          excludeDraft: exclude_draft,
+          excludeDeleted: exclude_deleted
+        };
+
+        // Field-path filtering requires full pagination + client-side filter
+        if (hasFieldFilter) {
+          const allCases: any[] = [];
+          let pageCount = 0;
+          let currentPageToken: string | undefined = undefined;
+          do {
+            const response = await client.getTestCases(project_key, {
+              ...baseSearchParams,
+              size: MAX_PAGE_SIZE,
+              pageToken: currentPageToken,
+            });
+            allCases.push(...(response.items || []));
+            pageCount++;
+            currentPageToken = response._meta?.nextPageToken;
+          } while (currentPageToken);
+
+          const matched = filterByField(allCases, fFilter!);
+
+          if (count_only) {
+            return { content: [{ type: "text" as const, text: JSON.stringify({
+              total_count: matched.length,
+              total_before_filter: allCases.length,
+              pages_traversed: pageCount,
+              field_filter: { path: fFilter!.fieldPath, value: fFilter!.fieldValue, mode: fFilter!.matchMode },
+              project_key
+            }, null, 2) }] };
+          }
+
+          const limited = matched.slice(0, size);
+          const formattedData = FormatProcessor.format({
+            items: limited,
+            page_count: limited.length,
+            total_matched: matched.length,
+            total_before_filter: allCases.length,
+            field_filter: { path: fFilter!.fieldPath, value: fFilter!.fieldValue, mode: fFilter!.matchMode },
+            _notice: matched.length > limited.length
+              ? `Showing first ${limited.length} of ${matched.length} matches. Increase 'size' to see more.`
+              : undefined
+          }, format);
+
+          return { content: [{ type: "text" as const,
+            text: typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2)
+          }] };
+        }
+
         if (count_only) {
           let totalCount = 0;
           let pageCount = 0;
           let currentPageToken: string | undefined = undefined;
           do {
             const response = await client.getTestCases(project_key, {
+              ...baseSearchParams,
               size: MAX_PAGE_SIZE,
               pageToken: currentPageToken,
-              suiteId: suite_id,
-              rootSuiteId: root_suite_id,
-              automationState: automation_states,
-              createdAfter: created_after,
-              createdBefore: created_before,
-              modifiedAfter: modified_after,
-              modifiedBefore: modified_before,
-              excludeDeprecated: exclude_deprecated,
-              excludeDraft: exclude_draft,
-              excludeDeleted: exclude_deleted
             });
             totalCount += (response.items || []).length;
             pageCount++;
@@ -1411,22 +1479,7 @@ async function main() {
           }, null, 2) }] };
         }
 
-        const searchParams = {
-          page,
-          size,
-          suiteId: suite_id,
-          rootSuiteId: root_suite_id,
-          automationState: automation_states,
-          createdAfter: created_after,
-          createdBefore: created_before,
-          modifiedAfter: modified_after,
-          modifiedBefore: modified_before,
-          excludeDeprecated: exclude_deprecated,
-          excludeDraft: exclude_draft,
-          excludeDeleted: exclude_deleted
-        };
-
-        const response = await client.getTestCases(project_key, searchParams);
+        const response = await client.getTestCases(project_key, { ...baseSearchParams, page, size });
 
         if (!validateApiResponse(response, 'array')) {
           throw new Error('Invalid API response format');
@@ -1434,7 +1487,6 @@ async function main() {
 
         let processedCases = response.items || response;
 
-        // If include_steps is true, fetch detailed info for first few cases
         if (include_steps && processedCases.length > 0) {
           debugLog("Fetching detailed steps for test cases", { count: Math.min(5, processedCases.length) });
 
@@ -1446,12 +1498,11 @@ async function main() {
                 return await client.getTestCaseByKey(project_key, testCase.key);
               } catch (error) {
                 debugLog(`Failed to fetch detailed case ${testCase.key}`, { error });
-                return testCase; // Fallback to original data
+                return testCase;
               }
             })
           );
 
-          // Replace original cases with detailed versions where successful
           const detailedMap = new Map();
           detailedCases.forEach((result, index) => {
             if (result.status === 'fulfilled' && result.value) {
@@ -2139,6 +2190,9 @@ async function main() {
       exclude_deprecated: z.boolean().default(false).describe("Exclude deprecated test cases from results"),
       exclude_draft: z.boolean().default(false).describe("Exclude draft test cases from results"),
       exclude_deleted: z.boolean().default(true).describe("Exclude deleted test cases from results (default: true)"),
+      field_path: z.string().optional().describe("Filter by any field using dot-notation path. Top-level: 'title', 'key', 'deprecated'. Nested: 'priority.name', 'automationState.name', 'testSuite.id', 'createdBy.username'. Custom fields: 'customField.manualOnly', 'customField.caseStatus'. Triggers client-side filtering (paginates all pages)."),
+      field_value: z.string().optional().describe("Value to match against the field. Required for 'exact', 'contains', and 'regex' modes. Not needed for 'exists' mode."),
+      field_match: z.enum(["exact", "contains", "regex", "exists"]).default("exact").describe("Match mode: 'exact' (case-insensitive equality), 'contains' (substring), 'regex' (pattern), 'exists' (field is present and non-null)"),
       max_page_size: z.number().int().positive().max(100).default(20).describe("Maximum number of results per page"),
       page_token: z.string().optional().describe("Token for pagination (from previous response next_page_token). On first call, omit this."),
       get_all: z.boolean().default(false).describe("Get all matching test cases across all pages (uses page_token loop internally)"),
@@ -2163,6 +2217,9 @@ async function main() {
         exclude_deprecated,
         exclude_draft,
         exclude_deleted,
+        field_path,
+        field_value,
+        field_match,
         max_page_size,
         page_token,
         get_all,
@@ -2176,37 +2233,40 @@ async function main() {
 
         const clickableLinkConfig = getClickableLinkConfig(include_clickable_links, ZEBRUNNER_URL);
 
-        // Build RQL filter from provided parameters
+        const hasFieldFilter = !!field_path;
+        const fFilter: FieldFilter | null = hasFieldFilter
+          ? { fieldPath: field_path!, fieldValue: field_value, matchMode: (field_match || "exact") as FieldMatchMode }
+          : null;
+
+        if (hasFieldFilter && fFilter!.matchMode !== "exists" && !field_value) {
+          return { content: [{ type: "text" as const,
+            text: `❌ Error: field_value is required when field_match is '${fFilter!.matchMode}'. Use 'exists' mode to check field presence only.`
+          }] };
+        }
+
         const filters: string[] = [];
 
         if (test_suite_id) {
           filters.push(`testSuite.id = ${test_suite_id}`);
         }
-
         if (created_after) {
           filters.push(`createdAt >= '${created_after}'`);
         }
-
         if (created_before) {
           filters.push(`createdAt <= '${created_before}'`);
         }
-
         if (last_modified_after) {
           filters.push(`lastModifiedAt >= '${last_modified_after}'`);
         }
-
         if (last_modified_before) {
           filters.push(`lastModifiedAt <= '${last_modified_before}'`);
         }
-
         if (priority_id) {
           filters.push(`priority.id = ${priority_id}`);
         }
-
         if (automation_state_id) {
           filters.push(`automationState.id = ${automation_state_id}`);
         }
-
         if (exclude_deprecated) {
           filters.push(`deprecated = false`);
         }
@@ -2217,11 +2277,75 @@ async function main() {
           filters.push(`deleted = false`);
         }
 
-        if (filters.length === 0) {
-          throw new Error('At least one filter parameter must be provided');
+        if (filters.length === 0 && !hasFieldFilter) {
+          throw new Error('At least one filter parameter must be provided (including field_path)');
         }
 
-        const filter = filters.join(' AND ');
+        const filter = filters.length > 0 ? filters.join(' AND ') : undefined;
+
+        // Field-path filter requires full pagination + client-side filter
+        if (hasFieldFilter) {
+          const allCases: any[] = [];
+          let pageCount = 0;
+          let currentPageToken = page_token;
+          do {
+            const response = await client.getTestCases(project_key, {
+              size: MAX_PAGE_SIZE,
+              filter,
+              pageToken: currentPageToken
+            });
+            allCases.push(...(response.items || []));
+            pageCount++;
+            currentPageToken = response._meta?.nextPageToken;
+          } while (currentPageToken);
+
+          const matched = filterByField(allCases, fFilter!);
+
+          if (count_only) {
+            return { content: [{ type: "text" as const, text: JSON.stringify({
+              total_count: matched.length,
+              total_before_filter: allCases.length,
+              pages_traversed: pageCount,
+              rql_filters_applied: filter || "(none)",
+              field_filter: { path: fFilter!.fieldPath, value: fFilter!.fieldValue, mode: fFilter!.matchMode },
+              project_key
+            }, null, 2) }] };
+          }
+
+          let processedCases = matched;
+          if (include_clickable_links && clickableLinkConfig.includeClickableLinks) {
+            processedCases = processedCases.map((testCase: any) =>
+              addTestCaseWebUrl(testCase, project_key, clickableLinkConfig.baseWebUrl, clickableLinkConfig)
+            );
+          }
+
+          const limited = processedCases.slice(0, max_page_size);
+          const formattedData = FormatProcessor.format(limited, format);
+          const resultText = typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2);
+
+          const MAX_RESPONSE_BYTES = 900_000;
+          if (resultText.length > MAX_RESPONSE_BYTES) {
+            const avgItemSize = resultText.length / limited.length;
+            const safeCount = Math.floor(MAX_RESPONSE_BYTES / avgItemSize * 0.9);
+            const truncated = limited.slice(0, Math.max(safeCount, 1));
+            const truncatedText = JSON.stringify(truncated, null, 2);
+            return { content: [{ type: "text" as const, text:
+              `Found ${matched.length} matching field filter (${allCases.length} total before filter), returning first ${truncated.length} ` +
+              `(response truncated to stay under MCP 1MB limit).\n` +
+              `Use count_only=true to get just the count.\n` +
+              `Field filter: ${fFilter!.fieldPath} ${fFilter!.matchMode} ${fFilter!.fieldValue || ''}\n` +
+              (filter ? `RQL filters: ${filter}\n` : '') + `\n${truncatedText}`
+            }] };
+          }
+
+          const filterDesc = `Field filter: ${fFilter!.fieldPath} ${fFilter!.matchMode} ${fFilter!.fieldValue ?? '(any)'}`;
+          const summary = `Found ${matched.length} test case(s) matching field filter (${allCases.length} total, ${pageCount} pages scanned)`;
+          const showingInfo = matched.length > limited.length ? `\nShowing first ${limited.length} of ${matched.length}. Set max_page_size higher to see more.` : '';
+
+          return { content: [{ type: "text" as const,
+            text: `${summary}\n${filterDesc}${filter ? `\nRQL filters: ${filter}` : ''}${showingInfo}\n\n${resultText}`
+          }] };
+        }
 
         if (get_all && count_only) {
           let totalCount = 0;
@@ -2251,13 +2375,11 @@ async function main() {
           let currentPageToken = page_token;
 
           do {
-            const searchParams = {
+            const response = await client.getTestCases(project_key, {
               size: max_page_size,
               filter: filter,
               pageToken: currentPageToken
-            };
-
-            const response = await client.getTestCases(project_key, searchParams);
+            });
 
             if (!validateApiResponse(response, 'array')) {
               throw new Error('Invalid API response format');
@@ -3888,13 +4010,37 @@ async function main() {
       launchId: z.number().int().positive().describe("Launch ID (e.g., 118685)"),
       includeLaunchDetails: z.boolean().default(true).describe("Include detailed launch information"),
       includeTestSessions: z.boolean().default(true).describe("Include test sessions data"),
-      format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format")
+      format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format"),
+      chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
+        "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
+      ),
+      chart_type: z.enum(['auto', 'pie', 'bar', 'stacked_bar', 'horizontal_bar', 'line']).default('auto').describe(
+        "Chart type override. 'auto' picks the best type for this tool's data. Explicit value forces that chart type."
+      ),
     }
     },
     async (args) => {
       try {
         debugLog("get_launch_details called", args);
-        return await reportingHandlers.getLauncherDetails(args);
+        const result = await reportingHandlers.getLauncherDetails(args);
+        if (args.chart && args.chart !== 'none') {
+          const text = result?.content?.[0]?.text || '{}';
+          try {
+            const data = JSON.parse(text);
+            const runs = data.testRunsSummary || {};
+            const entries = Object.entries(runs.byStatus || {}).filter(([_, v]: any) => v > 0);
+            if (entries.length > 0) {
+              const chartConfig: ChartConfig = {
+                type: args.chart_type !== 'auto' ? args.chart_type : 'pie',
+                title: `Launch Details — ${data.launchName || args.launchId}`,
+                labels: entries.map(([k]: any) => k),
+                datasets: [{ label: 'Tests', values: entries.map(([_, v]: any) => v as number) }],
+              };
+              return buildChartResponse(chartConfig, args.chart as 'png' | 'html' | 'text', `Launch ${args.launchId} test breakdown`);
+            }
+          } catch { /* fall through to original result */ }
+        }
+        return result;
       } catch (error: any) {
         debugLog("Error in get_launch_details", { error: error.message, args });
         return {
@@ -3929,7 +4075,13 @@ async function main() {
       count_only: z.boolean().default(false).describe(
         "When true, returns only the total and per-status count of tests in the launch without full data. " +
         "Skips session resolution, JIRA URL lookup, and formatting. Much faster than full summary."
-      )
+      ),
+      chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
+        "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
+      ),
+      chart_type: z.enum(['auto', 'pie', 'bar', 'stacked_bar', 'horizontal_bar', 'line']).default('auto').describe(
+        "Chart type override. 'auto' picks the best type for this tool's data. Explicit value forces that chart type."
+      ),
     }
     },
     async (args) => {
@@ -3983,7 +4135,13 @@ async function main() {
       count_only: z.boolean().default(false).describe(
         "When true, resolves builds/suites but returns only the count of matched suites without generating the full report. " +
         "Useful for pre-checking how many suites will be included."
-      )
+      ),
+      chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
+        "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
+      ),
+      chart_type: z.enum(['auto', 'pie', 'bar', 'stacked_bar', 'horizontal_bar', 'line']).default('auto').describe(
+        "Chart type override. 'auto' picks the best type for this tool's data. Explicit value forces that chart type."
+      ),
     }
     },
     async (args) => {
@@ -4008,7 +4166,9 @@ async function main() {
           linkedIssues: args.linked_issues,
           outputStyle: args.output_style,
           outputFormat: args.output_format,
-          count_only: args.count_only
+          count_only: args.count_only,
+          chart: args.chart,
+          chart_type: args.chart_type,
         });
       } catch (error: any) {
         debugLog("Error in generate_weekly_regression_stability_report", { error: error.message, args });
@@ -4031,7 +4191,13 @@ async function main() {
       projectId: z.number().int().positive().optional().describe("Project ID (e.g., 7) - alternative to projectKey"),
       launchId: z.number().int().positive().describe("Launch ID (e.g., 118685)"),
       format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format"),
-      jira_base_url: z.string().url().optional().describe("Override JIRA base URL (e.g., 'https://myproject.atlassian.net'). If not set, resolved from Zebrunner integrations or JIRA_BASE_URL env var")
+      jira_base_url: z.string().url().optional().describe("Override JIRA base URL (e.g., 'https://myproject.atlassian.net'). If not set, resolved from Zebrunner integrations or JIRA_BASE_URL env var"),
+      chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
+        "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
+      ),
+      chart_type: z.enum(['auto', 'pie', 'bar', 'stacked_bar', 'horizontal_bar', 'line']).default('auto').describe(
+        "Chart type override. 'auto' picks the best type for this tool's data. Explicit value forces that chart type."
+      ),
     }
     },
     async (args) => {
@@ -4067,7 +4233,13 @@ async function main() {
       format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format"),
       session_resolution: z.enum(['auto', 'per_test', 'launch_level']).default('auto').describe("Session duration resolution strategy: auto (launch-level first, fallback per-test), per_test, or launch_level"),
       medium_threshold_seconds: z.number().int().positive().default(300).describe("Duration threshold (seconds) above which a test is classified as Medium. Default: 300 (5 min)"),
-      long_threshold_seconds: z.number().int().positive().default(600).describe("Duration threshold (seconds) above which a test is classified as Long. Default: 600 (10 min)")
+      long_threshold_seconds: z.number().int().positive().default(600).describe("Duration threshold (seconds) above which a test is classified as Long. Default: 600 (10 min)"),
+      chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
+        "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
+      ),
+      chart_type: z.enum(['auto', 'pie', 'bar', 'stacked_bar', 'horizontal_bar', 'line']).default('auto').describe(
+        "Chart type override. 'auto' picks the best type for this tool's data. Explicit value forces that chart type."
+      ),
     }
     },
     async (args) => {
@@ -4093,7 +4265,9 @@ async function main() {
           format: args.format,
           session_resolution: args.session_resolution,
           medium_threshold_seconds: args.medium_threshold_seconds,
-          long_threshold_seconds: args.long_threshold_seconds
+          long_threshold_seconds: args.long_threshold_seconds,
+          chart: args.chart,
+          chart_type: args.chart_type,
         });
       } catch (error: any) {
         debugLog("Error in analyze_regression_runtime", { error: error.message, args });
@@ -4101,6 +4275,72 @@ async function main() {
           content: [{
             type: "text" as const,
             text: `Error analyzing regression runtime: ${error.message}`
+          }]
+        };
+      }
+    }
+  );
+
+  server.registerTool(
+    "find_flaky_tests",
+    {
+      description: "🔍 Find flaky tests across launches using a 3-phase approach: (1) cross-launch flip-flop analysis of automated tests, (2) manual-only test case scan via TCM execution history, (3) dual-perspective enrichment of top automated flaky tests with TCM data. Detects tests that oscillate between PASSED/FAILED across multiple launches within a time window.",
+    inputSchema: {
+      project: z.union([z.enum(["web","android","ios","api"]), z.string(), z.number()]).describe("Project alias (web/android/ios/api), project key, or project ID"),
+      period_days: z.number().int().positive().max(90).default(14).describe("Time window in days to scan for flakiness (default: 14, max: 90)"),
+      min_flip_count: z.number().int().positive().default(2).describe("Minimum pass/fail transitions to qualify as flaky (default: 2)"),
+      stability_threshold: z.number().min(0).max(100).default(80).describe("Max avg stability % to include — tests above this are considered stable (default: 80)"),
+      milestone: z.string().optional().describe("Optional milestone filter for launches"),
+      build: z.string().optional().describe("Optional build number filter for launches"),
+      suite_names: z.array(z.string()).optional().describe("Optional suite names to scope the manual test scan (Phase 2)"),
+      include_manual: z.boolean().default(true).describe("Scan manual-only test cases via TCM execution history (Phase 2)"),
+      enrich_top_n: z.number().int().min(0).default(10).describe("Number of top automated flaky tests to enrich with TCM data (Phase 3). Set to 0 to skip."),
+      limit: z.number().int().positive().max(200).default(50).describe("Max flaky tests to return"),
+      include_history: z.boolean().default(false).describe("Include per-test execution timeline with dates, statuses, and MANUAL/AUTOMATED type"),
+      format: z.enum(['json', 'string', 'jira']).default('json').describe("Output format: json, markdown string, or Jira wiki markup"),
+      count_only: z.boolean().default(false).describe(
+        "When true, returns only the count of automated flaky tests found (Phase 1 only). Skips Phase 2/3."
+      ),
+      chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
+        "When set, returns a bar chart of top flaky tests by flip count. " +
+        "'png' returns a base64 PNG image, 'html' returns Chart.js page, 'text' returns ASCII chart."
+      ),
+      chart_type: z.enum(['auto', 'pie', 'bar', 'stacked_bar', 'horizontal_bar', 'line']).default('auto').describe(
+        "Chart type override. 'auto' picks the best type for this tool's data. Explicit value forces that chart type."
+      )
+    }
+    },
+    async (args) => {
+      try {
+        debugLog("find_flaky_tests called", args);
+        const { projectId } = await resolveProjectId(args.project);
+        const projectKey = typeof args.project === 'string'
+          ? (PROJECT_ALIASES[args.project] || args.project)
+          : undefined;
+        return await reportingHandlers.findFlakyTests({
+          projectKey: projectKey,
+          projectId,
+          period_days: args.period_days,
+          min_flip_count: args.min_flip_count,
+          stability_threshold: args.stability_threshold,
+          milestone: args.milestone,
+          build: args.build,
+          suite_names: args.suite_names,
+          include_manual: args.include_manual,
+          enrich_top_n: args.enrich_top_n,
+          limit: args.limit,
+          include_history: args.include_history,
+          format: args.format,
+          count_only: args.count_only,
+          chart: args.chart,
+          chart_type: args.chart_type,
+        });
+      } catch (error: any) {
+        debugLog("Error in find_flaky_tests", { error: error.message, args });
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error finding flaky tests: ${error.message}`
           }]
         };
       }
@@ -4166,7 +4406,13 @@ async function main() {
         "When true, returns only the total execution count and pass rate without full history data. " +
         "Skips formatting and detailed per-execution output."
       ),
-      format: z.enum(['dto', 'json', 'string']).default('string').describe("Output format: dto (structured), json, or string (markdown table)")
+      format: z.enum(['dto', 'json', 'string']).default('string').describe("Output format: dto (structured), json, or string (markdown table)"),
+      chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
+        "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
+      ),
+      chart_type: z.enum(['auto', 'pie', 'bar', 'stacked_bar', 'horizontal_bar', 'line']).default('auto').describe(
+        "Chart type override. 'auto' picks the best type for this tool's data. Explicit value forces that chart type."
+      ),
     }
     },
     async (args) => {
@@ -4305,7 +4551,13 @@ async function main() {
       count_only: z.boolean().default(false).describe(
         "When true, returns only the total count of failed tests (with or without issues) without performing analysis. " +
         "Skips expensive per-test analysis, session lookups, and screenshot processing."
-      )
+      ),
+      chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
+        "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
+      ),
+      chart_type: z.enum(['auto', 'pie', 'bar', 'stacked_bar', 'horizontal_bar', 'line']).default('auto').describe(
+        "Chart type override. 'auto' picks the best type for this tool's data. Explicit value forces that chart type."
+      ),
     }
     },
     async (args) => {
@@ -4336,7 +4588,13 @@ async function main() {
         "When true, returns only the total count of launches without full data. " +
         "Uses API metadata for an efficient single-request count. Bypasses MCP response size limits."
       ),
-      format: z.enum(['raw', 'formatted']).default('formatted').describe("Output format - 'raw' for full API response, 'formatted' for user-friendly display")
+      format: z.enum(['raw', 'formatted']).default('formatted').describe("Output format - 'raw' for full API response, 'formatted' for user-friendly display"),
+      chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
+        "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
+      ),
+      chart_type: z.enum(['auto', 'pie', 'bar', 'stacked_bar', 'horizontal_bar', 'line']).default('auto').describe(
+        "Chart type override. 'auto' picks the best type for this tool's data. Explicit value forces that chart type."
+      ),
     }
     },
     async (args) => {
@@ -4359,6 +4617,21 @@ async function main() {
           page: args.page,
           pageSize: args.pageSize
         });
+
+        if (args.chart && args.chart !== 'none') {
+          const items = launchesData.items || [];
+          const chartConfig: ChartConfig = {
+            type: args.chart_type !== 'auto' ? args.chart_type : 'stacked_bar',
+            title: `Launch Results — ${args.project} (Page ${args.page})`,
+            labels: items.map((l: any) => l.name?.slice(0, 20) || `#${l.id}`),
+            datasets: [
+              { label: 'Passed', values: items.map((l: any) => l.passed || 0), color: '#59a14f' },
+              { label: 'Failed', values: items.map((l: any) => l.failed || 0), color: '#e15759' },
+              { label: 'Skipped', values: items.map((l: any) => l.skipped || 0), color: '#edc948' },
+            ],
+          };
+          return buildChartResponse(chartConfig, args.chart as 'png' | 'html' | 'text', `Launch results for ${args.project}: ${launchesData._meta?.total || items.length} total launches`);
+        }
 
         if (args.format === 'raw') {
           return {
@@ -4456,7 +4729,13 @@ async function main() {
         "When true, returns only the total count of matching launches without full data. " +
         "Uses API metadata for an efficient single-request count. Bypasses MCP response size limits."
       ),
-      format: z.enum(['raw', 'formatted']).default('formatted').describe("Output format - 'raw' for full API response, 'formatted' for user-friendly display")
+      format: z.enum(['raw', 'formatted']).default('formatted').describe("Output format - 'raw' for full API response, 'formatted' for user-friendly display"),
+      chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
+        "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
+      ),
+      chart_type: z.enum(['auto', 'pie', 'bar', 'stacked_bar', 'horizontal_bar', 'line']).default('auto').describe(
+        "Chart type override. 'auto' picks the best type for this tool's data. Explicit value forces that chart type."
+      ),
     }
     },
     async (args) => {
@@ -4501,7 +4780,22 @@ async function main() {
           query: args.query
         });
 
-        if (args.format === 'raw') {
+                if (args.chart && args.chart !== 'none') {
+          const items = launchesData.items || [];
+          const chartConfig: ChartConfig = {
+            type: args.chart_type !== 'auto' ? args.chart_type : 'stacked_bar',
+            title: `Filtered Launches — ${args.project}`,
+            labels: items.map((l: any) => l.name?.slice(0, 20) || `#${l.id}`),
+            datasets: [
+              { label: 'Passed', values: items.map((l: any) => l.passed || 0), color: '#59a14f' },
+              { label: 'Failed', values: items.map((l: any) => l.failed || 0), color: '#e15759' },
+              { label: 'Skipped', values: items.map((l: any) => l.skipped || 0), color: '#edc948' },
+            ],
+          };
+          return buildChartResponse(chartConfig, args.chart as 'png' | 'html' | 'text', `Filtered launches for ${args.project}: ${launchesData._meta?.total || items.length} total`);
+        }
+
+if (args.format === 'raw') {
           return {
             content: [{
               type: "text" as const,
@@ -4712,8 +5006,13 @@ async function main() {
         .describe("Override templateId if needed"),
       dashboardName: z.string().optional()
         .describe("Override dashboard title"),
-      format: z.enum(['raw', 'formatted']).default('formatted')
-        .describe("Output format: raw widget response or formatted data")
+      format: z.enum(['raw', 'formatted']).default('formatted'),
+      chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
+        "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
+      ),
+      chart_type: z.enum(['auto', 'pie', 'bar', 'stacked_bar', 'horizontal_bar', 'line']).default('auto').describe(
+        "Chart type override. 'auto' picks the best type for this tool's data. Explicit value forces that chart type."
+      ),
     }
     },
     async (args) => {
@@ -4737,6 +5036,50 @@ async function main() {
           console.error("get_platform_results_by_period ok", {
             projectId, templateId: args.templateId, period: args.period
           });
+        }
+
+        if (args.chart && args.chart !== 'none') {
+          const rows: any[] = Array.isArray(data) ? data : [];
+          if (rows.length > 0) {
+            const sampleKeys = Object.keys(rows[0]);
+            debugLog("Platform chart: row keys", sampleKeys);
+
+            // Auto-discover label column: first column whose value is a non-numeric string
+            const labelKey = sampleKeys.find(k => {
+              const v = rows[0][k];
+              return typeof v === 'string' && isNaN(Number(v));
+            }) ?? sampleKeys[0];
+
+            // Auto-discover numeric dataset columns (passed, failed, skipped, etc.)
+            const numericKeys = sampleKeys.filter(k => {
+              if (k === labelKey) return false;
+              const v = rows[0][k];
+              return typeof v === 'number' || (typeof v === 'string' && !isNaN(Number(v)) && v !== '');
+            });
+
+            const labels = rows.map((r: any) => String(r[labelKey] ?? 'Unknown'));
+
+            const statusColors: Record<string, string> = {
+              passed: '#59a14f', failed: '#e15759', skipped: '#f28e2b',
+              aborted: '#bab0ac', known_issue: '#edc948', in_progress: '#76b7b2',
+              queued: '#b07aa1',
+            };
+
+            const datasets = numericKeys.map(k => ({
+              label: k.charAt(0).toUpperCase() + k.slice(1).toLowerCase(),
+              values: rows.map((r: any) => parseInt(r[k] || '0')),
+              color: statusColors[k.toLowerCase()] ?? undefined,
+            }));
+
+            const chartConfig: ChartConfig = {
+              type: args.chart_type !== 'auto' ? args.chart_type : 'stacked_bar',
+              title: `Platform Results (${args.period})`,
+              labels,
+              datasets,
+            };
+            return buildChartResponse(chartConfig, args.chart as 'png' | 'html' | 'text', `Platform results for ${args.period}`);
+          }
+          return { content: [{ type: "text" as const, text: "No platform data to chart." }] };
         }
 
         let result;
@@ -4797,8 +5140,13 @@ async function main() {
       milestone: z.array(z.string())
         .default([])
         .describe("Optional MILESTONE filter, e.g., ['25.39.0'] for milestone filtering"),
-      format: z.enum(['raw', 'formatted']).default('formatted')
-        .describe("Output format: raw widget response or formatted data")
+      format: z.enum(['raw', 'formatted']).default('formatted'),
+      chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
+        "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
+      ),
+      chart_type: z.enum(['auto', 'pie', 'bar', 'stacked_bar', 'horizontal_bar', 'line']).default('auto').describe(
+        "Chart type override. 'auto' picks the best type for this tool's data. Explicit value forces that chart type."
+      ),
     }
     },
     async (args) => {
@@ -4905,6 +5253,16 @@ async function main() {
           });
         }
 
+        if (args.chart && args.chart !== 'none') {
+          const chartConfig: ChartConfig = {
+            type: args.chart_type !== 'auto' ? args.chart_type : 'horizontal_bar',
+            title: `Top ${top.length} Bugs (${args.period})`,
+            labels: top.map((b: any) => b.key),
+            datasets: [{ label: 'Failures', values: top.map((b: any) => b.failures) }],
+          };
+          return buildChartResponse(chartConfig, args.chart as 'png' | 'html' | 'text', `Top ${top.length} bugs for ${args.period}`);
+        }
+
         // Return formatted or raw output based on format parameter
         const formatValue = args.format as 'raw' | 'formatted';
         if (formatValue === 'raw') {
@@ -4965,7 +5323,13 @@ async function main() {
         .default(TEMPLATE.BUG_REVIEW)
         .describe("Override templateId if needed (default: 9 for Bug Review)"),
       format: z.enum(['detailed', 'summary', 'json']).default('detailed')
-        .describe("Output format: detailed (full info with markdown links), summary (concise), or json (raw data)")
+        .describe("Output format: detailed (full info with markdown links), summary (concise), or json (raw data)"),
+      chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
+        "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
+      ),
+      chart_type: z.enum(['auto', 'pie', 'bar', 'stacked_bar', 'horizontal_bar', 'line']).default('auto').describe(
+        "Chart type override. 'auto' picks the best type for this tool's data. Explicit value forces that chart type."
+      )
     }
     },
     async (args) => {
@@ -5127,6 +5491,24 @@ async function main() {
 
         // Calculate priority and trend analysis
         const priorityAnalysis = analyzeBugPriorities(bugs);
+
+        if (args.chart && args.chart !== 'none') {
+          const chartConfig: ChartConfig = {
+            type: args.chart_type !== 'auto' ? args.chart_type : 'pie',
+            title: `Bug Priority Distribution (${args.period})`,
+            labels: ['Critical', 'High', 'Medium', 'Low'],
+            datasets: [{
+              label: 'Bugs',
+              values: [
+                priorityAnalysis.critical.length,
+                priorityAnalysis.high.length,
+                priorityAnalysis.medium.length,
+                priorityAnalysis.low.length,
+              ],
+            }],
+          };
+          return buildChartResponse(chartConfig, args.chart as 'png' | 'html' | 'text', `Bug review: ${bugs.length} bugs — Critical: ${priorityAnalysis.critical.length}, High: ${priorityAnalysis.high.length}, Medium: ${priorityAnalysis.medium.length}, Low: ${priorityAnalysis.low.length}`);
+        }
 
         // Helper to format failure details section
         const formatFailureDetails = (bug: any, level: string) => {
@@ -5863,8 +6245,13 @@ ${detailsInfo.map((detail, i) => {
         "When true, paginates through all pages and returns only the total count of test runs without data. " +
         "Useful for metrics and dashboards. Bypasses MCP response size limits."
       ),
-      format: z.enum(['raw', 'formatted']).default('formatted')
-        .describe("Output format: raw API response or formatted data")
+      format: z.enum(['raw', 'formatted']).default('formatted'),
+      chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
+        "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
+      ),
+      chart_type: z.enum(['auto', 'pie', 'bar', 'stacked_bar', 'horizontal_bar', 'line']).default('auto').describe(
+        "Chart type override. 'auto' picks the best type for this tool's data. Explicit value forces that chart type."
+      ),
     }
     },
     async (args) => {
@@ -5960,6 +6347,25 @@ ${detailsInfo.map((detail, i) => {
           sortBy: args.sortBy
         });
 
+        if (args.chart && args.chart !== 'none') {
+          const runs = testRunsData.items || [];
+          const statusMap: Record<string, number[]> = {};
+          runs.forEach((r: any, idx: number) => {
+            const details = r.executionSummary?.details || {};
+            Object.entries(details).forEach(([status, info]: any) => {
+              if (!statusMap[status]) statusMap[status] = new Array(runs.length).fill(0);
+              statusMap[status][idx] = info.testCasesCount || 0;
+            });
+          });
+          const chartConfig: ChartConfig = {
+            type: args.chart_type !== 'auto' ? args.chart_type : 'stacked_bar',
+            title: `Test Runs — ${projectKey}`,
+            labels: runs.map((r: any) => r.name?.slice(0, 20) || `Run ${r.id}`),
+            datasets: Object.entries(statusMap).map(([status, values]) => ({ label: status, values })),
+          };
+          return buildChartResponse(chartConfig, args.chart as 'png' | 'html' | 'text', `${runs.length} test runs for ${projectKey}`);
+        }
+
         let result: any;
         if (args.format === 'raw') {
           result = testRunsData;
@@ -6035,8 +6441,13 @@ ${detailsInfo.map((detail, i) => {
       project: z.union([z.enum(["web","android","ios","api"]), z.string()])
         .default("web")
         .describe("Project alias ('web', 'android', 'ios', 'api') or project key"),
-      format: z.enum(['raw', 'formatted']).default('formatted')
-        .describe("Output format: raw API response or formatted data")
+      format: z.enum(['raw', 'formatted']).default('formatted'),
+      chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
+        "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
+      ),
+      chart_type: z.enum(['auto', 'pie', 'bar', 'stacked_bar', 'horizontal_bar', 'line']).default('auto').describe(
+        "Chart type override. 'auto' picks the best type for this tool's data. Explicit value forces that chart type."
+      ),
     }
     },
     async (args) => {
@@ -6060,6 +6471,26 @@ ${detailsInfo.map((detail, i) => {
           id: args.id,
           projectKey
         });
+
+        if (args.chart && args.chart !== 'none') {
+          const runData = testRunData as any;
+          const summaries = runData?.data?.executionSummaries || runData?.executionSummaries || [];
+          const statusCounts: Record<string, number> = {};
+          summaries.forEach((s: any) => {
+            const status = s.status?.name || 'UNKNOWN';
+            statusCounts[status] = (statusCounts[status] || 0) + (s.testCasesCount || 0);
+          });
+          const entries = Object.entries(statusCounts).filter(([_, v]) => v > 0);
+          if (entries.length > 0) {
+            const chartConfig: ChartConfig = {
+              type: args.chart_type !== 'auto' ? args.chart_type : 'pie',
+              title: `Test Run Status — Run ${args.id}`,
+              labels: entries.map(([k]) => k),
+              datasets: [{ label: 'Test Cases', values: entries.map(([_, v]) => v) }],
+            };
+            return buildChartResponse(chartConfig, args.chart as 'png' | 'html' | 'text', `Test run ${args.id} status distribution`);
+          }
+        }
 
         let result: any;
         if (args.format === 'raw') {
@@ -6146,8 +6577,13 @@ ${detailsInfo.map((detail, i) => {
       project: z.union([z.enum(["web","android","ios","api"]), z.string()])
         .default("web")
         .describe("Project alias ('web', 'android', 'ios', 'api') or project key"),
-      format: z.enum(['raw', 'formatted']).default('formatted')
-        .describe("Output format: raw API response or formatted data")
+      format: z.enum(['raw', 'formatted']).default('formatted'),
+      chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
+        "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
+      ),
+      chart_type: z.enum(['auto', 'pie', 'bar', 'stacked_bar', 'horizontal_bar', 'line']).default('auto').describe(
+        "Chart type override. 'auto' picks the best type for this tool's data. Explicit value forces that chart type."
+      ),
     }
     },
     async (args) => {
@@ -6171,6 +6607,21 @@ ${detailsInfo.map((detail, i) => {
           testRunId: args.testRunId,
           projectKey
         });
+
+        if (args.chart && args.chart !== 'none') {
+          const statusCounts: Record<string, number> = {};
+          (testCasesData.items || []).forEach((tc: any) => {
+            const st = tc.resultStatus?.name || tc.status || 'UNKNOWN';
+            statusCounts[st] = (statusCounts[st] || 0) + 1;
+          });
+          const chartConfig: ChartConfig = {
+            type: args.chart_type !== 'auto' ? args.chart_type : 'pie',
+            title: `Test Case Status — Run ${args.testRunId}`,
+            labels: Object.keys(statusCounts),
+            datasets: [{ label: 'Test Cases', values: Object.values(statusCounts) }],
+          };
+          return buildChartResponse(chartConfig, args.chart as 'png' | 'html' | 'text', `Test run ${args.testRunId}: ${(testCasesData.items || []).length} test cases`);
+        }
 
         let result: any;
         if (args.format === 'raw') {
@@ -7157,7 +7608,13 @@ ${detailsInfo.map((detail, i) => {
       tags_format: z.enum(['by_root_suite', 'single_line']).default('by_root_suite').describe(
         "TAGS output format: by_root_suite (separate TAGS line per root suite, default) or single_line (all combined on one line)"
       ),
-      max_results: z.number().int().positive().max(2000).default(500).describe("Maximum test cases to process")
+      max_results: z.number().int().positive().max(2000).default(500).describe("Maximum test cases to process"),
+      chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
+        "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
+      ),
+      chart_type: z.enum(['auto', 'pie', 'bar', 'stacked_bar', 'horizontal_bar', 'line']).default('auto').describe(
+        "Chart type override. 'auto' picks the best type for this tool's data. Explicit value forces that chart type."
+      ),
     }
     },
     async (args) => {
@@ -7367,7 +7824,26 @@ ${detailsInfo.map((detail, i) => {
           }
         });
 
-        // Step 8: Format output based on requested format
+                // Chart output
+        if (args.chart && args.chart !== 'none') {
+          const groupLabels: string[] = [];
+          const groupCounts: number[] = [];
+          for (const [, group] of rootSuiteGroups) {
+            groupLabels.push(group.rootSuiteName);
+            let count = 0;
+            for (const [, fs] of group.featureSuites) count += fs.testCases.length;
+            groupCounts.push(count);
+          }
+          const chartConfig: ChartConfig = {
+            type: args.chart_type !== 'auto' ? args.chart_type : 'bar',
+            title: `Test Cases by Feature — "${feature_keyword}" in ${project_key}`,
+            labels: groupLabels,
+            datasets: [{ label: 'Test Cases', values: groupCounts }],
+          };
+          return buildChartResponse(chartConfig, args.chart as 'png' | 'html' | 'text', `${uniqueMatches.length} test cases matching "${feature_keyword}" across ${groupLabels.length} root suites`);
+        }
+
+// Step 8: Format output based on requested format
         let output = '';
 
         if (output_format === 'test_run_rules') {

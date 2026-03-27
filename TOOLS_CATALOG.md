@@ -20,6 +20,17 @@ Complete reference of all available tools with natural language usage examples.
 
 ---
 
+### Chart Parameters (available on 17 tools)
+
+All tools marked with chart support accept these two parameters:
+
+| Parameter | Values | Description |
+|-----------|--------|-------------|
+| `chart` | `none`, `png`, `html`, `text` | Output format. `png` = base64 image, `html` = interactive Chart.js, `text` = ASCII chart |
+| `chart_type` | `auto`, `pie`, `bar`, `stacked_bar`, `horizontal_bar`, `line` | Chart shape. `auto` (default) picks the best type for the tool's data. Explicit value overrides. |
+
+---
+
 ## Test Failure Analysis & Debugging
 
 ### `analyze_test_failure`
@@ -276,6 +287,33 @@ Weekly stability report for project MCP using:
 - "Analyze regression runtime for the Web project with medium_threshold_seconds: 120 and long_threshold_seconds: 300. Show which tests fall into each bucket."
 - "Analyze regression runtime for the Android project on the latest milestone. What is the average time cost per test case in each duration bucket? Are long-running tests covering proportionally more test cases?"
 
+### `find_flaky_tests`
+
+**Description:** Find flaky tests across launches using a 3-phase approach: cross-launch flip-flop analysis for automated tests, manual test case scan via TCM execution history, and optional dual-perspective enrichment correlating both data sources.
+
+**Parameters:**
+- `project` (required) — Project key or alias (e.g., `"android"`, `"MCPAND"`)
+- `period_days` — Number of days to look back (default: `14`)
+- `min_flip_count` — Minimum status flips to be considered flaky (default: `2`)
+- `stability_threshold` — Pass-rate threshold below which a test is considered flaky (default: `0.8`)
+- `milestone` — Filter launches by milestone name
+- `build` — Filter launches by build number
+- `suite_names` — Array of suite names to include
+- `include_manual` — Also scan manual test cases via TCM (default: `true`)
+- `enrich_top_n` — Enrich top N flaky tests with dual-perspective data (default: `5`)
+- `limit` — Maximum number of flaky tests to return (default: `50`)
+- `include_history` — Include per-test execution history details (default: `false`)
+- `format` — Output format: `"json"` or `"string"` (default: `"string"`)
+- `count_only` — Return only the count of flaky tests (default: `false`)
+- `chart` — Output chart format: `"none"`, `"png"`, `"html"`, `"text"` (default: `"none"`)
+- `chart_type` — Chart type override: `"auto"`, `"pie"`, `"bar"`, `"stacked_bar"`, `"horizontal_bar"`, `"line"` (default: `"auto"`)
+
+**Example Prompts:**
+- "Find flaky tests in the Android project over the last 14 days"
+- "How many flaky tests are in the iOS project? Use count_only"
+- "Find the top 10 most flaky tests in the Web project with full history details"
+- "Find flaky tests in the Android project and show me a chart"
+
 ---
 
 ## Video & Screenshot Analysis
@@ -331,12 +369,22 @@ Weekly stability report for project MCP using:
 
 ### `get_test_cases_advanced`
 
-**Description:** Advanced filtering with automation states, dates, priority, and more.
+**Description:** Advanced filtering with automation states, dates, priority, and more. Supports **generic field-path filtering** via `field_path`, `field_value`, and `field_match` parameters for any field including custom fields.
+
+**Field-Path Filtering Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `field_path` | string | Dot-notation path to any field (e.g., `customField.manualOnly`, `priority.name`, `title`) |
+| `field_value` | string | Value to match against (not required for `exists` mode) |
+| `field_match` | `exact` \| `contains` \| `regex` \| `exists` | Match mode (default: `exact`) |
 
 **Example Prompts:**
 - "Get test cases created after 2025-01-01 with automation state 'Manual'"
 - "Show me high priority test cases from last month"
 - "Find test cases updated after 2025-11-01 that are not automated"
+- "Get all test cases in MFPAND where customField.manualOnly is 'Yes'"
+- "Find test cases whose priority.name contains 'High'"
 
 ### `get_test_cases_by_automation_state`
 
@@ -349,12 +397,13 @@ Weekly stability report for project MCP using:
 
 ### `get_test_case_by_filter`
 
-**Description:** Advanced filtering by suite, dates, priority, automation state, and status.
+**Description:** Advanced filtering by suite, dates, priority, automation state, and status. Also supports **generic field-path filtering** via `field_path`, `field_value`, and `field_match` (same parameters as `get_test_cases_advanced`).
 
 **Example Prompts:**
 - "Get test cases from suite 491 created after 2025-01-01 with high priority"
 - "Show me test cases from suite 17470 with status 'Approved'"
 - "Find test cases in suite 18697 that were updated last week"
+- "Find test cases in MFPAND where customField.caseStatus equals 'Active'"
 
 ### `get_automation_states`
 
@@ -905,7 +954,7 @@ For large datasets, you can specify filters and limits:
 
 ---
 
-**Last Updated:** v6.5.4 - March 2026
+**Last Updated:** v6.6.0 - March 2026
 
 For the latest features and updates, see [change-logs.md](change-logs.md).
 

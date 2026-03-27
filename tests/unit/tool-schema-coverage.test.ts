@@ -76,7 +76,7 @@ function keyCandidates(key: string): string[] {
 }
 
 describe("Tool Schema Coverage", () => {
-  it("validates required schema keys exist for all 51 tools", () => {
+  it("validates required schema keys exist for all 53 tools", () => {
     const source = readServerSource();
 
     for (const [toolName, requiredKeys] of Object.entries(TOOL_SCHEMA_REQUIRED_KEYS)) {

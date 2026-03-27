@@ -9,6 +9,9 @@ export type PromptCategory =
   | "test_run"
   | "duplicate"
   | "e2e_metric"
+  | "flaky"
+  | "chart"
+  | "field_filter"
   | "negative";
 
 export type NegativeCategory =
@@ -772,6 +775,158 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
     requiredContext: ["projectKey"],
   },
 
+  // ── Section 8: Flaky Test Detection ──
+
+  {
+    id: "find_flaky_tests.basic_scan",
+    toolSection: "8. Flaky Tests",
+    promptTemplate:
+      "Find flaky tests in the {{project_key}} project over the last 14 days.",
+    expectedTools: ["find_flaky_tests"],
+    expectedArgKeys: ["project"],
+    category: "flaky",
+    layer: 1,
+    requiredContext: ["projectKey"],
+  },
+  {
+    id: "find_flaky_tests.count_only",
+    toolSection: "8. Flaky Tests",
+    promptTemplate:
+      "How many flaky tests are in the {{project_key}} project? Just the count.",
+    expectedTools: ["find_flaky_tests"],
+    expectedArgKeys: ["project"],
+    category: "flaky",
+    layer: 2,
+    requiredContext: ["projectKey"],
+  },
+  {
+    id: "find_flaky_tests.with_history",
+    toolSection: "8. Flaky Tests",
+    promptTemplate:
+      "Find flaky tests in the {{project_key}} project with full execution history. Show me the top 20 most flaky tests including their pass/fail timeline.",
+    expectedTools: ["find_flaky_tests"],
+    expectedArgKeys: ["project"],
+    category: "flaky",
+    layer: 2,
+    requiredContext: ["projectKey"],
+  },
+  {
+    id: "find_flaky_tests.with_chart",
+    toolSection: "8. Flaky Tests",
+    promptTemplate:
+      "Show me a chart of the top flaky tests in the {{project_key}} project over the last 30 days.",
+    expectedTools: ["find_flaky_tests"],
+    expectedArgKeys: ["project"],
+    category: "flaky",
+    layer: 2,
+    requiredContext: ["projectKey"],
+  },
+
+  // ── Section 9: Chart Visualization ──
+
+  {
+    id: "chart.launch_summary_pie",
+    toolSection: "9. Chart",
+    promptTemplate:
+      "Show me a pie chart of test results for launch {{launch_id}} in the {{project_key}} project.",
+    expectedTools: ["get_launch_test_summary", "get_launch_summary"],
+    expectedArgKeys: ["project_key", "launch_id"],
+    category: "chart",
+    layer: 2,
+    requiredContext: ["projectKey", "launchId"],
+  },
+  {
+    id: "chart.launches_stacked_bar",
+    toolSection: "9. Chart",
+    promptTemplate:
+      "Generate a chart of launch results for the {{project_key}} project showing passed, failed, and skipped per launch.",
+    expectedTools: ["get_all_launches_for_project", "get_platform_results_by_period"],
+    expectedArgKeys: ["project"],
+    category: "chart",
+    layer: 2,
+    requiredContext: ["projectKey"],
+  },
+  {
+    id: "chart.execution_history_line",
+    toolSection: "9. Chart",
+    promptTemplate:
+      "Chart the execution history for test {{launch_test_id}} in launch {{launch_id}} of the {{project_key}} project as a line chart.",
+    expectedTools: ["get_test_execution_history"],
+    expectedArgKeys: ["projectKey", "testId"],
+    category: "chart",
+    layer: 2,
+    requiredContext: ["projectKey", "launchId", "launchTestId"],
+  },
+  {
+    id: "chart.top_bugs_bar",
+    toolSection: "9. Chart",
+    promptTemplate:
+      "Show me a chart of the top bugs in the {{project_key}} project over the last 30 days.",
+    expectedTools: ["get_top_bugs"],
+    expectedArgKeys: ["project"],
+    category: "chart",
+    layer: 1,
+    requiredContext: ["projectKey"],
+  },
+  {
+    id: "chart.text_fallback",
+    toolSection: "9. Chart",
+    promptTemplate:
+      "Show me a text-based chart of bug priority distribution for the {{project_key}} project over the last 14 days.",
+    expectedTools: ["get_bug_review", "get_top_bugs"],
+    expectedArgKeys: ["project"],
+    category: "chart",
+    layer: 1,
+    requiredContext: ["projectKey"],
+  },
+
+  // ── Section 10: Field-Path Filtering ──
+
+  {
+    id: "field_filter.custom_field_exact",
+    toolSection: "10. Field Filter",
+    promptTemplate:
+      "Get all test cases in the {{project_key}} project where the custom field 'manualOnly' equals 'Yes'.",
+    expectedTools: ["get_test_cases_advanced", "get_test_case_by_filter"],
+    expectedArgKeys: ["project_key"],
+    category: "field_filter",
+    layer: 2,
+    requiredContext: ["projectKey"],
+  },
+  {
+    id: "field_filter.priority_name",
+    toolSection: "10. Field Filter",
+    promptTemplate:
+      "Find all High priority test cases in the {{project_key}} project by filtering on priority.name.",
+    expectedTools: ["get_test_cases_advanced", "get_test_case_by_filter"],
+    expectedArgKeys: ["project_key"],
+    category: "field_filter",
+    layer: 2,
+    requiredContext: ["projectKey"],
+  },
+  {
+    id: "field_filter.title_contains",
+    toolSection: "10. Field Filter",
+    promptTemplate:
+      "Find all test cases in the {{project_key}} project whose title contains 'login'.",
+    expectedTools: ["get_test_cases_advanced", "get_test_case_by_filter", "get_test_case_by_title"],
+    expectedArgKeys: ["project_key"],
+    category: "field_filter",
+    layer: 1,
+    requiredContext: ["projectKey"],
+  },
+  {
+    id: "field_filter.count_manual_only",
+    toolSection: "10. Field Filter",
+    promptTemplate:
+      "How many test cases in the {{project_key}} project have customField.manualOnly set to 'Yes'? Just the count.",
+    expectedTools: ["get_test_cases_advanced", "get_test_case_by_filter"],
+    expectedArgKeys: ["project_key"],
+    category: "field_filter",
+    layer: 2,
+    requiredContext: ["projectKey"],
+  },
+
   // ══════════════════════════════════════════════════════════════════
   // Negative Tests — prompts that should NOT trigger normal tool use
   // ══════════════════════════════════════════════════════════════════
@@ -908,6 +1063,20 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
     expectedBehavior: "should_error",
   },
 
+  // ── Invalid data for flaky tests ──
+
+  {
+    id: "neg.invalid.flaky_fake_project",
+    toolSection: "Negative",
+    promptTemplate: "Find flaky tests in the ZZZZNONEXISTENT99 project over the last 14 days.",
+    expectedTools: ["find_flaky_tests"],
+    category: "negative",
+    layer: 3,
+    isNegative: true,
+    negativeCategory: "invalid_data",
+    expectedBehavior: "should_error",
+  },
+
   // ── Tool confusion: explicitly names a wrong tool for the task ──
 
   {
@@ -945,6 +1114,35 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
       "What are the top bugs in the {{project_key}} project? I need bug information specifically, not test coverage data.",
     expectedTools: ["get_top_bugs", "get_bug_review"],
     forbiddenTools: ["get_test_coverage_by_test_case_steps_by_key", "get_enhanced_test_coverage_with_rules"],
+    category: "negative",
+    layer: 1,
+    isNegative: true,
+    negativeCategory: "tool_confusion",
+    expectedBehavior: "should_select_tool",
+    requiredContext: ["projectKey"],
+  },
+
+  {
+    id: "neg.confuse.flaky_vs_history",
+    toolSection: "Negative",
+    promptTemplate:
+      "Find all flaky tests across multiple launches in the {{project_key}} project. I need cross-launch flip-flop analysis, not single-test execution history.",
+    expectedTools: ["find_flaky_tests"],
+    forbiddenTools: ["get_test_execution_history"],
+    category: "negative",
+    layer: 1,
+    isNegative: true,
+    negativeCategory: "tool_confusion",
+    expectedBehavior: "should_select_tool",
+    requiredContext: ["projectKey"],
+  },
+  {
+    id: "neg.confuse.chart_vs_analyze",
+    toolSection: "Negative",
+    promptTemplate:
+      "I need a chart of the bug priority distribution for the {{project_key}} project. Use the bug review tool with chart output, not the failure analysis tool.",
+    expectedTools: ["get_bug_review"],
+    forbiddenTools: ["detailed_analyze_launch_failures", "analyze_test_failure"],
     category: "negative",
     layer: 1,
     isNegative: true,

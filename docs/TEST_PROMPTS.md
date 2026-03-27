@@ -1,6 +1,6 @@
 # Test Prompts for Zebrunner MCP Tools
 
-> **Version:** 6.5.4
+> **Version:** 6.6.0
 >
 > This document contains 1–3 test prompts per tool with expected behavior, plus end-to-end metric collection prompts. All prompts use generic platform references (iOS / Android / Web) without specific project keys, launch IDs, or milestones.
 
@@ -15,6 +15,9 @@
 5. [Test Run Management Tools](#5-test-run-management-tools)
 6. [Duplicate Analysis Tools](#6-duplicate-analysis-tools)
 7. [E2E Metric Collection Prompts](#7-e2e-metric-collection-prompts)
+8. [Flaky Test Detection](#8-flaky-test-detection)
+9. [Chart Visualization](#9-chart-visualization)
+10. [Field-Path Filtering](#10-field-path-filtering)
 
 ---
 
@@ -94,7 +97,7 @@
 
 **Expected:** Uses `automation_states`, `created_after`, `exclude_deprecated: true`, `exclude_draft: true`. Server-side RQL filtering.
 
-**Prompt 4 — Count only** *(v6.5.4)*
+**Prompt 4 — Count only** *(v6.6.0)*
 > How many test cases are in root suite 42 of the iOS project? Just the count.
 
 **Expected:** Uses `count_only: true` with `root_suite_id: 42`. Paginates through all pages accumulating only the count. Returns `{total_count: N}` without test case data.
@@ -132,7 +135,7 @@
 
 **Expected:** Uses `get_all: true` to auto-paginate, `exclude_deprecated: true` for server-side filtering. Response includes `page_count` and `has_more_pages: false`.
 
-**Prompt 4 — Count only (efficient for metrics)** *(v6.5.4)*
+**Prompt 4 — Count only (efficient for metrics)** *(v6.6.0)*
 > How many automated test cases are in the Android project? Just the count, not the full data.
 
 **Expected:** Uses `get_all: true, count_only: true`. Returns `{total_count: N}` without fetching full payloads. Efficient for metrics collection on large projects.
@@ -160,7 +163,7 @@
 
 **Expected:** Uses `get_all: true` to auto-paginate through all matching test cases.
 
-**Prompt 3 — Count only** *(v6.5.4)*
+**Prompt 3 — Count only** *(v6.6.0)*
 > How many test cases in the iOS project have "payment" in the title? Just the count.
 
 **Expected:** Uses `get_all: true, count_only: true`. Returns `{total_count: N}` without full payloads.
@@ -184,7 +187,7 @@
 
 **Expected:** Uses `automation_state_id`, `exclude_deprecated: true`, `exclude_draft: true`. Server-side RQL filtering.
 
-**Prompt 4 — Count only for date range** *(v6.5.4)*
+**Prompt 4 — Count only for date range** *(v6.6.0)*
 > How many test cases were created in the Android project in the last 30 days? Just the count.
 
 **Expected:** Uses `get_all: true, count_only: true, created_after: <30 days ago>`. Returns `{total_count: N}` without full payloads.
@@ -258,7 +261,7 @@
 
 **Expected:** Uses `exclude_deprecated: true`, `exclude_draft: true`, `exclude_deleted: true`. Server-side RQL filtering applied. Response includes `filters_applied` metadata.
 
-**Prompt 3 — Count only** *(v6.5.4)*
+**Prompt 3 — Count only** *(v6.6.0)*
 > How many total test cases are in the Web project, excluding deleted ones? Just the count.
 
 **Expected:** Uses `count_only: true, exclude_deleted: true`. Returns `{total_count: N}` without fetching all test case objects. Efficient for coverage metrics.
@@ -272,7 +275,7 @@
 
 **Expected:** Returns test cases enriched with `rootSuiteId` information for categorization.
 
-**Prompt 2 — Count only** *(v6.5.4)*
+**Prompt 2 — Count only** *(v6.6.0)*
 > How many test cases are in the Android project? Just the count, skip the hierarchy enrichment.
 
 **Expected:** Uses `count_only: true`. Paginates to count but skips suite hierarchy processing for speed. Returns `{total_count: N}`.
@@ -300,7 +303,7 @@
 
 **Expected:** Uses `include_sub_suites: false` to return only direct children of suite 42.
 
-**Prompt 3 — Count only** *(v6.5.4)*
+**Prompt 3 — Count only** *(v6.6.0)*
 > How many test cases are in suite 42 of the iOS project, including sub-suites? Just the count.
 
 **Expected:** Uses `count_only: true`. Auto-detects suite type, builds filter, and paginates to count without returning test case data. Returns `{total_count: N, suite_name: "...", is_root_suite: true/false}`.
@@ -847,3 +850,114 @@ These prompts combine multiple tools to collect real business metrics. The LLM s
 **Expected tools:** `get_all_launches_with_filter` + `get_launch_test_summary` for pass rate, `detailed_analyze_launch_failures` for unlinked failures, `analyze_regression_runtime` with baseline comparison, `get_test_cases_by_automation_state` with `count_only: true` for coverage percentage, `get_top_bugs` for defect patterns.
 
 **Expected output:** Structured assessment with per-check status, evidence, and a clear Go/No-Go recommendation.
+
+---
+
+## 8. Flaky Test Detection
+
+### `find_flaky_tests`
+
+**Prompt 1 — Basic flaky scan** *(v6.6.0)*
+> Find flaky tests in the Android project over the last 14 days.
+
+**Expected:** Uses `find_flaky_tests` with `project: "android"`, `period_days: 14`. Returns a list of tests that flipped pass/fail at least 2 times, sorted by flip count. Includes automated tests from launch analysis and manual-only tests from TCM execution history.
+
+**Prompt 2 — Count only** *(v6.6.0)*
+> How many flaky tests are there in the Web project? Just the count.
+
+**Expected:** Uses `count_only: true`. Returns only the count from Phase 1 (automated flaky detection via launch scan), skipping Phases 2 and 3.
+
+**Prompt 3 — With execution history** *(v6.6.0)*
+> Find flaky tests in the iOS project over the last 30 days with execution history included. Format as Jira markup.
+
+**Expected:** Uses `include_history: true`, `period_days: 30`, `format: "jira"`. Returns flaky tests with per-test timeline showing date, status, type (MANUAL/AUTOMATED), and launch ID.
+
+**Prompt 4 — Chart output** *(v6.6.0)*
+> Show me a chart of the top flaky tests in the Android project.
+
+**Expected:** Uses `chart: "png"` (or the LLM selects an appropriate format). Returns a bar chart visualization of the top flaky tests sorted by flip count.
+
+---
+
+## 9. Chart Visualization
+
+### Chart output on existing tools
+
+**Prompt 1 — Pie chart of test status** *(v6.6.0)*
+> Show me a pie chart of test results for launch 120806 in the Android project.
+
+**Expected:** Uses `get_launch_test_summary` with `chart: "png"`. Returns a PNG pie chart showing passed/failed/skipped distribution.
+
+**Prompt 2 — Bar chart of suite stability** *(v6.6.0)*
+> Generate a chart comparing suite pass rates for the weekly regression stability report on build 49117 vs 48886 in the MCP project.
+
+**Expected:** Uses `generate_weekly_regression_stability_report` with `chart: "png"`. Returns a bar chart of suite pass rates.
+
+**Prompt 3 — Stacked bar of launch results** *(v6.6.0)*
+> Show me a chart of launch results for the Web project.
+
+**Expected:** Uses `get_all_launches_for_project` with `chart: "png"`. Returns a stacked bar chart showing passed/failed/skipped per launch.
+
+**Prompt 4 — Line chart of test execution history** *(v6.6.0)*
+> Chart the execution history for test 5451420 in launch 120806 of the MCP project.
+
+**Expected:** Uses `get_test_execution_history` with `chart: "png"`. Returns a line chart showing pass/fail trend and duration over executions.
+
+**Prompt 5 — Text chart fallback** *(v6.6.0)*
+> Show me the top bugs for the Android project as a text chart.
+
+**Expected:** Uses `get_top_bugs` with `chart: "text"`. Returns an ASCII/markdown horizontal bar chart of bug failure counts.
+
+**Prompt 6 — HTML interactive chart** *(v6.6.0)*
+> Give me an interactive HTML chart of platform results for the last 7 days.
+
+**Expected:** Uses `get_platform_results_by_period` with `chart: "html"`. Returns a self-contained HTML page with Chart.js for interactive stacked bar visualization.
+
+**Prompt 7 — Pie chart override** *(v6.6.0)*
+> Show me a pie chart of test results for launch 120806 in the Android project.
+
+**Expected:** Uses `get_launch_test_summary` with `chart: "png"`, `chart_type: "pie"`. Returns a PNG pie chart of passed/failed/skipped distribution.
+
+**Prompt 8 — Bar chart override on pie-default tool** *(v6.6.0)*
+> Give me a bar chart breakdown of test run statuses for run 456 in the Web project.
+
+**Expected:** Uses `get_test_run_by_id` with `chart: "png"`, `chart_type: "bar"`. Overrides the default pie chart with a vertical bar chart.
+
+**Prompt 9 — Pie chart for platform results** *(v6.6.0)*
+> Show me a pie chart of platform test results for the Web project over the last 7 days.
+
+**Expected:** Uses `get_platform_results_by_period` with `chart: "png"`, `chart_type: "pie"`. Overrides the default stacked bar with a pie chart.
+
+## 10. Field-Path Filtering
+
+### Filtering test cases by custom fields and nested properties
+
+**Prompt 1 — Custom field exact match** *(v6.6.0)*
+> Get all test cases in the MFPAND project where the custom field 'manualOnly' equals 'Yes'.
+
+**Expected:** Uses `get_test_cases_advanced` with `field_path: "customField.manualOnly"`, `field_value: "Yes"`, `field_match: "exact"`. Paginates all test cases and applies client-side filtering. Returns only test cases where the manualOnly custom field is "Yes".
+
+**Prompt 2 — Nested field filtering** *(v6.6.0)*
+> Find all High priority test cases in the MFPAND project.
+
+**Expected:** Uses `get_test_cases_advanced` or `get_test_case_by_filter` with either the RQL priority filter or `field_path: "priority.name"`, `field_value: "High"`, `field_match: "exact"`.
+
+**Prompt 3 — Count with field filter** *(v6.6.0)*
+> How many manual-only test cases are in the MFPAND project?
+
+**Expected:** Uses `get_test_cases_advanced` with `field_path: "customField.manualOnly"`, `field_value: "Yes"`, `count_only: true`. Returns the count of matching test cases without full payloads.
+
+**Prompt 4 — Title contains** *(v6.6.0)*
+> Find all test cases in MFPAND whose title contains 'login'.
+
+**Expected:** Uses `get_test_cases_advanced` or `get_test_case_by_filter` with `field_path: "title"`, `field_value: "login"`, `field_match: "contains"`.
+
+**Prompt 5 — Check if custom field exists** *(v6.6.0)*
+> Show me which test cases in MFPAND have a 'testrailId' custom field defined.
+
+**Expected:** Uses `get_test_cases_advanced` with `field_path: "customField.testrailId"`, `field_match: "exists"`. Returns test cases where the field is present and non-null.
+
+**Prompt 6 — Mixed filters** *(v6.6.0)*
+> In MFPAND, get all automated test cases from suite 491 where customField.manualOnly is 'No'.
+
+**Expected:** Uses `get_test_case_by_filter` with `suite_id`, `automation_state`, and `field_path: "customField.manualOnly"`, `field_value: "No"`, `field_match: "exact"`. RQL filters are applied server-side, then field-path filtering is applied client-side on the results.
