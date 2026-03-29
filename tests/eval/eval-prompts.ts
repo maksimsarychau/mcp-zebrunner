@@ -12,6 +12,7 @@ export type PromptCategory =
   | "flaky"
   | "chart"
   | "field_filter"
+  | "report"
   | "negative";
 
 export type NegativeCategory =
@@ -566,7 +567,7 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
     id: "detailed_analyze_launch_failures.unlinked",
     toolSection: "3. Analysis",
     promptTemplate:
-      "Show me all failed tests in launch {{failed_launch_id}} of the {{project_key}} project that don't have linked Jira issues.",
+      "Use the detailed_analyze_launch_failures tool to show all failed tests in launch {{failed_launch_id}} of the {{project_key}} project that don't have linked Jira issues.",
     expectedTools: ["detailed_analyze_launch_failures"],
     expectedArgKeys: ["projectKey", "testRunId"],
     category: "analysis",
@@ -927,6 +928,108 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
     requiredContext: ["projectKey"],
   },
 
+  // ── Section 11: Reports (generate_report) ──
+
+  {
+    id: "report.quality_dashboard",
+    toolSection: "11. Reports",
+    promptTemplate:
+      "Generate a quality dashboard for the {{project_key}} project for the last 30 days.",
+    expectedTools: ["generate_report"],
+    expectedArgKeys: ["report_types", "projects"],
+    category: "report",
+    layer: 1,
+    requiredContext: ["projectKey"],
+  },
+  {
+    id: "report.coverage",
+    toolSection: "11. Reports",
+    promptTemplate:
+      "Use the generate_report tool with report_types=['coverage'] to build a per-suite test coverage report for the {{project_key}} project.",
+    expectedTools: ["generate_report"],
+    expectedArgKeys: ["report_types", "projects"],
+    category: "report",
+    layer: 1,
+    requiredContext: ["projectKey"],
+  },
+  {
+    id: "report.pass_rate",
+    toolSection: "11. Reports",
+    promptTemplate:
+      "Show me the pass rate report for the {{project_key}} project with target comparison.",
+    expectedTools: ["generate_report"],
+    expectedArgKeys: ["report_types", "projects"],
+    category: "report",
+    layer: 1,
+    requiredContext: ["projectKey"],
+  },
+  {
+    id: "report.runtime_efficiency",
+    toolSection: "11. Reports",
+    promptTemplate:
+      "Use the generate_report tool with report_types=['runtime_efficiency'] for the {{project_key}} project. Set milestone to {{milestone_name}}.",
+    expectedTools: ["generate_report"],
+    expectedArgKeys: ["report_types", "projects"],
+    category: "report",
+    layer: 2,
+    requiredContext: ["projectKey", "milestoneName"],
+  },
+  {
+    id: "report.executive_dashboard",
+    toolSection: "11. Reports",
+    promptTemplate:
+      "Generate an executive QA dashboard for the {{project_key}} project suitable for a weekly standup.",
+    expectedTools: ["generate_report"],
+    expectedArgKeys: ["report_types", "projects"],
+    category: "report",
+    layer: 1,
+    requiredContext: ["projectKey"],
+  },
+  {
+    id: "report.release_readiness",
+    toolSection: "11. Reports",
+    promptTemplate:
+      "Assess release readiness for the {{project_key}} project. Check pass rate, coverage, runtime, and top defects. Give a Go/No-Go recommendation.",
+    expectedTools: ["generate_report"],
+    expectedArgKeys: ["report_types", "projects"],
+    category: "report",
+    layer: 1,
+    requiredContext: ["projectKey"],
+  },
+  {
+    id: "report.multiple_types",
+    toolSection: "11. Reports",
+    promptTemplate:
+      "Generate both a coverage report and a pass rate report for the {{project_key}} project in a single call.",
+    expectedTools: ["generate_report"],
+    expectedArgKeys: ["report_types", "projects"],
+    category: "report",
+    layer: 2,
+    requiredContext: ["projectKey"],
+  },
+  {
+    id: "report.custom_targets",
+    toolSection: "11. Reports",
+    promptTemplate:
+      "Generate a pass rate report for the {{project_key}} project with a custom target of 95%.",
+    expectedTools: ["generate_report"],
+    expectedArgKeys: ["report_types", "projects"],
+    category: "report",
+    layer: 2,
+    requiredContext: ["projectKey"],
+  },
+  {
+    id: "report.coverage_exclude_patterns",
+    toolSection: "11. Reports",
+    promptTemplate:
+      "Build a coverage report for the {{project_key}} project. Exclude MA, Critical, and Performance suites from the regression total.",
+    expectedTools: ["generate_report"],
+    expectedArgKeys: ["report_types", "projects"],
+    category: "report",
+    layer: 2,
+    requiredContext: ["projectKey"],
+  },
+
   // ══════════════════════════════════════════════════════════════════
   // Negative Tests — prompts that should NOT trigger normal tool use
   // ══════════════════════════════════════════════════════════════════
@@ -1077,6 +1180,20 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
     expectedBehavior: "should_error",
   },
 
+  // ── Invalid data for reports ──
+
+  {
+    id: "neg.invalid.report_fake_project",
+    toolSection: "Negative",
+    promptTemplate: "Generate a quality dashboard for the ZZZZNONEXISTENT99 project.",
+    expectedTools: ["generate_report"],
+    category: "negative",
+    layer: 3,
+    isNegative: true,
+    negativeCategory: "invalid_data",
+    expectedBehavior: "should_error",
+  },
+
   // ── Tool confusion: explicitly names a wrong tool for the task ──
 
   {
@@ -1143,6 +1260,34 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
       "I need a chart of the bug priority distribution for the {{project_key}} project. Use the bug review tool with chart output, not the failure analysis tool.",
     expectedTools: ["get_bug_review"],
     forbiddenTools: ["detailed_analyze_launch_failures", "analyze_test_failure"],
+    category: "negative",
+    layer: 1,
+    isNegative: true,
+    negativeCategory: "tool_confusion",
+    expectedBehavior: "should_select_tool",
+    requiredContext: ["projectKey"],
+  },
+  {
+    id: "neg.confuse.report_vs_launch",
+    toolSection: "Negative",
+    promptTemplate:
+      "Generate a pass rate report for the {{project_key}} project using generate_report. Do NOT use get_all_launches_for_project or get_launch_test_summary individually.",
+    expectedTools: ["generate_report"],
+    forbiddenTools: ["get_all_launches_for_project", "get_launch_test_summary"],
+    category: "negative",
+    layer: 1,
+    isNegative: true,
+    negativeCategory: "tool_confusion",
+    expectedBehavior: "should_select_tool",
+    requiredContext: ["projectKey"],
+  },
+  {
+    id: "neg.confuse.single_suite_vs_report",
+    toolSection: "Negative",
+    promptTemplate:
+      "List the test suites in the {{project_key}} project. I just need the suite names. Use a TCM tool, not the report generator.",
+    expectedTools: ["list_test_suites", "get_tcm_test_suites_by_project", "get_root_suites", "get_all_tcm_test_case_suites_by_project"],
+    forbiddenTools: ["generate_report"],
     category: "negative",
     layer: 1,
     isNegative: true,

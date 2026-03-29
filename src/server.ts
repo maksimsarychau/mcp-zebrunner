@@ -8,6 +8,7 @@ import { ConfigManager } from "./config/manager.js";
 import { EnhancedZebrunnerClient } from "./api/enhanced-client.js";
 import { ZebrunnerReportingClient, type FieldsLayout } from "./api/reporting-client.js";
 import { ZebrunnerReportingToolHandlers } from "./handlers/reporting-tools.js";
+import { ReportHandler } from "./handlers/report-handler.js";
 import { FormatProcessor } from "./utils/formatter.js";
 import { HierarchyProcessor } from "./utils/hierarchy.js";
 import { RulesParser } from "./utils/rules-parser.js";
@@ -26,6 +27,14 @@ import { stealthIntegrityCheck } from "./stealth-integrity.js";
 import { sanitizeRqlString } from "./utils/security.js";
 import { buildChartResponse, type ChartConfig } from "./utils/chart-generator.js";
 import { matchesField, filterByField, type FieldFilter, type FieldMatchMode } from "./utils/custom-field-filter.js";
+import {
+  ALL_PERIODS as SHARED_ALL_PERIODS,
+  TEMPLATE as SHARED_TEMPLATE,
+  PLATFORM_MAP as SHARED_PLATFORM_MAP,
+  buildParamsConfig as sharedBuildParamsConfig,
+  createWidgetSqlCaller,
+  type WidgetSqlCaller,
+} from "./utils/widget-sql.js";
 import {
   loadToolIntelSnapshot,
   markdownForAllTools,
@@ -64,12 +73,14 @@ if (configWarnings.length > 0) {
   configWarnings.forEach(warning => console.error(warning));
 }
 
-/** Enhanced API client configuration */
+/** Enhanced API client configuration — timeout sourced from TIMEOUT env var (default: 60s) */
+const API_TIMEOUT = appConfig.timeout ?? 60_000;
+
 const config: ZebrunnerConfig = {
   baseUrl: ZEBRUNNER_URL,
   username: ZEBRUNNER_LOGIN,
   token: ZEBRUNNER_TOKEN,
-  timeout: 30_000,
+  timeout: API_TIMEOUT,
   retryAttempts: 3,
   retryDelay: 1000,
   debug: DEBUG_MODE,
@@ -83,7 +94,7 @@ const client = new EnhancedZebrunnerClient(config);
 const reportingConfig: ZebrunnerReportingConfig = {
   baseUrl: ZEBRUNNER_URL.replace('/api/public/v1', ''),
   accessToken: ZEBRUNNER_TOKEN,
-  timeout: 30_000,
+  timeout: API_TIMEOUT,
   debug: DEBUG_MODE
 };
 
@@ -109,37 +120,10 @@ const PROJECT_ALIASES: Record<string, string> = {
   web: "MFPWEB", android: "MFPAND", ios: "MFPIOS", api: "MFPAPI"
 };
 
-const ALL_PERIODS = [
-  "Today",
-  "Last 24 Hours",
-  "Week",
-  "Last 7 Days",
-  "Last 14 Days",
-  "Month",
-  "Last 30 Days",
-  "Quarter",
-  "Last 90 Days",
-  "Year",
-  "Last 365 Days",
-  "Total"
-] as const;
-
+const ALL_PERIODS = SHARED_ALL_PERIODS;
 type Period = (typeof ALL_PERIODS)[number];
-
-const PLATFORM_MAP: Record<string, string[]> = {
-  web: [],        // web often uses BROWSER instead
-  api: ["api"],
-  android: [],
-  ios: ["ios"]
-};
-
-const TEMPLATE = {
-  RESULTS_BY_PLATFORM: 8,
-  TOP_BUGS: 4,
-  BUG_REVIEW: 9,
-  FAILURE_INFO: 6,
-  FAILURE_DETAILS: 10
-} as const;
+const PLATFORM_MAP = SHARED_PLATFORM_MAP;
+const TEMPLATE = SHARED_TEMPLATE;
 
 /** Debug logging utility with safe serialization - uses stderr to avoid MCP protocol interference */
 function debugLog(message: string, data?: unknown) {
@@ -247,66 +231,24 @@ function validateApiResponse(data: unknown, expectedType: string): boolean {
   return true;
 }
 
-// === Generic SQL widget caller ===
-async function callWidgetSql(
-  projectId: number,
-  templateId: number,
-  paramsConfig: any
-): Promise<any> {
-  const bearerToken = await reportingClient.authenticate();
-  const url = `${WIDGET_BASE_URL}/api/reporting/v1/widget-templates/sql?projectId=${projectId}`;
+// === Generic SQL widget caller (delegates to shared factory) ===
+const callWidgetSql: WidgetSqlCaller = createWidgetSqlCaller(
+  WIDGET_BASE_URL,
+  () => reportingClient.authenticate()
+);
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${bearerToken}`,
-      "Content-Type": "application/json",
-      "Accept": "application/json"
-    },
-    body: JSON.stringify({ templateId, paramsConfig })
-  });
+// === Report handler (replaces DashboardHandler) ===
+const reportHandler = new ReportHandler(
+  reportingClient,
+  client,
+  reportingHandlers,
+  callWidgetSql,
+  resolveProjectId,
+  PROJECT_ALIASES,
+);
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`Widget SQL failed: ${res.status} ${res.statusText} — ${text.slice(0, 500)}`);
-  }
-  return res.json();
-}
-
-// === Build paramsConfig for widget requests ===
-function buildParamsConfig(opts: {
-  period: string;
-  platform?: string | string[];  // alias ("ios") or explicit array (["ios"])
-  browser?: string[];            // e.g., ["chrome"] for web
-  milestone?: string[];          // e.g., ["25.39.0"] for milestone filtering
-  dashboardName?: string;        // optional override
-  extra?: Partial<Record<string, any>>;
-}) {
-  const { period, platform, browser = [], milestone = [], dashboardName, extra = {} } = opts;
-  const normalized = ALL_PERIODS.find(p => p.toLowerCase() === period.toLowerCase());
-  if (!normalized) {
-    throw new Error(`Invalid period: ${period}. Allowed: ${ALL_PERIODS.join(", ")}`);
-  }
-
-  const resolvedPlatform: string[] =
-    Array.isArray(platform)
-      ? platform
-      : platform
-      ? (PLATFORM_MAP[platform] ?? [])
-      : [];
-
-  return {
-    BROWSER: browser,
-    DEFECT: [], APPLICATION: [], BUILD: [], PRIORITY: [],
-    RUN: [], USER: [], ENV: [], MILESTONE: milestone,
-    PLATFORM: resolvedPlatform,
-    STATUS: [], LOCALE: [],
-    PERIOD: normalized,
-    dashboardName: dashboardName ?? "Weekly results",
-    isReact: true,
-    ...extra
-  };
-}
+// === Build paramsConfig for widget requests (delegates to shared utility) ===
+const buildParamsConfig = sharedBuildParamsConfig;
 
 // === Helper functions for parsing HTML anchor tags ===
 
@@ -4341,6 +4283,72 @@ async function main() {
           content: [{
             type: "text" as const,
             text: `❌ Error finding flaky tests: ${error.message}`
+          }]
+        };
+      }
+    }
+  );
+
+  // ═══════════════════════════════════════════════════════════════════
+  // Universal Report Generator
+  // ═══════════════════════════════════════════════════════════════════
+  server.registerTool(
+    "generate_report",
+    {
+      description: "📊 Universal report generator. Supports 6 report types: quality_dashboard (HTML+Markdown with 6 panels), coverage (per-suite test coverage table), pass_rate (per-platform with targets), runtime_efficiency (with delta vs previous milestone), executive_dashboard (standup-ready combined report), release_readiness (Go/No-Go assessment). Can generate single or multiple reports per call.",
+    inputSchema: {
+      report_types: z.array(z.enum([
+        'quality_dashboard', 'coverage', 'pass_rate',
+        'runtime_efficiency', 'executive_dashboard', 'release_readiness'
+      ])).min(1).describe(
+        "Report type(s) to generate. Can request multiple in one call."
+      ),
+      projects: z.array(z.string()).min(1).describe(
+        "Project aliases or keys (e.g., ['android', 'ios'] or ['MFPAND', 'MFPIOS'])"
+      ),
+      period: z.enum(ALL_PERIODS).default("Last 30 Days").describe(
+        "Time period for the report data"
+      ),
+      milestone: z.string().optional().describe(
+        "Optional milestone filter (e.g., '25.39.0')"
+      ),
+      top_bugs_limit: z.number().int().positive().max(50).default(10).optional().describe(
+        "Top bugs to show (quality_dashboard, executive_dashboard). Default: 10"
+      ),
+      sections: z.array(z.enum(['pass_rate', 'runtime', 'coverage', 'bugs', 'milestones', 'flaky'])).optional().describe(
+        "Sections for quality_dashboard. Default: all 6"
+      ),
+      targets: z.record(z.string(), z.number()).optional().describe(
+        "Pass rate targets per project (e.g., {\"android\": 90, \"web\": 65}). Defaults: android=90, ios=90, web=65"
+      ),
+      exclude_suite_patterns: z.array(z.string()).optional().describe(
+        "Suite name patterns to exclude from TOTAL REGRESSION in coverage report (e.g., ['MA', 'Critical', 'Performance'])"
+      ),
+      previous_milestone: z.string().optional().describe(
+        "Baseline milestone for delta comparison (runtime_efficiency, release_readiness)"
+      ),
+    }
+    },
+    async (args) => {
+      try {
+        debugLog("generate_report called", args);
+        return await reportHandler.generateReport({
+          report_types: args.report_types,
+          projects: args.projects,
+          period: args.period,
+          milestone: args.milestone,
+          top_bugs_limit: args.top_bugs_limit,
+          sections: args.sections,
+          targets: args.targets,
+          exclude_suite_patterns: args.exclude_suite_patterns,
+          previous_milestone: args.previous_milestone,
+        });
+      } catch (error: any) {
+        debugLog("Error in generate_report", { error: error.message, args });
+        return {
+          content: [{
+            type: "text" as const,
+            text: `Error generating report: ${error?.message || error}`
           }]
         };
       }

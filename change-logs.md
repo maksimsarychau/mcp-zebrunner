@@ -1,6 +1,67 @@
 # Change Logs
 
+## v6.7.0 (2026-03-28)
+
+### Universal Report Generator — `generate_report`
+
+Replaces `generate_quality_dashboard` with a universal `generate_report` tool supporting 6 report types. Accepts single or multiple report types per call.
+
+**Report Types:**
+
+1. **`quality_dashboard`** — Full HTML dashboard + Markdown with 6 panels (pass rate, runtime, coverage, bugs, milestones, flaky). Preserves all v6.6.0 dashboard functionality.
+2. **`coverage`** — Per-suite test coverage table per platform. Shows Implemented, Manual Only, Deprecated, Total, Coverage %. Handles "Manual Only" as automation state or custom field. Includes TOTAL and TOTAL REGRESSION rows (excludes non-regression suites via `exclude_suite_patterns`).
+3. **`pass_rate`** — Per-platform pass rate with known-issue exclusion and target comparison. Returns Markdown + PNG chart.
+4. **`runtime_efficiency`** — Regression runtime with WRI, duration distribution, and delta vs `previous_milestone`. Flags >20% degradation.
+5. **`executive_dashboard`** — Standup-ready combined report (pass rate + runtime + top 5 bugs + coverage + flaky). Returns Markdown + PNG charts + HTML.
+6. **`release_readiness`** — Go/No-Go assessment per platform. Evaluates pass rate, unresolved failures, runtime delta, coverage, defects. Each check gets PASS/FAIL/WARN.
+
+**New Parameters:** `report_types`, `exclude_suite_patterns`, `previous_milestone` (in addition to all existing `quality_dashboard` params).
+
+**Architecture:** Modular design with shared fetch methods in `ReportHandler` and individual report generators in `src/handlers/reports/`. Each report module is independent and reuses shared data fetching.
+
+**Breaking Change:** `generate_quality_dashboard` is removed. Use `generate_report` with `report_types: ["quality_dashboard"]` for equivalent behavior.
+
+---
+
 ## v6.6.0 (2026-03-26)
+
+### Quality Dashboard Tool
+
+#### New: `generate_quality_dashboard` — multi-project executive dashboard
+
+A single MCP tool call that orchestrates parallel API calls across multiple Zebrunner projects and returns a unified quality dashboard with 6 metric panels:
+
+1. **Pass Rate Overview** — stacked bar chart with passed/failed/skipped/known-issue per project, target comparison (e.g., Android/iOS >= 90%, Web >= 65%), and pass rate excluding known issues
+2. **Regression Runtime Efficiency** — delegates to `analyzeRegressionRuntime` handler for proper WRI (Weighted Runtime Index), Short/Medium/Long duration classification, avg runtime per test & test case
+3. **Automation Coverage Sustainability** — pie/bar chart showing Automated / Manual / Not Automated counts per project
+4. **Top N Bugs** — horizontal bar chart of most frequent defects across all projects
+5. **Milestone Summary** — table filtered by period overlap (only milestones whose date range intersects the requested period), with completion status, start/due dates, and overdue flags
+6. **Flaky Tests** — delegates to `findFlakyTests` handler showing top flip-flopping tests with flip count, pass rate, and stability metrics
+
+**Output:** Dual format — Markdown summary with detailed tables and inline PNG charts + self-contained HTML dashboard with interactive Chart.js charts.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `projects` | `string[]` | Project aliases or keys (e.g., `["android", "ios"]`) |
+| `period` | `string` | Time period (e.g., `"Last 30 Days"`) |
+| `milestone` | `string?` | Optional milestone filter |
+| `top_bugs_limit` | `number` | Number of top bugs to show (default: 10) |
+| `sections` | `string[]?` | Sections to include (default: all 6): `pass_rate`, `runtime`, `coverage`, `bugs`, `milestones`, `flaky` |
+| `targets` | `Record<string, number>?` | Pass rate targets per project (e.g., `{"android": 90, "web": 65}`). Defaults: android=90, ios=90, web=65 |
+
+**Architecture:** Data is fetched in parallel across all projects using `Promise.allSettled` — if one project fails, the others still render. Runtime and flaky sections delegate to the existing `analyzeRegressionRuntime` and `findFlakyTests` handlers. Uses the shared `callWidgetSql` utility and existing `chart-generator.ts` for PNG rendering.
+
+**New files:** `src/handlers/dashboard-handler.ts`, `src/utils/dashboard-template.ts`, `src/utils/widget-sql.ts`
+
+---
+
+### HTTP Request Timeout — Default Increased to 60s
+
+The default HTTP request timeout for all API clients has been increased from 30 seconds to 60 seconds. This addresses timeout issues with large iOS regression datasets and milestone-level queries. The timeout is configurable via the `TIMEOUT` environment variable (value in milliseconds, e.g., `TIMEOUT=90000` for 90 seconds).
+
+---
 
 ### Generic Field-Path Filtering for Test Cases
 

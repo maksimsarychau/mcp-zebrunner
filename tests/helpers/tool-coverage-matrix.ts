@@ -51,7 +51,8 @@ export const TOOL_SMOKE_INPUTS: Record<string, Record<string, unknown>> = {
   analyze_test_cases_duplicates_semantic: { project_key: "MCP", suite_id: 1 },
   aggregate_test_cases_by_feature: { project_key: "MCP", feature_keyword: "login" },
   analyze_regression_runtime: { project: "android", milestone: "develop-49771" },
-  find_flaky_tests: { project: "android", period_days: 14 }
+  find_flaky_tests: { project: "android", period_days: 14 },
+  generate_report: { report_types: ["quality_dashboard"], projects: ["android", "ios"], period: "Last 30 Days" }
 };
 
 export const TOOL_SCHEMA_REQUIRED_KEYS: Record<string, string[]> = Object.fromEntries(

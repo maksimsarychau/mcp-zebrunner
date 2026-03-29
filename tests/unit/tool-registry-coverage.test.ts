@@ -30,11 +30,11 @@ describe("Tool Registry Coverage (53 tools)", () => {
     const serverSource = fs.readFileSync(path.join(root, "src", "server.ts"), "utf-8");
     const serverTools = extractServerTools(serverSource);
 
-    assert.equal(serverTools.length, 53, "server.ts should register exactly 53 tools");
-    assert.equal(new Set(serverTools).size, 53, "all registered tools should be unique");
+    assert.equal(serverTools.length, 54, "server.ts should register exactly 54 tools");
+    assert.equal(new Set(serverTools).size, 54, "all registered tools should be unique");
 
     const coverageKeys = Object.keys(TOOL_SMOKE_INPUTS);
-    assert.equal(coverageKeys.length, 53, "smoke coverage map should include 53 tools");
+    assert.equal(coverageKeys.length, 54, "smoke coverage map should include 54 tools");
 
     const missingCoverage = serverTools.filter(tool => !(tool in TOOL_SMOKE_INPUTS));
     assert.deepEqual(missingCoverage, [], `missing smoke coverage for: ${missingCoverage.join(", ")}`);

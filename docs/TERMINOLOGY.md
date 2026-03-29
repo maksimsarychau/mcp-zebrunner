@@ -162,4 +162,4 @@ Given 4 tests in a launch:
 
 ---
 
-_v6.6.0 — March 2026_
+_v6.7.0 — March 2026_

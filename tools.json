@@ -210,6 +210,10 @@
   {
     "name": "find_flaky_tests",
     "description": "Find flaky tests across launches using a 3-phase approach: cross-launch flip-flop analysis, manual test case scan via TCM execution history, and dual-perspective enrichment of top flaky tests with TCM data"
+  },
+  {
+    "name": "generate_report",
+    "description": "Universal report generator supporting 6 report types: quality_dashboard (HTML+Markdown with 6 panels), coverage (per-suite test coverage table), pass_rate (per-platform with targets), runtime_efficiency (with delta vs previous milestone), executive_dashboard (standup-ready combined report), release_readiness (Go/No-Go assessment). Can generate single or multiple reports per call."
   }
 ]
 

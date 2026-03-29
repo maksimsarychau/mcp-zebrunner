@@ -785,6 +785,51 @@ Weekly stability report for project MCP using:
 
 ---
 
+## Universal Report Generator
+
+### `generate_report`
+
+**Description:** Universal report generator that supports 6 report types. Can generate a single report or combine multiple in one call. Replaces the former `generate_quality_dashboard` tool (use `report_types: ["quality_dashboard"]` for equivalent behavior).
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `report_types` | `string[]` | Report type(s) to generate (required). See report types below. |
+| `projects` | `string[]` | Project aliases or keys (e.g., `["android", "ios"]`) |
+| `period` | `string` | Time period (e.g., `"Last 30 Days"`) |
+| `milestone` | `string?` | Optional milestone filter |
+| `top_bugs_limit` | `number?` | Top bugs count for `quality_dashboard` / `executive_dashboard` (default: 10) |
+| `sections` | `string[]?` | Sections for `quality_dashboard`: `pass_rate`, `runtime`, `coverage`, `bugs`, `milestones`, `flaky` |
+| `targets` | `Record<string, number>?` | Pass rate targets per project (e.g., `{"android": 90, "web": 65}`). Defaults: android=90, ios=90, web=65 |
+| `exclude_suite_patterns` | `string[]?` | Suite patterns to exclude from TOTAL REGRESSION in `coverage` report (e.g., `["MA", "Critical", "Performance"]`) |
+| `previous_milestone` | `string?` | Baseline milestone for delta comparison in `runtime_efficiency` / `release_readiness` |
+
+**Report Types:**
+
+1. **`quality_dashboard`** — Full HTML dashboard + Markdown with 6 panels: pass rate (target comparison + known-issue exclusion), runtime (WRI, Short/Medium/Long), coverage, top bugs, milestones, flaky tests. Returns HTML + PNG charts.
+
+2. **`coverage`** — Per-suite test coverage table for each platform. Shows Implemented, Manual Only, Deprecated, Total, Coverage %. Includes TOTAL and TOTAL REGRESSION summary rows (regression excludes suites matching `exclude_suite_patterns`). Handles "Manual Only" as both automation state and custom field.
+
+3. **`pass_rate`** — Per-platform pass rate metrics with total executed, passed, failed, known issues, pass rate, pass rate excluding known issues, and target comparison with status indicators. Returns Markdown + PNG chart.
+
+4. **`runtime_efficiency`** — Regression runtime metrics per platform with WRI, duration distribution, avg runtime per test/test case. When `previous_milestone` is provided, calculates deltas and flags suites with >20% degradation. Returns Markdown + PNG chart.
+
+5. **`executive_dashboard`** — Standup-ready combined report: pass rate + runtime + top 5 bugs + coverage + flaky tests. Returns Markdown + PNG charts + HTML dashboard.
+
+6. **`release_readiness`** — Go/No-Go assessment per platform. Evaluates: pass rate vs target, unresolved failures, runtime efficiency delta, automation coverage, top defects. Each check gets PASS/FAIL/WARN status. Returns structured Markdown with overall recommendation.
+
+**Example Prompts:**
+- "Generate a quality dashboard for Android and iOS for the last 30 days"
+- "Build a test coverage report for all three platforms"
+- "Show pass rate for Android, iOS, and Web for milestone 25.40.0"
+- "Compare runtime efficiency for Android between milestone 25.40.0 and 25.39.0"
+- "Generate an executive dashboard for all platforms this quarter"
+- "Assess release readiness for Android on milestone 25.40.0 vs previous 25.39.0"
+- "Generate coverage and pass rate reports together for all platforms"
+
+---
+
 ## Project Discovery
 
 ### `get_available_projects`
@@ -954,7 +999,7 @@ For large datasets, you can specify filters and limits:
 
 ---
 
-**Last Updated:** v6.6.0 - March 2026
+**Last Updated:** v6.7.0 - March 2026
 
 For the latest features and updates, see [change-logs.md](change-logs.md).
 

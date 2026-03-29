@@ -41,7 +41,7 @@ const config: ZebrunnerConfig = {
   baseUrl: ZEBRUNNER_URL,
   username: ZEBRUNNER_LOGIN,
   token: ZEBRUNNER_TOKEN,
-  timeout: 30_000,
+  timeout: 60_000,
   retryAttempts: 3,
   retryDelay: 1000,
   debug: DEBUG_MODE,
@@ -53,7 +53,7 @@ const config: ZebrunnerConfig = {
 const reportingConfig: ZebrunnerReportingConfig = {
   baseUrl: ZEBRUNNER_URL.replace('/api/public/v1', ''),
   accessToken: ZEBRUNNER_TOKEN,
-  timeout: 30_000,
+  timeout: 60_000,
   debug: DEBUG_MODE
 };
 
