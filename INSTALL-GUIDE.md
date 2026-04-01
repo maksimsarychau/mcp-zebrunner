@@ -28,6 +28,12 @@ If you see version numbers, everything is fine.
 
 ## 2. Get the Code
 
+Recommendation to create a separate folder like src 
+```bash
+mkdir src
+cd src
+```
+
 1. Open **Terminal** (macOS/Linux) or **Command Prompt** (Windows).
 2. Run:
    ```bash
