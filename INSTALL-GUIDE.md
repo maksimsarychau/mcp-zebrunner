@@ -8,7 +8,7 @@ This guide explains in **very simple steps** how to install and update the **MCP
 
 ## 1. Install Required Software
 
-1. Install **Git** and **Node.js** (version 18 or newer):
+1. Install **Git** and **Node.js** (version 18 or newer) (Install [brew](https://mac.install.guide/homebrew/3) if it was missed:
    - Windows: Download from https://nodejs.org
    - macOS: Run in terminal:
      ```bash
@@ -27,6 +27,12 @@ If you see version numbers, everything is fine.
 ---
 
 ## 2. Get the Code
+
+Recommendation to create a separate folder like src 
+```bash
+mkdir src
+cd src
+```
 
 1. Open **Terminal** (macOS/Linux) or **Command Prompt** (Windows).
 2. Run:
