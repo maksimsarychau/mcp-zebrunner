@@ -37,6 +37,18 @@ When using `source_case_key` to copy a test case, the source test case URL is no
 **Forced draft on create.**
 `create_test_case` now always sets `draft: true` regardless of the provided value or the source test case's draft status. This safety measure ensures AI-generated test cases are clearly identifiable. Use `update_test_case` to publish when ready.
 
+### Documentation Overhaul
+
+- **`TEST_PROMPTS.md`** — Added section 13 "Mutation Tools (Beta)" with 14 new test prompts covering `create_test_case`, `update_test_case`, `create_test_suite`, `update_test_suite`, and 2 negative safety prompts. Fixed tool count (52 → 55+) and `get_test_suites` → `list_test_suites` naming. Updated version to 7.0.1.
+- **`EXECUTIVE_SUMMARY.md`** — Added mutation safety section, v7.x timeline entry, updated tool count (40+ → 55+), added mutation example to comparison table.
+- **`AI_MCP_BENEFITS.md`** — Added "Safe Test Case Authoring" section, updated tool count (40+ → 55+), added mutation domain.
+- **`EVALUATION_FRAMEWORK.md`** — Updated tool counts (52 → 58), prompt counts (74 → 100), total assertions (102 → 154).
+- **`MCP_NPM_INSTALLATION_GUIDE.md`** — Updated Cursor config to `.cursor/mcp.json` format, removed speculative ChatGPT Desktop section, replaced non-existent `ZebrunnerClient` test with manual server start test, version bumped to 7.0.1.
+- **`RELEASE_SIGNING_GUIDE.md`** — Removed leaked API key, updated min-version examples (6.2.0 → 7.0.0).
+- **`README.md`** — Updated tool count (40+ → 55+), fixed crosslinks to archived docs.
+- **Historical docs archived** — Moved 10 implementation records to `docs/archive/` with historical notes: `SCREENSHOT_ANALYSIS_IMPLEMENTATION_SUMMARY.md`, `VIDEO_ANALYSIS_IMPLEMENTATION_GUIDE.md`, `NEW_LAUNCHER_TOOL.md`, `LAUNCH_TEST_SUMMARY_TOOL.md`, `TEST_CASE_VALIDATION_IMPLEMENTATION.md`, `ENHANCED_VALIDATION_FEATURES.md`, `SUITE_HIERARCHY.md`, `URL_BASED_ANALYSIS.md`, `SCREENSHOT_ANALYSIS.md`, `RULES_QUICK_REFERENCE.md`. All crosslinks updated.
+- **Dependency security** — Upgraded `@anthropic-ai/sdk` from `0.80.0` to `0.86.1` to fix moderate "Memory Tool Path Validation Allows Sandbox Escape" vulnerability.
+
 ---
 
 ## v7.0.0 (2026-04-09)
