@@ -8,32 +8,13 @@ function readServerSource() {
   return fs.readFileSync(path.join(process.cwd(), "src", "server.ts"), "utf-8");
 }
 
-function schemaBlockForTool(source: string, toolName: string): string | null {
-  const escapedName = toolName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const startPattern = new RegExp(`server\\.registerTool\\(\\s*"${escapedName}"`, "m");
-  const startMatch = source.match(startPattern);
-  if (!startMatch || startMatch.index === undefined) return null;
-
-  const startIndex = startMatch.index;
-  const asyncIndex = source.indexOf(",\n    async", startIndex);
-  if (asyncIndex === -1) return null;
-
-  // Look for inputSchema: { within the config object
-  const inputSchemaIdx = source.indexOf("inputSchema:", startIndex);
-  if (inputSchemaIdx === -1 || inputSchemaIdx > asyncIndex) {
-    // Tool has no inputSchema (zero-arg tool) — return empty string
-    return "";
-  }
-
-  const schemaStart = source.indexOf("{", inputSchemaIdx);
-  if (schemaStart === -1 || schemaStart > asyncIndex) return null;
-
+function extractBracedBlock(source: string, openBraceIdx: number, limit: number): string | null {
   let depth = 0;
   let inSingle = false;
   let inDouble = false;
   let inTemplate = false;
 
-  for (let i = schemaStart; i < asyncIndex; i++) {
+  for (let i = openBraceIdx; i < limit; i++) {
     const ch = source[i];
     const prev = source[i - 1];
 
@@ -47,7 +28,46 @@ function schemaBlockForTool(source: string, toolName: string): string | null {
     if (ch === "}") {
       depth--;
       if (depth === 0) {
-        return source.slice(schemaStart + 1, i);
+        return source.slice(openBraceIdx + 1, i);
+      }
+    }
+  }
+  return null;
+}
+
+function schemaBlockForTool(source: string, toolName: string): string | null {
+  const escapedName = toolName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const startPattern = new RegExp(`server\\.registerTool\\(\\s*"${escapedName}"`, "m");
+  const startMatch = source.match(startPattern);
+  if (!startMatch || startMatch.index === undefined) return null;
+
+  const startIndex = startMatch.index;
+  const asyncIndex = source.indexOf(",\n    async", startIndex);
+  if (asyncIndex === -1) return null;
+
+  const inputSchemaIdx = source.indexOf("inputSchema:", startIndex);
+  if (inputSchemaIdx === -1 || inputSchemaIdx > asyncIndex) {
+    return "";
+  }
+
+  const afterColon = source.slice(inputSchemaIdx + "inputSchema:".length, asyncIndex).trimStart();
+
+  if (afterColon.startsWith("{")) {
+    const schemaStart = source.indexOf("{", inputSchemaIdx + "inputSchema:".length);
+    return extractBracedBlock(source, schemaStart, asyncIndex);
+  }
+
+  const varMatch = afterColon.match(/^([A-Z]\w+)/);
+  if (varMatch) {
+    const varName = varMatch[1];
+    const defPattern = new RegExp(`const\\s+${varName}\\s*=\\s*z\\.object\\(`);
+    const defMatch = source.match(defPattern);
+    if (defMatch && defMatch.index !== undefined) {
+      const objStart = source.indexOf("({", defMatch.index);
+      if (objStart !== -1) {
+        return extractBracedBlock(source, objStart + 1, source.indexOf("}).refine(", objStart) !== -1
+          ? source.indexOf("}).refine(", objStart) + 1
+          : source.length);
       }
     }
   }
@@ -68,7 +88,12 @@ const KEY_ALIASES: Record<string, string[]> = {
   projectKey: ["projectKey", "project_key", "project"],
   testRunId: ["testRunId", "test_run_id", "launch_id"],
   testId: ["testId", "test_id"],
-  implementation_code: ["implementation_code", "implementation_context"]
+  implementation_code: ["implementation_code", "implementation_context"],
+  title: ["title"],
+  identifier: ["identifier"],
+  dry_run: ["dry_run"],
+  test_suite_id: ["test_suite_id", "suite_id", "root_suite_id"],
+  mode: ["mode"]
 };
 
 function keyCandidates(key: string): string[] {

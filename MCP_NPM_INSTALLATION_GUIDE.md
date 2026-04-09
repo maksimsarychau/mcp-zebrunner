@@ -1,6 +1,6 @@
 # MCP Zebrunner - NPM Installation & Configuration Guide
 
-This guide walks you through installing and configuring the **Zebrunner MCP Server** for various AI clients including Claude Desktop, Cursor, IntelliJ IDEA, and ChatGPT Desktop.
+This guide walks you through installing and configuring the **Zebrunner MCP Server** for various AI clients including Claude Desktop, Cursor, and IntelliJ IDEA.
 
 ---
 
@@ -13,7 +13,6 @@ This guide walks you through installing and configuring the **Zebrunner MCP Serv
    - [Claude Desktop](#claude-desktop)
    - [Cursor](#cursor)
    - [IntelliJ IDEA](#intellij-idea)
-   - [ChatGPT Desktop](#chatgpt-desktop)
 6. [Verification & Testing](#verification--testing)
 7. [Troubleshooting](#troubleshooting)
 
@@ -230,30 +229,15 @@ Claude Desktop uses a configuration file to manage MCP servers.
 
 ### Cursor
 
-Cursor supports MCP servers through its configuration.
+Cursor supports MCP servers through a dedicated configuration file.
 
 #### Configuration Steps
 
-1. **Open Cursor Settings**
-   - Press `Cmd/Ctrl + ,` to open settings
-   - Navigate to **MCP Servers** or search for "MCP"
+1. **Create or edit `.cursor/mcp.json`** in your project root (or globally at `~/.cursor/mcp.json`):
 
-2. **Add MCP Server Configuration**
-
-   **Method A: Using Cursor's MCP UI (if available)**
-   - Click "Add MCP Server"
-   - Enter the following details:
-     - **Name:** `zebrunner`
-     - **Command:** `node`
-     - **Args:** `/usr/local/lib/node_modules/mcp-zebrunner/dist/server.js` (or local path)
-     - **Environment Variables:** Add ZEBRUNNER_URL, ZEBRUNNER_LOGIN, ZEBRUNNER_TOKEN
-
-   **Method B: Edit settings.json manually**
-   
-   Open Cursor's `settings.json`:
    ```json
    {
-     "mcp.servers": {
+     "mcpServers": {
        "zebrunner": {
          "command": "node",
          "args": ["/usr/local/lib/node_modules/mcp-zebrunner/dist/server.js"],
@@ -267,7 +251,9 @@ Cursor supports MCP servers through its configuration.
    }
    ```
 
-3. **Reload Cursor** or restart the window for changes to take effect.
+2. **Reload Cursor** or restart the window for changes to take effect.
+
+3. **Verify** — open Cursor Settings (`Cmd/Ctrl + ,`), navigate to **MCP** and confirm `zebrunner` appears in the server list with a green status indicator.
 
 ---
 
@@ -321,53 +307,6 @@ Then run the server with:
 ```bash
 node /usr/local/lib/node_modules/mcp-zebrunner/dist/server.js
 ```
-
----
-
-### ChatGPT Desktop
-
-ChatGPT Desktop may support MCP servers through custom integrations.
-
-#### Configuration Steps
-
-1. **Open ChatGPT Desktop Settings**
-   - Navigate to **Settings** → **Integrations** or **Advanced**
-
-2. **Add Custom MCP Server** (if supported)
-
-   ```json
-   {
-     "mcp_servers": {
-       "zebrunner": {
-         "command": "node",
-         "args": ["/usr/local/lib/node_modules/mcp-zebrunner/dist/server.js"],
-         "environment": {
-           "ZEBRUNNER_URL": "https://your-instance.zebrunner.com",
-           "ZEBRUNNER_LOGIN": "your-username",
-           "ZEBRUNNER_TOKEN": "your-api-token"
-         }
-       }
-     }
-   }
-   ```
-
-3. **Alternative: Run as Standalone Server**
-
-   If direct integration isn't available, run the MCP server separately:
-
-   ```bash
-   # Set environment variables
-   export ZEBRUNNER_URL="https://your-instance.zebrunner.com"
-   export ZEBRUNNER_LOGIN="your-username"
-   export ZEBRUNNER_TOKEN="your-api-token"
-
-   # Run the server
-   node /usr/local/lib/node_modules/mcp-zebrunner/dist/server.js
-   ```
-
-   Then configure ChatGPT Desktop to connect to the running server.
-
-**Note:** MCP support in ChatGPT Desktop may vary. Check the official ChatGPT documentation for the latest integration methods.
 
 ---
 
@@ -425,43 +364,19 @@ node /usr/local/lib/node_modules/mcp-zebrunner/dist/server.js
 2. Check the console for startup logs
 3. Verify no errors appear
 
-**For ChatGPT Desktop:**
-1. Restart ChatGPT Desktop
-2. Check the integrations panel
-3. Verify the Zebrunner MCP server appears in the list
-
 ### 4. Test API Connection
 
-Create a test script to verify API connectivity:
+Run the server manually and verify it starts without errors:
 
-```javascript
-// test-zebrunner-connection.js
-import { ZebrunnerClient } from 'mcp-zebrunner';
-
-const client = new ZebrunnerClient({
-  baseUrl: process.env.ZEBRUNNER_URL,
-  login: process.env.ZEBRUNNER_LOGIN,
-  authToken: process.env.ZEBRUNNER_TOKEN
-});
-
-// Test connection
-async function testConnection() {
-  try {
-    const projects = await client.getProjects();
-    console.log('✅ Connection successful!');
-    console.log(`Found ${projects.length} projects`);
-  } catch (error) {
-    console.error('❌ Connection failed:', error.message);
-  }
-}
-
-testConnection();
-```
-
-Run the test:
 ```bash
-node test-zebrunner-connection.js
+export ZEBRUNNER_URL="https://your-instance.zebrunner.com"
+export ZEBRUNNER_LOGIN="your-username"
+export ZEBRUNNER_TOKEN="your-api-token"
+
+node $(npm root -g)/mcp-zebrunner/dist/server.js
 ```
+
+If the server starts cleanly (no error output), the connection is configured correctly. Press `Ctrl+C` to stop.
 
 ---
 
@@ -641,6 +556,6 @@ If you continue to experience issues:
 
 ---
 
-**Version:** 5.12.0  
-**Last Updated:** December 2, 2025  
+**Version:** 7.0.1  
+**Last Updated:** April 9, 2026  
 **Maintainer:** Maksim Sarychau

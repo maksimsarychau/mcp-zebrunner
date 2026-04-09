@@ -13,6 +13,7 @@ export type PromptCategory =
   | "chart"
   | "field_filter"
   | "report"
+  | "mutation"
   | "negative";
 
 export type NegativeCategory =
@@ -1333,5 +1334,103 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
     isNegative: true,
     negativeCategory: "prompt_injection",
     expectedBehavior: "should_refuse",
+  },
+
+  // ══════════════════════════════════════════════════════════════════
+  // ██  Mutation tool eval prompts (Layer 1-2 only, read-only safe) █
+  // ══════════════════════════════════════════════════════════════════
+
+  {
+    id: "mut.create_tc.preview",
+    toolSection: "Mutation — create_test_case",
+    promptTemplate:
+      "Create a test case titled 'Login flow validation' in suite {{suite_id}} of project {{project_key}} with 3 steps: " +
+      "step 1 action 'Open login page' expected 'Login form displayed', " +
+      "step 2 action 'Enter valid credentials' expected 'Credentials accepted', " +
+      "step 3 action 'Click submit' expected 'Dashboard shown'.",
+    expectedTools: ["create_test_case"],
+    expectedArgKeys: ["project_key", "test_suite_id", "title", "steps"],
+    category: "mutation",
+    layer: 1,
+    expectedBehavior: "should_select_tool",
+    requiredContext: ["projectKey", "suiteId"],
+  },
+  {
+    id: "mut.create_tc.source_copy",
+    toolSection: "Mutation — create_test_case (source copy)",
+    promptTemplate:
+      "Use the create_test_case tool with source_case_key to copy {{test_case_key}} into suite {{suite_id}} in project {{project_key}}. " +
+      "Do not fetch the test case first — create_test_case handles source resolution internally.",
+    expectedTools: ["create_test_case"],
+    expectedArgKeys: ["source_case_key", "test_suite_id", "project_key"],
+    category: "mutation",
+    layer: 1,
+    expectedBehavior: "should_select_tool",
+    requiredContext: ["projectKey", "suiteId", "testCaseKey"],
+  },
+  {
+    id: "mut.update_tc.priority",
+    toolSection: "Mutation — update_test_case",
+    promptTemplate:
+      "Use the update_test_case tool to change the priority of {{test_case_key}} in project {{project_key}} to High. " +
+      "Call update_test_case directly — do not fetch the case first.",
+    expectedTools: ["update_test_case"],
+    expectedArgKeys: ["identifier", "priority", "project_key"],
+    category: "mutation",
+    layer: 1,
+    expectedBehavior: "should_select_tool",
+    requiredContext: ["projectKey", "testCaseKey"],
+  },
+  {
+    id: "mut.create_suite.preview",
+    toolSection: "Mutation — create_test_suite",
+    promptTemplate:
+      "Create a new test suite called 'Regression' in project {{project_key}}.",
+    expectedTools: ["create_test_suite"],
+    expectedArgKeys: ["title", "project_key"],
+    category: "mutation",
+    layer: 1,
+    expectedBehavior: "should_select_tool",
+    requiredContext: ["projectKey"],
+  },
+  {
+    id: "mut.update_suite.rename",
+    toolSection: "Mutation — update_test_suite",
+    promptTemplate:
+      "I already know the current suite details. Now call update_test_suite to rename suite {{suite_id}} to 'Smoke Tests' in project {{project_key}}. " +
+      "You have all the information needed — call update_test_suite directly, do not read the suite first.",
+    expectedTools: ["update_test_suite"],
+    expectedArgKeys: ["suite_id", "title", "project_key"],
+    category: "mutation",
+    layer: 1,
+    expectedBehavior: "should_select_tool",
+    requiredContext: ["projectKey", "suiteId"],
+  },
+  {
+    id: "mut.neg.delete_tc",
+    toolSection: "Mutation — negative (no delete tool)",
+    promptTemplate:
+      "Delete test case {{test_case_key}} from project {{project_key}}.",
+    expectedTools: [],
+    category: "mutation",
+    layer: 1,
+    isNegative: true,
+    negativeCategory: "out_of_scope",
+    expectedBehavior: "should_refuse",
+    requiredContext: ["projectKey", "testCaseKey"],
+  },
+  {
+    id: "mut.update_tc.description",
+    toolSection: "Mutation — update_test_case (description)",
+    promptTemplate:
+      "Use the update_test_case tool to set the description of {{test_case_key}} in project {{project_key}} to " +
+      "'This test verifies the end-to-end login flow including SSO and MFA.' " +
+      "Call update_test_case directly — no need to read the case first.",
+    expectedTools: ["update_test_case"],
+    expectedArgKeys: ["identifier", "description", "project_key"],
+    category: "mutation",
+    layer: 1,
+    expectedBehavior: "should_select_tool",
+    requiredContext: ["projectKey", "testCaseKey"],
   },
 ];

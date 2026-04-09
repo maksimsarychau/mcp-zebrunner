@@ -1,8 +1,8 @@
 # MCP Zebrunner: Executive Summary
 
 **Author:** Maksim Sarychau  
-**Current Version:** 6.7.0
-**Last Updated:** March 2026
+**Current Version:** 7.0.1
+**Last Updated:** April 2026
 
 ---
 
@@ -37,6 +37,7 @@ MCP Zebrunner provides a natural‑language interface for test management. Inste
 | Building custom reports | *"Generate weekly regression stability report"* |
 | Searching across suites | *"Find all login-related tests"* |
 | Analyzing launch results | *"Analyze launch 120906 failures"* |
+| Manually creating test cases | *"Create a test case with 5 steps in project MCP"* |
 
 ---
 
@@ -50,9 +51,17 @@ MCP Zebrunner provides a natural‑language interface for test management. Inste
 
 ### 📋 Test Case Management
 - Retrieve, search, and filter test cases  
+- **Create and update** test cases and suites via natural language (Beta)  
 - Validate quality against best practices  
 - AI‑powered improvement suggestions  
 - Duplicate detection (exact and semantic)
+
+### 🔒 Mutation Safety (v7.0.0+)
+- **Two-step confirmation gate** — preview before every write operation  
+- **Forced draft** — all created test cases start as drafts for review  
+- **Audit logging** — every mutation recorded to `~/.mcp-zebrunner-audit.jsonl`  
+- **Source traceability** — copied test cases include a link to the original  
+- **Runtime validation** — priorities, automation states, and custom fields validated before execution
 
 ### 🚀 Launch & Execution Management
 - Launch details and summaries  
@@ -95,12 +104,12 @@ MCP Zebrunner provides a natural‑language interface for test management. Inste
 
 ### Distribution
 - ✅ **npm Registry** — `npm install -g mcp-zebrunner`  
-- ✅ **Docker Hub** — `msarychau/mcp-zebrunner:6.7.0`
+- ✅ **Docker Hub** — `msarychau/mcp-zebrunner:7.0.1`
 - ✅ **GitHub** — open source at github.com/maksimsarychau/mcp-zebrunner  
-- ⚠️ **MCP Registry** — publication in progress (registry schema validation issue tracked)
+- ⚠️ **MCP Registry** — publication in progress
 
 ### Scale
-- **40+ tools** across test management and reporting  
+- **55+ tools** across test management, mutation, and reporting  
 - **Multiple integrations** — Claude Desktop, Cursor, ChatGPT Desktop, IntelliJ IDEA, Docker  
 - **Rules engine** for quality validation  
 - **Multiple output formats** — JSON, Markdown, Jira‑ready
@@ -146,6 +155,7 @@ MCP Zebrunner provides a natural‑language interface for test management. Inste
 | v4.x | Video analysis, Jira integration, intelligent rules |
 | v5.x | Docker support, MCP Registry, feature aggregation |
 | v6.x | Stealth integrity protection, cryptographic signing, remote control |
+| v7.x | Mutation tools (create/update test cases & suites), two-step confirmation, audit logging, universal report generator |
 
 ---
 

@@ -332,7 +332,7 @@ function createMockHandler() {
     return { projectId: 1 };
   };
 
-  const aliases: Record<string, string> = { android: "MFPAND", ios: "MFPIOS" };
+  const aliases: Record<string, string> = { android: "MCP", ios: "MCP" };
 
   return new ReportHandler(
     mockReportingClient,
@@ -517,7 +517,7 @@ describe("ReportHandler: error handling", () => {
         if (callCount === 1) return { projectId: 1 };
         throw new Error("Not found");
       },
-      { android: "MFPAND", ios: "MFPIOS" },
+      { android: "MCP", ios: "MCP" },
     );
 
     const result = await handler.generateReport({

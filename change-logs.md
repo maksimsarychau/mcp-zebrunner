@@ -1,5 +1,92 @@
 # Change Logs
 
+## v7.0.1 (2026-04-09)
+
+### Confirmation Flow Overhaul & Serialization Fixes
+
+**Confirmation token now stores the full payload server-side.**
+The two-step confirmation flow previously required the LLM to re-send the entire mutation payload on the confirm call, which caused data loss (steps, description, conditions were often dropped). The confirmation token now stores a JSON snapshot of the complete original arguments. The confirm call only needs `{ "confirm": true, "confirmation_token": "..." }` — all other fields are restored automatically from the stored snapshot.
+
+**ASCII-safe JSON serialization.**
+The mutation client now escapes all non-ASCII Unicode characters to `\uXXXX` sequences before sending to the Zebrunner API, preventing `TCM-1019` parser errors caused by LLM-generated em-dashes (—), arrows (→), smart quotes, and other Unicode characters.
+
+**Literal escape normalization.**
+`\\n`, `\\t`, `\\r` literal sequences (common in LLM-generated JSON) are now converted to real control characters before API serialization, preventing literal `\n` strings from appearing in Zebrunner UI fields.
+
+**File upload safety.**
+Moved ASCII-safe encoding from the instance-level `transformRequest` (which incorrectly processed `FormData` and broke file uploads) to per-request scope in the `request()` method only. `Content-Type` reverted from `application/json; charset=utf-8` to `application/json` per API docs (RFC 8259 mandates UTF-8).
+
+**Custom field file reference scanning.**
+`collectAllFileUuids`, `applyUuidMapping`, and `stripFailedFileRefs` now scan `customField` TEXT values for markdown file references (`[name](/files/uuid)`, `![alt](/files/uuid)`) in addition to the existing root and step-level scanning.
+
+**`generate_report` marked Beta.**
+Tool description now starts with `(Beta)`.
+
+**Updated tool descriptions.**
+All 4 mutation tools include explicit TWO-STEP FLOW instructions telling the LLM to call with ONLY `confirm: true` and `confirmation_token` after the preview step — no need to re-send any other fields.
+
+**Zod schemas relaxed for confirm calls.**
+Required fields (`title`, `test_suite_id`, `identifier`, `suite_id`) are now `.optional()` at the schema level. Manual validation ensures they are present for preview/dry-run calls, while confirm calls skip these checks since the stored snapshot provides them.
+
+**Version alignment.**
+All entry points (`server.ts`, `index.ts`, `index-enhanced.ts`, `index-working-enhanced.ts`, `server-with-reporting.ts`) now report version `7.0.1`.
+
+**Source traceability on copy.**
+When using `source_case_key` to copy a test case, the source test case URL is now automatically prepended to the description (e.g. `**Source:** [MCP-29](https://...)`). This applies in all cases — whether the description is inherited from the source or explicitly provided.
+
+**Forced draft on create.**
+`create_test_case` now always sets `draft: true` regardless of the provided value or the source test case's draft status. This safety measure ensures AI-generated test cases are clearly identifiable. Use `update_test_case` to publish when ready.
+
+---
+
+## v7.0.0 (2026-04-09)
+
+### Mutation Tools — 4 new tools + 4 shared helpers + file attachment support
+
+Introduces write-capable MCP tools for creating and updating Test Suites and Test Cases in Zebrunner. All mutation tools follow a strict **two-call confirmation gate**: the first call returns a preview, and only after user approval does the second call with `confirm: true` execute the mutation.
+
+**New Tools:**
+
+| Tool | Method | Description |
+|------|--------|-------------|
+| `create_test_suite` | POST | Create a new Test Suite (root or nested). |
+| `update_test_suite` | PUT | Full replacement update of an existing Test Suite. |
+| `create_test_case` | POST | Create a new Test Case with runtime validation. Supports `{file_path}` attachments and optional `source_case_key` to pre-populate from an existing test case. |
+| `update_test_case` | PATCH | Partial update of a Test Case by numeric ID or string key. Supports `{file_path}` attachments. |
+
+**Safety Features:**
+- **Two-call confirmation gate:** Preview → user approval → execute with `confirm: true`.
+- **Audit logging:** Every mutation is logged to `~/.mcp-zebrunner-audit.jsonl` with timestamp, tool, method, URL, and payload.
+- **Read-back verification:** After mutations, the server fetches the updated record and computes a field-by-field diff.
+- **Runtime validation:** Priorities, automation states, and custom fields are validated against project settings before execution.
+- **Dry-run mode:** `dry_run: true` returns the raw payload without any validation or execution.
+- **Atomic update warnings:** `steps` and `requirements` in `update_test_case` warn that they replace all existing items.
+- **MCP annotations:** All tools declare `readOnlyHint: false` with appropriate `destructiveHint` and `idempotentHint` values.
+- **Resilient file handling:** All file download/upload operations are wrapped in try-catch — failures are reported as warnings without blocking the tool.
+
+**File Attachment Support:**
+- Attachments accept either `{fileUuid}` for pre-uploaded files or `{file_path}` for local files (uploaded automatically via `POST /files`).
+- Both root-level and step-level attachments support `{file_path}`.
+- Internal `uploadFile` and `downloadFile` methods on the mutation client (not exposed as public tools).
+
+**`create_test_case` enhancements:**
+- **Enhanced preview:** Shows both "Fields to be set" and "Fields that will be null/default (not provided)" for full visibility of omissions.
+- **Optional `source_case_key`:** Pre-populate fields from an existing test case by key. Explicitly passed fields override source values. Priority and automation state are resolved by name for cross-project compatibility.
+- **Cross-project file re-upload:** When using `source_case_key` across projects, file attachments are automatically downloaded and re-uploaded to the target project, with fallback to stripping and a warning on failure.
+
+**Enhanced Tools:**
+- `get_tcm_suite_by_id` — Added `mode` parameter (`simple`/`full`) with direct Public API lookup for simple mode.
+- `get_test_case_by_key` — Updated description to recommend `json` format as data source for mutation tools.
+
+**New Files:**
+- `src/api/mutation-client.ts` — Dedicated axios wrapper for POST/PUT/PATCH, file upload/download, and settings GETs on the Public API.
+- `src/helpers/audit.ts` — Append-only JSONL audit logger.
+- `src/helpers/diff.ts` — Field-by-field diff computation and formatting.
+- `src/helpers/settings.ts` — Runtime validators for automation states, priorities, and custom fields.
+- `src/helpers/file-refs.ts` — File UUID extraction, cross-project re-upload orchestration, stripping, and warning generation.
+
+---
+
 ## v6.7.0 (2026-03-28)
 
 ### Universal Report Generator — `generate_report`

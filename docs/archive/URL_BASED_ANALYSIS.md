@@ -1,6 +1,6 @@
 # 🔗 Smart URL-Based Analysis Guide
 
-> **NEW in v5.5.0**: Claude can automatically detect Zebrunner URLs and analyze them with optimal settings!
+> URL-based analysis added in v5.5.0. Fully active in current version (7.0.1).
 
 ## 🎯 Overview
 

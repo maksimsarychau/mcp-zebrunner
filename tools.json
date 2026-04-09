@@ -49,7 +49,7 @@
   },
   {
     "name": "get_test_case_by_key",
-    "description": "Get detailed information for a specific test case by its key (e.g., MCP-123)"
+    "description": "Get detailed information for a specific test case by its key (e.g., MCP-123). Default format is 'json' — recommended when using as data source for create_test_case or update_test_case."
   },
   {
     "name": "get_test_case_by_title",
@@ -101,7 +101,23 @@
   },
   {
     "name": "get_tcm_suite_by_id",
-    "description": "Get test suite details by ID"
+    "description": "Get test suite by its numeric ID. Use for any 'show me suite', 'get suite by ID', 'find suite' request. Supports simple (fast direct API) and full (hierarchy-enriched) modes."
+  },
+  {
+    "name": "create_test_suite",
+    "description": "(Beta) Create a new Test Suite in a Zebrunner project. Requires preview approval before execution."
+  },
+  {
+    "name": "update_test_suite",
+    "description": "(Beta) Update an existing Test Suite (full PUT replacement). Requires preview approval before execution."
+  },
+  {
+    "name": "create_test_case",
+    "description": "(Beta) Create a new Test Case with runtime validation of priorities, automation states, and custom fields. Accepts { file_path } in attachments for local file upload. Optional source_case_key to pre-populate from an existing test case. Requires preview approval."
+  },
+  {
+    "name": "update_test_case",
+    "description": "(Beta) Partially update an existing Test Case by numeric ID or string key (PATCH). Accepts { file_path } in attachments for local file upload. Requires preview approval."
   },
   {
     "name": "get_tcm_test_suites_by_project",
