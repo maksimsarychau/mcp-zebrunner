@@ -8,6 +8,7 @@ import { ConfigManager } from "./config/manager.js";
 import { EnhancedZebrunnerClient } from "./api/enhanced-client.js";
 import { ZebrunnerReportingClient, type FieldsLayout } from "./api/reporting-client.js";
 import { ZebrunnerReportingToolHandlers } from "./handlers/reporting-tools.js";
+import { ReportHandler } from "./handlers/report-handler.js";
 import { FormatProcessor } from "./utils/formatter.js";
 import { HierarchyProcessor } from "./utils/hierarchy.js";
 import { RulesParser } from "./utils/rules-parser.js";
@@ -27,10 +28,56 @@ import { sanitizeRqlString } from "./utils/security.js";
 import { buildChartResponse, type ChartConfig } from "./utils/chart-generator.js";
 import { matchesField, filterByField, type FieldFilter, type FieldMatchMode } from "./utils/custom-field-filter.js";
 import {
+  ALL_PERIODS as SHARED_ALL_PERIODS,
+  TEMPLATE as SHARED_TEMPLATE,
+  PLATFORM_MAP as SHARED_PLATFORM_MAP,
+  buildParamsConfig as sharedBuildParamsConfig,
+  createWidgetSqlCaller,
+  type WidgetSqlCaller,
+} from "./utils/widget-sql.js";
+import {
   loadToolIntelSnapshot,
   markdownForAllTools,
   markdownForToolDetails
 } from "./utils/tool-intel.js";
+
+// Mutation tools imports
+import { ZebrunnerMutationClient } from "./api/mutation-client.js";
+import { writeAuditLog } from "./helpers/audit.js";
+import { computeDiff, formatDiff } from "./helpers/diff.js";
+// Pre-validation removed from the hot path — the API validates server-side.
+// On error, we enrich the message with valid options to help the user fix the request.
+async function enrichMutationError(
+  error: any,
+  projectKey: string,
+  mc: ZebrunnerMutationClient,
+): Promise<string> {
+  const base = error.message || String(error);
+  try {
+    const hints: string[] = [];
+    const msg = base.toLowerCase();
+    if (msg.includes("priority") || msg.includes("field error")) {
+      const res = await mc.getPriorities(projectKey);
+      hints.push(`Valid priorities: ${res.items.map((i: any) => i.name).join(", ")}`);
+    }
+    if (msg.includes("automation") || msg.includes("field error")) {
+      const res = await mc.getAutomationStates(projectKey);
+      hints.push(`Valid automation states: ${res.items.map((i: any) => i.name).join(", ")}`);
+    }
+    return hints.length > 0 ? `${base}\n${hints.join("\n")}` : base;
+  } catch {
+    return base;
+  }
+}
+import {
+  collectAllFileUuids,
+  reUploadFiles,
+  applyUuidMapping,
+  stripFailedFileRefs,
+  buildFileTransferReport,
+  processFilePathAttachments,
+  describeFilePathAttachments,
+} from "./helpers/file-refs.js";
 
 /**
  * Unified Zebrunner MCP Server
@@ -64,12 +111,14 @@ if (configWarnings.length > 0) {
   configWarnings.forEach(warning => console.error(warning));
 }
 
-/** Enhanced API client configuration */
+/** Enhanced API client configuration — timeout sourced from TIMEOUT env var (default: 60s) */
+const API_TIMEOUT = appConfig.timeout ?? 60_000;
+
 const config: ZebrunnerConfig = {
   baseUrl: ZEBRUNNER_URL,
   username: ZEBRUNNER_LOGIN,
   token: ZEBRUNNER_TOKEN,
-  timeout: 30_000,
+  timeout: API_TIMEOUT,
   retryAttempts: 3,
   retryDelay: 1000,
   debug: DEBUG_MODE,
@@ -78,12 +127,13 @@ const config: ZebrunnerConfig = {
 };
 
 const client = new EnhancedZebrunnerClient(config);
+const mutationClient = new ZebrunnerMutationClient(config);
 
 // Initialize reporting client (new authentication method)
 const reportingConfig: ZebrunnerReportingConfig = {
   baseUrl: ZEBRUNNER_URL.replace('/api/public/v1', ''),
   accessToken: ZEBRUNNER_TOKEN,
-  timeout: 30_000,
+  timeout: API_TIMEOUT,
   debug: DEBUG_MODE
 };
 
@@ -101,6 +151,23 @@ client.setPrioritiesResolver(async (projectKey: string) => {
   return reportingClient.getPriorities(projectId);
 });
 
+// === Auto-detect test case review rules/checkpoints files ===
+import * as fs from "node:fs";
+import * as path from "node:path";
+import * as crypto from "node:crypto";
+
+const REVIEW_RULES_FILE = (() => {
+  const p = path.resolve(process.cwd(), "test_case_review_rules.md");
+  if (fs.existsSync(p)) { console.error(`✅ Auto-detected review rules: ${p}`); return p; }
+  return undefined;
+})();
+const REVIEW_CHECKPOINTS_FILE = (() => {
+  const p = path.resolve(process.cwd(), "test_case_analysis_checkpoints.md");
+  if (fs.existsSync(p)) { console.error(`✅ Auto-detected review checkpoints: ${p}`); return p; }
+  return undefined;
+})();
+const REVIEW_FILES_AVAILABLE = !!(REVIEW_RULES_FILE && REVIEW_CHECKPOINTS_FILE);
+
 // === Widget mini-config ===
 const WIDGET_BASE_URL = ZEBRUNNER_URL.replace('/api/public/v1', '');
 
@@ -109,37 +176,10 @@ const PROJECT_ALIASES: Record<string, string> = {
   web: "MFPWEB", android: "MFPAND", ios: "MFPIOS", api: "MFPAPI"
 };
 
-const ALL_PERIODS = [
-  "Today",
-  "Last 24 Hours",
-  "Week",
-  "Last 7 Days",
-  "Last 14 Days",
-  "Month",
-  "Last 30 Days",
-  "Quarter",
-  "Last 90 Days",
-  "Year",
-  "Last 365 Days",
-  "Total"
-] as const;
-
+const ALL_PERIODS = SHARED_ALL_PERIODS;
 type Period = (typeof ALL_PERIODS)[number];
-
-const PLATFORM_MAP: Record<string, string[]> = {
-  web: [],        // web often uses BROWSER instead
-  api: ["api"],
-  android: [],
-  ios: ["ios"]
-};
-
-const TEMPLATE = {
-  RESULTS_BY_PLATFORM: 8,
-  TOP_BUGS: 4,
-  BUG_REVIEW: 9,
-  FAILURE_INFO: 6,
-  FAILURE_DETAILS: 10
-} as const;
+const PLATFORM_MAP = SHARED_PLATFORM_MAP;
+const TEMPLATE = SHARED_TEMPLATE;
 
 /** Debug logging utility with safe serialization - uses stderr to avoid MCP protocol interference */
 function debugLog(message: string, data?: unknown) {
@@ -247,66 +287,24 @@ function validateApiResponse(data: unknown, expectedType: string): boolean {
   return true;
 }
 
-// === Generic SQL widget caller ===
-async function callWidgetSql(
-  projectId: number,
-  templateId: number,
-  paramsConfig: any
-): Promise<any> {
-  const bearerToken = await reportingClient.authenticate();
-  const url = `${WIDGET_BASE_URL}/api/reporting/v1/widget-templates/sql?projectId=${projectId}`;
+// === Generic SQL widget caller (delegates to shared factory) ===
+const callWidgetSql: WidgetSqlCaller = createWidgetSqlCaller(
+  WIDGET_BASE_URL,
+  () => reportingClient.authenticate()
+);
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${bearerToken}`,
-      "Content-Type": "application/json",
-      "Accept": "application/json"
-    },
-    body: JSON.stringify({ templateId, paramsConfig })
-  });
+// === Report handler (replaces DashboardHandler) ===
+const reportHandler = new ReportHandler(
+  reportingClient,
+  client,
+  reportingHandlers,
+  callWidgetSql,
+  resolveProjectId,
+  PROJECT_ALIASES,
+);
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`Widget SQL failed: ${res.status} ${res.statusText} — ${text.slice(0, 500)}`);
-  }
-  return res.json();
-}
-
-// === Build paramsConfig for widget requests ===
-function buildParamsConfig(opts: {
-  period: string;
-  platform?: string | string[];  // alias ("ios") or explicit array (["ios"])
-  browser?: string[];            // e.g., ["chrome"] for web
-  milestone?: string[];          // e.g., ["25.39.0"] for milestone filtering
-  dashboardName?: string;        // optional override
-  extra?: Partial<Record<string, any>>;
-}) {
-  const { period, platform, browser = [], milestone = [], dashboardName, extra = {} } = opts;
-  const normalized = ALL_PERIODS.find(p => p.toLowerCase() === period.toLowerCase());
-  if (!normalized) {
-    throw new Error(`Invalid period: ${period}. Allowed: ${ALL_PERIODS.join(", ")}`);
-  }
-
-  const resolvedPlatform: string[] =
-    Array.isArray(platform)
-      ? platform
-      : platform
-      ? (PLATFORM_MAP[platform] ?? [])
-      : [];
-
-  return {
-    BROWSER: browser,
-    DEFECT: [], APPLICATION: [], BUILD: [], PRIORITY: [],
-    RUN: [], USER: [], ENV: [], MILESTONE: milestone,
-    PLATFORM: resolvedPlatform,
-    STATUS: [], LOCALE: [],
-    PERIOD: normalized,
-    dashboardName: dashboardName ?? "Weekly results",
-    isReact: true,
-    ...extra
-  };
-}
+// === Build paramsConfig for widget requests (delegates to shared utility) ===
+const buildParamsConfig = sharedBuildParamsConfig;
 
 // === Helper functions for parsing HTML anchor tags ===
 
@@ -951,11 +949,13 @@ async function main() {
   const server = new McpServer(
     {
       name: "mcp-zebrunner",
-      version: "3.1.0"
+      version: "7.0.1"
     },
     {
       capabilities: {
-        tools: {}
+        tools: {},
+        resources: {},
+        prompts: {},
       }
     }
   );
@@ -1095,7 +1095,8 @@ async function main() {
       description: `🔍 Get detailed test case by key or numeric ID. Accepts:
 • Test case key: 'MCP-29', 'MCP-2'
 • Numeric ID: '86280' (requires project_key)
-• From Zebrunner URL: extract project_key and caseId from URLs like https://example.zebrunner.com/projects/MCP/test-cases?caseId=86280 → project_key='MCP', case_key='86280'`,
+• From Zebrunner URL: extract project_key and caseId from URLs like https://example.zebrunner.com/projects/MCP/test-cases?caseId=86280 → project_key='MCP', case_key='86280'
+Default format is 'json' which exposes all raw field values. Use 'json' when using this tool as a data source for create_test_case or update_test_case. 'markdown' format may omit some raw field content.`,
     inputSchema: {
       project_key: z.string().min(1).optional().describe("Project key (e.g., 'MCP', 'MCP'). Auto-detected from case_key if it contains a key pattern like 'MCP-29'. Required when case_key is a numeric ID."),
       case_key: z.string().min(1).describe("Test case key (e.g., 'MCP-29') OR numeric test case ID (e.g., '86280'). When providing a numeric ID, project_key is required."),
@@ -3237,25 +3238,58 @@ async function main() {
   server.registerTool(
     "get_tcm_suite_by_id",
     {
-      description: "🔍 Find TCM suite by ID with comprehensive search",
+      description: `🔍 Get test suite by its numeric ID. This is the primary tool for any "show me suite", "get suite by ID", or "find suite" request.
+Supports two modes:
+- simple (default): Fast direct API call. Returns suite fields (id, title, description, parentSuiteId, relativePosition). Best for quick lookups.
+- full: Fetches all project suites and enriches with hierarchy (rootSuiteId, parent chain, clickable links). Use when hierarchy context is needed.`,
     inputSchema: {
       project_key: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
+      project_id: z.number().int().positive().optional().describe("Project ID (alternative to project_key)"),
       suite_id: z.number().int().positive().describe("Suite ID to find"),
-      only_root_suites: z.boolean().default(false).describe("Search only in root suites"),
+      mode: z.enum(['simple', 'full']).default('simple').describe("'simple' = fast direct API call (default). 'full' = hierarchy-enriched with root suite chain and clickable links."),
+      only_root_suites: z.boolean().default(false).describe("(full mode only) Search only in root suites"),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
-      include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI")
+      include_clickable_links: z.boolean().default(false).describe("(full mode only) Include clickable links to Zebrunner web UI")
     }
     },
     async (args) => {
       try {
-        const { project_key, suite_id, only_root_suites, format, include_clickable_links } = args;
+        const { project_key, suite_id, format } = args;
+        const mode = args.mode || 'simple';
 
-        debugLog("Getting TCM suite by ID", { project_key, suite_id, only_root_suites, include_clickable_links });
+        debugLog("Getting TCM suite by ID", { project_key, suite_id, mode });
 
-        // Get clickable links configuration
+        // ---- Simple mode: direct Public API call ----
+        if (mode === 'simple') {
+          try {
+            const body = await mutationClient.getTestSuiteById(project_key, suite_id);
+            const suite = body.data;
+
+            const formattedResult = FormatProcessor.format(suite, format as any);
+            return {
+              content: [{
+                type: "text" as const,
+                text: typeof formattedResult === 'string' ? formattedResult : JSON.stringify(formattedResult, null, 2)
+              }]
+            };
+          } catch (directError: any) {
+            if (directError.statusCode === 404) {
+              return {
+                content: [{
+                  type: "text" as const,
+                  text: `❌ Suite ID ${suite_id} not found in project ${project_key}`
+                }]
+              };
+            }
+            throw directError;
+          }
+        }
+
+        // ---- Full mode: fetch all + hierarchy enrichment ----
+        const { only_root_suites, include_clickable_links } = args;
+
         const clickableLinkConfig = getClickableLinkConfig(include_clickable_links, ZEBRUNNER_URL);
 
-        // Get all suites from project using comprehensive method
         debugLog("Fetching all suites using getAllTestSuites method", { project_key, suite_id });
         const allSuites = await client.getAllTestSuites(project_key);
 
@@ -3265,21 +3299,17 @@ async function main() {
           sampleSuiteIds: allSuites.slice(0, 5).map(s => s.id)
         });
 
-        // Filter to root suites if requested
         let searchSuites = allSuites;
         if (only_root_suites) {
           searchSuites = HierarchyProcessor.getRootSuites(allSuites);
         }
 
-        // Find the suite
         const suite = searchSuites.find((s: ZebrunnerTestSuite) => s.id === suite_id);
 
         if (suite) {
-          // Enhance with hierarchy information
           const processedSuites = HierarchyProcessor.setRootParentsToSuites(allSuites);
           const enhancedSuite = processedSuites.find(s => s.id === suite_id) || suite;
 
-          // Add clickable links if enabled
           const suiteWithLinks = addSuiteWebUrl(enhancedSuite, project_key, clickableLinkConfig.baseWebUrl, clickableLinkConfig);
 
           console.error(`Found suite by id ${suite_id} with title: ${enhancedSuite.name || enhancedSuite.title}`);
@@ -3319,6 +3349,969 @@ async function main() {
       }
     }
   );
+
+  // ========== MUTATION TOOLS (Beta) ==========
+
+  // Boolean that also accepts string "true"/"false" from MCP clients that
+  // serialise booleans as strings (e.g. Zebrunner MCP Inspector, some XML transports).
+  const BoolParam = z.preprocess(
+    (v) => (v === "true" || v === "1" ? true : v === "false" || v === "0" ? false : v),
+    z.boolean().default(false),
+  );
+
+  // --- Confirmation token enforcement ---
+  // Ensures the preview step is always executed before mutation.
+  // Preview generates a one-time-use token and stores the full args;
+  // the confirm call only needs confirm + token (args are restored).
+  const CONFIRMATION_TOKEN_TTL_MS = 10 * 60 * 1000; // 10 min
+  interface PendingConfirmation { timestamp: number; argsJson: string }
+  const confirmationTokens = new Map<string, PendingConfirmation>();
+
+  function generateConfirmationToken(argsJson: string): string {
+    const now = Date.now();
+    for (const [tok, pd] of confirmationTokens) {
+      if (now - pd.timestamp > CONFIRMATION_TOKEN_TTL_MS) confirmationTokens.delete(tok);
+    }
+    const token = crypto.randomBytes(8).toString("hex");
+    confirmationTokens.set(token, { timestamp: now, argsJson });
+    return token;
+  }
+
+  function validateAndRestoreArgs<T extends Record<string, unknown>>(
+    args: T,
+  ): T | { error: string } {
+    const token = (args as Record<string, unknown>).confirmation_token as string | undefined;
+    if (!token) {
+      return { error: "❌ confirmation_token is required when confirm is true. " +
+        "Call without confirm first to get a preview and token." };
+    }
+    const pd = confirmationTokens.get(token);
+    if (pd == null) {
+      return { error: "❌ Invalid or already-used confirmation_token. " +
+        "Call without confirm first to get a fresh preview and token." };
+    }
+    if (Date.now() - pd.timestamp > CONFIRMATION_TOKEN_TTL_MS) {
+      confirmationTokens.delete(token);
+      return { error: "❌ Confirmation token expired (10 min TTL). " +
+        "Call without confirm first to get a new preview and token." };
+    }
+    confirmationTokens.delete(token); // one-time use
+    const storedArgs = JSON.parse(pd.argsJson) as T;
+    const reviewOverride = (args as Record<string, unknown>).review;
+    Object.assign(args, storedArgs);
+    (args as Record<string, unknown>).confirm = true;
+    if (reviewOverride !== undefined) (args as Record<string, unknown>).review = reviewOverride;
+    return args;
+  }
+
+  const CreateTestSuiteSchema = z.object({
+    project_key: z.string().min(1).optional().describe("Project key (e.g., 'android' or 'ANDROID')"),
+    project_id: z.number().int().positive().optional().describe("Project numeric ID (alternative to project_key)"),
+    title: z.string().min(1).max(255).optional().describe("Suite name. Required for preview, auto-restored for confirm."),
+    description: z.string().max(5000).optional().describe("Optional description."),
+    parent_suite_id: z.number().int().positive().optional()
+      .describe("ID of parent suite. Omit to create a root-level suite."),
+    dry_run: BoolParam.describe("If true, returns raw payload for debugging (skips validation)."),
+    confirm: BoolParam.describe("Must be true to execute. Without it, returns a preview for user approval."),
+    confirmation_token: z.string().optional()
+      .describe("Token returned by the preview step. Required when confirm is true."),
+  });
+
+  server.registerTool(
+    "create_test_suite",
+    {
+      description: `🔧 (Beta) Create a new Test Suite in a Zebrunner project.
+Requires Engineer role or higher in the target project.
+Suites can be nested at any depth by providing parent_suite_id.
+Omit parent_suite_id to create a root-level suite.
+TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + confirmation_token. 2) After user approval, call with ONLY confirm: true and the confirmation_token. The full payload is stored server-side — do NOT re-send other fields.`,
+      inputSchema: CreateTestSuiteSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async (args) => {
+      try {
+        // Restore full args from stored token when confirming
+        if (args.confirm) {
+          const restored = validateAndRestoreArgs(args);
+          if ("error" in restored) return { content: [{ type: "text" as const, text: restored.error }] };
+        }
+
+        if (!args.project_key && !args.project_id) {
+          return { content: [{ type: "text" as const, text: "❌ Either project_key or project_id must be provided" }] };
+        }
+        if (!args.title) {
+          return { content: [{ type: "text" as const, text: "❌ title is required" }] };
+        }
+        const projectKey = args.project_key || String(args.project_id);
+
+        const payload: Record<string, unknown> = { title: args.title };
+        if (args.description !== undefined) payload.description = args.description;
+        if (args.parent_suite_id !== undefined) payload.parentSuiteId = args.parent_suite_id;
+
+        const url = `/test-suites?projectKey=${encodeURIComponent(projectKey)}`;
+
+        if (args.dry_run) {
+          return {
+            content: [{ type: "text" as const, text:
+              `DRY RUN — create_test_suite\nPOST ${url}\n\nPayload:\n${JSON.stringify(payload, null, 2)}`
+            }]
+          };
+        }
+
+        const parentLabel = args.parent_suite_id != null
+          ? `Suite ID ${args.parent_suite_id}`
+          : "root level";
+
+        if (!args.confirm) {
+          const token = generateConfirmationToken(JSON.stringify(args));
+          return {
+            content: [{ type: "text" as const, text:
+              `📋 Preview — create_test_suite\nPOST ${url}\n\n` +
+              `Title: ${args.title}\n` +
+              `Parent: ${parentLabel}\n` +
+              `Description: ${args.description || "(none)"}\n\n` +
+              `Payload:\n${JSON.stringify(payload, null, 2)}\n\n` +
+              `confirmation_token: ${token}\n` +
+              `⚠️ To proceed, call again with ONLY: { "confirm": true, "confirmation_token": "${token}" }`
+            }]
+          };
+        }
+
+        // Confirm — execute mutation
+        writeAuditLog({
+          timestamp: new Date().toISOString(),
+          tool: "create_test_suite",
+          method: "POST",
+          url,
+          projectKey,
+          payload,
+        });
+
+        const body = await mutationClient.createTestSuite(projectKey, payload);
+        const suite = body.data;
+        const createdParent = suite.parentSuiteId != null
+          ? `Suite ID ${suite.parentSuiteId}`
+          : "root level";
+
+        return {
+          content: [{ type: "text" as const, text:
+            `✅ Test Suite created successfully\n` +
+            `ID: ${suite.id}\nTitle: ${suite.title}\n` +
+            `Parent: ${createdParent}\n` +
+            `Position: ${suite.relativePosition ?? "N/A"}\n\n` +
+            `Full record:\n${JSON.stringify(suite, null, 2)}`
+          }]
+        };
+      } catch (error: any) {
+        const hint = error.statusCode === 409
+          ? "\nHint: A concurrent modification is in progress. Wait a moment and retry."
+          : "";
+        return {
+          content: [{ type: "text" as const, text:
+            `❌ Error in create_test_suite: ${error.message}${hint}`
+          }]
+        };
+      }
+    }
+  );
+
+  const UpdateTestSuiteSchema = z.object({
+    project_key: z.string().min(1).optional().describe("Project key (e.g., 'android' or 'ANDROID')"),
+    project_id: z.number().int().positive().optional().describe("Project numeric ID (alternative to project_key)"),
+    suite_id: z.number().int().positive().optional()
+      .describe("Numeric ID of the Test Suite to update. Required for preview, auto-restored for confirm."),
+    title: z.string().min(1).max(255).optional()
+      .describe("Suite name. Required for preview — this is a full PUT replacement, all fields are overwritten."),
+    description: z.string().max(5000).optional()
+      .describe("Suite description. Omit to clear it."),
+    parent_suite_id: z.number().int().positive().nullable().optional()
+      .describe("Parent suite ID. Set to null or omit to make this a root-level suite."),
+    dry_run: BoolParam.describe("If true, returns raw payload for debugging (skips validation)."),
+    confirm: BoolParam.describe("Must be true to execute. Without it, returns a preview for user approval."),
+    confirmation_token: z.string().optional()
+      .describe("Token returned by the preview step. Required when confirm is true."),
+  });
+
+  server.registerTool(
+    "update_test_suite",
+    {
+      description: `🔧 (Beta) Update an existing Test Suite by its numeric ID.
+Requires Engineer role or higher in the target project.
+⚠️ IMPORTANT: This uses PUT (full replacement). You must always provide 'title' even if you only want to change another field.
+Setting parent_suite_id to null or omitting it will promote the suite to root level.
+TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + confirmation_token. 2) After user approval, call with ONLY confirm: true and the confirmation_token. The full payload is stored server-side — do NOT re-send other fields.`,
+      inputSchema: UpdateTestSuiteSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async (args) => {
+      try {
+        if (args.confirm) {
+          const restored = validateAndRestoreArgs(args);
+          if ("error" in restored) return { content: [{ type: "text" as const, text: restored.error }] };
+        }
+
+        if (!args.project_key && !args.project_id) {
+          return { content: [{ type: "text" as const, text: "❌ Either project_key or project_id must be provided" }] };
+        }
+        if (!args.suite_id) {
+          return { content: [{ type: "text" as const, text: "❌ suite_id is required" }] };
+        }
+        if (!args.title) {
+          return { content: [{ type: "text" as const, text: "❌ title is required" }] };
+        }
+        const projectKey = args.project_key || String(args.project_id);
+
+        const payload: Record<string, unknown> = { title: args.title };
+        if (args.description !== undefined) payload.description = args.description;
+        if (args.parent_suite_id !== undefined) payload.parentSuiteId = args.parent_suite_id;
+
+        const url = `/test-suites/${args.suite_id}?projectKey=${encodeURIComponent(projectKey)}`;
+
+        if (args.dry_run) {
+          return {
+            content: [{ type: "text" as const, text:
+              `DRY RUN — update_test_suite\nPUT ${url}\n\nPayload:\n${JSON.stringify(payload, null, 2)}`
+            }]
+          };
+        }
+
+        if (!args.confirm) {
+          let beforeText = "";
+          try {
+            const before = await mutationClient.getTestSuiteById(projectKey, args.suite_id);
+            const beforeData = before.data;
+            beforeText =
+              `Current values:\n` +
+              `  Title: ${beforeData.title ?? "N/A"}\n` +
+              `  Description: ${beforeData.description ?? "(none)"}\n` +
+              `  Parent Suite ID: ${beforeData.parentSuiteId ?? "root level"}\n\n`;
+          } catch {
+            beforeText = "⚠️ Could not fetch current suite state for comparison.\n\n";
+          }
+
+          const token = generateConfirmationToken(JSON.stringify(args));
+          return {
+            content: [{ type: "text" as const, text:
+              `📋 Preview — update_test_suite\nPUT ${url}\n\n` +
+              beforeText +
+              `Proposed values:\n` +
+              `  Title: ${args.title}\n` +
+              `  Description: ${args.description ?? "(will be cleared)"}\n` +
+              `  Parent Suite ID: ${args.parent_suite_id ?? "root level"}\n\n` +
+              `Payload:\n${JSON.stringify(payload, null, 2)}\n\n` +
+              `confirmation_token: ${token}\n` +
+              `⚠️ To proceed, call again with ONLY: { "confirm": true, "confirmation_token": "${token}" }`
+            }]
+          };
+        }
+
+        // Confirm — execute mutation
+        let beforeData: Record<string, unknown> = {};
+        try {
+          const before = await mutationClient.getTestSuiteById(projectKey, args.suite_id);
+          beforeData = before.data ?? {};
+        } catch {
+          // Non-fatal — proceed without diff
+        }
+
+        writeAuditLog({
+          timestamp: new Date().toISOString(),
+          tool: "update_test_suite",
+          method: "PUT",
+          url,
+          projectKey,
+          payload,
+        });
+
+        const body = await mutationClient.updateTestSuite(projectKey, args.suite_id, payload);
+        const afterData = body.data ?? {};
+        const diffs = computeDiff(beforeData, afterData);
+        const parentLabel = afterData.parentSuiteId != null
+          ? `Suite ID ${afterData.parentSuiteId}`
+          : "root level";
+
+        return {
+          content: [{ type: "text" as const, text:
+            `✅ Test Suite updated successfully\n` +
+            `ID: ${afterData.id} | Title: ${afterData.title}\n` +
+            `Parent: ${parentLabel} | Position: ${afterData.relativePosition ?? "N/A"}\n\n` +
+            `Changed fields:\n${formatDiff(diffs)}\n\n` +
+            `Full updated record:\n${JSON.stringify(afterData, null, 2)}`
+          }]
+        };
+      } catch (error: any) {
+        const hint = error.statusCode === 409
+          ? "\nHint: A concurrent modification is in progress. Wait a moment and retry."
+          : error.statusCode === 404
+          ? "\nHint: No suite found with the provided suite_id in this project."
+          : "";
+        return {
+          content: [{ type: "text" as const, text:
+            `❌ Error in update_test_suite: ${error.message}${hint}`
+          }]
+        };
+      }
+    }
+  );
+
+  const IdOrName = z.union([
+    z.object({ id: z.number().int().positive() }),
+    z.object({ name: z.string().min(1) }),
+  ]);
+
+  const FileRef = z.union([
+    z.object({ fileUuid: z.string().uuid().describe("UUID of a previously uploaded file") }),
+    z.object({ file_path: z.string().min(1).describe("Absolute path to a local file to upload automatically") }),
+  ]);
+
+  const StepSchema = z.object({
+    action: z.string().optional().describe("Step action text. Supports markdown."),
+    expectedResult: z.string().optional().describe("Expected result text. Supports markdown."),
+    sharedStepsId: z.number().int().positive().optional()
+      .describe("ID of a shared steps group. If set, references reusable shared steps."),
+    attachments: z.array(FileRef).optional(),
+  });
+
+  const RequirementSchema = z.object({
+    source: z.enum(["JIRA", "AZURE_DEVOPS"]),
+    reference: z.string().min(1),
+  });
+
+  const CreateTestCaseSchema = z.object({
+    project_key: z.string().min(1).optional()
+      .describe("Project key. Provide either this or project_id."),
+    project_id: z.number().int().positive().optional()
+      .describe("Project numeric ID. Provide either this or project_key."),
+    test_suite_id: z.number().int().positive().optional()
+      .describe("ID of the Test Suite to place this test case in. Required for preview, auto-restored for confirm."),
+    title: z.string().min(1).max(255).optional()
+      .describe("Test case title. Required unless source_case_key is provided (inherited from source)."),
+    source_case_key: z.string().optional()
+      .describe("Source test case key (e.g., 'MCP-123'). Fetches the source and uses its fields as defaults. Explicitly passed fields override source values. Cross-project file attachments are automatically re-uploaded to the target project."),
+    description: z.string().max(5000).optional().describe("Rich text description. Supports markdown."),
+    priority: IdOrName.optional()
+      .describe("Priority reference. Pass { id: N } or { name: '...' }. Validated against project priorities."),
+    automation_state: IdOrName.optional()
+      .describe("Automation state reference. Pass { id: N } or { name: '...' }. Validated against project automation states."),
+    draft: z.boolean().optional().describe("Ignored — always forced to true for safety. Use update_test_case to publish."),
+    deprecated: z.boolean().optional().describe("Mark test case as deprecated. Defaults to false."),
+    pre_conditions: z.string().max(2000).optional().describe("Pre-conditions (setup instructions). Supports markdown."),
+    post_conditions: z.string().max(2000).optional().describe("Post-conditions (cleanup instructions). Supports markdown."),
+    steps: z.array(StepSchema).optional()
+      .describe("Test steps. Each step must have either sharedStepsId OR action/expectedResult."),
+    requirements: z.array(RequirementSchema).optional()
+      .describe("Linked requirements from JIRA or AZURE_DEVOPS."),
+    custom_field: z.record(z.string(), z.unknown()).optional()
+      .describe("Custom fields keyed by systemName. Values validated at runtime."),
+    attachments: z.array(FileRef).optional()
+      .describe("Files attached to this test case."),
+    dry_run: BoolParam.describe("If true, returns raw payload for debugging (skips validation)."),
+    confirm: BoolParam.describe("Must be true to execute. Without it, returns a preview for user approval."),
+    confirmation_token: z.string().optional()
+      .describe("Token returned by the preview step. Required when confirm is true."),
+    review: BoolParam.describe("If true, runs quality review against rules after creation and appends improvement suggestions."),
+  });
+
+  server.registerTool(
+    "create_test_case",
+    {
+      description: `🔧 (Beta) Create a new Test Case in a Zebrunner project.
+Requires Engineer role or higher in the target project.
+Available automation states and priorities can be discovered via list_automation_states and list_priorities tools.
+Custom field keys must be systemName values (not display names) from list_custom_fields.
+Attachments accept either { fileUuid } for pre-uploaded files or { file_path } for local files (uploaded automatically).
+Optionally, pass source_case_key to pre-populate fields from an existing test case (explicit args override source values). When copying, the source test case URL is automatically prepended to the description for traceability.
+SAFETY: All created test cases are forced to draft=true regardless of the provided value. Review it and update manually or use update_test_case to publish when ready.
+Use dry_run: true to preview the raw payload without any validation.
+Pass review: true to run a quality review against project rules after creation.
+TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + confirmation_token. 2) After user approval, call with ONLY confirm: true and the confirmation_token (optionally review: true). The full payload is stored server-side — do NOT re-send other fields.`,
+      inputSchema: CreateTestCaseSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async (args) => {
+      const handlerStart = Date.now();
+      try {
+        // Restore full args from stored token when confirming
+        if (args.confirm) {
+          const restored = validateAndRestoreArgs(args);
+          if ("error" in restored) return { content: [{ type: "text" as const, text: restored.error }] };
+        }
+
+        debugLog("create_test_case: handler entered", { confirm: args.confirm, dry_run: args.dry_run, review: args.review });
+        if (!args.project_key && !args.project_id) {
+          return { content: [{ type: "text" as const, text: "❌ Either project_key or project_id must be provided" }] };
+        }
+        if (!args.test_suite_id) {
+          return { content: [{ type: "text" as const, text: "❌ test_suite_id is required" }] };
+        }
+        const projectKey = args.project_key || String(args.project_id);
+
+        // --- Source case resolution ---
+        let sourceData: Record<string, unknown> | undefined;
+        let sourceProjectKey: string | undefined;
+        let fileTransferReport = "";
+
+        if (args.source_case_key) {
+          const keyMatch = args.source_case_key.match(/^([A-Za-z][A-Za-z0-9_]*)-(\d+)$/);
+          if (!keyMatch) {
+            return { content: [{ type: "text" as const, text: "❌ source_case_key must be in format 'PROJECT-123'" }] };
+          }
+          sourceProjectKey = keyMatch[1];
+
+          const sourceResp = await mutationClient.getTestCaseByKey(sourceProjectKey, args.source_case_key);
+          sourceData = sourceResp.data ?? {};
+        }
+
+        // Merge source fields with explicit args (explicit args win)
+        const eff = {
+          title: args.title ?? (sourceData?.title as string | undefined),
+          test_suite_id: args.test_suite_id,
+          description: args.description !== undefined ? args.description : (sourceData?.description as string | undefined),
+          priority: args.priority !== undefined ? args.priority
+            : sourceData?.priority ? { name: (sourceData.priority as { name: string }).name } : undefined,
+          automation_state: args.automation_state !== undefined ? args.automation_state
+            : sourceData?.automationState ? { name: (sourceData.automationState as { name: string }).name } : undefined,
+          draft: args.draft !== undefined ? args.draft : (sourceData?.draft as boolean | undefined),
+          deprecated: args.deprecated !== undefined ? args.deprecated : (sourceData?.deprecated as boolean | undefined),
+          pre_conditions: args.pre_conditions !== undefined ? args.pre_conditions : (sourceData?.preConditions as string | undefined),
+          post_conditions: args.post_conditions !== undefined ? args.post_conditions : (sourceData?.postConditions as string | undefined),
+          steps: args.steps !== undefined ? args.steps : (sourceData?.steps as Array<Record<string, unknown>> | undefined),
+          requirements: args.requirements !== undefined ? args.requirements : (sourceData?.requirements as Array<Record<string, unknown>> | undefined),
+          custom_field: args.custom_field !== undefined ? args.custom_field : (sourceData?.customField as Record<string, unknown> | undefined),
+          attachments: args.attachments !== undefined ? args.attachments : (sourceData?.attachments as Array<{ fileUuid: string }> | undefined),
+        };
+
+        if (!eff.title) {
+          return { content: [{ type: "text" as const, text: "❌ title is required (provide directly or via source_case_key)" }] };
+        }
+
+        if (args.source_case_key && sourceData) {
+          const baseWebUrl = ZEBRUNNER_URL.replace("/api/public/v1", "");
+          const sourceId = sourceData.id;
+          const sourceLink = sourceId
+            ? `[${args.source_case_key}](${baseWebUrl}/projects/${sourceProjectKey}/test-cases?caseId=${sourceId})`
+            : args.source_case_key;
+          const sourceHeader = `**Source:** ${sourceLink}`;
+          eff.description = eff.description ? `${sourceHeader}\n\n${eff.description}` : sourceHeader;
+        }
+
+        // Safety: always create test cases as drafts
+        eff.draft = true;
+
+        // Build API payload (map snake_case → camelCase)
+        const payload: Record<string, unknown> = {
+          testSuite: { id: eff.test_suite_id },
+          title: eff.title,
+        };
+        if (eff.description !== undefined) payload.description = eff.description;
+        if (eff.priority !== undefined) payload.priority = eff.priority;
+        if (eff.automation_state !== undefined) payload.automationState = eff.automation_state;
+        payload.draft = true;
+        if (eff.deprecated !== undefined) payload.deprecated = eff.deprecated;
+        if (eff.pre_conditions !== undefined) payload.preConditions = eff.pre_conditions;
+        if (eff.post_conditions !== undefined) payload.postConditions = eff.post_conditions;
+        if (eff.steps !== undefined) payload.steps = eff.steps;
+        if (eff.requirements !== undefined) payload.requirements = eff.requirements;
+        if (eff.custom_field !== undefined) payload.customField = eff.custom_field;
+        if (eff.attachments !== undefined) payload.attachments = eff.attachments;
+
+        // Cross-project file handling: re-upload when source project differs
+        const isCrossProject = sourceProjectKey && sourceProjectKey.toUpperCase() !== projectKey.toUpperCase();
+        if (isCrossProject && sourceData) {
+          try {
+            const { attachmentUuids, inlineUuids, locations } = collectAllFileUuids(payload);
+            const allUuids = [...new Set([...attachmentUuids, ...inlineUuids])];
+
+            if (allUuids.length > 0) {
+              const { uuidMap, failures } = await reUploadFiles(allUuids, mutationClient);
+
+              if (uuidMap.size > 0) {
+                Object.assign(payload, applyUuidMapping(payload, uuidMap));
+              }
+              if (failures.length > 0) {
+                const { cleanedPayload, warnings } = stripFailedFileRefs(payload, failures);
+                Object.assign(payload, cleanedPayload);
+                fileTransferReport += warnings.length > 0 ? "\n" + warnings.join("\n") : "";
+              }
+              fileTransferReport = buildFileTransferReport(allUuids.length, uuidMap, failures, locations) +
+                (fileTransferReport ? "\n" + fileTransferReport : "");
+            }
+          } catch (fileErr: unknown) {
+            const msg = fileErr instanceof Error ? fileErr.message : String(fileErr);
+            fileTransferReport = `⚠️ Cross-project file transfer failed: ${msg}\nAll file references from source have been stripped.`;
+            const allUuids = [...collectAllFileUuids(payload).attachmentUuids, ...collectAllFileUuids(payload).inlineUuids];
+            if (allUuids.length > 0) {
+              const { cleanedPayload } = stripFailedFileRefs(payload, allUuids);
+              Object.assign(payload, cleanedPayload);
+            }
+          }
+        }
+
+        const url = `/test-cases?projectKey=${encodeURIComponent(projectKey)}`;
+        debugLog("create_test_case: payload built", { elapsed: `${Date.now() - handlerStart}ms`, stepsCount: (eff.steps as unknown[] | undefined)?.length ?? 0 });
+
+        // Branch A: dry_run
+        if (args.dry_run) {
+          return {
+            content: [{ type: "text" as const, text:
+              `DRY RUN — create_test_case\nPOST ${url}\n\nPayload:\n${JSON.stringify(payload, null, 2)}`
+            }]
+          };
+        }
+
+        // Branch B: preview (default)
+        if (!args.confirm) {
+          const fieldsToSet: string[] = [
+            `  title            → ${JSON.stringify(eff.title)}`,
+            `  test_suite_id    → ${eff.test_suite_id}`,
+          ];
+          if (eff.description !== undefined) fieldsToSet.push(`  description      → ${JSON.stringify(eff.description).slice(0, 80)}...`);
+          if (eff.priority !== undefined) fieldsToSet.push(`  priority         → ${JSON.stringify(eff.priority)}`);
+          if (eff.automation_state !== undefined) fieldsToSet.push(`  automation_state → ${JSON.stringify(eff.automation_state)}`);
+          fieldsToSet.push(`  draft            → true (forced for safety — use update_test_case to publish)`);
+          if (eff.deprecated !== undefined) fieldsToSet.push(`  deprecated       → ${eff.deprecated}`);
+          if (eff.pre_conditions !== undefined) fieldsToSet.push(`  pre_conditions   → ${JSON.stringify(eff.pre_conditions).slice(0, 80)}...`);
+          if (eff.post_conditions !== undefined) fieldsToSet.push(`  post_conditions  → ${JSON.stringify(eff.post_conditions).slice(0, 80)}...`);
+          if (eff.steps !== undefined) fieldsToSet.push(`  steps            → ${(eff.steps as unknown[]).length} step(s)`);
+          if (eff.requirements !== undefined) fieldsToSet.push(`  requirements     → ${(eff.requirements as unknown[]).length} requirement(s)`);
+          if (eff.custom_field !== undefined) fieldsToSet.push(`  custom_field     → keys: ${Object.keys(eff.custom_field as object).join(", ")}`);
+          if (eff.attachments !== undefined) fieldsToSet.push(`  attachments      → ${(eff.attachments as unknown[]).length} file(s)`);
+
+          // Describe any file_path entries pending upload
+          const allAtts = [
+            ...(Array.isArray(eff.attachments) ? eff.attachments : []),
+            ...(Array.isArray(eff.steps)
+              ? (eff.steps as Array<Record<string, unknown>>).flatMap((s) =>
+                  Array.isArray(s.attachments) ? s.attachments : [])
+              : []),
+          ];
+          const filePathLines = describeFilePathAttachments(allAtts as Array<{ fileUuid?: string; file_path?: string }>);
+
+          const nullDefaults: string[] = [];
+          if (eff.description === undefined) nullDefaults.push(`  description      → null`);
+          if (eff.priority === undefined) nullDefaults.push(`  priority         → (project default)`);
+          if (eff.automation_state === undefined) nullDefaults.push(`  automation_state → (project default)`);
+          if (eff.deprecated === undefined) nullDefaults.push(`  deprecated       → false`);
+          if (eff.pre_conditions === undefined) nullDefaults.push(`  pre_conditions   → null`);
+          if (eff.post_conditions === undefined) nullDefaults.push(`  post_conditions  → null`);
+          if (eff.steps === undefined) nullDefaults.push(`  steps            → (none)`);
+          if (eff.requirements === undefined) nullDefaults.push(`  requirements     → []`);
+          if (eff.custom_field === undefined) nullDefaults.push(`  custom_field     → (none)`);
+          if (eff.attachments === undefined) nullDefaults.push(`  attachments      → []`);
+
+          let previewText = `📋 Preview — create_test_case\nPOST ${url}\n`;
+          if (args.source_case_key) {
+            previewText += `\nSource: ${args.source_case_key}${isCrossProject ? ` (cross-project → ${projectKey})` : ""}\n`;
+          }
+          previewText += `\nFields to be set:\n${fieldsToSet.join("\n")}\n`;
+
+          if (nullDefaults.length > 0) {
+            previewText += `\n⚠️ Fields that will be null/default (not provided):\n${nullDefaults.join("\n")}\n`;
+          }
+          if (filePathLines.length > 0) {
+            previewText += `\n📎 Attachments to upload:\n${filePathLines.join("\n")}\n`;
+          }
+          if (fileTransferReport) {
+            previewText += `\n📎 ${fileTransferReport}\n`;
+          }
+
+          const token = generateConfirmationToken(JSON.stringify(args));
+          previewText += `\nPayload:\n${JSON.stringify(payload, null, 2)}\n\n` +
+            `confirmation_token: ${token}\n` +
+            `⚠️ To proceed, call again with ONLY: { "confirm": true, "confirmation_token": "${token}" }`;
+
+          return {
+            content: [{ type: "text" as const, text: previewText }]
+          };
+        }
+
+        // Confirm — execute
+        debugLog("create_test_case: entering confirm branch", { elapsed: `${Date.now() - handlerStart}ms` });
+        const t0 = Date.now();
+        const uploadReportLines: string[] = [];
+        const uploadWarnings: string[] = [];
+        try {
+          if (Array.isArray(payload.attachments)) {
+            const { resolved, uploadReport, warnings: uw } = await processFilePathAttachments(
+              payload.attachments as Array<{ fileUuid?: string; file_path?: string }>,
+              mutationClient,
+            );
+            payload.attachments = resolved.length > 0 ? resolved : undefined;
+            uploadReportLines.push(...uploadReport);
+            uploadWarnings.push(...uw);
+          }
+          if (Array.isArray(payload.steps)) {
+            for (const step of payload.steps as Array<Record<string, unknown>>) {
+              if (Array.isArray(step.attachments)) {
+                const { resolved, uploadReport, warnings: uw } = await processFilePathAttachments(
+                  step.attachments as Array<{ fileUuid?: string; file_path?: string }>,
+                  mutationClient,
+                );
+                step.attachments = resolved.length > 0 ? resolved : undefined;
+                uploadReportLines.push(...uploadReport);
+                uploadWarnings.push(...uw);
+              }
+            }
+          }
+        } catch (uploadErr: unknown) {
+          const msg = uploadErr instanceof Error ? uploadErr.message : String(uploadErr);
+          uploadWarnings.push(`⚠️ File upload processing failed: ${msg}. Proceeding without file attachments.`);
+          delete payload.attachments;
+        }
+        debugLog("create_test_case: file uploads done", { elapsed: `${Date.now() - t0}ms` });
+
+        writeAuditLog({
+          timestamp: new Date().toISOString(),
+          tool: "create_test_case",
+          method: "POST",
+          url,
+          projectKey,
+          payload,
+          ...(args.source_case_key ? { source_case_key: args.source_case_key } : {}),
+        });
+
+        const body = await mutationClient.createTestCase(projectKey, payload);
+        debugLog("create_test_case: API call done", { elapsed: `${Date.now() - t0}ms`, totalElapsed: `${Date.now() - handlerStart}ms` });
+        const tc = body.data;
+
+        let resultText =
+          `✅ Test Case created successfully\n` +
+          `ID: ${tc.id ?? "N/A"}\n` +
+          `Key: ${tc.key ?? "N/A"}\n` +
+          `Title: ${tc.title ?? "N/A"}\n` +
+          `Suite ID: ${(tc.testSuite as { id: number })?.id ?? "N/A"}\n` +
+          `Priority: ${tc.priority ? JSON.stringify(tc.priority) : "N/A"}\n` +
+          `Automation State: ${tc.automationState ? JSON.stringify(tc.automationState) : "N/A"}\n` +
+          `Draft: ${tc.draft ?? "N/A"}\n`;
+
+        if (args.source_case_key) resultText += `Source: ${args.source_case_key}\n`;
+        if (uploadReportLines.length > 0) resultText += `\n📎 Files uploaded:\n${uploadReportLines.join("\n")}\n`;
+        if (uploadWarnings.length > 0) resultText += `\n${uploadWarnings.join("\n")}\n`;
+        if (fileTransferReport) resultText += `\n📎 ${fileTransferReport}\n`;
+        resultText += `\nFull record:\n${JSON.stringify(tc, null, 2)}`;
+
+        // Optional quality review
+        if (args.review && REVIEW_FILES_AVAILABLE && tc.key) {
+          try {
+            debugLog("create_test_case: running quality review", { key: tc.key });
+            const { ZebrunnerToolHandlers } = await import("./handlers/tools.js");
+            const { ZebrunnerApiClient } = await import("./api/client.js");
+            const basicClient = new ZebrunnerApiClient(config);
+            const toolHandlers = new ZebrunnerToolHandlers(basicClient);
+            const fieldsLayout = await getFieldsLayoutForProject(projectKey);
+            const reviewResult = await toolHandlers.validateTestCase({
+              projectKey,
+              caseKey: tc.key as string,
+              rulesFilePath: REVIEW_RULES_FILE,
+              checkpointsFilePath: REVIEW_CHECKPOINTS_FILE,
+              format: "markdown",
+              improveIfPossible: false,
+            }, fieldsLayout);
+            debugLog("create_test_case: review done", { elapsed: `${Date.now() - t0}ms` });
+            const reviewText = reviewResult?.content?.[0]?.text;
+            if (reviewText) {
+              resultText += `\n\n📝 Quality Review\n${"─".repeat(40)}\n${reviewText}`;
+            }
+          } catch (reviewErr: unknown) {
+            const msg = reviewErr instanceof Error ? reviewErr.message : String(reviewErr);
+            resultText += `\n\n⚠️ Quality review skipped: ${msg}`;
+          }
+        } else if (!args.review && REVIEW_FILES_AVAILABLE && tc.key) {
+          resultText += `\n\n💡 Tip: pass review: true to run a quality review against project rules.`;
+        }
+
+        return {
+          content: [{ type: "text" as const, text: resultText }]
+        };
+      } catch (error: any) {
+        const enriched = await enrichMutationError(error, args.project_key || String(args.project_id), mutationClient);
+        return {
+          content: [{ type: "text" as const, text:
+            `❌ Error in create_test_case: ${enriched}`
+          }]
+        };
+      }
+    }
+  );
+
+  const UpdateTestCaseSchema = z.object({
+    project_key: z.string().min(1).optional()
+      .describe("Project key. Provide either this or project_id."),
+    project_id: z.number().int().positive().optional()
+      .describe("Project numeric ID. Provide either this or project_key."),
+    identifier: z.union([
+      z.number().int().positive().describe("Numeric test case ID → calls PATCH /test-cases/{id}"),
+      z.string().min(1).describe("Test case key (e.g. 'MCP-42') → calls PATCH /test-cases/key:{key}"),
+    ]).optional().describe("Numeric ID or string key of the test case to update. Required for preview, auto-restored for confirm."),
+    test_suite_id: z.number().int().positive().optional()
+      .describe("Move test case to a different suite."),
+    title: z.string().min(1).max(255).optional().describe("New title."),
+    description: z.string().max(5000).optional().describe("Supports markdown."),
+    priority: IdOrName.optional()
+      .describe("Pass { id: N } or { name: '...' }. Validated at runtime."),
+    automation_state: IdOrName.optional()
+      .describe("Pass { id: N } or { name: '...' }. Validated at runtime."),
+    draft: z.boolean().optional(),
+    deprecated: z.boolean().optional(),
+    pre_conditions: z.string().max(2000).optional().describe("Supports markdown."),
+    post_conditions: z.string().max(2000).optional().describe("Supports markdown."),
+    steps: z.array(StepSchema).optional()
+      .describe("⚠️ ATOMIC: replaces ALL existing steps. To add one step, first fetch current steps and include them all."),
+    requirements: z.array(RequirementSchema).optional()
+      .describe("⚠️ ATOMIC: replaces ALL existing requirements."),
+    custom_field: z.record(z.string(), z.unknown()).optional()
+      .describe("Only specified keys are updated. Set a value to null to clear that field."),
+    attachments: z.array(FileRef).optional(),
+    dry_run: BoolParam.describe("If true, returns raw payload for debugging (skips validation)."),
+    confirm: BoolParam.describe("Must be true to execute. Without it, returns a preview for user approval."),
+    confirmation_token: z.string().optional()
+      .describe("Token returned by the preview step. Required when confirm is true."),
+    review: BoolParam.describe("If true, runs quality review against rules after update and appends improvement suggestions."),
+  });
+
+  server.registerTool(
+    "update_test_case",
+    {
+      description: `🔧 (Beta) Partially update an existing Test Case by its numeric ID or string key.
+Requires Engineer role or higher in the target project.
+Auto-detects the endpoint: numeric identifier → /test-cases/{id}, string identifier → /test-cases/key:{key}.
+Both use PATCH — only provided fields are updated.
+Attachments accept either { fileUuid } for pre-uploaded files or { file_path } for local files (uploaded automatically).
+⚠️ IMPORTANT: 'steps' and 'requirements' are atomic — providing a non-null list replaces ALL existing items. To add a single step, first retrieve the current steps via get_test_case_by_key and include all of them in the update.
+TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + confirmation_token. 2) After user approval, call with ONLY confirm: true and the confirmation_token (optionally review: true). The full payload is stored server-side — do NOT re-send other fields.`,
+      inputSchema: UpdateTestCaseSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async (args) => {
+      const handlerStart = Date.now();
+      try {
+        // Restore full args from stored token when confirming
+        if (args.confirm) {
+          const restored = validateAndRestoreArgs(args);
+          if ("error" in restored) return { content: [{ type: "text" as const, text: restored.error }] };
+        }
+
+        debugLog("update_test_case: handler entered", { confirm: args.confirm, dry_run: args.dry_run, review: args.review });
+        if (!args.project_key && !args.project_id) {
+          return { content: [{ type: "text" as const, text: "❌ Either project_key or project_id must be provided" }] };
+        }
+        if (!args.identifier) {
+          return { content: [{ type: "text" as const, text: "❌ identifier is required (numeric ID or string key)" }] };
+        }
+        const projectKey = args.project_key || String(args.project_id);
+        const isKeyIdentifier = typeof args.identifier === "string";
+
+        // Build payload (only include explicitly provided fields)
+        const payload: Record<string, unknown> = {};
+        if (args.test_suite_id !== undefined) payload.testSuite = { id: args.test_suite_id };
+        if (args.title !== undefined) payload.title = args.title;
+        if (args.description !== undefined) payload.description = args.description;
+        if (args.priority !== undefined) payload.priority = args.priority;
+        if (args.automation_state !== undefined) payload.automationState = args.automation_state;
+        if (args.draft !== undefined) payload.draft = args.draft;
+        if (args.deprecated !== undefined) payload.deprecated = args.deprecated;
+        if (args.pre_conditions !== undefined) payload.preConditions = args.pre_conditions;
+        if (args.post_conditions !== undefined) payload.postConditions = args.post_conditions;
+        if (args.steps !== undefined) payload.steps = args.steps;
+        if (args.requirements !== undefined) payload.requirements = args.requirements;
+        if (args.custom_field !== undefined) payload.customField = args.custom_field;
+        if (args.attachments !== undefined) payload.attachments = args.attachments;
+
+        if (Object.keys(payload).length === 0) {
+          return { content: [{ type: "text" as const, text: "❌ At least one field to update must be provided" }] };
+        }
+
+        const resourcePath = isKeyIdentifier
+          ? `/test-cases/key:${args.identifier}`
+          : `/test-cases/${args.identifier}`;
+        const url = `${resourcePath}?projectKey=${encodeURIComponent(projectKey)}`;
+        const identifierType = isKeyIdentifier ? "key" : "ID";
+
+        // Branch A: dry_run
+        if (args.dry_run) {
+          return {
+            content: [{ type: "text" as const, text:
+              `DRY RUN — update_test_case (by ${identifierType})\nPATCH ${url}\n\nPayload:\n${JSON.stringify(payload, null, 2)}`
+            }]
+          };
+        }
+
+        // Fetch before-state for preview/diff (non-fatal if it fails)
+        let beforeData: Record<string, unknown> = {};
+        try {
+          const before = isKeyIdentifier
+            ? await mutationClient.getTestCaseByKey(projectKey, args.identifier as string)
+            : await mutationClient.getTestCaseById(projectKey, args.identifier as number);
+          beforeData = before.data ?? {};
+        } catch {
+          // Non-fatal
+        }
+
+        // Branch B: preview (default) — no settings validation, returns fast
+        if (!args.confirm) {
+          const stepsWarning = args.steps !== undefined
+            ? "\n⚠️ WARNING: steps are provided — this will REPLACE all existing steps.\n"
+            : "";
+          const reqsWarning = args.requirements !== undefined
+            ? "\n⚠️ WARNING: requirements are provided — this will REPLACE all existing requirements.\n"
+            : "";
+
+          const allAtts = [
+            ...(Array.isArray(args.attachments) ? args.attachments : []),
+            ...(Array.isArray(args.steps)
+              ? (args.steps as Array<Record<string, unknown>>).flatMap((s) =>
+                  Array.isArray(s.attachments) ? s.attachments : [])
+              : []),
+          ];
+          const filePathLines = describeFilePathAttachments(allAtts as Array<{ fileUuid?: string; file_path?: string }>);
+          const filePathSection = filePathLines.length > 0
+            ? `\n📎 Attachments to upload:\n${filePathLines.join("\n")}\n`
+            : "";
+
+          const token = generateConfirmationToken(JSON.stringify(args));
+          return {
+            content: [{ type: "text" as const, text:
+              `📋 Preview — update_test_case (by ${identifierType})\nPATCH ${url}\n\n` +
+              `Current record:\n${JSON.stringify(beforeData, null, 2)}\n\n` +
+              `Proposed changes:\n${JSON.stringify(payload, null, 2)}\n` +
+              stepsWarning + reqsWarning + filePathSection + `\n` +
+              `confirmation_token: ${token}\n` +
+              `⚠️ To proceed, call again with ONLY: { "confirm": true, "confirmation_token": "${token}" }`
+            }]
+          };
+        }
+
+        // Confirm — execute
+        debugLog("update_test_case: entering confirm branch", { elapsed: `${Date.now() - handlerStart}ms` });
+        const t0 = Date.now();
+        const uploadReportLines: string[] = [];
+        const uploadWarnings: string[] = [];
+        try {
+          if (Array.isArray(payload.attachments)) {
+            const { resolved, uploadReport, warnings: uw } = await processFilePathAttachments(
+              payload.attachments as Array<{ fileUuid?: string; file_path?: string }>,
+              mutationClient,
+            );
+            payload.attachments = resolved.length > 0 ? resolved : undefined;
+            uploadReportLines.push(...uploadReport);
+            uploadWarnings.push(...uw);
+          }
+          if (Array.isArray(payload.steps)) {
+            for (const step of payload.steps as Array<Record<string, unknown>>) {
+              if (Array.isArray(step.attachments)) {
+                const { resolved, uploadReport, warnings: uw } = await processFilePathAttachments(
+                  step.attachments as Array<{ fileUuid?: string; file_path?: string }>,
+                  mutationClient,
+                );
+                step.attachments = resolved.length > 0 ? resolved : undefined;
+                uploadReportLines.push(...uploadReport);
+                uploadWarnings.push(...uw);
+              }
+            }
+          }
+        } catch (uploadErr: unknown) {
+          const msg = uploadErr instanceof Error ? uploadErr.message : String(uploadErr);
+          uploadWarnings.push(`⚠️ File upload processing failed: ${msg}. Proceeding without file attachments.`);
+          delete payload.attachments;
+        }
+        debugLog("update_test_case: file uploads done", { elapsed: `${Date.now() - t0}ms` });
+
+        writeAuditLog({
+          timestamp: new Date().toISOString(),
+          tool: "update_test_case",
+          method: "PATCH",
+          url,
+          projectKey,
+          payload,
+        });
+
+        const body = isKeyIdentifier
+          ? await mutationClient.updateTestCaseByKey(projectKey, args.identifier as string, payload)
+          : await mutationClient.updateTestCaseById(projectKey, args.identifier as number, payload);
+        debugLog("update_test_case: API call done", { elapsed: `${Date.now() - t0}ms`, totalElapsed: `${Date.now() - handlerStart}ms` });
+
+        const afterData = body.data ?? {};
+        const diffs = computeDiff(beforeData, afterData);
+
+        let resultText =
+          `✅ Test Case updated successfully\n` +
+          `ID: ${afterData.id ?? "N/A"} | Key: ${afterData.key ?? "N/A"}\n\n` +
+          `Changed fields:\n${formatDiff(diffs)}\n`;
+
+        if (uploadReportLines.length > 0) resultText += `\n📎 Files uploaded:\n${uploadReportLines.join("\n")}\n`;
+        if (uploadWarnings.length > 0) resultText += `\n${uploadWarnings.join("\n")}\n`;
+        resultText += `\nFull updated record:\n${JSON.stringify(afterData, null, 2)}`;
+
+        const caseKey = afterData.key as string | undefined;
+        if (args.review && REVIEW_FILES_AVAILABLE && caseKey) {
+          try {
+            debugLog("update_test_case: running quality review", { key: caseKey });
+            const { ZebrunnerToolHandlers } = await import("./handlers/tools.js");
+            const { ZebrunnerApiClient } = await import("./api/client.js");
+            const basicClient = new ZebrunnerApiClient(config);
+            const toolHandlers = new ZebrunnerToolHandlers(basicClient);
+            const fieldsLayout = await getFieldsLayoutForProject(projectKey);
+            const reviewResult = await toolHandlers.validateTestCase({
+              projectKey,
+              caseKey,
+              rulesFilePath: REVIEW_RULES_FILE,
+              checkpointsFilePath: REVIEW_CHECKPOINTS_FILE,
+              format: "markdown",
+              improveIfPossible: false,
+            }, fieldsLayout);
+            debugLog("update_test_case: review done", { elapsed: `${Date.now() - t0}ms` });
+            const reviewText = reviewResult?.content?.[0]?.text;
+            if (reviewText) {
+              resultText += `\n\n📝 Quality Review\n${"─".repeat(40)}\n${reviewText}`;
+            }
+          } catch (reviewErr: unknown) {
+            const msg = reviewErr instanceof Error ? reviewErr.message : String(reviewErr);
+            resultText += `\n\n⚠️ Quality review skipped: ${msg}`;
+          }
+        } else if (!args.review && REVIEW_FILES_AVAILABLE && caseKey) {
+          resultText += `\n\n💡 Tip: pass review: true to run a quality review against project rules.`;
+        }
+
+        return {
+          content: [{ type: "text" as const, text: resultText }]
+        };
+      } catch (error: any) {
+        const hint = error.statusCode === 404
+          ? "\nHint: No test case found with the provided identifier in this project."
+          : error.statusCode === 409
+          ? "\nHint: A concurrent modification is in progress. Wait a moment and retry."
+          : "";
+        const enriched = await enrichMutationError(error, args.project_key || String(args.project_id), mutationClient);
+        return {
+          content: [{ type: "text" as const, text:
+            `❌ Error in update_test_case: ${enriched}${hint}`
+          }]
+        };
+      }
+    }
+  );
+
+  // ========== END MUTATION TOOLS ==========
 
   server.registerTool(
     "get_all_tcm_test_cases_by_project",
@@ -4341,6 +5334,72 @@ async function main() {
           content: [{
             type: "text" as const,
             text: `❌ Error finding flaky tests: ${error.message}`
+          }]
+        };
+      }
+    }
+  );
+
+  // ═══════════════════════════════════════════════════════════════════
+  // Universal Report Generator
+  // ═══════════════════════════════════════════════════════════════════
+  server.registerTool(
+    "generate_report",
+    {
+      description: "📊 (Beta) Universal report generator. Supports 6 report types: quality_dashboard (HTML+Markdown with 6 panels), coverage (per-suite test coverage table), pass_rate (per-platform with targets), runtime_efficiency (with delta vs previous milestone), executive_dashboard (standup-ready combined report), release_readiness (Go/No-Go assessment). Can generate single or multiple reports per call.",
+    inputSchema: {
+      report_types: z.array(z.enum([
+        'quality_dashboard', 'coverage', 'pass_rate',
+        'runtime_efficiency', 'executive_dashboard', 'release_readiness'
+      ])).min(1).describe(
+        "Report type(s) to generate. Can request multiple in one call."
+      ),
+      projects: z.array(z.string()).min(1).describe(
+        "Project aliases or keys (e.g., ['android', 'ios'] or ['MFPAND', 'MFPIOS'])"
+      ),
+      period: z.enum(ALL_PERIODS).default("Last 30 Days").describe(
+        "Time period for the report data"
+      ),
+      milestone: z.string().optional().describe(
+        "Optional milestone filter (e.g., '25.39.0')"
+      ),
+      top_bugs_limit: z.number().int().positive().max(50).default(10).optional().describe(
+        "Top bugs to show (quality_dashboard, executive_dashboard). Default: 10"
+      ),
+      sections: z.array(z.enum(['pass_rate', 'runtime', 'coverage', 'bugs', 'milestones', 'flaky'])).optional().describe(
+        "Sections for quality_dashboard. Default: all 6"
+      ),
+      targets: z.record(z.string(), z.number()).optional().describe(
+        "Pass rate targets per project (e.g., {\"android\": 90, \"web\": 65}). Defaults: android=90, ios=90, web=65"
+      ),
+      exclude_suite_patterns: z.array(z.string()).optional().describe(
+        "Suite name patterns to exclude from TOTAL REGRESSION in coverage report (e.g., ['MA', 'Critical', 'Performance'])"
+      ),
+      previous_milestone: z.string().optional().describe(
+        "Baseline milestone for delta comparison (runtime_efficiency, release_readiness)"
+      ),
+    }
+    },
+    async (args) => {
+      try {
+        debugLog("generate_report called", args);
+        return await reportHandler.generateReport({
+          report_types: args.report_types,
+          projects: args.projects,
+          period: args.period,
+          milestone: args.milestone,
+          top_bugs_limit: args.top_bugs_limit,
+          sections: args.sections,
+          targets: args.targets,
+          exclude_suite_patterns: args.exclude_suite_patterns,
+          previous_milestone: args.previous_milestone,
+        });
+      } catch (error: any) {
+        debugLog("Error in generate_report", { error: error.message, args });
+        return {
+          content: [{
+            type: "text" as const,
+            text: `Error generating report: ${error?.message || error}`
           }]
         };
       }

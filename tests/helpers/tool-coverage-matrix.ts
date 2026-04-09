@@ -15,7 +15,7 @@ export const TOOL_SMOKE_INPUTS: Record<string, Record<string, unknown>> = {
   get_tcm_test_suites_by_project: { project_key: "MCP" },
   get_all_tcm_test_case_suites_by_project: { project_key: "MCP" },
   get_root_suites: { project_key: "MCP" },
-  get_tcm_suite_by_id: { project_key: "MCP", suite_id: 1 },
+  get_tcm_suite_by_id: { project_key: "MCP", suite_id: 1, mode: "simple" },
   get_all_tcm_test_cases_by_project: { project_key: "MCP" },
   get_all_tcm_test_cases_with_root_suite_id: { project_key: "MCP" },
   get_root_id_by_suite_id: { project_key: "MCP", suite_id: 1 },
@@ -51,7 +51,12 @@ export const TOOL_SMOKE_INPUTS: Record<string, Record<string, unknown>> = {
   analyze_test_cases_duplicates_semantic: { project_key: "MCP", suite_id: 1 },
   aggregate_test_cases_by_feature: { project_key: "MCP", feature_keyword: "login" },
   analyze_regression_runtime: { project: "android", milestone: "develop-49771" },
-  find_flaky_tests: { project: "android", period_days: 14 }
+  find_flaky_tests: { project: "android", period_days: 14 },
+  generate_report: { report_types: ["quality_dashboard"], projects: ["android", "ios"], period: "Last 30 Days" },
+  create_test_suite: { project_key: "MCP", title: "Smoke Suite", dry_run: true },
+  update_test_suite: { project_key: "MCP", suite_id: 1, title: "Smoke Suite", dry_run: true },
+  create_test_case: { project_key: "MCP", test_suite_id: 1, title: "Smoke TC", dry_run: true },
+  update_test_case: { project_key: "MCP", identifier: 1, title: "Smoke TC", dry_run: true }
 };
 
 export const TOOL_SCHEMA_REQUIRED_KEYS: Record<string, string[]> = Object.fromEntries(

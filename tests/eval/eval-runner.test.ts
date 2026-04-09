@@ -560,6 +560,9 @@ describe("LLM Evaluation Tests", () => {
     const populated = populatePrompt(ep.promptTemplate, ctx);
     const start = Date.now();
 
+    let selectedTool: string | undefined;
+    let args: Record<string, unknown> = {};
+
     try {
       // Step 1: Get tool selection from Claude
       const response = await client.messages.create({
@@ -573,20 +576,24 @@ describe("LLM Evaluation Tests", () => {
       });
 
       const toolUse = response.content.find((b) => b.type === "tool_use");
-      const selectedTool = toolUse?.type === "tool_use" ? toolUse.name : undefined;
-      const args = (toolUse?.type === "tool_use" ? toolUse.input : {}) as Record<string, unknown>;
+      selectedTool = toolUse?.type === "tool_use" ? toolUse.name : undefined;
+      args = (toolUse?.type === "tool_use" ? toolUse.input : {}) as Record<string, unknown>;
+    } catch (err: any) {
+      return errorResult(ep, populated, err, Date.now() - start);
+    }
 
-      const toolCorrect = checkToolSelection(selectedTool, ep.expectedTools);
+    const toolCorrect = checkToolSelection(selectedTool, ep.expectedTools);
 
-      const argCheck = ep.expectedArgKeys
-        ? checkArgKeys(args, ep.expectedArgKeys)
-        : { pass: true, missing: [] as string[] };
+    const argCheck = ep.expectedArgKeys
+      ? checkArgKeys(args, ep.expectedArgKeys)
+      : { pass: true, missing: [] as string[] };
 
-      // Step 2: Execute the tool via MCP
-      let mcpOutput = "";
-      let judgeScore;
-      let patternMatch;
+    // Step 2: Execute the tool via MCP
+    let mcpOutput = "";
+    let judgeScore;
+    let patternMatch;
 
+    try {
       if (selectedTool) {
         mcpOutput = await callMCPTool(selectedTool, args);
 
@@ -598,7 +605,7 @@ describe("LLM Evaluation Tests", () => {
         // Step 4: Judge the output
         judgeScore = await judgeToolOutput(client, config, ep, populated, mcpOutput);
       }
-
+    } catch (err: any) {
       return {
         id: ep.id,
         category: ep.category,
@@ -610,15 +617,28 @@ describe("LLM Evaluation Tests", () => {
         toolSelectionCorrect: toolCorrect,
         argsCorrect: argCheck.pass,
         missingArgs: argCheck.missing,
-        outputPatternMatch: patternMatch?.pass,
-        failedPatterns: patternMatch?.failedPatterns,
-        judgeScore,
-        mcpOutput: mcpOutput.slice(0, 5000),
+        error: err.message || String(err),
         durationMs: Date.now() - start,
       };
-    } catch (err: any) {
-      return errorResult(ep, populated, err, Date.now() - start);
     }
+
+    return {
+      id: ep.id,
+      category: ep.category,
+      layer: ep.layer,
+      prompt: populated,
+      expectedTools: ep.expectedTools,
+      selectedTool,
+      selectedArgs: args,
+      toolSelectionCorrect: toolCorrect,
+      argsCorrect: argCheck.pass,
+      missingArgs: argCheck.missing,
+      outputPatternMatch: patternMatch?.pass,
+      failedPatterns: patternMatch?.failedPatterns,
+      judgeScore,
+      mcpOutput: mcpOutput.slice(0, 5000),
+      durationMs: Date.now() - start,
+    };
   }
 
   async function runMultiToolEval(ep: EvalPrompt): Promise<EvalResult> {

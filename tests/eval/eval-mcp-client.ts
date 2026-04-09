@@ -3,7 +3,7 @@ import { existsSync } from "fs";
 import { join } from "path";
 
 const SERVER_STARTUP_TIMEOUT = 30_000;
-const REQUEST_TIMEOUT_MS = 60_000;
+const REQUEST_TIMEOUT_MS = 120_000;
 
 let serverProcess: ChildProcess | null = null;
 let nextRequestId = 1;

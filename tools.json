@@ -49,7 +49,7 @@
   },
   {
     "name": "get_test_case_by_key",
-    "description": "Get detailed information for a specific test case by its key (e.g., MCP-123)"
+    "description": "Get detailed information for a specific test case by its key (e.g., MCP-123). Default format is 'json' — recommended when using as data source for create_test_case or update_test_case."
   },
   {
     "name": "get_test_case_by_title",
@@ -101,7 +101,23 @@
   },
   {
     "name": "get_tcm_suite_by_id",
-    "description": "Get test suite details by ID"
+    "description": "Get test suite by its numeric ID. Use for any 'show me suite', 'get suite by ID', 'find suite' request. Supports simple (fast direct API) and full (hierarchy-enriched) modes."
+  },
+  {
+    "name": "create_test_suite",
+    "description": "(Beta) Create a new Test Suite in a Zebrunner project. Requires preview approval before execution."
+  },
+  {
+    "name": "update_test_suite",
+    "description": "(Beta) Update an existing Test Suite (full PUT replacement). Requires preview approval before execution."
+  },
+  {
+    "name": "create_test_case",
+    "description": "(Beta) Create a new Test Case with runtime validation of priorities, automation states, and custom fields. Accepts { file_path } in attachments for local file upload. Optional source_case_key to pre-populate from an existing test case. Requires preview approval."
+  },
+  {
+    "name": "update_test_case",
+    "description": "(Beta) Partially update an existing Test Case by numeric ID or string key (PATCH). Accepts { file_path } in attachments for local file upload. Requires preview approval."
   },
   {
     "name": "get_tcm_test_suites_by_project",
@@ -210,6 +226,10 @@
   {
     "name": "find_flaky_tests",
     "description": "Find flaky tests across launches using a 3-phase approach: cross-launch flip-flop analysis, manual test case scan via TCM execution history, and dual-perspective enrichment of top flaky tests with TCM data"
+  },
+  {
+    "name": "generate_report",
+    "description": "Universal report generator supporting 6 report types: quality_dashboard (HTML+Markdown with 6 panels), coverage (per-suite test coverage table), pass_rate (per-platform with targets), runtime_efficiency (with delta vs previous milestone), executive_dashboard (standup-ready combined report), release_readiness (Go/No-Go assessment). Can generate single or multiple reports per call."
   }
 ]
 

@@ -85,7 +85,7 @@ export class ZebrunnerApiClient {
 
   constructor(config: ZebrunnerConfig) {
     this.config = {
-      timeout: 30_000,
+      timeout: 60_000,
       retryAttempts: 3,
       retryDelay: 1000,
       debug: false,

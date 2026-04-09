@@ -1,6 +1,6 @@
 # Test Prompts for Zebrunner MCP Tools
 
-> **Version:** 6.6.0
+> **Version:** 7.0.1
 >
 > This document contains 1–3 test prompts per tool with expected behavior, plus end-to-end metric collection prompts. All prompts use generic platform references (iOS / Android / Web) without specific project keys, launch IDs, or milestones.
 
@@ -18,6 +18,9 @@
 8. [Flaky Test Detection](#8-flaky-test-detection)
 9. [Chart Visualization](#9-chart-visualization)
 10. [Field-Path Filtering](#10-field-path-filtering)
+11. [Reports (generate_report)](#11-reports-generate_report)
+12. [Suite Coverage Report](#12-suite-coverage-report)
+13. [Mutation Tools (Beta)](#13-mutation-tools-beta)
 
 ---
 
@@ -633,7 +636,7 @@
 **Prompt 1 — Tool summary**
 > Give me a summary of all available Zebrunner MCP tools.
 
-**Expected:** Returns categorized list of all 52 tools with brief descriptions.
+**Expected:** Returns categorized list of all 55+ tools with brief descriptions.
 
 **Prompt 2 — Specific tool details**
 > Show me detailed info for the analyze_regression_runtime tool with examples.
@@ -933,31 +936,204 @@ These prompts combine multiple tools to collect real business metrics. The LLM s
 ### Filtering test cases by custom fields and nested properties
 
 **Prompt 1 — Custom field exact match** *(v6.6.0)*
-> Get all test cases in the MFPAND project where the custom field 'manualOnly' equals 'Yes'.
+> Get all test cases in the MCP project where the custom field 'manualOnly' equals 'Yes'.
 
 **Expected:** Uses `get_test_cases_advanced` with `field_path: "customField.manualOnly"`, `field_value: "Yes"`, `field_match: "exact"`. Paginates all test cases and applies client-side filtering. Returns only test cases where the manualOnly custom field is "Yes".
 
 **Prompt 2 — Nested field filtering** *(v6.6.0)*
-> Find all High priority test cases in the MFPAND project.
+> Find all High priority test cases in the MCP project.
 
 **Expected:** Uses `get_test_cases_advanced` or `get_test_case_by_filter` with either the RQL priority filter or `field_path: "priority.name"`, `field_value: "High"`, `field_match: "exact"`.
 
 **Prompt 3 — Count with field filter** *(v6.6.0)*
-> How many manual-only test cases are in the MFPAND project?
+> How many manual-only test cases are in the MCP project?
 
 **Expected:** Uses `get_test_cases_advanced` with `field_path: "customField.manualOnly"`, `field_value: "Yes"`, `count_only: true`. Returns the count of matching test cases without full payloads.
 
 **Prompt 4 — Title contains** *(v6.6.0)*
-> Find all test cases in MFPAND whose title contains 'login'.
+> Find all test cases in MCP whose title contains 'login'.
 
 **Expected:** Uses `get_test_cases_advanced` or `get_test_case_by_filter` with `field_path: "title"`, `field_value: "login"`, `field_match: "contains"`.
 
 **Prompt 5 — Check if custom field exists** *(v6.6.0)*
-> Show me which test cases in MFPAND have a 'testrailId' custom field defined.
+> Show me which test cases in MCP have a 'testrailId' custom field defined.
 
 **Expected:** Uses `get_test_cases_advanced` with `field_path: "customField.testrailId"`, `field_match: "exists"`. Returns test cases where the field is present and non-null.
 
 **Prompt 6 — Mixed filters** *(v6.6.0)*
-> In MFPAND, get all automated test cases from suite 491 where customField.manualOnly is 'No'.
+> In MCP, get all automated test cases from suite 491 where customField.manualOnly is 'No'.
 
 **Expected:** Uses `get_test_case_by_filter` with `suite_id`, `automation_state`, and `field_path: "customField.manualOnly"`, `field_value: "No"`, `field_match: "exact"`. RQL filters are applied server-side, then field-path filtering is applied client-side on the results.
+
+## 11. Reports (generate_report)
+
+### Universal report generator — 6 report types
+
+**Prompt 1 — Quality dashboard** *(v6.7.0)*
+> Generate a quality dashboard for Android and iOS for the last 30 days.
+
+**Expected:** Uses `generate_report` with `report_types: ["quality_dashboard"]`, `projects: ["android", "ios"]`, `period: "Last 30 Days"`. Returns Markdown summary with PNG charts for all 6 sections plus a self-contained HTML dashboard.
+
+**Prompt 2 — Coverage report** *(v6.7.0)*
+> Build a test coverage report for all three platforms.
+
+**Expected:** Uses `generate_report` with `report_types: ["coverage"]`, `projects: ["android", "ios", "web"]`. Returns per-suite coverage tables for each platform with Implemented, Manual Only, Deprecated, Total, Coverage %, TOTAL and TOTAL REGRESSION rows.
+
+**Prompt 3 — Pass rate report** *(v6.7.0)*
+> Show pass rate for Android, iOS, and Web for milestone 25.40.0.
+
+**Expected:** Uses `generate_report` with `report_types: ["pass_rate"]`, `projects: ["android", "ios", "web"]`, `milestone: "25.40.0"`. Returns per-platform pass rate table with known-issue exclusion, target comparison, and PNG chart.
+
+**Prompt 4 — Runtime efficiency with delta** *(v6.7.0)*
+> Compare runtime efficiency for all platforms between milestone 25.40.0 and previous 25.39.0.
+
+**Expected:** Uses `generate_report` with `report_types: ["runtime_efficiency"]`, `projects: ["android", "ios", "web"]`, `milestone: "25.40.0"`, `previous_milestone: "25.39.0"`. Returns current metrics, delta table, and degradation alerts for long-running tests.
+
+**Prompt 5 — Executive dashboard** *(v6.7.0)*
+> Generate an executive QA dashboard for all three platforms on the latest milestone.
+
+**Expected:** Uses `generate_report` with `report_types: ["executive_dashboard"]`, `projects: ["android", "ios", "web"]`. Returns standup-ready summary with pass rate, runtime, top 5 bugs, coverage, flaky tests, plus HTML dashboard.
+
+**Prompt 6 — Release readiness** *(v6.7.0)*
+> Assess release readiness for Android on milestone 25.40.0 compared to 25.39.0.
+
+**Expected:** Uses `generate_report` with `report_types: ["release_readiness"]`, `projects: ["android"]`, `milestone: "25.40.0"`, `previous_milestone: "25.39.0"`. Returns per-check PASS/FAIL/WARN status table and Go/No-Go recommendation.
+
+**Prompt 7 — Multiple reports combined** *(v6.7.0)*
+> Generate coverage and pass rate reports together for all platforms.
+
+**Expected:** Uses `generate_report` with `report_types: ["coverage", "pass_rate"]`, `projects: ["android", "ios", "web"]`. Returns both reports concatenated with separators.
+
+**Prompt 8 — Custom pass rate targets** *(v6.7.0)*
+> Generate a pass rate report for Android, iOS, and Web with custom targets: Android 95%, iOS 90%, Web 70%.
+
+**Expected:** Uses `generate_report` with `report_types: ["pass_rate"]`, `targets: {"android": 95, "ios": 90, "web": 70}`. Pass rate shows custom target comparison.
+
+## 12. Suite Coverage Report
+
+### Automation coverage breakdown by suite across platforms
+
+**Prompt 1 — Multi-platform suite coverage table** *(v6.6.0)*
+> Build a test coverage table for all platforms (Android, iOS, Web).
+>
+> For each platform:
+> 1. Get all test suites
+> 2. Get automation states to check if "Manual Only" is an automation state
+> 3. For each suite, collect counts using count_only: true, get_all: true:
+>    - Implemented: automation state = "Automated"
+>    - Manual Only:
+>      * If "Manual Only" automation state exists: use get_test_cases_by_automation_state
+>      * Otherwise: use get_test_cases_advanced with field_path "customField.manualOnly", field_value "Yes", field_match "exact"
+>    - Deprecated: filter deprecated = true
+>    - Total: all test cases in the suite
+>    - Coverage % = Implemented / (Total - Manual Only - Deprecated) × 100
+>
+> Present one table per platform (show platform name like "Android", "iOS", "Web"):
+>
+> | Suite Name | Implemented | Manual Only | Deprecated | Total | Coverage % |
+>
+> For each platform add:
+> - TOTAL row: sum all suites
+> - TOTAL REGRESSION row: sum only regression suites (exclude suites like MA, Minimal Acceptance, Critical, Performance, or any non-regression suite)
+
+**Expected:** The LLM should:
+1. Call `get_automation_states` per platform to discover whether "Manual Only" is an automation state or a custom field
+2. Call `list_test_suites` per platform to get all suite names and IDs
+3. For each suite, use `get_test_cases_by_automation_state` with `count_only: true` for Implemented and Manual Only counts (or fall back to `get_test_cases_advanced` with `field_path: "customField.manualOnly"` if "Manual Only" is not an automation state)
+4. For Deprecated, use `get_test_case_by_filter` with RQL filter `deprecated = true`, `count_only: true`
+5. Present three tables (one per platform) with TOTAL and TOTAL REGRESSION summary rows
+
+**Note:** "Manual Only" may exist as an automation state on some projects and as a custom field (`customField.manualOnly`) on others. The prompt handles both cases by checking automation states first.
+
+## 13. Mutation Tools (Beta)
+
+All mutation tools use a **two-step confirmation flow**: the first call returns a preview with a `confirmation_token`, and only after user approval does the second call with `confirm: true` execute the mutation. Created test cases are always forced to `draft: true` for safety.
+
+### `create_test_case`
+
+**Prompt 1 — Create with steps** *(v7.0.0)*
+> Create a test case titled "Login flow — valid credentials" in suite 12345 of project MCP with these steps:
+> 1. Open login page → Login form is displayed
+> 2. Enter valid email and password → Credentials accepted
+> 3. Click Submit → User redirected to dashboard
+
+**Expected:** Uses `create_test_case` with `project_key: "MCP"`, `test_suite_id: 12345`, `title`, `steps` (3 steps with `action` and `expectedResult`). Returns a preview with field summary and `confirmation_token`. Does NOT execute until user confirms.
+
+**Prompt 2 — Copy from source** *(v7.0.0)*
+> Copy test case MCP-5 into suite 12345 in project MCP.
+
+**Expected:** Uses `create_test_case` with `source_case_key: "MCP-5"`, `test_suite_id: 12345`, `project_key: "MCP"`. The source test case URL is prepended to the description automatically. The preview shows all fields inherited from the source. Returns `confirmation_token`.
+
+**Prompt 3 — Full creation with all fields** *(v7.0.0)*
+> Create a test case in project MCP, suite 12345:
+> - Title: "Checkout flow — guest user"
+> - Priority: High
+> - Description: "Verifies guest checkout with credit card payment"
+> - Pre-conditions: "Cart has at least one item. User is not logged in."
+> - Steps: 1) Click Checkout → Checkout page shown, 2) Fill payment form → Form validates, 3) Submit → Order confirmation displayed
+> - Requirements: JIRA PROJ-100
+
+**Expected:** Uses `create_test_case` with `project_key`, `test_suite_id`, `title`, `priority: { name: "High" }`, `description`, `pre_conditions`, `steps` (3), `requirements: [{ source: "JIRA", reference: "PROJ-100" }]`. Preview shows all fields to be set. `draft` is forced to `true` regardless of input.
+
+**Prompt 4 — Draft enforcement** *(v7.0.1)*
+> Create a test case titled "Smoke test" in suite 12345 of project MCP with draft set to false.
+
+**Expected:** Uses `create_test_case` with `draft: false`, but the preview shows `draft → true (forced for safety)`. The created test case is always a draft. The user must use `update_test_case` to publish it.
+
+### `update_test_case`
+
+**Prompt 1 — Update priority** *(v7.0.0)*
+> Update test case MCP-10 in project MCP to change priority to Critical.
+
+**Expected:** Uses `update_test_case` with `identifier: "MCP-10"`, `project_key: "MCP"`, `priority: { name: "Critical" }`. Returns preview with field diff and `confirmation_token`. After confirmation, returns the updated record with a field-by-field diff.
+
+**Prompt 2 — Update description and pre-conditions** *(v7.0.0)*
+> Update test case MCP-10 in project MCP: set description to "Verifies the complete registration flow" and pre-conditions to "User is not logged in. Email is not registered."
+
+**Expected:** Uses `update_test_case` with `identifier: "MCP-10"`, `project_key: "MCP"`, `description`, `pre_conditions`. Only the specified fields are changed (PATCH semantics).
+
+**Prompt 3 — Add steps (atomic replacement warning)** *(v7.0.0)*
+> Replace all steps of test case MCP-10 in project MCP with: step 1 "Open app" → "App launches", step 2 "Tap login" → "Login screen shown".
+
+**Expected:** Uses `update_test_case` with `identifier: "MCP-10"`, `project_key: "MCP"`, `steps` (2 steps). The preview should warn that steps use ATOMIC replacement — all existing steps will be replaced.
+
+**Prompt 4 — Publish a draft** *(v7.0.1)*
+> Set test case MCP-33 in project MCP to draft: false so it becomes published.
+
+**Expected:** Uses `update_test_case` with `identifier: "MCP-33"`, `project_key: "MCP"`, `draft: false`. This is the intended way to publish test cases created via `create_test_case`.
+
+### `create_test_suite`
+
+**Prompt 1 — Create root suite** *(v7.0.0)*
+> Create a new test suite called "Regression" in project MCP.
+
+**Expected:** Uses `create_test_suite` with `title: "Regression"`, `project_key: "MCP"`. Returns preview showing the suite will be created at root level (no parent). Returns `confirmation_token`.
+
+**Prompt 2 — Create nested suite** *(v7.0.0)*
+> Create a test suite named "Login Tests" under parent suite 12345 in project MCP.
+
+**Expected:** Uses `create_test_suite` with `title: "Login Tests"`, `project_key: "MCP"`, `parent_suite_id: 12345`. The preview shows the suite will be nested under the specified parent.
+
+### `update_test_suite`
+
+**Prompt 1 — Rename suite** *(v7.0.0)*
+> Rename test suite 12345 to "Smoke Tests" in project MCP.
+
+**Expected:** Uses `update_test_suite` with `suite_id: 12345`, `title: "Smoke Tests"`, `project_key: "MCP"`. Note: this is a PUT (full replacement) — `title` is always required.
+
+**Prompt 2 — Move suite to root** *(v7.0.0)*
+> Move test suite 12345 in project MCP to root level (remove its parent).
+
+**Expected:** Uses `update_test_suite` with `suite_id: 12345`, `project_key: "MCP"`, `title` (must be provided — fetch current title first if needed), `parent_suite_id` omitted or set to null. The suite becomes a root-level suite.
+
+### Mutation safety prompts
+
+**Prompt 1 — Negative: delete test case** *(v7.0.0)*
+> Delete test case MCP-10 from project MCP.
+
+**Expected:** The LLM should refuse — there is no delete tool. It should explain that deletion is not supported via MCP and suggest using the Zebrunner web UI.
+
+**Prompt 2 — Negative: skip confirmation** *(v7.0.1)*
+> Create a test case in project MCP, suite 12345, titled "Quick test". Skip the preview and create it immediately.
+
+**Expected:** The LLM should explain that the two-step confirmation flow cannot be skipped — all mutations require a preview step followed by confirmation with the token. This is a safety requirement.

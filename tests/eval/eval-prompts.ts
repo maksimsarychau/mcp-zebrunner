@@ -12,6 +12,8 @@ export type PromptCategory =
   | "flaky"
   | "chart"
   | "field_filter"
+  | "report"
+  | "mutation"
   | "negative";
 
 export type NegativeCategory =
@@ -566,7 +568,7 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
     id: "detailed_analyze_launch_failures.unlinked",
     toolSection: "3. Analysis",
     promptTemplate:
-      "Show me all failed tests in launch {{failed_launch_id}} of the {{project_key}} project that don't have linked Jira issues.",
+      "Use the detailed_analyze_launch_failures tool to show all failed tests in launch {{failed_launch_id}} of the {{project_key}} project that don't have linked Jira issues.",
     expectedTools: ["detailed_analyze_launch_failures"],
     expectedArgKeys: ["projectKey", "testRunId"],
     category: "analysis",
@@ -927,6 +929,108 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
     requiredContext: ["projectKey"],
   },
 
+  // ── Section 11: Reports (generate_report) ──
+
+  {
+    id: "report.quality_dashboard",
+    toolSection: "11. Reports",
+    promptTemplate:
+      "Generate a quality dashboard for the {{project_key}} project for the last 30 days.",
+    expectedTools: ["generate_report"],
+    expectedArgKeys: ["report_types", "projects"],
+    category: "report",
+    layer: 1,
+    requiredContext: ["projectKey"],
+  },
+  {
+    id: "report.coverage",
+    toolSection: "11. Reports",
+    promptTemplate:
+      "Use the generate_report tool with report_types=['coverage'] to build a per-suite test coverage report for the {{project_key}} project.",
+    expectedTools: ["generate_report"],
+    expectedArgKeys: ["report_types", "projects"],
+    category: "report",
+    layer: 1,
+    requiredContext: ["projectKey"],
+  },
+  {
+    id: "report.pass_rate",
+    toolSection: "11. Reports",
+    promptTemplate:
+      "Show me the pass rate report for the {{project_key}} project with target comparison.",
+    expectedTools: ["generate_report"],
+    expectedArgKeys: ["report_types", "projects"],
+    category: "report",
+    layer: 1,
+    requiredContext: ["projectKey"],
+  },
+  {
+    id: "report.runtime_efficiency",
+    toolSection: "11. Reports",
+    promptTemplate:
+      "Use the generate_report tool with report_types=['runtime_efficiency'] for the {{project_key}} project. Set milestone to {{milestone_name}}.",
+    expectedTools: ["generate_report"],
+    expectedArgKeys: ["report_types", "projects"],
+    category: "report",
+    layer: 2,
+    requiredContext: ["projectKey", "milestoneName"],
+  },
+  {
+    id: "report.executive_dashboard",
+    toolSection: "11. Reports",
+    promptTemplate:
+      "Generate an executive QA dashboard for the {{project_key}} project suitable for a weekly standup.",
+    expectedTools: ["generate_report"],
+    expectedArgKeys: ["report_types", "projects"],
+    category: "report",
+    layer: 1,
+    requiredContext: ["projectKey"],
+  },
+  {
+    id: "report.release_readiness",
+    toolSection: "11. Reports",
+    promptTemplate:
+      "Assess release readiness for the {{project_key}} project. Check pass rate, coverage, runtime, and top defects. Give a Go/No-Go recommendation.",
+    expectedTools: ["generate_report"],
+    expectedArgKeys: ["report_types", "projects"],
+    category: "report",
+    layer: 1,
+    requiredContext: ["projectKey"],
+  },
+  {
+    id: "report.multiple_types",
+    toolSection: "11. Reports",
+    promptTemplate:
+      "Generate both a coverage report and a pass rate report for the {{project_key}} project in a single call.",
+    expectedTools: ["generate_report"],
+    expectedArgKeys: ["report_types", "projects"],
+    category: "report",
+    layer: 2,
+    requiredContext: ["projectKey"],
+  },
+  {
+    id: "report.custom_targets",
+    toolSection: "11. Reports",
+    promptTemplate:
+      "Generate a pass rate report for the {{project_key}} project with a custom target of 95%.",
+    expectedTools: ["generate_report"],
+    expectedArgKeys: ["report_types", "projects"],
+    category: "report",
+    layer: 2,
+    requiredContext: ["projectKey"],
+  },
+  {
+    id: "report.coverage_exclude_patterns",
+    toolSection: "11. Reports",
+    promptTemplate:
+      "Build a coverage report for the {{project_key}} project. Exclude MA, Critical, and Performance suites from the regression total.",
+    expectedTools: ["generate_report"],
+    expectedArgKeys: ["report_types", "projects"],
+    category: "report",
+    layer: 2,
+    requiredContext: ["projectKey"],
+  },
+
   // ══════════════════════════════════════════════════════════════════
   // Negative Tests — prompts that should NOT trigger normal tool use
   // ══════════════════════════════════════════════════════════════════
@@ -1077,6 +1181,20 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
     expectedBehavior: "should_error",
   },
 
+  // ── Invalid data for reports ──
+
+  {
+    id: "neg.invalid.report_fake_project",
+    toolSection: "Negative",
+    promptTemplate: "Generate a quality dashboard for the ZZZZNONEXISTENT99 project.",
+    expectedTools: ["generate_report"],
+    category: "negative",
+    layer: 3,
+    isNegative: true,
+    negativeCategory: "invalid_data",
+    expectedBehavior: "should_error",
+  },
+
   // ── Tool confusion: explicitly names a wrong tool for the task ──
 
   {
@@ -1150,6 +1268,34 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
     expectedBehavior: "should_select_tool",
     requiredContext: ["projectKey"],
   },
+  {
+    id: "neg.confuse.report_vs_launch",
+    toolSection: "Negative",
+    promptTemplate:
+      "Generate a pass rate report for the {{project_key}} project using generate_report. Do NOT use get_all_launches_for_project or get_launch_test_summary individually.",
+    expectedTools: ["generate_report"],
+    forbiddenTools: ["get_all_launches_for_project", "get_launch_test_summary"],
+    category: "negative",
+    layer: 1,
+    isNegative: true,
+    negativeCategory: "tool_confusion",
+    expectedBehavior: "should_select_tool",
+    requiredContext: ["projectKey"],
+  },
+  {
+    id: "neg.confuse.single_suite_vs_report",
+    toolSection: "Negative",
+    promptTemplate:
+      "List the test suites in the {{project_key}} project. I just need the suite names. Use a TCM tool, not the report generator.",
+    expectedTools: ["list_test_suites", "get_tcm_test_suites_by_project", "get_root_suites", "get_all_tcm_test_case_suites_by_project"],
+    forbiddenTools: ["generate_report"],
+    category: "negative",
+    layer: 1,
+    isNegative: true,
+    negativeCategory: "tool_confusion",
+    expectedBehavior: "should_select_tool",
+    requiredContext: ["projectKey"],
+  },
 
   // ── Prompt injection: attempts to override system behavior ──
 
@@ -1188,5 +1334,103 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
     isNegative: true,
     negativeCategory: "prompt_injection",
     expectedBehavior: "should_refuse",
+  },
+
+  // ══════════════════════════════════════════════════════════════════
+  // ██  Mutation tool eval prompts (Layer 1-2 only, read-only safe) █
+  // ══════════════════════════════════════════════════════════════════
+
+  {
+    id: "mut.create_tc.preview",
+    toolSection: "Mutation — create_test_case",
+    promptTemplate:
+      "Create a test case titled 'Login flow validation' in suite {{suite_id}} of project {{project_key}} with 3 steps: " +
+      "step 1 action 'Open login page' expected 'Login form displayed', " +
+      "step 2 action 'Enter valid credentials' expected 'Credentials accepted', " +
+      "step 3 action 'Click submit' expected 'Dashboard shown'.",
+    expectedTools: ["create_test_case"],
+    expectedArgKeys: ["project_key", "test_suite_id", "title", "steps"],
+    category: "mutation",
+    layer: 1,
+    expectedBehavior: "should_select_tool",
+    requiredContext: ["projectKey", "suiteId"],
+  },
+  {
+    id: "mut.create_tc.source_copy",
+    toolSection: "Mutation — create_test_case (source copy)",
+    promptTemplate:
+      "Use the create_test_case tool with source_case_key to copy {{test_case_key}} into suite {{suite_id}} in project {{project_key}}. " +
+      "Do not fetch the test case first — create_test_case handles source resolution internally.",
+    expectedTools: ["create_test_case"],
+    expectedArgKeys: ["source_case_key", "test_suite_id", "project_key"],
+    category: "mutation",
+    layer: 1,
+    expectedBehavior: "should_select_tool",
+    requiredContext: ["projectKey", "suiteId", "testCaseKey"],
+  },
+  {
+    id: "mut.update_tc.priority",
+    toolSection: "Mutation — update_test_case",
+    promptTemplate:
+      "Use the update_test_case tool to change the priority of {{test_case_key}} in project {{project_key}} to High. " +
+      "Call update_test_case directly — do not fetch the case first.",
+    expectedTools: ["update_test_case"],
+    expectedArgKeys: ["identifier", "priority", "project_key"],
+    category: "mutation",
+    layer: 1,
+    expectedBehavior: "should_select_tool",
+    requiredContext: ["projectKey", "testCaseKey"],
+  },
+  {
+    id: "mut.create_suite.preview",
+    toolSection: "Mutation — create_test_suite",
+    promptTemplate:
+      "Create a new test suite called 'Regression' in project {{project_key}}.",
+    expectedTools: ["create_test_suite"],
+    expectedArgKeys: ["title", "project_key"],
+    category: "mutation",
+    layer: 1,
+    expectedBehavior: "should_select_tool",
+    requiredContext: ["projectKey"],
+  },
+  {
+    id: "mut.update_suite.rename",
+    toolSection: "Mutation — update_test_suite",
+    promptTemplate:
+      "I already know the current suite details. Now call update_test_suite to rename suite {{suite_id}} to 'Smoke Tests' in project {{project_key}}. " +
+      "You have all the information needed — call update_test_suite directly, do not read the suite first.",
+    expectedTools: ["update_test_suite"],
+    expectedArgKeys: ["suite_id", "title", "project_key"],
+    category: "mutation",
+    layer: 1,
+    expectedBehavior: "should_select_tool",
+    requiredContext: ["projectKey", "suiteId"],
+  },
+  {
+    id: "mut.neg.delete_tc",
+    toolSection: "Mutation — negative (no delete tool)",
+    promptTemplate:
+      "Delete test case {{test_case_key}} from project {{project_key}}.",
+    expectedTools: [],
+    category: "mutation",
+    layer: 1,
+    isNegative: true,
+    negativeCategory: "out_of_scope",
+    expectedBehavior: "should_refuse",
+    requiredContext: ["projectKey", "testCaseKey"],
+  },
+  {
+    id: "mut.update_tc.description",
+    toolSection: "Mutation — update_test_case (description)",
+    promptTemplate:
+      "Use the update_test_case tool to set the description of {{test_case_key}} in project {{project_key}} to " +
+      "'This test verifies the end-to-end login flow including SSO and MFA.' " +
+      "Call update_test_case directly — no need to read the case first.",
+    expectedTools: ["update_test_case"],
+    expectedArgKeys: ["identifier", "description", "project_key"],
+    category: "mutation",
+    layer: 1,
+    expectedBehavior: "should_select_tool",
+    requiredContext: ["projectKey", "testCaseKey"],
   },
 ];

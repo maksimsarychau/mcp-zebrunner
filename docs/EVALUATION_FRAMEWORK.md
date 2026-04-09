@@ -27,7 +27,7 @@
 
 ## 1. Executive Summary
 
-MCP Zebrunner exposes **52 tools** to AI assistants (Claude, Cursor, ChatGPT). When a user asks "Show me the latest test failures," the AI must:
+MCP Zebrunner exposes **58 tools** to AI assistants (Claude, Cursor, ChatGPT). When a user asks "Show me the latest test failures," the AI must:
 
 1. **Pick the right tool** from 52 options (e.g., `detailed_analyze_launch_failures`)
 2. **Provide the right arguments** (e.g., `project: "MY_PROJECT"`, `launch_id: 12345`)
@@ -43,8 +43,8 @@ The Evaluation Framework automatically tests all three of these steps using a re
 | Tool Selection Accuracy | 97.6% |
 | Argument Correctness | 100.0% |
 | Output Quality (Judge) | 4.06 / 5.0 |
-| Total Prompts Tested | 74 (57 positive + 17 negative) |
-| Total Test Assertions | 102 |
+| Total Prompts Tested | 100 (76 positive + 24 negative) |
+| Total Test Assertions | 154 |
 | Duration | ~5 minutes |
 | Estimated Cost | ~$4–5 per full run |
 
@@ -54,7 +54,7 @@ The Evaluation Framework automatically tests all three of these steps using a re
 
 ### The Problem
 
-MCP Zebrunner has 52 tools with overlapping capabilities. For example:
+MCP Zebrunner has 58 tools with overlapping capabilities. For example:
 
 - `list_test_suites` vs `get_tcm_test_suites_by_project` — both list suites
 - `get_test_cases_advanced` vs `get_test_cases_by_suite_smart` — both retrieve test cases by suite
@@ -107,7 +107,7 @@ The framework uses a **layered evaluation** approach. Each layer tests a differe
 **Question answered:** "Given a user prompt, does the LLM select the correct tool?"
 
 **How it works:**
-1. Send a natural-language prompt to Claude along with all 52 tool definitions
+1. Send a natural-language prompt to Claude along with all 58 tool definitions
 2. Claude responds with a tool_use block naming which tool it wants to call
 3. Compare the selected tool against the expected tool(s)
 
@@ -496,7 +496,7 @@ Each LLM call sends the following to Claude:
 | Component | Approximate Tokens | Notes |
 |-----------|--------------------|-------|
 | System prompt | ~50 | Fixed "You are a QA assistant..." |
-| Tool definitions (52 tools) | ~12,000–15,000 | Each tool: name + description + JSON schema |
+| Tool definitions (58 tools) | ~12,000–15,000 | Each tool: name + description + JSON schema |
 | User prompt | ~30–100 | The populated eval prompt |
 | **Total input per call** | **~14,000** | |
 | **Output per call** | **~200–500** | tool_use block with name + args |
@@ -624,10 +624,10 @@ npm run test:eval:l3
    ├── Fetch first test case → <project_key>-1
    └── (L3 only) Fetch launches, milestones, automation states
 3. Start the MCP server (dist/server.js via stdio)
-4. Load 52 tool schemas from the running server
+4. Load 58 tool schemas from the running server
 5. For each prompt:
    ├── Populate template variables ({{project_key}} → <discovered_value>)
-   ├── Send to Claude API with all 52 tool definitions
+   ├── Send to Claude API with all 58 tool definitions
    ├── Validate tool selection against expected tools
    ├── (L2+) Validate argument keys
    └── (L3) Execute tool via MCP, judge output quality
@@ -740,7 +740,7 @@ Test Failed
 tests/eval/
 ├── eval-config.ts          # Configuration: API keys, model, thresholds
 ├── eval-discovery.ts       # Dynamic data discovery from Zebrunner
-├── eval-prompts.ts         # 57 structured prompt definitions
+├── eval-prompts.ts         # 100 structured prompt definitions (76 positive + 24 negative)
 ├── eval-mcp-client.ts      # MCP server lifecycle + JSON-RPC client
 ├── eval-judges.ts          # Tool selection, arg check, LLM judge
 ├── eval-report.ts          # Result aggregation, scorecard, JSON/MD output

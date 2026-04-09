@@ -1,6 +1,166 @@
 # Change Logs
 
+## v7.0.1 (2026-04-09)
+
+### Confirmation Flow Overhaul & Serialization Fixes
+
+**Confirmation token now stores the full payload server-side.**
+The two-step confirmation flow previously required the LLM to re-send the entire mutation payload on the confirm call, which caused data loss (steps, description, conditions were often dropped). The confirmation token now stores a JSON snapshot of the complete original arguments. The confirm call only needs `{ "confirm": true, "confirmation_token": "..." }` — all other fields are restored automatically from the stored snapshot.
+
+**ASCII-safe JSON serialization.**
+The mutation client now escapes all non-ASCII Unicode characters to `\uXXXX` sequences before sending to the Zebrunner API, preventing `TCM-1019` parser errors caused by LLM-generated em-dashes (—), arrows (→), smart quotes, and other Unicode characters.
+
+**Literal escape normalization.**
+`\\n`, `\\t`, `\\r` literal sequences (common in LLM-generated JSON) are now converted to real control characters before API serialization, preventing literal `\n` strings from appearing in Zebrunner UI fields.
+
+**File upload safety.**
+Moved ASCII-safe encoding from the instance-level `transformRequest` (which incorrectly processed `FormData` and broke file uploads) to per-request scope in the `request()` method only. `Content-Type` reverted from `application/json; charset=utf-8` to `application/json` per API docs (RFC 8259 mandates UTF-8).
+
+**Custom field file reference scanning.**
+`collectAllFileUuids`, `applyUuidMapping`, and `stripFailedFileRefs` now scan `customField` TEXT values for markdown file references (`[name](/files/uuid)`, `![alt](/files/uuid)`) in addition to the existing root and step-level scanning.
+
+**`generate_report` marked Beta.**
+Tool description now starts with `(Beta)`.
+
+**Updated tool descriptions.**
+All 4 mutation tools include explicit TWO-STEP FLOW instructions telling the LLM to call with ONLY `confirm: true` and `confirmation_token` after the preview step — no need to re-send any other fields.
+
+**Zod schemas relaxed for confirm calls.**
+Required fields (`title`, `test_suite_id`, `identifier`, `suite_id`) are now `.optional()` at the schema level. Manual validation ensures they are present for preview/dry-run calls, while confirm calls skip these checks since the stored snapshot provides them.
+
+**Version alignment.**
+All entry points (`server.ts`, `index.ts`, `index-enhanced.ts`, `index-working-enhanced.ts`, `server-with-reporting.ts`) now report version `7.0.1`.
+
+**Source traceability on copy.**
+When using `source_case_key` to copy a test case, the source test case URL is now automatically prepended to the description (e.g. `**Source:** [MCP-29](https://...)`). This applies in all cases — whether the description is inherited from the source or explicitly provided.
+
+**Forced draft on create.**
+`create_test_case` now always sets `draft: true` regardless of the provided value or the source test case's draft status. This safety measure ensures AI-generated test cases are clearly identifiable. Use `update_test_case` to publish when ready.
+
+### Documentation Overhaul
+
+- **`TEST_PROMPTS.md`** — Added section 13 "Mutation Tools (Beta)" with 14 new test prompts covering `create_test_case`, `update_test_case`, `create_test_suite`, `update_test_suite`, and 2 negative safety prompts. Fixed tool count (52 → 55+) and `get_test_suites` → `list_test_suites` naming. Updated version to 7.0.1.
+- **`EXECUTIVE_SUMMARY.md`** — Added mutation safety section, v7.x timeline entry, updated tool count (40+ → 55+), added mutation example to comparison table.
+- **`AI_MCP_BENEFITS.md`** — Added "Safe Test Case Authoring" section, updated tool count (40+ → 55+), added mutation domain.
+- **`EVALUATION_FRAMEWORK.md`** — Updated tool counts (52 → 58), prompt counts (74 → 100), total assertions (102 → 154).
+- **`MCP_NPM_INSTALLATION_GUIDE.md`** — Updated Cursor config to `.cursor/mcp.json` format, removed speculative ChatGPT Desktop section, replaced non-existent `ZebrunnerClient` test with manual server start test, version bumped to 7.0.1.
+- **`RELEASE_SIGNING_GUIDE.md`** — Removed leaked API key, updated min-version examples (6.2.0 → 7.0.0).
+- **`README.md`** — Updated tool count (40+ → 55+), fixed crosslinks to archived docs.
+- **Historical docs archived** — Moved 10 implementation records to `docs/archive/` with historical notes: `SCREENSHOT_ANALYSIS_IMPLEMENTATION_SUMMARY.md`, `VIDEO_ANALYSIS_IMPLEMENTATION_GUIDE.md`, `NEW_LAUNCHER_TOOL.md`, `LAUNCH_TEST_SUMMARY_TOOL.md`, `TEST_CASE_VALIDATION_IMPLEMENTATION.md`, `ENHANCED_VALIDATION_FEATURES.md`, `SUITE_HIERARCHY.md`, `URL_BASED_ANALYSIS.md`, `SCREENSHOT_ANALYSIS.md`, `RULES_QUICK_REFERENCE.md`. All crosslinks updated.
+- **Dependency security** — Upgraded `@anthropic-ai/sdk` from `0.80.0` to `0.86.1` to fix moderate "Memory Tool Path Validation Allows Sandbox Escape" vulnerability.
+
+---
+
+## v7.0.0 (2026-04-09)
+
+### Mutation Tools — 4 new tools + 4 shared helpers + file attachment support
+
+Introduces write-capable MCP tools for creating and updating Test Suites and Test Cases in Zebrunner. All mutation tools follow a strict **two-call confirmation gate**: the first call returns a preview, and only after user approval does the second call with `confirm: true` execute the mutation.
+
+**New Tools:**
+
+| Tool | Method | Description |
+|------|--------|-------------|
+| `create_test_suite` | POST | Create a new Test Suite (root or nested). |
+| `update_test_suite` | PUT | Full replacement update of an existing Test Suite. |
+| `create_test_case` | POST | Create a new Test Case with runtime validation. Supports `{file_path}` attachments and optional `source_case_key` to pre-populate from an existing test case. |
+| `update_test_case` | PATCH | Partial update of a Test Case by numeric ID or string key. Supports `{file_path}` attachments. |
+
+**Safety Features:**
+- **Two-call confirmation gate:** Preview → user approval → execute with `confirm: true`.
+- **Audit logging:** Every mutation is logged to `~/.mcp-zebrunner-audit.jsonl` with timestamp, tool, method, URL, and payload.
+- **Read-back verification:** After mutations, the server fetches the updated record and computes a field-by-field diff.
+- **Runtime validation:** Priorities, automation states, and custom fields are validated against project settings before execution.
+- **Dry-run mode:** `dry_run: true` returns the raw payload without any validation or execution.
+- **Atomic update warnings:** `steps` and `requirements` in `update_test_case` warn that they replace all existing items.
+- **MCP annotations:** All tools declare `readOnlyHint: false` with appropriate `destructiveHint` and `idempotentHint` values.
+- **Resilient file handling:** All file download/upload operations are wrapped in try-catch — failures are reported as warnings without blocking the tool.
+
+**File Attachment Support:**
+- Attachments accept either `{fileUuid}` for pre-uploaded files or `{file_path}` for local files (uploaded automatically via `POST /files`).
+- Both root-level and step-level attachments support `{file_path}`.
+- Internal `uploadFile` and `downloadFile` methods on the mutation client (not exposed as public tools).
+
+**`create_test_case` enhancements:**
+- **Enhanced preview:** Shows both "Fields to be set" and "Fields that will be null/default (not provided)" for full visibility of omissions.
+- **Optional `source_case_key`:** Pre-populate fields from an existing test case by key. Explicitly passed fields override source values. Priority and automation state are resolved by name for cross-project compatibility.
+- **Cross-project file re-upload:** When using `source_case_key` across projects, file attachments are automatically downloaded and re-uploaded to the target project, with fallback to stripping and a warning on failure.
+
+**Enhanced Tools:**
+- `get_tcm_suite_by_id` — Added `mode` parameter (`simple`/`full`) with direct Public API lookup for simple mode.
+- `get_test_case_by_key` — Updated description to recommend `json` format as data source for mutation tools.
+
+**New Files:**
+- `src/api/mutation-client.ts` — Dedicated axios wrapper for POST/PUT/PATCH, file upload/download, and settings GETs on the Public API.
+- `src/helpers/audit.ts` — Append-only JSONL audit logger.
+- `src/helpers/diff.ts` — Field-by-field diff computation and formatting.
+- `src/helpers/settings.ts` — Runtime validators for automation states, priorities, and custom fields.
+- `src/helpers/file-refs.ts` — File UUID extraction, cross-project re-upload orchestration, stripping, and warning generation.
+
+---
+
+## v6.7.0 (2026-03-28)
+
+### Universal Report Generator — `generate_report`
+
+Replaces `generate_quality_dashboard` with a universal `generate_report` tool supporting 6 report types. Accepts single or multiple report types per call.
+
+**Report Types:**
+
+1. **`quality_dashboard`** — Full HTML dashboard + Markdown with 6 panels (pass rate, runtime, coverage, bugs, milestones, flaky). Preserves all v6.6.0 dashboard functionality.
+2. **`coverage`** — Per-suite test coverage table per platform. Shows Implemented, Manual Only, Deprecated, Total, Coverage %. Handles "Manual Only" as automation state or custom field. Includes TOTAL and TOTAL REGRESSION rows (excludes non-regression suites via `exclude_suite_patterns`).
+3. **`pass_rate`** — Per-platform pass rate with known-issue exclusion and target comparison. Returns Markdown + PNG chart.
+4. **`runtime_efficiency`** — Regression runtime with WRI, duration distribution, and delta vs `previous_milestone`. Flags >20% degradation.
+5. **`executive_dashboard`** — Standup-ready combined report (pass rate + runtime + top 5 bugs + coverage + flaky). Returns Markdown + PNG charts + HTML.
+6. **`release_readiness`** — Go/No-Go assessment per platform. Evaluates pass rate, unresolved failures, runtime delta, coverage, defects. Each check gets PASS/FAIL/WARN.
+
+**New Parameters:** `report_types`, `exclude_suite_patterns`, `previous_milestone` (in addition to all existing `quality_dashboard` params).
+
+**Architecture:** Modular design with shared fetch methods in `ReportHandler` and individual report generators in `src/handlers/reports/`. Each report module is independent and reuses shared data fetching.
+
+**Breaking Change:** `generate_quality_dashboard` is removed. Use `generate_report` with `report_types: ["quality_dashboard"]` for equivalent behavior.
+
+---
+
 ## v6.6.0 (2026-03-26)
+
+### Quality Dashboard Tool
+
+#### New: `generate_quality_dashboard` — multi-project executive dashboard
+
+A single MCP tool call that orchestrates parallel API calls across multiple Zebrunner projects and returns a unified quality dashboard with 6 metric panels:
+
+1. **Pass Rate Overview** — stacked bar chart with passed/failed/skipped/known-issue per project, target comparison (e.g., Android/iOS >= 90%, Web >= 65%), and pass rate excluding known issues
+2. **Regression Runtime Efficiency** — delegates to `analyzeRegressionRuntime` handler for proper WRI (Weighted Runtime Index), Short/Medium/Long duration classification, avg runtime per test & test case
+3. **Automation Coverage Sustainability** — pie/bar chart showing Automated / Manual / Not Automated counts per project
+4. **Top N Bugs** — horizontal bar chart of most frequent defects across all projects
+5. **Milestone Summary** — table filtered by period overlap (only milestones whose date range intersects the requested period), with completion status, start/due dates, and overdue flags
+6. **Flaky Tests** — delegates to `findFlakyTests` handler showing top flip-flopping tests with flip count, pass rate, and stability metrics
+
+**Output:** Dual format — Markdown summary with detailed tables and inline PNG charts + self-contained HTML dashboard with interactive Chart.js charts.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `projects` | `string[]` | Project aliases or keys (e.g., `["android", "ios"]`) |
+| `period` | `string` | Time period (e.g., `"Last 30 Days"`) |
+| `milestone` | `string?` | Optional milestone filter |
+| `top_bugs_limit` | `number` | Number of top bugs to show (default: 10) |
+| `sections` | `string[]?` | Sections to include (default: all 6): `pass_rate`, `runtime`, `coverage`, `bugs`, `milestones`, `flaky` |
+| `targets` | `Record<string, number>?` | Pass rate targets per project (e.g., `{"android": 90, "web": 65}`). Defaults: android=90, ios=90, web=65 |
+
+**Architecture:** Data is fetched in parallel across all projects using `Promise.allSettled` — if one project fails, the others still render. Runtime and flaky sections delegate to the existing `analyzeRegressionRuntime` and `findFlakyTests` handlers. Uses the shared `callWidgetSql` utility and existing `chart-generator.ts` for PNG rendering.
+
+**New files:** `src/handlers/dashboard-handler.ts`, `src/utils/dashboard-template.ts`, `src/utils/widget-sql.ts`
+
+---
+
+### HTTP Request Timeout — Default Increased to 60s
+
+The default HTTP request timeout for all API clients has been increased from 30 seconds to 60 seconds. This addresses timeout issues with large iOS regression datasets and milestone-level queries. The timeout is configurable via the `TIMEOUT` environment variable (value in milliseconds, e.g., `TIMEOUT=90000` for 90 seconds).
+
+---
 
 ### Generic Field-Path Filtering for Test Cases
 

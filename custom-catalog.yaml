@@ -17,7 +17,7 @@ servers:
     # ── Basic Info ──────────────────────────────────────────────────────────────
     name: "Zebrunner MCP"
     description: "Comprehensive test management integration for AI assistants - manage test cases, suites, launches, and analyze test results"
-    version: "6.5.1"
+    version: "7.0.1"
     author: "Maksim Sarychau"
     license: "AGPL-3.0"
     
@@ -69,7 +69,7 @@ servers:
         example: "user@example.com"
         
       ZEBRUNNER_TOKEN:
-        description: "Personal access token (Settings → API Tokens)"
+        description: "Personal access token (Settings → API Tokens) or refreshToken from SSO session (see docs/OKTA_ACCESS_INVESTIGATION.md)"
         required: true
         secret: true
         

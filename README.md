@@ -1,6 +1,6 @@
 # Zebrunner MCP Server
 ![version](https://img.shields.io/github/package-json/v/maksimsarychau/mcp-zebrunner)
-<!--**Current version:** 🟢 --> <!--VERSION_START--><!--4.1.157--> <!--VERSION_END--> 
+<!--**Current version:** 🟢 --> <!--VERSION_START--><!--7.0.1--> <!--VERSION_END--> 
 
 A **Model Context Protocol (MCP)** server that integrates with **Zebrunner Test Case Management** to help QA teams manage test cases, test suites, and test execution data through AI assistants like Claude.
 
@@ -27,12 +27,13 @@ A **Model Context Protocol (MCP)** server that integrates with **Zebrunner Test 
 6. [🛠️ Available Tools](#️-available-tools)
    - 6.1. [📋 Test Case Management](#-test-case-management)
    - 6.2. [🌳 Test Suite Hierarchy & Organization](#-test-suite-hierarchy--organization)
-   - 6.3. [🔍 Test Coverage & Analysis](#-test-coverage--analysis)
-   - 6.4. [🧪 Test Code Generation & Validation](#-test-code-generation--validation)
-   - 6.5. [🚀 Launch & Execution Management](#-launch--execution-management)
-   - 6.6. [📊 Reporting & Analytics](#-reporting--analytics)
-   - 6.7. [🏃 Test Run Management](#-test-run-management)
-   - 6.8. [🎯 Management-Focused Quick Commands](#-management-focused-quick-commands)
+   - 6.3. [🔧 Mutation Tools (Beta)](#-mutation-tools-beta)
+   - 6.4. [🔍 Test Coverage & Analysis](#-test-coverage--analysis)
+   - 6.5. [🧪 Test Code Generation & Validation](#-test-code-generation--validation)
+   - 6.6. [🚀 Launch & Execution Management](#-launch--execution-management)
+   - 6.7. [📊 Reporting & Analytics](#-reporting--analytics)
+   - 6.8. [🏃 Test Run Management](#-test-run-management)
+   - 6.9. [🎯 Management-Focused Quick Commands](#-management-focused-quick-commands)
 7. [🎭 Role-Specific Prompts & Workflows](#-role-specific-prompts--workflows)
    - <details><summary>7.1. 👩‍💻 Manual QA Engineers</summary>
      
@@ -516,10 +517,26 @@ Once connected, you can use these tools through natural language in your AI assi
 #### **Suite Analysis Tools**
 | Tool | Description | Example Usage | Best For |
 |------|-------------|---------------|----------|
-| `get_tcm_suite_by_id` | Find specific suite by ID | `"Get details for suite 17470"` | All roles |
+| `get_tcm_suite_by_id` | Get suite by ID (simple: fast direct API, full: hierarchy-enriched) | `"Show me suite 20421 in project MCP"` | All roles |
 | `get_tcm_test_suites_by_project` | Comprehensive suite listing | `"Get all suites for project MCP with hierarchy"` | Managers |
 | `get_all_tcm_test_case_suites_by_project` | Get all TCM test case suites with pagination | `"Get all TCM test case suites for project MCP"` | Managers, Analysts |
 | `get_root_id_by_suite_id` | Find root suite for any suite | `"What's the root suite for suite 12345?"` | Analysts |
+
+### 🔧 Mutation Tools (Beta)
+
+> **Safety Model:** Every mutation tool follows a **two-call confirmation gate**. The first call returns a preview; only after user approval should `confirm: true` be passed to execute the mutation. All mutations are audit-logged to `~/.mcp-zebrunner-audit.jsonl`. Use `dry_run: true` for raw payload inspection.
+
+#### **Suite Mutations**
+| Tool | Description | Example Usage | Best For |
+|------|-------------|---------------|----------|
+| `create_test_suite` | (Beta) Create a new Test Suite | `"Create root suite 'Payments' in project MCP"` | QA, Managers |
+| `update_test_suite` | (Beta) Update an existing Test Suite (full PUT) | `"Rename suite 18697 to 'Login & Registration'"` | QA, Managers |
+
+#### **Test Case Mutations**
+| Tool | Description | Example Usage | Best For |
+|------|-------------|---------------|----------|
+| `create_test_case` | (Beta) Create a new Test Case with runtime validation of priorities, automation states, and custom fields. Accepts `{file_path}` in attachments. Optional `source_case_key` to pre-populate from an existing test case. | `"Create test case 'Verify login' in suite 17470 for project MCP"` | QA, SDETs |
+| `update_test_case` | (Beta) Partially update a Test Case by ID or key (PATCH). Accepts `{file_path}` in attachments for local file upload. | `"Attach /Users/me/screenshot.png to test case MCP-42"` | QA, SDETs |
 
 ### 🔍 Test Coverage & Analysis
 
@@ -623,7 +640,7 @@ Once connected, you can use these tools through natural language in your AI assi
 | `download_test_screenshot` | Download protected screenshots from Zebrunner with authentication | `"Download screenshot from https://your-workspace.zebrunner.com/files/abc123 for test 5451420"` | **QA Engineers, Automation Engineers** |
 | `analyze_screenshot` | Visual analysis with OCR, UI detection, and Claude Vision | `"Analyze screenshot https://your-workspace.zebrunner.com/files/abc123 with OCR and detailed analysis"` | **QA Engineers, SDETs, Developers** |
 
-> 📸 **Enhanced!** Screenshot analysis now integrated directly into `analyze_test_failure` and `analyze_launch_failures` - no need to call separately! See [Screenshot Analysis Guide](docs/SCREENSHOT_ANALYSIS.md) for details.
+> 📸 **Enhanced!** Screenshot analysis now integrated directly into `analyze_test_failure` and `analyze_launch_failures` - no need to call separately! See [Screenshot Analysis Guide](docs/archive/SCREENSHOT_ANALYSIS.md) for details.
 
 #### **Platform & Results Analysis** ⭐ *Critical for Management*
 | Tool | Description | Example Usage | Best For |
@@ -1238,12 +1255,12 @@ Leverage intelligent validation:
 ## 📚 Additional Documentation
 
 ### 📖 Tool References
-- **[TOOLS_CATALOG.md](TOOLS_CATALOG.md)** - 🆕 **Complete catalog of all 40+ tools with natural language examples**
+- **[TOOLS_CATALOG.md](TOOLS_CATALOG.md)** - 🆕 **Complete catalog of all 55+ tools with natural language examples**
 - **[INSTALL-GUIDE.md](INSTALL-GUIDE.md)** - 📥 **Step-by-step installation and setup guide**
 
 ### 🧠 Intelligent Rules System
 - **[docs/INTELLIGENT_RULES_SYSTEM.md](docs/INTELLIGENT_RULES_SYSTEM.md)** - 🧠 **Complete guide to the 3-tier intelligent rules system**
-- **[docs/RULES_QUICK_REFERENCE.md](docs/RULES_QUICK_REFERENCE.md)** - ⚡ **Quick reference for rules system commands and configuration**
+- **[docs/archive/RULES_QUICK_REFERENCE.md](docs/archive/RULES_QUICK_REFERENCE.md)** - ⚡ **Quick reference for rules system commands and configuration**
 
 ### 📋 Rules Files (Customizable)
 - **[test_case_review_rules.md](test_case_review_rules.md)** - 🎯 **Core quality standards and writing guidelines**
@@ -1251,16 +1268,15 @@ Leverage intelligent validation:
 - **[mcp-zebrunner-rules.md](mcp-zebrunner-rules.md)** - ⚙️ **Technical configuration for test generation and coverage analysis**
 
 ### 🔍 Specialized Guides
-- **[docs/SCREENSHOT_ANALYSIS.md](docs/SCREENSHOT_ANALYSIS.md)** - 📸 **Screenshot download and visual analysis guide**
+- **[docs/archive/SCREENSHOT_ANALYSIS.md](docs/archive/SCREENSHOT_ANALYSIS.md)** - 📸 **Screenshot download and visual analysis guide**
 - **[change-logs.md](change-logs.md)** - 📝 **Version history and feature updates**
 
 ### 🛠️ Feature Documentation
 - **[docs/TERMINOLOGY.md](docs/TERMINOLOGY.md)** - 📖 **Test vs Test Case vs Test Run vs Launch — glossary and counting rules**
-- **[docs/NEW_LAUNCHER_TOOL.md](docs/NEW_LAUNCHER_TOOL.md)** - Detailed information about launch and reporting tools
-- **[docs/SUITE_HIERARCHY.md](docs/SUITE_HIERARCHY.md)** - Complete guide to suite hierarchy features
-- **[docs/TEST_CASE_VALIDATION_IMPLEMENTATION.md](docs/TEST_CASE_VALIDATION_IMPLEMENTATION.md)** - Test case validation system details
-- **[docs/ENHANCED_VALIDATION_FEATURES.md](docs/ENHANCED_VALIDATION_FEATURES.md)** - Advanced validation and improvement features
-- **[docs/SCREENSHOT_ANALYSIS.md](docs/SCREENSHOT_ANALYSIS.md)** - 📸 **Screenshot analysis and visual forensics guide** 🆕
+- **[docs/archive/NEW_LAUNCHER_TOOL.md](docs/archive/NEW_LAUNCHER_TOOL.md)** - Detailed information about launch and reporting tools
+- **[docs/archive/SUITE_HIERARCHY.md](docs/archive/SUITE_HIERARCHY.md)** - Complete guide to suite hierarchy features
+- **[docs/archive/TEST_CASE_VALIDATION_IMPLEMENTATION.md](docs/archive/TEST_CASE_VALIDATION_IMPLEMENTATION.md)** - Test case validation system details
+- **[docs/archive/ENHANCED_VALIDATION_FEATURES.md](docs/archive/ENHANCED_VALIDATION_FEATURES.md)** - Advanced validation and improvement features
 
 [⬆️ Back to top](#-table-of-contents)
 
