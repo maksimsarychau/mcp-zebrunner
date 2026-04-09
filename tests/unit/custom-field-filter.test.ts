@@ -10,7 +10,7 @@ import {
 
 const SAMPLE_TC = {
   id: 1076,
-  key: "MFPAND-180",
+  key: "MCP-180",
   title: "[Diary]Nutrients get updated after adding a food item",
   deleted: false,
   deprecated: false,
@@ -34,7 +34,7 @@ const SAMPLE_TC = {
 const SAMPLE_MANUAL = {
   ...SAMPLE_TC,
   id: 2000,
-  key: "MFPAND-999",
+  key: "MCP-999",
   title: "Manual barcode scanning test",
   automationState: { id: 10, name: "Not Automated" },
   customField: {
@@ -47,7 +47,7 @@ const SAMPLE_MANUAL = {
 describe("Custom Field Filter Unit Tests", () => {
   describe("resolveFieldPath", () => {
     it("should resolve top-level string field", () => {
-      assert.strictEqual(resolveFieldPath(SAMPLE_TC, "key"), "MFPAND-180");
+      assert.strictEqual(resolveFieldPath(SAMPLE_TC, "key"), "MCP-180");
     });
 
     it("should resolve top-level boolean field", () => {
@@ -138,7 +138,7 @@ describe("Custom Field Filter Unit Tests", () => {
     });
 
     it("should match top-level field exact", () => {
-      const filter: FieldFilter = { fieldPath: "key", fieldValue: "MFPAND-180", matchMode: "exact" };
+      const filter: FieldFilter = { fieldPath: "key", fieldValue: "MCP-180", matchMode: "exact" };
       assert.strictEqual(matchesField(SAMPLE_TC, filter), true);
     });
 
@@ -335,19 +335,19 @@ describe("Custom Field Filter Unit Tests", () => {
     it("should filter by customField.manualOnly = Yes", () => {
       const result = filterByField(items, { fieldPath: "customField.manualOnly", fieldValue: "Yes", matchMode: "exact" });
       assert.strictEqual(result.length, 1);
-      assert.strictEqual(result[0].key, "MFPAND-999");
+      assert.strictEqual(result[0].key, "MCP-999");
     });
 
     it("should filter by automationState.name = Automated", () => {
       const result = filterByField(items, { fieldPath: "automationState.name", fieldValue: "Automated", matchMode: "exact" });
       assert.strictEqual(result.length, 1);
-      assert.strictEqual(result[0].key, "MFPAND-180");
+      assert.strictEqual(result[0].key, "MCP-180");
     });
 
     it("should filter by title contains", () => {
       const result = filterByField(items, { fieldPath: "title", fieldValue: "barcode", matchMode: "contains" });
       assert.strictEqual(result.length, 1);
-      assert.strictEqual(result[0].key, "MFPAND-999");
+      assert.strictEqual(result[0].key, "MCP-999");
     });
 
     it("should return empty for no matches", () => {
@@ -364,7 +364,7 @@ describe("Custom Field Filter Unit Tests", () => {
       const mixed = [SAMPLE_TC, null, SAMPLE_MANUAL, undefined] as any[];
       const result = filterByField(mixed, { fieldPath: "customField.manualOnly", fieldValue: "Yes", matchMode: "exact" });
       assert.strictEqual(result.length, 1);
-      assert.strictEqual(result[0].key, "MFPAND-999");
+      assert.strictEqual(result[0].key, "MCP-999");
     });
 
     it("should handle items with missing customField", () => {

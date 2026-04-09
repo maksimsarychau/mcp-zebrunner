@@ -95,7 +95,7 @@ export class ZebrunnerReportingClient {
 
   constructor(config: ZebrunnerReportingConfig) {
     this.config = {
-      timeout: 30_000,
+      timeout: 60_000,
       debug: false,
       ...config
     };

@@ -55,7 +55,7 @@ export class EnhancedZebrunnerClient {
 
   constructor(config: ZebrunnerConfig) {
     this.config = {
-      timeout: 30_000,
+      timeout: 60_000,
       retryAttempts: 3,
       retryDelay: 1000,
       debug: false,
@@ -351,7 +351,7 @@ export class EnhancedZebrunnerClient {
       // Try a minimal request to test-suites endpoint which should work with valid auth
       const response = await this.http.get('/test-suites', {
         params: { projectKey, size: 1 }, // Use configured project
-        timeout: this.config.timeout || 30000
+        timeout: this.config.timeout || 60000
       });
       
       return {

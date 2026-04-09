@@ -1,5 +1,7 @@
 # New Launcher Details MCP Tool
 
+> **Note:** This is a historical implementation record. The `get_launch_details` tool is fully shipped and active in the current version (7.0.1).
+
 ## Overview
 
 A new MCP tool `get_launch_details` has been implemented that uses the new Zebrunner Reporting API authentication method (access token → bearer token). This tool provides comprehensive launcher information including test sessions data.

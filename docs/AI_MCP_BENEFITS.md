@@ -1,7 +1,7 @@
 # AI + MCP: Benefits for Test Management
 
 **Author:** Maksim Sarychau
-**Current Version:** 6.6.0
+**Current Version:** 7.0.1
 
 ---
 
@@ -38,6 +38,16 @@ Go beyond raw data with intelligent analysis:
 - **Quality validation** — check test cases against best practices
 - **Improvement suggestions** — AI recommends better assertions, naming, and coverage
 - **Automation readiness** — assess which manual tests can be automated
+
+### Safe Test Case Authoring (v7.0+)
+
+Create and update test cases and suites through natural language with built-in safety:
+
+- *"Create a test case with 5 steps in project MCP"* — previews before executing
+- *"Copy test case MCP-5 to suite 12345"* — preserves traceability link to the original
+- **Two-step confirmation** — every mutation requires preview + user approval
+- **Forced draft** — AI-created test cases always start as drafts for human review
+- **Audit trail** — all mutations logged for accountability
 
 ### Reporting Without the Overhead
 
@@ -100,15 +110,17 @@ Accelerate automation with AI-generated test code:
 Available across multiple channels:
 
 - **npm** — `npm install -g mcp-zebrunner`
-- **Docker** — `msarychau/mcp-zebrunner:6.6.0`
+- **Docker** — `msarychau/mcp-zebrunner:7.0.1`
 - **GitHub** — [github.com/maksimsarychau/mcp-zebrunner](https://github.com/maksimsarychau/mcp-zebrunner)
 - **MCP Registry** — discoverable at [registry.modelcontextprotocol.io](https://registry.modelcontextprotocol.io)
 
 ---
 
-## 40+ Tools Across Two Domains
+## 55+ Tools Across Three Domains
 
-**Test Case Management:** retrieve, search, filter, validate, and improve test cases and suites.
+**Test Case Management:** retrieve, search, filter, validate, improve, **create**, and **update** test cases and suites.
+
+**Mutation & Safety:** create/update test cases and suites with two-step confirmation, audit logging, forced draft, and source traceability.
 
 **Reporting & Analytics:** launch analysis, failure forensics, video analysis, weekly reports, bug analysis, and Jira ticket generation.
 

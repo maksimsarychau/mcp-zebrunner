@@ -1,5 +1,7 @@
 # Test Case Validation Tool Implementation
 
+> **Note:** This is a historical implementation record. The `validate_test_case` tool is fully shipped and active in the current version (7.0.1).
+
 ## Overview
 
 We have successfully implemented a dynamic test case validation tool for the Zebrunner MCP server that validates test cases against quality standards and best practices. The tool supports configurable rules that can be adapted to different projects and changing standards.

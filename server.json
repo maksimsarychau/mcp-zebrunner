@@ -9,12 +9,12 @@
     "source": "github"
   },
   "license": "AGPL-3.0",
-  "version": "6.6.0",
+  "version": "7.0.1",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "mcp-zebrunner",
-      "version": "6.6.0",
+      "version": "7.0.1",
       "transport": {
         "type": "stdio"
       },
@@ -35,7 +35,7 @@
         },
         {
           "name": "ZEBRUNNER_TOKEN",
-          "description": "Your Zebrunner API authentication token",
+          "description": "Your Zebrunner API authentication token (Personal API Token from Settings → API Tokens, or refreshToken from SSO session)",
           "isRequired": true,
           "format": "string",
           "isSecret": true

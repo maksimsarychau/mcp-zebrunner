@@ -10,13 +10,14 @@ Complete reference of all available tools with natural language usage examples.
 4. [Video & Screenshot Analysis](#video--screenshot-analysis)
 5. [Test Case Management](#test-case-management)
 6. [Test Suite Hierarchy](#test-suite-hierarchy)
-7. [Test Coverage & Validation](#test-coverage--validation)
-8. [Test Code Generation](#test-code-generation)
-9. [Duplicate Detection](#duplicate-detection)
-10. [Feature-Based Test Case Aggregation](#feature-based-test-case-aggregation)
-11. [Test Run Management](#test-run-management)
-12. [Platform & Results Analysis](#platform--results-analysis)
-13. [Project Discovery](#project-discovery)
+7. [Mutation Tools (Beta)](#mutation-tools-beta)
+8. [Test Coverage & Validation](#test-coverage--validation)
+9. [Test Code Generation](#test-code-generation)
+10. [Duplicate Detection](#duplicate-detection)
+11. [Feature-Based Test Case Aggregation](#feature-based-test-case-aggregation)
+12. [Test Run Management](#test-run-management)
+13. [Platform & Results Analysis](#platform--results-analysis)
+14. [Project Discovery](#project-discovery)
 
 ---
 
@@ -383,7 +384,7 @@ Weekly stability report for project MCP using:
 - "Get test cases created after 2025-01-01 with automation state 'Manual'"
 - "Show me high priority test cases from last month"
 - "Find test cases updated after 2025-11-01 that are not automated"
-- "Get all test cases in MFPAND where customField.manualOnly is 'Yes'"
+- "Get all test cases in MCP where customField.manualOnly is 'Yes'"
 - "Find test cases whose priority.name contains 'High'"
 
 ### `get_test_cases_by_automation_state`
@@ -403,7 +404,7 @@ Weekly stability report for project MCP using:
 - "Get test cases from suite 491 created after 2025-01-01 with high priority"
 - "Show me test cases from suite 17470 with status 'Approved'"
 - "Find test cases in suite 18697 that were updated last week"
-- "Find test cases in MFPAND where customField.caseStatus equals 'Active'"
+- "Find test cases in MCP where customField.caseStatus equals 'Active'"
 
 ### `get_automation_states`
 
@@ -492,11 +493,16 @@ Weekly stability report for project MCP using:
 
 ### `get_tcm_suite_by_id`
 
-**Description:** Find specific test suite by its ID.
+**Description:** Get test suite by its numeric ID. This is the primary tool for any "show me suite", "get suite by ID", or "find suite" request.
+
+**Modes:**
+- `simple` (default) — Fast direct API call. Returns id, title, description, parentSuiteId, relativePosition.
+- `full` — Fetches all project suites and enriches with hierarchy (rootSuiteId, parent chain, clickable links). Use when hierarchy context is needed.
 
 **Example Prompts:**
+- "Show me suite in project MCP by id 20421"
 - "Get details for suite 17470"
-- "Show me suite 18697"
+- "Show me suite 18697 with full hierarchy"
 - "What's in test suite 491?"
 
 ### `get_tcm_test_suites_by_project`
@@ -525,6 +531,115 @@ Weekly stability report for project MCP using:
 - "What's the root suite for suite 12345?"
 - "Find root suite for suite 491"
 - "Get parent root for suite 17470"
+
+---
+
+## Mutation Tools (Beta)
+
+> **Safety Model:** All mutation tools follow a two-call confirmation gate. The first call (without `confirm: true`) returns a preview of the planned action. Only after user approval should the tool be called again with `confirm: true` to execute. An audit log is written to `~/.mcp-zebrunner-audit.jsonl` before every mutation. Use `dry_run: true` for raw payload inspection without any validation.
+
+### `create_test_suite`
+
+**Description:** (Beta) Create a new Test Suite in a Zebrunner project. Requires Engineer role or higher.
+
+**Parameters:**
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `project_key` | string | * | Project key (e.g., 'ANDROID'). Provide this or `project_id`. |
+| `project_id` | number | * | Numeric project ID. Provide this or `project_key`. |
+| `title` | string | ✅ | Suite name (1–255 chars). |
+| `description` | string | | Optional description (max 5000 chars). |
+| `parent_suite_id` | number | | Parent suite ID. Omit to create a root-level suite. |
+| `dry_run` | boolean | | If true, returns raw payload without validation. |
+| `confirm` | boolean | | Must be true to execute. Without it, returns a preview. |
+
+**Example Prompts:**
+- "Create a new root test suite called 'Payments' in project MCP"
+- "Create a child suite 'Edge Cases' under suite 18697 in project android"
+
+### `update_test_suite`
+
+**Description:** (Beta) Update an existing Test Suite by numeric ID (full PUT replacement). Requires Engineer role or higher.
+
+**Parameters:**
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `project_key` | string | * | Project key. Provide this or `project_id`. |
+| `project_id` | number | * | Numeric project ID. |
+| `suite_id` | number | ✅ | ID of the suite to update. |
+| `title` | string | ✅ | Suite name (always required — full replacement). |
+| `description` | string | | New description. Omit to clear. |
+| `parent_suite_id` | number/null | | Set to null or omit to promote to root. |
+| `dry_run` | boolean | | Raw payload inspection. |
+| `confirm` | boolean | | Must be true to execute. |
+
+**Example Prompts:**
+- "Rename suite 18697 to 'Login & Registration' in project MCP"
+- "Move suite 491 under parent suite 18697 in project android"
+
+### `create_test_case`
+
+**Description:** (Beta) Create a new Test Case in a Zebrunner project. Validates priority, automation state, and custom fields against project settings at runtime. Optionally accepts `source_case_key` to pre-populate fields from an existing test case.
+
+**Parameters:**
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `project_key` | string | * | Project key. Provide this or `project_id`. |
+| `project_id` | number | * | Numeric project ID. |
+| `test_suite_id` | number | yes | Suite to place the test case in. |
+| `title` | string | ** | Test case title (1-255 chars). Required unless `source_case_key` is provided. |
+| `source_case_key` | string | | Source test case key (e.g., 'MCP-6528'). Fetches the source and uses its fields as defaults. Explicitly passed fields override source values. Cross-project file attachments are automatically re-uploaded. |
+| `description` | string | | Rich text description (max 5000 chars, supports markdown). |
+| `priority` | `{id}` or `{name}` | | Priority reference validated at runtime. |
+| `automation_state` | `{id}` or `{name}` | | Automation state reference validated at runtime. |
+| `draft` | boolean | | Mark as draft. |
+| `deprecated` | boolean | | Mark as deprecated. |
+| `pre_conditions` | string | | Setup instructions (max 2000 chars). |
+| `post_conditions` | string | | Cleanup instructions (max 2000 chars). |
+| `steps` | array | | Test steps with action/expectedResult or sharedStepsId. Step attachments support `{file_path}`. |
+| `requirements` | array | | Linked JIRA or AZURE_DEVOPS requirements. |
+| `custom_field` | object | | Custom fields keyed by systemName. |
+| `attachments` | array | | File references: `{fileUuid}` for pre-uploaded files or `{file_path}` for local files (uploaded automatically). |
+| `dry_run` | boolean | | Raw payload inspection. |
+| `confirm` | boolean | | Must be true to execute. |
+
+**Preview enhancements:**
+- Shows both "Fields to be set" and "Fields that will be null/default (not provided)" for full visibility.
+- When `source_case_key` is used, shows source attribution and any cross-project file transfer results.
+- Local `file_path` attachments show file size and pending upload status.
+
+**Example Prompts:**
+- "Create a test case 'Verify login with valid credentials' in suite 17470 for project MCP"
+- "Create a test case with priority High and 3 steps in suite 491"
+- "Create a test case in MCP suite 20421 using source_case_key MCP-123 but override priority to Low"
+
+### `update_test_case`
+
+**Description:** (Beta) Partially update an existing Test Case by numeric ID or string key (PATCH). Only provided fields are updated. Accepts `{file_path}` in attachments for local file upload.
+
+**Parameters:**
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `project_key` | string | * | Project key. Provide this or `project_id`. |
+| `project_id` | number | * | Numeric project ID. |
+| `identifier` | number or string | yes | Numeric ID or string key (e.g., 'MCP-42'). |
+| `title` | string | | New title. |
+| `test_suite_id` | number | | Move to a different suite. |
+| `description` | string | | New description. |
+| `priority` | `{id}` or `{name}` | | New priority. |
+| `automation_state` | `{id}` or `{name}` | | New automation state. |
+| `steps` | array | | ATOMIC: replaces ALL existing steps. Step attachments support `{file_path}`. |
+| `requirements` | array | | ATOMIC: replaces ALL existing requirements. |
+| `custom_field` | object | | Only specified keys are updated. |
+| `attachments` | array | | File references: `{fileUuid}` or `{file_path}` for local files. |
+| `dry_run` | boolean | | Raw payload inspection. |
+| `confirm` | boolean | | Must be true to execute. |
+
+**Example Prompts:**
+- "Update test case MCP-42 title to 'Verify login with SSO'"
+- "Change automation state to 'Automated' for test case 12345 in project android"
+- "Move test case MCP-100 to suite 18824"
+- "Attach /Users/me/screenshot.png to test case MCP-42"
 
 ---
 
@@ -785,6 +900,51 @@ Weekly stability report for project MCP using:
 
 ---
 
+## Universal Report Generator
+
+### `generate_report`
+
+**Description:** Universal report generator that supports 6 report types. Can generate a single report or combine multiple in one call. Replaces the former `generate_quality_dashboard` tool (use `report_types: ["quality_dashboard"]` for equivalent behavior).
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `report_types` | `string[]` | Report type(s) to generate (required). See report types below. |
+| `projects` | `string[]` | Project aliases or keys (e.g., `["android", "ios"]`) |
+| `period` | `string` | Time period (e.g., `"Last 30 Days"`) |
+| `milestone` | `string?` | Optional milestone filter |
+| `top_bugs_limit` | `number?` | Top bugs count for `quality_dashboard` / `executive_dashboard` (default: 10) |
+| `sections` | `string[]?` | Sections for `quality_dashboard`: `pass_rate`, `runtime`, `coverage`, `bugs`, `milestones`, `flaky` |
+| `targets` | `Record<string, number>?` | Pass rate targets per project (e.g., `{"android": 90, "web": 65}`). Defaults: android=90, ios=90, web=65 |
+| `exclude_suite_patterns` | `string[]?` | Suite patterns to exclude from TOTAL REGRESSION in `coverage` report (e.g., `["MA", "Critical", "Performance"]`) |
+| `previous_milestone` | `string?` | Baseline milestone for delta comparison in `runtime_efficiency` / `release_readiness` |
+
+**Report Types:**
+
+1. **`quality_dashboard`** — Full HTML dashboard + Markdown with 6 panels: pass rate (target comparison + known-issue exclusion), runtime (WRI, Short/Medium/Long), coverage, top bugs, milestones, flaky tests. Returns HTML + PNG charts.
+
+2. **`coverage`** — Per-suite test coverage table for each platform. Shows Implemented, Manual Only, Deprecated, Total, Coverage %. Includes TOTAL and TOTAL REGRESSION summary rows (regression excludes suites matching `exclude_suite_patterns`). Handles "Manual Only" as both automation state and custom field.
+
+3. **`pass_rate`** — Per-platform pass rate metrics with total executed, passed, failed, known issues, pass rate, pass rate excluding known issues, and target comparison with status indicators. Returns Markdown + PNG chart.
+
+4. **`runtime_efficiency`** — Regression runtime metrics per platform with WRI, duration distribution, avg runtime per test/test case. When `previous_milestone` is provided, calculates deltas and flags suites with >20% degradation. Returns Markdown + PNG chart.
+
+5. **`executive_dashboard`** — Standup-ready combined report: pass rate + runtime + top 5 bugs + coverage + flaky tests. Returns Markdown + PNG charts + HTML dashboard.
+
+6. **`release_readiness`** — Go/No-Go assessment per platform. Evaluates: pass rate vs target, unresolved failures, runtime efficiency delta, automation coverage, top defects. Each check gets PASS/FAIL/WARN status. Returns structured Markdown with overall recommendation.
+
+**Example Prompts:**
+- "Generate a quality dashboard for Android and iOS for the last 30 days"
+- "Build a test coverage report for all three platforms"
+- "Show pass rate for Android, iOS, and Web for milestone 25.40.0"
+- "Compare runtime efficiency for Android between milestone 25.40.0 and 25.39.0"
+- "Generate an executive dashboard for all platforms this quarter"
+- "Assess release readiness for Android on milestone 25.40.0 vs previous 25.39.0"
+- "Generate coverage and pass rate reports together for all platforms"
+
+---
+
 ## Project Discovery
 
 ### `get_available_projects`
@@ -950,11 +1110,11 @@ For large datasets, you can specify filters and limits:
 - **Installation Guide:** [INSTALL-GUIDE.md](INSTALL-GUIDE.md)
 - **Security Features:** [change-logs.md](change-logs.md#v5100---security-comprehensive-security-hardening-high--medium-severity-fixes)
 - **Changelog:** [change-logs.md](change-logs.md)
-- **Screenshot Analysis:** [docs/SCREENSHOT_ANALYSIS.md](docs/SCREENSHOT_ANALYSIS.md)
+- **Screenshot Analysis:** [docs/archive/SCREENSHOT_ANALYSIS.md](docs/archive/SCREENSHOT_ANALYSIS.md)
 
 ---
 
-**Last Updated:** v6.6.0 - March 2026
+**Last Updated:** v7.0.0 - April 2026
 
 For the latest features and updates, see [change-logs.md](change-logs.md).
 

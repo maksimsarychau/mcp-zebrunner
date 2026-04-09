@@ -1,5 +1,7 @@
 # Launch Test Summary Tool
 
+> **Note:** This is a historical implementation record. The `get_launch_test_summary` tool is fully shipped and active in the current version (7.0.1).
+
 ## Overview
 
 The `get_launch_test_summary` tool provides a **token-optimized** way to analyze launch test results. It automatically fetches all tests from all pages and provides comprehensive statistics while using minimal tokens (~5K vs 185K).

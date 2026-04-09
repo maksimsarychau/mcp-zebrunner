@@ -1,5 +1,7 @@
 # Suite Hierarchy Enhancement
 
+> **Note:** This is a historical implementation record. The suite hierarchy feature is fully shipped and active in the current version (7.0.1).
+
 ## Overview
 
 The Suite Hierarchy enhancement adds `featureSuiteId` and `rootSuiteId` fields to test case responses, providing complete suite hierarchy context for better test organization and analysis.

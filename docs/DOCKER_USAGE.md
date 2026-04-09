@@ -25,7 +25,7 @@ cd mcp-zebrunner
 docker compose build
 
 # Or build with version tag
-VERSION=6.6.0 docker compose build
+VERSION=7.0.1 docker compose build
 ```
 
 ### Run Locally with Docker Compose
@@ -189,7 +189,7 @@ docker compose build
 docker compose build --no-cache
 
 # Build with version tag
-VERSION=6.6.0 docker compose build
+VERSION=7.0.1 docker compose build
 ```
 
 ### Running
@@ -233,10 +233,10 @@ docker run --rm \
 docker login -u msarychau
 
 # Tag with version
-docker tag msarychau/mcp-zebrunner:latest msarychau/mcp-zebrunner:6.6.0
+docker tag msarychau/mcp-zebrunner:latest msarychau/mcp-zebrunner:7.0.1
 
 # Push both tags
-docker push msarychau/mcp-zebrunner:6.6.0
+docker push msarychau/mcp-zebrunner:7.0.1
 docker push msarychau/mcp-zebrunner:latest
 ```
 
@@ -460,4 +460,4 @@ Submit Zebrunner MCP to Docker's official MCP Registry so it appears in Docker D
 
 ---
 
-*Last Updated: December 2025*
+*Last Updated: April 2026*

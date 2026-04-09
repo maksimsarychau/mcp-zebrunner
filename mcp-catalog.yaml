@@ -9,7 +9,7 @@
 # ══════════════════════════════════════════════════════════════════════════════
 
 name: zebrunner-mcp
-version: "6.5.1"
+version: "7.0.1"
 description: |
   Zebrunner MCP Server - Comprehensive test management integration for AI assistants.
   
@@ -71,7 +71,7 @@ config:
     type: secret
     required: true
     title: "API Token"
-    description: "Personal access token from Zebrunner (Settings → API Tokens)"
+    description: "Personal access token from Zebrunner (Settings → API Tokens) or refreshToken from SSO session (see docs/OKTA_ACCESS_INVESTIGATION.md)"
     placeholder: "your-api-token"
 
   # Optional settings

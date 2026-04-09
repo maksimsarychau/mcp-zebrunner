@@ -3,6 +3,8 @@ dist
 .env
 .DS_Store
 mcp.config.json
+api-docs.json
+mcp-mutation-safety.md
 .claude
 !.env.example
 

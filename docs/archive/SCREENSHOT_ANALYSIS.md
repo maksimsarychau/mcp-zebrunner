@@ -333,9 +333,9 @@ No additional configuration needed! The tools work automatically through MCP in 
    - May misidentify similar devices
    - Limited to common devices in database
 
-3. **No Video Analysis**
-   - Only static screenshots supported
-   - Video artifacts not yet supported
+3. **Video Analysis Available Separately**
+   - Video analysis is handled by the `analyze_test_execution_video` tool (added in v5.7.0)
+   - This tool focuses on static screenshots only
 
 4. **No Page Source Parsing**
    - XML/HTML analysis not included (future enhancement)
