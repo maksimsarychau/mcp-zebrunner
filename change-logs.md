@@ -1,5 +1,75 @@
 # Change Logs
 
+## v7.1.1 (2026-04-13)
+
+### Steering-Inspired "Next Step" Guidance
+
+Mutation tool responses now include just-in-time "next step" hints that guide the LLM toward logical follow-up actions. Inspired by the [Strands Agents steering pattern](https://strandsagents.com/blog/steering-accuracy-beats-prompts-workflows/), hints are delivered at the moment the LLM needs them rather than front-loaded into system prompts.
+
+**How it works:** After a successful mutation, the server appends a `Tip:` block suggesting the most useful next tool call. Hints are conditional — they are suppressed when redundant (e.g., the quality check hint is skipped if `review: true` was already used).
+
+**Hints by tool:**
+- **`create_test_suite`** — suggests `create_test_case` or sub-suite creation with the new suite ID.
+- **`create_test_case`** — always reminds that the case is draft and suggests `update_test_case` to publish. If `review` was not used, also suggests `validate_test_case` for a quality check.
+- **`create_test_case` preview** — reinforces the `draft=true` safety rule before confirmation via a `Note:` marker.
+- **`update_test_case`** — suggests `validate_test_case` (skipped if `review: true` was already used inline).
+- **`manage_test_run` create** — suggests populating the empty run via `add_cases` or importing launch results.
+- **`manage_test_run` update** — suggests `list_test_run_test_cases` to view current assignments.
+- **`manage_test_run` add_cases** — suggests importing results or viewing the case list.
+- **`import_launch_results_to_test_run`** — suggests viewing updated statuses or the run summary.
+
+**Implementation:**
+- Extracted `steeringHint()` helper into `src/helpers/steering.ts` — a pure, deterministic function that takes a tool name and context (ID, reviewUsed flag) and returns the hint text.
+- All 8 inline hint blocks in `src/server.ts` refactored to call the helper.
+- 25 new unit tests in `tests/unit/steering-hints.test.ts` covering all tool types, conditional logic, edge cases, and no-emoji validation.
+- 10 mutation eval prompts extended with `expectedOutputPatterns` for steering hint markers.
+- Version bumped to 7.1.1 across all entry points, configs, catalogs, and documentation.
+
+---
+
+## v7.1.0 (2026-04-10)
+
+### New Tools: Test Run Management & Launch Results Import
+
+**`manage_test_run` (Beta)** — Unified tool for creating, updating, and adding test cases to Zebrunner Test Runs.
+- **create**: `POST /test-runs` (201). Supports title, description, milestone, environment, configurations (up to 100 group/option pairs), and requirements.
+- **update**: `PATCH /test-runs/{id}` (200). Partial update — only provided fields change. WARNING: `configurations` is atomic (replaces all).
+- **add_cases**: `POST /test-runs/{id}/test-cases` (204 No Content). Supports adding by test case keys, suite selectors (IMMEDIATE/ALL_DESCENDANTS), or all project test cases. Follow-up GET verifies the updated count.
+- Two-step confirmation, audit logging, `skip_errors: true` by default.
+
+**`import_launch_results_to_test_run` (Beta)** — Cross-API bridge that imports automation launch results into a TCM Test Run.
+- Reads tests from a Reporting API launch, extracts linked test case keys and statuses, maps them to TCM result statuses, and imports via `POST /test-runs/{id}/test-cases:import`.
+- Default status mapping: PASSED→Passed, FAILED→Failed, SKIPPED→Skipped, ABORTED→Blocked. Custom overrides via `status_mapping`.
+- Pre-flight validation shows matched, not-in-run, and no-launch-data test cases.
+- Safety: `add_missing_test_cases: false` by default (only updates test cases already in the run).
+- Two-step confirmation, audit logging, `skip_errors: true` by default.
+
+**Mutation client** — Added 4 new methods: `createTestRun`, `updateTestRun`, `addTestCasesToRun`, `importTestCaseResults`. The `addTestCasesToRun` method handles the 204 No Content response directly without JSON parsing.
+
+### Steering-Inspired "Next Step" Hints
+
+All mutation tool success responses now include just-in-time guidance that steers the LLM toward logical follow-up actions, inspired by the Strands Agents steering pattern. Hints use plain text `Tip:` / `Note:` markers (no emoji).
+
+- **`create_test_suite`** — suggests `create_test_case` or sub-suite creation with the new suite ID.
+- **`create_test_case`** — always reminds that the case is draft and suggests `update_test_case` to publish. If `review` was not used, also suggests `validate_test_case`.
+- **`update_test_case`** — suggests `validate_test_case` (skipped if `review: true` was already used).
+- **`manage_test_run` create** — suggests populating the run via `add_cases` or importing launch results.
+- **`manage_test_run` update** — suggests `list_test_run_test_cases` to view assignments.
+- **`manage_test_run` add_cases** — suggests importing results or viewing cases.
+- **`import_launch_results_to_test_run`** — suggests viewing updated statuses or run summary.
+- **`create_test_case` preview** — reinforces the `draft=true` safety rule before confirmation.
+
+### Tool & Test Registry Updates
+
+- Tool count updated from 58 to 60 in registry coverage tests.
+- `tools.json` updated with `manage_test_run` and `import_launch_results_to_test_run` entries.
+- Smoke coverage matrix extended with new tool entries.
+- 7 new unit tests for mutation client test run methods.
+- 5 new eval prompts for test run management and launch import.
+- Version bumped to 7.1.0 across all entry points, configs, catalogs, and documentation.
+
+---
+
 ## v7.0.1 (2026-04-09)
 
 ### Confirmation Flow Overhaul & Serialization Fixes

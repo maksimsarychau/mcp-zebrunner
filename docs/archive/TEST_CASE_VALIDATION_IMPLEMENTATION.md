@@ -1,6 +1,6 @@
 # Test Case Validation Tool Implementation
 
-> **Note:** This is a historical implementation record. The `validate_test_case` tool is fully shipped and active in the current version (7.0.1).
+> **Note:** This is a historical implementation record. The `validate_test_case` tool is fully shipped and active in the current version (7.1.1).
 
 ## Overview
 

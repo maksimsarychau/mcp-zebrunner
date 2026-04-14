@@ -26,6 +26,13 @@ export class ZebrunnerMutationClient {
       ...config,
     };
 
+    if (!this.config.username?.trim() || !this.config.token?.trim()) {
+      throw new Error(
+        "ZebrunnerMutationClient: username and token must be non-empty strings. " +
+        "Set ZEBRUNNER_USERNAME and ZEBRUNNER_TOKEN environment variables.",
+      );
+    }
+
     const baseURL = this.config.baseUrl.replace(/\/+$/, "");
     const basic = Buffer.from(
       `${this.config.username}:${this.config.token}`,
@@ -140,6 +147,65 @@ export class ZebrunnerMutationClient {
     return this.get(`/test-suites/${id}`, { projectKey });
   }
 
+  // --------------- Test Runs ---------------
+
+  async createTestRun(
+    projectKey: string,
+    payload: Record<string, unknown>,
+    opts?: { skipErrors?: boolean; createMissingConfigurations?: boolean },
+  ): Promise<{ data: Record<string, unknown> }> {
+    const params: Record<string, string> = { projectKey };
+    if (opts?.skipErrors !== undefined) params.skipErrors = String(opts.skipErrors);
+    if (opts?.createMissingConfigurations !== undefined)
+      params.createMissingConfigurations = String(opts.createMissingConfigurations);
+    const response = await this.request("POST", "/test-runs", payload, params);
+    return response.data;
+  }
+
+  async updateTestRun(
+    projectKey: string,
+    id: number,
+    payload: Record<string, unknown>,
+    opts?: { skipErrors?: boolean; createMissingConfigurations?: boolean },
+  ): Promise<{ data: Record<string, unknown> }> {
+    const params: Record<string, string> = { projectKey };
+    if (opts?.skipErrors !== undefined) params.skipErrors = String(opts.skipErrors);
+    if (opts?.createMissingConfigurations !== undefined)
+      params.createMissingConfigurations = String(opts.createMissingConfigurations);
+    const response = await this.request("PATCH", `/test-runs/${id}`, payload, params);
+    return response.data;
+  }
+
+  async addTestCasesToRun(
+    projectKey: string,
+    runId: number,
+    payload: Record<string, unknown>,
+  ): Promise<void> {
+    try {
+      const normalized = ZebrunnerMutationClient.normalizeEscapes(payload) as Record<string, unknown>;
+      const body = ZebrunnerMutationClient.asciiSafeStringify(normalized);
+      await this.http.post(`/test-runs/${runId}/test-cases`, body, {
+        params: { projectKey },
+        transformRequest: [(d: unknown) => d],
+      });
+    } catch (error) {
+      throw this.handleError(error);
+    }
+  }
+
+  async importTestCaseResults(
+    projectKey: string,
+    runId: number,
+    payload: Record<string, unknown>,
+    opts?: { skipErrors?: boolean; addMissingTestCases?: boolean },
+  ): Promise<{ items: Array<Record<string, unknown>> }> {
+    const params: Record<string, string> = { projectKey };
+    if (opts?.skipErrors !== undefined) params.skipErrors = String(opts.skipErrors);
+    if (opts?.addMissingTestCases !== undefined) params.addMissingTestCases = String(opts.addMissingTestCases);
+    const response = await this.request("POST", `/test-runs/${runId}/test-cases:import`, payload, params);
+    return response.data;
+  }
+
   // --------------- Test Case Settings ---------------
 
   async getAutomationStates(
@@ -176,8 +242,8 @@ export class ZebrunnerMutationClient {
           ...form.getHeaders(),
           Authorization: this.authHeader,
         },
-        maxBodyLength: 1_073_741_824,
-        maxContentLength: 1_073_741_824,
+        maxBodyLength: 104_857_600,     // 100 MB
+        maxContentLength: 104_857_600,  // 100 MB
       });
       return response.data;
     } catch (error) {

@@ -1,27 +1,63 @@
 [
   {
+    "name": "about_mcp_tools",
+    "description": "Summarize all MCP tools or show detailed info for a specific tool with examples and approximate token usage"
+  },
+  {
+    "name": "aggregate_test_cases_by_feature",
+    "description": "Find ALL test cases related to a specific feature across the project. Searches title, description, preconditions, and test steps (case-insensitive). Groups by Root Suite and Feature Suite. Outputs: detailed (full hierarchy), short (summary), dto (JSON), test_run_rules (automation tags)"
+  },
+  {
+    "name": "analyze_regression_runtime",
+    "description": "Analyze Regression Runtime Efficiency: per-launch elapsed time, attempt/re-run breakdown, per-test duration classification (Short/Medium/Long), Average Runtime per Test, Average Runtime per Test Case, Weighted Runtime Index, and optional baseline comparison with delta tracking"
+  },
+  {
+    "name": "analyze_screenshot",
+    "description": "Visual analysis of screenshots with OCR, UI element detection, and AI vision analysis"
+  },
+  {
+    "name": "analyze_test_cases_duplicates",
+    "description": "Find duplicate test cases using text similarity"
+  },
+  {
+    "name": "analyze_test_cases_duplicates_semantic",
+    "description": "Find duplicate test cases using semantic/AI analysis"
+  },
+  {
+    "name": "analyze_test_execution_video",
+    "description": "Download and analyze test execution video with AI vision - extracts frames and compares with test steps"
+  },
+  {
     "name": "analyze_test_failure",
     "description": "Deep forensic analysis of failed tests including logs, screenshots, error classification, and comparison with last passed execution"
+  },
+  {
+    "name": "create_test_case",
+    "description": "(Beta) Create a new Test Case with runtime validation of priorities, automation states, and custom fields. Accepts { file_path } in attachments for local file upload. Optional source_case_key to pre-populate from an existing test case. Requires preview approval."
+  },
+  {
+    "name": "create_test_suite",
+    "description": "(Beta) Create a new Test Suite in a Zebrunner project. Requires preview approval before execution."
   },
   {
     "name": "detailed_analyze_launch_failures",
     "description": "Analyze ALL failures in a launch with intelligent grouping, executive summary, timeline analysis, and pattern detection"
   },
   {
-    "name": "get_test_execution_history",
-    "description": "Track test execution trends across multiple launches with pass/fail history and pass rate"
+    "name": "download_test_screenshot",
+    "description": "Download protected screenshots from Zebrunner with authentication"
   },
   {
-    "name": "get_launch_details",
-    "description": "Get comprehensive information about a specific launch including test results, environment, and metadata"
+    "name": "find_flaky_tests",
+    "description": "Find flaky tests across launches using a 3-phase approach: cross-launch flip-flop analysis, manual test case scan via TCM execution history, and dual-perspective enrichment of top flaky tests with TCM data"
   },
   {
-    "name": "get_launch_summary",
-    "description": "Quick launch overview with key metrics and status"
+    "name": "generate_draft_test_by_key",
+    "description": "Generate draft test code from test case specification"
   },
   {
-    "name": "get_launch_test_summary",
-    "description": "Lightweight aggregated test results with statistics and most unstable tests"
+    "name": "generate_report",
+    "description": "Universal report generator supporting 6 report types: quality_dashboard (HTML+Markdown with 6 panels), coverage (per-suite test coverage table), pass_rate (per-platform with targets), runtime_efficiency (with delta vs previous milestone), executive_dashboard (standup-ready combined report), release_readiness (Go/No-Go assessment). Can generate single or multiple reports per call."
   },
   {
     "name": "generate_weekly_regression_stability_report",
@@ -36,20 +72,92 @@
     "description": "Filter launches by milestone, build, or other criteria"
   },
   {
-    "name": "analyze_test_execution_video",
-    "description": "Download and analyze test execution video with AI vision - extracts frames and compares with test steps"
+    "name": "get_all_subsuites",
+    "description": "Get all subsuites under a parent suite"
   },
   {
-    "name": "download_test_screenshot",
-    "description": "Download protected screenshots from Zebrunner with authentication"
+    "name": "get_all_tcm_test_case_suites_by_project",
+    "description": "Get all TCM test case suites by project with pagination"
   },
   {
-    "name": "analyze_screenshot",
-    "description": "Visual analysis of screenshots with OCR, UI element detection, and AI vision analysis"
+    "name": "get_all_tcm_test_cases_by_project",
+    "description": "Get all test cases for a project"
+  },
+  {
+    "name": "get_all_tcm_test_cases_with_root_suite_id",
+    "description": "Get all test cases under a specific root suite"
+  },
+  {
+    "name": "get_automation_priorities",
+    "description": "Get available automation priorities"
+  },
+  {
+    "name": "get_automation_states",
+    "description": "Get available automation states for test cases"
+  },
+  {
+    "name": "get_available_projects",
+    "description": "Discover available Zebrunner projects"
+  },
+  {
+    "name": "get_bug_failure_info",
+    "description": "Get failure information for a specific bug"
+  },
+  {
+    "name": "get_bug_review",
+    "description": "Get detailed bug review information"
+  },
+  {
+    "name": "get_enhanced_test_coverage_with_rules",
+    "description": "Enhanced test coverage analysis with rules engine"
+  },
+  {
+    "name": "get_launch_details",
+    "description": "Get comprehensive information about a specific launch including test results, environment, and metadata"
+  },
+  {
+    "name": "get_launch_summary",
+    "description": "Quick launch overview with key metrics and status"
+  },
+  {
+    "name": "get_launch_test_summary",
+    "description": "Lightweight aggregated test results with statistics and most unstable tests"
+  },
+  {
+    "name": "get_platform_results_by_period",
+    "description": "Get test results grouped by platform over a time period"
+  },
+  {
+    "name": "get_project_milestones",
+    "description": "Get milestones for a project"
+  },
+  {
+    "name": "get_root_id_by_suite_id",
+    "description": "Find the root suite ID for any suite"
+  },
+  {
+    "name": "get_root_suites",
+    "description": "Get root-level test suites"
+  },
+  {
+    "name": "get_suite_hierarchy",
+    "description": "Get complete suite hierarchy tree"
+  },
+  {
+    "name": "get_tcm_suite_by_id",
+    "description": "Get test suite by its numeric ID. Use for any 'show me suite', 'get suite by ID', 'find suite' request. Supports simple (fast direct API) and full (hierarchy-enriched) modes."
+  },
+  {
+    "name": "get_tcm_test_suites_by_project",
+    "description": "Get all test suites for a project"
+  },
+  {
+    "name": "get_test_case_by_filter",
+    "description": "Filter test cases by various criteria. Supports field_path/field_value/field_match for generic field-path filtering including custom fields."
   },
   {
     "name": "get_test_case_by_key",
-    "description": "Get detailed information for a specific test case by its key (e.g., MCP-123). Default format is 'json' — recommended when using as data source for create_test_case or update_test_case."
+    "description": "Get detailed information for a specific test case by its key (e.g., MCP-123). Default format is 'json' \u2014 recommended when using as data source for create_test_case or update_test_case."
   },
   {
     "name": "get_test_case_by_title",
@@ -64,74 +172,6 @@
     "description": "Get test cases filtered by automation state"
   },
   {
-    "name": "get_test_case_by_filter",
-    "description": "Filter test cases by various criteria. Supports field_path/field_value/field_match for generic field-path filtering including custom fields."
-  },
-  {
-    "name": "get_automation_states",
-    "description": "Get available automation states for test cases"
-  },
-  {
-    "name": "get_automation_priorities",
-    "description": "Get available automation priorities"
-  },
-  {
-    "name": "get_all_tcm_test_cases_by_project",
-    "description": "Get all test cases for a project"
-  },
-  {
-    "name": "get_all_tcm_test_cases_with_root_suite_id",
-    "description": "Get all test cases under a specific root suite"
-  },
-  {
-    "name": "list_test_suites",
-    "description": "List test suites with pagination"
-  },
-  {
-    "name": "get_suite_hierarchy",
-    "description": "Get complete suite hierarchy tree"
-  },
-  {
-    "name": "get_root_suites",
-    "description": "Get root-level test suites"
-  },
-  {
-    "name": "get_all_subsuites",
-    "description": "Get all subsuites under a parent suite"
-  },
-  {
-    "name": "get_tcm_suite_by_id",
-    "description": "Get test suite by its numeric ID. Use for any 'show me suite', 'get suite by ID', 'find suite' request. Supports simple (fast direct API) and full (hierarchy-enriched) modes."
-  },
-  {
-    "name": "create_test_suite",
-    "description": "(Beta) Create a new Test Suite in a Zebrunner project. Requires preview approval before execution."
-  },
-  {
-    "name": "update_test_suite",
-    "description": "(Beta) Update an existing Test Suite (full PUT replacement). Requires preview approval before execution."
-  },
-  {
-    "name": "create_test_case",
-    "description": "(Beta) Create a new Test Case with runtime validation of priorities, automation states, and custom fields. Accepts { file_path } in attachments for local file upload. Optional source_case_key to pre-populate from an existing test case. Requires preview approval."
-  },
-  {
-    "name": "update_test_case",
-    "description": "(Beta) Partially update an existing Test Case by numeric ID or string key (PATCH). Accepts { file_path } in attachments for local file upload. Requires preview approval."
-  },
-  {
-    "name": "get_tcm_test_suites_by_project",
-    "description": "Get all test suites for a project"
-  },
-  {
-    "name": "get_all_tcm_test_case_suites_by_project",
-    "description": "Get all TCM test case suites by project with pagination"
-  },
-  {
-    "name": "get_root_id_by_suite_id",
-    "description": "Find the root suite ID for any suite"
-  },
-  {
     "name": "get_test_cases_by_suite_smart",
     "description": "Smart test case retrieval by suite ID with automatic root/child suite detection"
   },
@@ -140,97 +180,63 @@
     "description": "Analyze test coverage by test case steps"
   },
   {
-    "name": "get_enhanced_test_coverage_with_rules",
-    "description": "Enhanced test coverage analysis with rules engine"
-  },
-  {
-    "name": "validate_test_case",
-    "description": "Validate test case quality against best practices"
-  },
-  {
-    "name": "improve_test_case",
-    "description": "Get AI-powered suggestions to improve test case quality"
-  },
-  {
-    "name": "generate_draft_test_by_key",
-    "description": "Generate draft test code from test case specification"
-  },
-  {
-    "name": "analyze_test_cases_duplicates",
-    "description": "Find duplicate test cases using text similarity"
-  },
-  {
-    "name": "analyze_test_cases_duplicates_semantic",
-    "description": "Find duplicate test cases using semantic/AI analysis"
-  },
-  {
-    "name": "aggregate_test_cases_by_feature",
-    "description": "Find ALL test cases related to a specific feature across the project. Searches title, description, preconditions, and test steps (case-insensitive). Groups by Root Suite and Feature Suite. Outputs: detailed (full hierarchy), short (summary), dto (JSON), test_run_rules (automation tags)"
-  },
-  {
-    "name": "list_test_runs",
-    "description": "List test runs with pagination"
+    "name": "get_test_execution_history",
+    "description": "Track test execution trends across multiple launches with pass/fail history and pass rate"
   },
   {
     "name": "get_test_run_by_id",
     "description": "Get test run details by ID"
   },
   {
-    "name": "list_test_run_test_cases",
-    "description": "List test cases in a test run"
+    "name": "get_test_run_configuration_groups",
+    "description": "Get configuration groups for a test run"
   },
   {
     "name": "get_test_run_result_statuses",
     "description": "Get result statuses for a test run"
   },
   {
-    "name": "get_test_run_configuration_groups",
-    "description": "Get configuration groups for a test run"
-  },
-  {
-    "name": "get_platform_results_by_period",
-    "description": "Get test results grouped by platform over a time period"
-  },
-  {
     "name": "get_top_bugs",
     "description": "Get top bugs affecting test results"
   },
   {
-    "name": "get_bug_review",
-    "description": "Get detailed bug review information"
+    "name": "import_launch_results_to_test_run",
+    "description": "Import automation launch results into a TCM Test Run by bridging Reporting API launches to Public API test runs (Beta)"
   },
   {
-    "name": "get_bug_failure_info",
-    "description": "Get failure information for a specific bug"
+    "name": "improve_test_case",
+    "description": "Get AI-powered suggestions to improve test case quality"
   },
   {
-    "name": "get_project_milestones",
-    "description": "Get milestones for a project"
+    "name": "list_test_run_test_cases",
+    "description": "List test cases in a test run"
   },
   {
-    "name": "about_mcp_tools",
-    "description": "Summarize all MCP tools or show detailed info for a specific tool with examples and approximate token usage"
+    "name": "list_test_runs",
+    "description": "List test runs with pagination"
   },
   {
-    "name": "get_available_projects",
-    "description": "Discover available Zebrunner projects"
+    "name": "list_test_suites",
+    "description": "List test suites with pagination"
+  },
+  {
+    "name": "manage_test_run",
+    "description": "Create, update, or add test cases to a Zebrunner Test Run (Beta)"
   },
   {
     "name": "test_reporting_connection",
     "description": "Test the connection to Zebrunner reporting API"
   },
   {
-    "name": "analyze_regression_runtime",
-    "description": "Analyze Regression Runtime Efficiency: per-launch elapsed time, attempt/re-run breakdown, per-test duration classification (Short/Medium/Long), Average Runtime per Test, Average Runtime per Test Case, Weighted Runtime Index, and optional baseline comparison with delta tracking"
+    "name": "update_test_case",
+    "description": "(Beta) Partially update an existing Test Case by numeric ID or string key (PATCH). Accepts { file_path } in attachments for local file upload. Requires preview approval."
   },
   {
-    "name": "find_flaky_tests",
-    "description": "Find flaky tests across launches using a 3-phase approach: cross-launch flip-flop analysis, manual test case scan via TCM execution history, and dual-perspective enrichment of top flaky tests with TCM data"
+    "name": "update_test_suite",
+    "description": "(Beta) Update an existing Test Suite (full PUT replacement). Requires preview approval before execution."
   },
   {
-    "name": "generate_report",
-    "description": "Universal report generator supporting 6 report types: quality_dashboard (HTML+Markdown with 6 panels), coverage (per-suite test coverage table), pass_rate (per-platform with targets), runtime_efficiency (with delta vs previous milestone), executive_dashboard (standup-ready combined report), release_readiness (Go/No-Go assessment). Can generate single or multiple reports per call."
+    "name": "validate_test_case",
+    "description": "Validate test case quality against best practices"
   }
 ]
-
-

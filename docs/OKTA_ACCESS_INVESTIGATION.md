@@ -837,7 +837,7 @@ Docker deployment uses the same STDIO transport with environment-variable creden
 servers:
   zebrunner-mcp:
     name: "Zebrunner MCP"
-    version: "7.0.1"
+    version: "7.1.1"
     image: "msarychau/mcp-zebrunner:latest"
     transport: "stdio"
     env:
