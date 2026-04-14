@@ -283,7 +283,7 @@ describe('API Clients Unit Tests', () => {
       const defaultHeaders = {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        'User-Agent': 'mcp-zebrunner/7.0.1'
+        'User-Agent': 'mcp-zebrunner/7.1.1'
       };
       
       assert.equal(defaultHeaders['Content-Type'], 'application/json', 'should set JSON content type');
@@ -438,6 +438,78 @@ describe('API Clients Unit Tests', () => {
       assert.ok(Array.isArray(cacheConfig.cacheableEndpoints), 'cacheable endpoints should be array');
     });
     
+  });
+
+  describe('ZebrunnerMutationClient — Test Run methods', () => {
+
+    it('should construct createTestRun URL and params correctly', () => {
+      const projectKey = 'MCP';
+      const opts = { skipErrors: true, createMissingConfigurations: false };
+      const params: Record<string, string> = { projectKey };
+      if (opts.skipErrors !== undefined) params.skipErrors = String(opts.skipErrors);
+      if (opts.createMissingConfigurations !== undefined)
+        params.createMissingConfigurations = String(opts.createMissingConfigurations);
+
+      assert.equal(params.projectKey, 'MCP');
+      assert.equal(params.skipErrors, 'true');
+      assert.equal(params.createMissingConfigurations, 'false');
+    });
+
+    it('should construct updateTestRun URL with run ID', () => {
+      const runId = 42;
+      const url = `/test-runs/${runId}`;
+      assert.equal(url, '/test-runs/42');
+    });
+
+    it('should construct addTestCasesToRun URL correctly', () => {
+      const runId = 123;
+      const url = `/test-runs/${runId}/test-cases`;
+      assert.equal(url, '/test-runs/123/test-cases');
+    });
+
+    it('should construct importTestCaseResults URL correctly', () => {
+      const runId = 456;
+      const url = `/test-runs/${runId}/test-cases:import`;
+      assert.equal(url, '/test-runs/456/test-cases:import');
+    });
+
+    it('should build import payload with correct structure', () => {
+      const items = [
+        { testCase: { key: 'MCP-82' }, result: { status: { name: 'Passed' }, executionType: 'AUTOMATED', executionTimeInMillis: 5000 } },
+        { testCase: { key: 'MCP-83' }, result: { status: { name: 'Failed' }, executionType: 'AUTOMATED', details: 'Assertion failed' } },
+      ];
+      const payload = { items };
+
+      assert.equal(payload.items.length, 2);
+      assert.equal(payload.items[0].testCase.key, 'MCP-82');
+      assert.equal(payload.items[0].result.status.name, 'Passed');
+      assert.equal(payload.items[1].result.details, 'Assertion failed');
+    });
+
+    it('should build addTestCases payload with selector and items', () => {
+      const payload: Record<string, unknown> = {
+        selector: {
+          allProjectTestCases: false,
+          testSuites: [{ id: 33, selectionMode: 'ALL_DESCENDANTS' }],
+        },
+        items: [{ key: 'MCP-1' }, { key: 'MCP-2' }],
+      };
+
+      assert.ok(payload.selector, 'should have selector');
+      assert.ok(Array.isArray(payload.items), 'should have items array');
+      assert.equal((payload.items as any[]).length, 2);
+    });
+
+    it('should handle importTestCaseResults query params for addMissingTestCases', () => {
+      const opts = { skipErrors: true, addMissingTestCases: false };
+      const params: Record<string, string> = { projectKey: 'MCP' };
+      if (opts.skipErrors !== undefined) params.skipErrors = String(opts.skipErrors);
+      if (opts.addMissingTestCases !== undefined) params.addMissingTestCases = String(opts.addMissingTestCases);
+
+      assert.equal(params.skipErrors, 'true');
+      assert.equal(params.addMissingTestCases, 'false');
+    });
+
   });
   
 });

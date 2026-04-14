@@ -537,6 +537,8 @@ Weekly stability report for project MCP using:
 ## Mutation Tools (Beta)
 
 > **Safety Model:** All mutation tools follow a two-call confirmation gate. The first call (without `confirm: true`) returns a preview of the planned action. Only after user approval should the tool be called again with `confirm: true` to execute. An audit log is written to `~/.mcp-zebrunner-audit.jsonl` before every mutation. Use `dry_run: true` for raw payload inspection without any validation.
+>
+> **Next-step guidance:** All mutation tool success responses include just-in-time steering hints that suggest logical follow-up actions (e.g., validate quality, publish a draft, populate a test run). Conditional hints are suppressed when redundant (e.g., quality check hint is skipped if `review: true` was already used).
 
 ### `create_test_suite`
 
@@ -640,6 +642,75 @@ Weekly stability report for project MCP using:
 - "Change automation state to 'Automated' for test case 12345 in project android"
 - "Move test case MCP-100 to suite 18824"
 - "Attach /Users/me/screenshot.png to test case MCP-42"
+
+### `manage_test_run`
+
+**Description:** (Beta) Create, update, or add test cases to a Zebrunner Test Run. Requires Engineer role or higher.
+
+**Actions:**
+
+| Action | Description |
+|--------|-------------|
+| `create` | Create a new (empty) test run. Requires `title`. Returns 201 with created run. |
+| `update` | Partial update (PATCH) of an existing test run. Only provided fields change. WARNING: `configurations` is atomic — replaces all existing. Returns 200. |
+| `add_cases` | Add test cases to an existing run by keys, suite IDs, or all project cases. Returns 204 No Content. |
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `action` | `"create"` / `"update"` / `"add_cases"` | yes | Action to perform. |
+| `project_key` | string | * | Project key (e.g., 'MCP'). Provide this or `project_id`. |
+| `project_id` | number | * | Numeric project ID. |
+| `test_run_id` | number | update/add_cases | Test Run ID. Required for update and add_cases. |
+| `title` | string | create | Test run title (1-255 chars). Required for create. |
+| `description` | string | | Test run description (max 10,000 chars). |
+| `milestone` | `{id}` or `{name}` | | Milestone reference. Use `get_test_run_configuration_groups` to discover values. |
+| `environment` | `{key}` | | Environment reference (e.g., `{ key: "pre-prod" }`). |
+| `configurations` | array | | Configuration group/option pairs. ATOMIC on update — replaces all. Max 100. |
+| `requirements` | array | | JIRA or AZURE_DEVOPS requirement references. |
+| `test_case_keys` | string[] | add_cases | Test case keys to add (e.g., `["MCP-82"]`). |
+| `test_suite_ids` | array | add_cases | Suites to add with `{id, selectionMode}`. |
+| `all_project_test_cases` | boolean | add_cases | If true, adds ALL project test cases. |
+| `skip_errors` | boolean | | Tolerate non-fatal errors. Default: true. |
+| `create_missing_configurations` | boolean | | Auto-create missing config groups/options. API default: true. |
+| `dry_run` | boolean | | Raw payload inspection. |
+| `confirm` | boolean | | Must be true to execute. |
+
+**Example Prompts:**
+- "Create a test run called 'Sprint 42 Regression' in project MCP"
+- "Create a test run 'Browser Matrix' with configurations Browser:Chrome and Browser:Firefox in project MCP"
+- "Update test run 123 in project MCP to set the milestone to 'Release 3.0'"
+- "Add test cases MCP-1, MCP-2, MCP-3 to test run 123 in project MCP"
+- "Add all test cases from suite 456 to test run 123 in project MCP"
+
+### `import_launch_results_to_test_run`
+
+**Description:** (Beta) Import automation launch results into a TCM Test Run. Bridges the Reporting API (launches/tests) to the Public API (test runs/test cases). Reads test results from a launch, maps test case keys and statuses, and imports them via the `:import` endpoint.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `project_key` | string | * | Project key. Provide this or `project_id`. |
+| `project_id` | number | * | Numeric project ID. |
+| `test_run_id` | number | yes | TCM Test Run ID to import results into. |
+| `launch_id` | number | yes | Reporting API Launch ID to pull results from. |
+| `test_case_keys` | string[] | | Filter: only import these test case keys. Omit for all. |
+| `status_mapping` | object | | Custom status overrides (e.g., `{ "ABORTED": "Skipped" }`). |
+| `execution_type` | `"MANUAL"` / `"AUTOMATED"` | | Execution type for results. Default: AUTOMATED. |
+| `add_missing_test_cases` | boolean | | Auto-add test cases not in the run. Default: false (safety). |
+| `skip_errors` | boolean | | Tolerate non-fatal errors. Default: true. |
+| `include_details` | boolean | | Carry over test error messages. Default: true. |
+| `dry_run` | boolean | | Raw payload inspection. |
+| `confirm` | boolean | | Must be true to execute. |
+
+**Default Status Mapping:** PASSED→Passed, FAILED→Failed, SKIPPED→Skipped, ABORTED→Blocked. Tests with IN_PROGRESS status are skipped.
+
+**Example Prompts:**
+- "Import results from launch 98765 into test run 123 for project MCP"
+- "Import only MCP-82 and MCP-83 results from launch 98765 to test run 123"
+- "Sync launch 45000 results to test run 789 in project MCP, map ABORTED to Skipped"
 
 ---
 
