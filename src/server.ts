@@ -44,6 +44,7 @@ import {
 // Mutation tools imports
 import { ZebrunnerMutationClient } from "./api/mutation-client.js";
 import { writeAuditLog } from "./helpers/audit.js";
+import { steeringHint } from "./helpers/steering.js";
 import { computeDiff, formatDiff } from "./helpers/diff.js";
 // Pre-validation removed from the hot path — the API validates server-side.
 // On error, we enrich the message with valid options to help the user fix the request.
@@ -949,7 +950,7 @@ async function main() {
   const server = new McpServer(
     {
       name: "mcp-zebrunner",
-      version: "7.0.1"
+      version: "7.1.1"
     },
     {
       capabilities: {
@@ -3504,7 +3505,8 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
             `ID: ${suite.id}\nTitle: ${suite.title}\n` +
             `Parent: ${createdParent}\n` +
             `Position: ${suite.relativePosition ?? "N/A"}\n\n` +
-            `Full record:\n${JSON.stringify(suite, null, 2)}`
+            `Full record:\n${JSON.stringify(suite, null, 2)}` +
+            steeringHint("create_test_suite", { id: suite.id as number })
           }]
         };
       } catch (error: any) {
@@ -3668,6 +3670,588 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
     z.object({ id: z.number().int().positive() }),
     z.object({ name: z.string().min(1) }),
   ]);
+
+  // ========== manage_test_run (Beta) ==========
+
+  const TestRunConfigurationSchema = z.object({
+    group: IdOrName.describe("Configuration group — provide { id } or { name }"),
+    option: IdOrName.describe("Configuration option — provide { id } or { name }"),
+  });
+
+  const TestRunRequirementSchema = z.object({
+    source: z.enum(["JIRA", "AZURE_DEVOPS"]).describe("External system type"),
+    reference: z.string().min(1).describe("Issue/requirement ID (e.g., 'ZEB-1703')"),
+  });
+
+  const TestSuiteSelectorSchema = z.object({
+    id: z.number().int().positive().describe("Test Suite ID"),
+    selectionMode: z.enum(["IMMEDIATE", "ALL_DESCENDANTS"]).default("ALL_DESCENDANTS")
+      .describe("IMMEDIATE = direct children only; ALL_DESCENDANTS = full subtree"),
+  });
+
+  const ManageTestRunSchema = z.object({
+    action: z.enum(["create", "update", "add_cases"])
+      .describe("Action to perform: create a new test run, update an existing one, or add test cases to a run."),
+    project_key: z.string().min(1).optional()
+      .describe("Project key (e.g., 'MCP'). Provide either this or project_id."),
+    project_id: z.number().int().positive().optional()
+      .describe("Project numeric ID. Provide either this or project_key."),
+    test_run_id: z.number().int().positive().optional()
+      .describe("Test Run ID. Required for 'update' and 'add_cases' actions."),
+    title: z.string().min(1).max(255).optional()
+      .describe("Test run title. Required for 'create'. Optional for 'update' (PATCH — only provided fields change)."),
+    description: z.string().max(10000).optional()
+      .describe("Test run description. Max 10,000 characters."),
+    milestone: IdOrName.optional()
+      .describe("Milestone — provide { id } or { name } of an existing milestone."),
+    environment: z.object({ key: z.string().min(1) }).optional()
+      .describe("Environment — provide { key } (e.g., 'pre-prod')."),
+    configurations: z.array(TestRunConfigurationSchema).max(100).optional()
+      .describe("Configuration group/option pairs. WARNING on update: this list is ATOMIC — it REPLACES all existing configurations."),
+    requirements: z.array(TestRunRequirementSchema).optional()
+      .describe("Linked requirements (JIRA / AZURE_DEVOPS references)."),
+    test_case_keys: z.array(z.string().min(1)).optional()
+      .describe("Test case keys to add (e.g., ['MCP-82','MCP-83']). Only for 'add_cases' action."),
+    test_suite_ids: z.array(TestSuiteSelectorSchema).optional()
+      .describe("Test suites whose cases should be added. Only for 'add_cases' action."),
+    all_project_test_cases: z.boolean().optional()
+      .describe("If true, add ALL project test cases to the run. Only for 'add_cases' action."),
+    skip_errors: BoolParam.describe("Tolerate non-fatal errors (e.g., unknown milestone). Default: true."),
+    create_missing_configurations: BoolParam.optional()
+      .describe("Auto-create configuration groups/options that don't exist. API default: true."),
+    dry_run: BoolParam.describe("If true, returns raw payload for debugging (skips validation)."),
+    confirm: BoolParam.describe("Must be true to execute. Without it, returns a preview for user approval."),
+    confirmation_token: z.string().optional()
+      .describe("Token returned by the preview step. Required when confirm is true."),
+  });
+
+  server.registerTool(
+    "manage_test_run",
+    {
+      description: `🏃 (Beta) Create, update, or add test cases to a Zebrunner Test Run.
+Requires Engineer role or higher in the target project.
+
+ACTIONS:
+  create   — Create a new (empty) test run. Requires 'title'.
+  update   — Partial update (PATCH) of an existing test run. Only provided fields change.
+             WARNING: 'configurations' is atomic — providing it REPLACES ALL existing configs.
+  add_cases — Add test cases to an existing test run by keys, suite IDs, or all project cases.
+
+Use 'get_test_run_configuration_groups' and 'get_test_run_result_statuses' to discover valid configuration values.
+
+TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + confirmation_token. 2) After user approval, call with ONLY confirm: true and the confirmation_token. The full payload is stored server-side — do NOT re-send other fields.`,
+      inputSchema: ManageTestRunSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async (args) => {
+      try {
+        if (args.confirm) {
+          const restored = validateAndRestoreArgs(args);
+          if ("error" in restored) return { content: [{ type: "text" as const, text: restored.error }] };
+        }
+
+        if (!args.project_key && !args.project_id) {
+          return { content: [{ type: "text" as const, text: "❌ Either project_key or project_id must be provided" }] };
+        }
+        const projectKey = args.project_key || String(args.project_id);
+
+        const opts: { skipErrors?: boolean; createMissingConfigurations?: boolean } = {};
+        if (args.skip_errors !== undefined) opts.skipErrors = !!args.skip_errors;
+        if (args.create_missing_configurations !== undefined) opts.createMissingConfigurations = !!args.create_missing_configurations;
+
+        // ─── ACTION: CREATE ───
+        if (args.action === "create") {
+          if (!args.title) {
+            return { content: [{ type: "text" as const, text: "❌ title is required for action 'create'" }] };
+          }
+          const payload: Record<string, unknown> = { title: args.title };
+          if (args.description !== undefined) payload.description = args.description;
+          if (args.milestone !== undefined) payload.milestone = args.milestone;
+          if (args.environment !== undefined) payload.environment = args.environment;
+          if (args.configurations !== undefined) payload.configurations = args.configurations;
+          if (args.requirements !== undefined) payload.requirements = args.requirements;
+
+          const url = `/test-runs?projectKey=${encodeURIComponent(projectKey)}`;
+
+          if (args.dry_run) {
+            return { content: [{ type: "text" as const, text:
+              `DRY RUN — manage_test_run (create)\nPOST ${url}\n\nPayload:\n${JSON.stringify(payload, null, 2)}`
+            }] };
+          }
+
+          if (!args.confirm) {
+            const token = generateConfirmationToken(JSON.stringify(args));
+            const lines = [
+              `📋 Preview — manage_test_run (create)`,
+              `POST ${url}\n`,
+              `Fields to be set:`,
+              `  title            → ${args.title}`,
+            ];
+            if (args.description !== undefined) lines.push(`  description      → ${args.description.slice(0, 80)}${args.description.length > 80 ? "..." : ""}`);
+            if (args.milestone !== undefined) lines.push(`  milestone        → ${JSON.stringify(args.milestone)}`);
+            if (args.environment !== undefined) lines.push(`  environment      → ${JSON.stringify(args.environment)}`);
+            if (args.configurations !== undefined) lines.push(`  configurations   → ${args.configurations.length} config(s)`);
+            if (args.requirements !== undefined) lines.push(`  requirements     → ${args.requirements.length} requirement(s)`);
+            lines.push("");
+            lines.push(`Payload:\n${JSON.stringify(payload, null, 2)}`);
+            lines.push("");
+            lines.push(`confirmation_token: ${token}`);
+            lines.push(`⚠️ To proceed, call again with ONLY: { "confirm": true, "confirmation_token": "${token}" }`);
+            return { content: [{ type: "text" as const, text: lines.join("\n") }] };
+          }
+
+          writeAuditLog({
+            timestamp: new Date().toISOString(),
+            tool: "manage_test_run",
+            method: "POST",
+            url,
+            projectKey,
+            payload,
+          });
+
+          const body = await mutationClient.createTestRun(projectKey, payload, opts);
+          const run = body.data;
+          return { content: [{ type: "text" as const, text:
+            `✅ Test Run created successfully\n` +
+            `ID: ${run.id}\nTitle: ${run.title}\nClosed: ${run.closed}\n` +
+            `Created by: ${(run.createdBy as any)?.username ?? "N/A"}\n\n` +
+            `Full record:\n${JSON.stringify(run, null, 2)}` +
+            steeringHint("manage_test_run_create", { id: run.id as number })
+          }] };
+        }
+
+        // ─── ACTION: UPDATE ───
+        if (args.action === "update") {
+          if (!args.test_run_id) {
+            return { content: [{ type: "text" as const, text: "❌ test_run_id is required for action 'update'" }] };
+          }
+          const payload: Record<string, unknown> = {};
+          if (args.title !== undefined) payload.title = args.title;
+          if (args.description !== undefined) payload.description = args.description;
+          if (args.milestone !== undefined) payload.milestone = args.milestone;
+          if (args.environment !== undefined) payload.environment = args.environment;
+          if (args.configurations !== undefined) payload.configurations = args.configurations;
+          if (args.requirements !== undefined) payload.requirements = args.requirements;
+
+          if (Object.keys(payload).length === 0) {
+            return { content: [{ type: "text" as const, text: "❌ No fields provided to update. Supply at least one of: title, description, milestone, environment, configurations, requirements." }] };
+          }
+
+          const url = `/test-runs/${args.test_run_id}?projectKey=${encodeURIComponent(projectKey)}`;
+
+          if (args.dry_run) {
+            return { content: [{ type: "text" as const, text:
+              `DRY RUN — manage_test_run (update)\nPATCH ${url}\n\nPayload:\n${JSON.stringify(payload, null, 2)}`
+            }] };
+          }
+
+          if (!args.confirm) {
+            const lines = [
+              `📋 Preview — manage_test_run (update)`,
+              `PATCH ${url}\n`,
+              `Fields to be updated:`,
+            ];
+            if (args.title !== undefined) lines.push(`  title            → ${args.title}`);
+            if (args.description !== undefined) lines.push(`  description      → ${args.description.slice(0, 80)}${args.description.length > 80 ? "..." : ""}`);
+            if (args.milestone !== undefined) lines.push(`  milestone        → ${JSON.stringify(args.milestone)}`);
+            if (args.environment !== undefined) lines.push(`  environment      → ${JSON.stringify(args.environment)}`);
+            if (args.configurations !== undefined) {
+              lines.push(`  configurations   → ${args.configurations.length} config(s)`);
+              lines.push(`  ⚠️ WARNING: configurations is ATOMIC — this will REPLACE ALL existing configurations!`);
+            }
+            if (args.requirements !== undefined) lines.push(`  requirements     → ${args.requirements.length} requirement(s)`);
+            lines.push("");
+            lines.push(`Payload:\n${JSON.stringify(payload, null, 2)}`);
+            lines.push("");
+            const token = generateConfirmationToken(JSON.stringify(args));
+            lines.push(`confirmation_token: ${token}`);
+            lines.push(`⚠️ To proceed, call again with ONLY: { "confirm": true, "confirmation_token": "${token}" }`);
+            return { content: [{ type: "text" as const, text: lines.join("\n") }] };
+          }
+
+          writeAuditLog({
+            timestamp: new Date().toISOString(),
+            tool: "manage_test_run",
+            method: "PATCH",
+            url,
+            projectKey,
+            payload,
+          });
+
+          const body = await mutationClient.updateTestRun(projectKey, args.test_run_id, payload, opts);
+          const run = body.data;
+          return { content: [{ type: "text" as const, text:
+            `✅ Test Run updated successfully\n` +
+            `ID: ${run.id}\nTitle: ${run.title}\nClosed: ${run.closed}\n\n` +
+            `Full updated record:\n${JSON.stringify(run, null, 2)}` +
+            steeringHint("manage_test_run_update", { id: run.id as number })
+          }] };
+        }
+
+        // ─── ACTION: ADD_CASES ───
+        if (args.action === "add_cases") {
+          if (!args.test_run_id) {
+            return { content: [{ type: "text" as const, text: "❌ test_run_id is required for action 'add_cases'" }] };
+          }
+          if (!args.test_case_keys?.length && !args.test_suite_ids?.length && !args.all_project_test_cases) {
+            return { content: [{ type: "text" as const, text: "❌ Provide at least one of: test_case_keys, test_suite_ids, or all_project_test_cases" }] };
+          }
+
+          const payload: Record<string, unknown> = {};
+          const selector: Record<string, unknown> = {};
+          if (args.all_project_test_cases) selector.allProjectTestCases = true;
+          if (args.test_suite_ids?.length) {
+            selector.testSuites = args.test_suite_ids.map(s => ({
+              id: s.id,
+              selectionMode: s.selectionMode,
+            }));
+          }
+          if (Object.keys(selector).length > 0) payload.selector = selector;
+          if (args.test_case_keys?.length) {
+            payload.items = args.test_case_keys.map(k => ({ key: k }));
+          }
+
+          const url = `/test-runs/${args.test_run_id}/test-cases?projectKey=${encodeURIComponent(projectKey)}`;
+
+          if (args.dry_run) {
+            return { content: [{ type: "text" as const, text:
+              `DRY RUN — manage_test_run (add_cases)\nPOST ${url}\n\nPayload:\n${JSON.stringify(payload, null, 2)}`
+            }] };
+          }
+
+          if (!args.confirm) {
+            const lines = [
+              `📋 Preview — manage_test_run (add_cases)`,
+              `POST ${url}\n`,
+              `Test cases to add to run ${args.test_run_id}:`,
+            ];
+            if (args.all_project_test_cases) lines.push(`  • ALL project test cases`);
+            if (args.test_suite_ids?.length) {
+              lines.push(`  • From ${args.test_suite_ids.length} suite(s):`);
+              args.test_suite_ids.forEach(s => lines.push(`    - Suite ${s.id} (${s.selectionMode})`));
+            }
+            if (args.test_case_keys?.length) {
+              lines.push(`  • ${args.test_case_keys.length} specific test case(s): ${args.test_case_keys.join(", ")}`);
+            }
+            lines.push("");
+            lines.push(`Payload:\n${JSON.stringify(payload, null, 2)}`);
+            lines.push("");
+            const token = generateConfirmationToken(JSON.stringify(args));
+            lines.push(`confirmation_token: ${token}`);
+            lines.push(`⚠️ To proceed, call again with ONLY: { "confirm": true, "confirmation_token": "${token}" }`);
+            return { content: [{ type: "text" as const, text: lines.join("\n") }] };
+          }
+
+          writeAuditLog({
+            timestamp: new Date().toISOString(),
+            tool: "manage_test_run",
+            method: "POST",
+            url,
+            projectKey,
+            payload,
+          });
+
+          await mutationClient.addTestCasesToRun(projectKey, args.test_run_id, payload);
+
+          let verificationText = "";
+          try {
+            const updated = await client.listPublicTestRunTestCases({
+              testRunId: args.test_run_id,
+              projectKey,
+            });
+            verificationText = `\nVerification: Test run now contains ${updated.items.length} test case(s).`;
+          } catch {
+            verificationText = "\n⚠️ Could not verify updated test case count.";
+          }
+
+          return { content: [{ type: "text" as const, text:
+            `✅ Test cases added to run ${args.test_run_id} successfully (204 No Content).${verificationText}` +
+            steeringHint("manage_test_run_add_cases", { id: args.test_run_id })
+          }] };
+        }
+
+        return { content: [{ type: "text" as const, text: `❌ Unknown action: ${args.action}. Use 'create', 'update', or 'add_cases'.` }] };
+      } catch (error: any) {
+        const hint = error.statusCode === 409
+          ? "\nHint: A concurrent modification is in progress. Wait a moment and retry."
+          : error.statusCode === 404
+          ? "\nHint: Test run or referenced resource not found."
+          : error.statusCode === 412
+          ? "\nHint: Pre-condition failed (e.g., test run is closed)."
+          : "";
+        return { content: [{ type: "text" as const, text:
+          `❌ Error in manage_test_run (${args.action}): ${error.message}${hint}`
+        }] };
+      }
+    }
+  );
+
+  // ========== import_launch_results_to_test_run (Beta) ==========
+
+  const DEFAULT_STATUS_MAP: Record<string, string> = {
+    PASSED: "Passed",
+    FAILED: "Failed",
+    SKIPPED: "Skipped",
+    ABORTED: "Blocked",
+  };
+
+  const ImportLaunchResultsSchema = z.object({
+    project_key: z.string().min(1).optional()
+      .describe("Project key (e.g., 'MCP'). Provide either this or project_id."),
+    project_id: z.number().int().positive().optional()
+      .describe("Project numeric ID. Provide either this or project_key."),
+    test_run_id: z.number().int().positive().optional()
+      .describe("TCM Test Run ID to import results into. Required for preview, auto-restored for confirm."),
+    launch_id: z.number().int().positive().optional()
+      .describe("Reporting API Launch ID to pull results from. Required for preview, auto-restored for confirm."),
+    test_case_keys: z.array(z.string()).optional()
+      .describe("Filter: only import results for these test case keys. Omit to import all mapped cases."),
+    status_mapping: z.record(z.string(), z.string()).optional()
+      .describe("Custom status overrides, e.g. { 'ABORTED': 'Skipped' }. Keys are Reporting statuses (PASSED/FAILED/SKIPPED/ABORTED), values are TCM status names."),
+    execution_type: z.enum(["MANUAL", "AUTOMATED"]).default("AUTOMATED")
+      .describe("Execution type to assign to imported results."),
+    add_missing_test_cases: BoolParam
+      .describe("If true, test cases from the launch not already in the run will be added. Default: false (safety)."),
+    skip_errors: BoolParam.describe("Tolerate non-fatal errors during import. Default: true."),
+    include_details: BoolParam.describe("Carry over test error messages as result details. Default: true."),
+    dry_run: BoolParam.describe("If true, returns raw payload for debugging (skips validation)."),
+    confirm: BoolParam.describe("Must be true to execute. Without it, returns a preview for user approval."),
+    confirmation_token: z.string().optional()
+      .describe("Token returned by the preview step. Required when confirm is true."),
+  });
+
+  server.registerTool(
+    "import_launch_results_to_test_run",
+    {
+      description: `📊 (Beta) Import automation launch results into a TCM Test Run.
+
+Bridges the Reporting API (launches/tests) to the Public API (test runs/test cases).
+Reads test results from a launch, maps test case keys and statuses, and imports them
+into the specified test run via the :import endpoint.
+
+Default status mapping: PASSED→Passed, FAILED→Failed, SKIPPED→Skipped, ABORTED→Blocked.
+Override with 'status_mapping'. Tests with IN_PROGRESS status are skipped.
+
+Safety: 'add_missing_test_cases' defaults to false — only test cases already in the run are updated.
+Set to true to auto-add new test cases from the launch.
+
+TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + confirmation_token. 2) After user approval, call with ONLY confirm: true and the confirmation_token. The full payload is stored server-side — do NOT re-send other fields.`,
+      inputSchema: ImportLaunchResultsSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async (args) => {
+      try {
+        if (args.confirm) {
+          const restored = validateAndRestoreArgs(args);
+          if ("error" in restored) return { content: [{ type: "text" as const, text: restored.error }] };
+        }
+
+        if (!args.project_key && !args.project_id) {
+          return { content: [{ type: "text" as const, text: "❌ Either project_key or project_id must be provided" }] };
+        }
+        if (!args.test_run_id) {
+          return { content: [{ type: "text" as const, text: "❌ test_run_id is required" }] };
+        }
+        if (!args.launch_id) {
+          return { content: [{ type: "text" as const, text: "❌ launch_id is required" }] };
+        }
+        const projectKey = args.project_key || String(args.project_id);
+
+        // Resolve numeric project ID for Reporting API
+        const numericProjectId = await reportingClient.getProjectId(projectKey);
+
+        // Fetch all tests from the launch
+        const launchTests = await reportingClient.getAllTestRuns(args.launch_id, numericProjectId);
+
+        // Build test-case-key → result map from launch data
+        const statusMap = { ...DEFAULT_STATUS_MAP, ...(args.status_mapping || {}) };
+        const tcResultMap = new Map<string, {
+          status: string; mappedStatus: string; durationMs: number | null;
+          details: string | null; testName: string;
+        }>();
+
+        for (const test of launchTests.items) {
+          const linkedCases = (test as any).testCases || [];
+          for (const tc of linkedCases) {
+            const tcKey = tc.testCaseId as string;
+            if (!tcKey) continue;
+
+            const rawStatus = ((test as any).status || "").toUpperCase();
+            if (rawStatus === "IN_PROGRESS") continue;
+
+            const mapped = statusMap[rawStatus];
+            if (!mapped) continue;
+
+            const startTime = (test as any).startTime as number | undefined;
+            const finishTime = (test as any).finishTime as number | undefined;
+            const durationMs = startTime && finishTime ? finishTime - startTime : null;
+            const details = args.include_details && (test as any).message ? String((test as any).message) : null;
+
+            tcResultMap.set(tcKey, {
+              status: rawStatus,
+              mappedStatus: mapped,
+              durationMs,
+              details,
+              testName: (test as any).name || "Unknown",
+            });
+          }
+        }
+
+        // Filter by requested keys
+        if (args.test_case_keys?.length) {
+          const allowed = new Set(args.test_case_keys);
+          for (const key of tcResultMap.keys()) {
+            if (!allowed.has(key)) tcResultMap.delete(key);
+          }
+        }
+
+        if (tcResultMap.size === 0) {
+          return { content: [{ type: "text" as const, text:
+            `⚠️ No mappable test case results found in launch ${args.launch_id}.\n` +
+            `Total tests in launch: ${launchTests.items.length}\n` +
+            `Ensure launch tests have linked test case keys (testCases[].testCaseId).`
+          }] };
+        }
+
+        // Pre-flight: fetch current test run contents
+        let runTestCases: Array<{ testCase: { key: string }; result?: { status?: { name: string } } | null }> = [];
+        try {
+          const runData = await client.listPublicTestRunTestCases({ testRunId: args.test_run_id, projectKey });
+          runTestCases = runData.items as any[];
+        } catch {
+          // non-fatal — proceed without pre-flight validation
+        }
+
+        const runKeys = new Set(runTestCases.map(tc => tc.testCase.key));
+
+        // Categorize
+        const matched: Array<{ key: string; currentStatus: string; newStatus: string; durationMs: number | null; testName: string }> = [];
+        const notInRun: string[] = [];
+        for (const [key, result] of tcResultMap) {
+          if (runKeys.has(key)) {
+            const current = runTestCases.find(tc => tc.testCase.key === key);
+            matched.push({
+              key,
+              currentStatus: current?.result?.status?.name || "Untested",
+              newStatus: result.mappedStatus,
+              durationMs: result.durationMs,
+              testName: result.testName,
+            });
+          } else {
+            notInRun.push(key);
+          }
+        }
+
+        // Build import payload
+        const importItems: Array<Record<string, unknown>> = [];
+        for (const [key, result] of tcResultMap) {
+          if (!args.add_missing_test_cases && !runKeys.has(key)) continue;
+
+          const item: Record<string, unknown> = {
+            testCase: { key },
+            result: {
+              status: { name: result.mappedStatus },
+              executionType: args.execution_type,
+              ...(result.durationMs != null ? { executionTimeInMillis: result.durationMs } : {}),
+              ...(result.details ? { details: result.details.slice(0, 10000) } : {}),
+            },
+          };
+          importItems.push(item);
+        }
+
+        const importPayload = { items: importItems };
+        const url = `/test-runs/${args.test_run_id}/test-cases:import?projectKey=${encodeURIComponent(projectKey)}`;
+
+        if (args.dry_run) {
+          return { content: [{ type: "text" as const, text:
+            `DRY RUN — import_launch_results_to_test_run\nPOST ${url}\n\nPayload (${importItems.length} items):\n${JSON.stringify(importPayload, null, 2)}`
+          }] };
+        }
+
+        if (!args.confirm) {
+          const lines = [
+            `📋 Preview — import_launch_results_to_test_run`,
+            `POST ${url}\n`,
+            `Launch ${args.launch_id} → Test Run ${args.test_run_id} (project: ${projectKey})\n`,
+            `Status mapping: ${Object.entries(statusMap).map(([k, v]) => `${k}→${v}`).join(", ")}\n`,
+            `Results to import (${importItems.length} test case(s)):\n`,
+          ];
+
+          if (matched.length > 0) {
+            lines.push(`  In run (will be updated): ${matched.length}`);
+            for (const m of matched.slice(0, 30)) {
+              const dur = m.durationMs != null ? ` (${Math.round(m.durationMs / 1000)}s)` : "";
+              const change = m.currentStatus !== m.newStatus ? ` [${m.currentStatus} → ${m.newStatus}]` : ` [${m.newStatus} unchanged]`;
+              lines.push(`    ${m.key}${change}${dur} — ${m.testName}`);
+            }
+            if (matched.length > 30) lines.push(`    ... and ${matched.length - 30} more`);
+          }
+
+          if (notInRun.length > 0) {
+            if (args.add_missing_test_cases) {
+              lines.push(`\n  Not in run (will be added): ${notInRun.length} — ${notInRun.slice(0, 10).join(", ")}${notInRun.length > 10 ? "..." : ""}`);
+            } else {
+              lines.push(`\n  Not in run (will be SKIPPED — add_missing_test_cases is false): ${notInRun.length} — ${notInRun.slice(0, 10).join(", ")}${notInRun.length > 10 ? "..." : ""}`);
+            }
+          }
+
+          lines.push("");
+          const token = generateConfirmationToken(JSON.stringify(args));
+          lines.push(`confirmation_token: ${token}`);
+          lines.push(`⚠️ To proceed, call again with ONLY: { "confirm": true, "confirmation_token": "${token}" }`);
+          return { content: [{ type: "text" as const, text: lines.join("\n") }] };
+        }
+
+        // Confirm — execute import
+        writeAuditLog({
+          timestamp: new Date().toISOString(),
+          tool: "import_launch_results_to_test_run",
+          method: "POST",
+          url,
+          projectKey,
+          payload: { launchId: args.launch_id, testRunId: args.test_run_id, itemCount: importItems.length },
+        });
+
+        const importOpts = {
+          skipErrors: args.skip_errors !== false,
+          addMissingTestCases: !!args.add_missing_test_cases,
+        };
+        const result = await mutationClient.importTestCaseResults(projectKey, args.test_run_id, importPayload, importOpts);
+
+        const items = result.items || [];
+        const succeeded = items.filter((i: any) => i.succeeded);
+        const failed = items.filter((i: any) => !i.succeeded);
+
+        const lines = [
+          `✅ Import completed: ${succeeded.length} succeeded, ${failed.length} failed out of ${items.length} total.\n`,
+        ];
+
+        if (failed.length > 0) {
+          lines.push(`Failed items:`);
+          for (const f of failed.slice(0, 20)) {
+            lines.push(`  ${(f as any).key}: ${(f as any).error?.reason || "UNKNOWN"} — ${(f as any).error?.message || ""}`);
+          }
+          if (failed.length > 20) lines.push(`  ... and ${failed.length - 20} more`);
+        }
+
+        return { content: [{ type: "text" as const, text: lines.join("\n") + steeringHint("import_launch_results", { id: args.test_run_id }) }] };
+      } catch (error: any) {
+        return { content: [{ type: "text" as const, text:
+          `❌ Error in import_launch_results_to_test_run: ${error.message}`
+        }] };
+      }
+    }
+  );
 
   const FileRef = z.union([
     z.object({ fileUuid: z.string().uuid().describe("UUID of a previously uploaded file") }),
@@ -3931,6 +4515,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           }
 
           const token = generateConfirmationToken(JSON.stringify(args));
+          previewText += steeringHint("create_test_case_preview", { id: 0 });
           previewText += `\nPayload:\n${JSON.stringify(payload, null, 2)}\n\n` +
             `confirmation_token: ${token}\n` +
             `⚠️ To proceed, call again with ONLY: { "confirm": true, "confirmation_token": "${token}" }`;
@@ -4033,6 +4618,10 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           }
         } else if (!args.review && REVIEW_FILES_AVAILABLE && tc.key) {
           resultText += `\n\n💡 Tip: pass review: true to run a quality review against project rules.`;
+        }
+
+        if (tc.key) {
+          resultText += steeringHint("create_test_case", { id: tc.key as string, reviewUsed: !!args.review });
         }
 
         return {
@@ -4290,6 +4879,10 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           }
         } else if (!args.review && REVIEW_FILES_AVAILABLE && caseKey) {
           resultText += `\n\n💡 Tip: pass review: true to run a quality review against project rules.`;
+        }
+
+        if (caseKey) {
+          resultText += steeringHint("update_test_case", { id: caseKey, reviewUsed: !!args.review });
         }
 
         return {

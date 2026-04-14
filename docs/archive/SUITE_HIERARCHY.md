@@ -1,6 +1,6 @@
 # Suite Hierarchy Enhancement
 
-> **Note:** This is a historical implementation record. The suite hierarchy feature is fully shipped and active in the current version (7.0.1).
+> **Note:** This is a historical implementation record. The suite hierarchy feature is fully shipped and active in the current version (7.1.1).
 
 ## Overview
 

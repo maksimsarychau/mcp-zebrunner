@@ -1,6 +1,6 @@
 # Test Prompts for Zebrunner MCP Tools
 
-> **Version:** 7.0.1
+> **Version:** 7.1.1
 >
 > This document contains 1–3 test prompts per tool with expected behavior, plus end-to-end metric collection prompts. All prompts use generic platform references (iOS / Android / Web) without specific project keys, launch IDs, or milestones.
 
@@ -1049,6 +1049,18 @@ These prompts combine multiple tools to collect real business metrics. The LLM s
 
 All mutation tools use a **two-step confirmation flow**: the first call returns a preview with a `confirmation_token`, and only after user approval does the second call with `confirm: true` execute the mutation. Created test cases are always forced to `draft: true` for safety.
 
+**Next-step steering (v7.1.1):** After every successful mutation, the server appends a `Tip:` block suggesting the most logical follow-up action. This is inspired by the [Strands Agents steering pattern](https://strandsagents.com/blog/steering-accuracy-beats-prompts-workflows/) -- just-in-time guidance delivered at the moment the LLM needs it.
+
+Hints are conditional:
+- `create_test_case` -- always shows draft/publish reminder; quality check hint is skipped if `review: true` was used.
+- `update_test_case` -- quality check hint is skipped if `review: true` was used.
+- `create_test_suite` -- always suggests adding test cases or creating sub-suites.
+- `manage_test_run` create -- always suggests populating the run or importing results.
+- `manage_test_run` add_cases -- always suggests importing results or viewing cases.
+- `import_launch_results_to_test_run` -- always suggests viewing updated statuses.
+
+The `steeringHint()` helper in `src/helpers/steering.ts` is a pure, deterministic function tested by 25 unit tests in `tests/unit/steering-hints.test.ts`. Eval prompts for mutation tools include `expectedOutputPatterns` validating that the `Tip:` markers and suggested tool names appear in the response.
+
 ### `create_test_case`
 
 **Prompt 1 — Create with steps** *(v7.0.0)*
@@ -1075,7 +1087,7 @@ All mutation tools use a **two-step confirmation flow**: the first call returns 
 
 **Expected:** Uses `create_test_case` with `project_key`, `test_suite_id`, `title`, `priority: { name: "High" }`, `description`, `pre_conditions`, `steps` (3), `requirements: [{ source: "JIRA", reference: "PROJ-100" }]`. Preview shows all fields to be set. `draft` is forced to `true` regardless of input.
 
-**Prompt 4 — Draft enforcement** *(v7.0.1)*
+**Prompt 4 — Draft enforcement** *(v7.1.1)*
 > Create a test case titled "Smoke test" in suite 12345 of project MCP with draft set to false.
 
 **Expected:** Uses `create_test_case` with `draft: false`, but the preview shows `draft → true (forced for safety)`. The created test case is always a draft. The user must use `update_test_case` to publish it.
@@ -1097,7 +1109,7 @@ All mutation tools use a **two-step confirmation flow**: the first call returns 
 
 **Expected:** Uses `update_test_case` with `identifier: "MCP-10"`, `project_key: "MCP"`, `steps` (2 steps). The preview should warn that steps use ATOMIC replacement — all existing steps will be replaced.
 
-**Prompt 4 — Publish a draft** *(v7.0.1)*
+**Prompt 4 — Publish a draft** *(v7.1.1)*
 > Set test case MCP-33 in project MCP to draft: false so it becomes published.
 
 **Expected:** Uses `update_test_case` with `identifier: "MCP-33"`, `project_key: "MCP"`, `draft: false`. This is the intended way to publish test cases created via `create_test_case`.
@@ -1126,6 +1138,35 @@ All mutation tools use a **two-step confirmation flow**: the first call returns 
 
 **Expected:** Uses `update_test_suite` with `suite_id: 12345`, `project_key: "MCP"`, `title` (must be provided — fetch current title first if needed), `parent_suite_id` omitted or set to null. The suite becomes a root-level suite.
 
+### `manage_test_run`
+
+**Prompt 1 — Create a test run** *(v7.1.1)*
+> Use manage_test_run to create a test run titled "Sprint 42 Regression" in project MCP.
+
+**Expected:** Uses `manage_test_run` with `action: "create"`, `project_key: "MCP"`, `title: "Sprint 42 Regression"`. Returns preview with title and empty configurations/requirements. Returns `confirmation_token`.
+
+**Prompt 2 — Update a test run milestone** *(v7.1.1)*
+> Use manage_test_run to update test run 42 in project MCP. Change the milestone to "Release 3.0".
+
+**Expected:** Uses `manage_test_run` with `action: "update"`, `project_key: "MCP"`, `test_run_id: 42`, `milestone: { name: "Release 3.0" }`. Preview shows only the milestone field being changed.
+
+**Prompt 3 — Add test cases to a run** *(v7.1.1)*
+> Use manage_test_run to add test cases MCP-1, MCP-2, and MCP-3 to test run 42 in project MCP.
+
+**Expected:** Uses `manage_test_run` with `action: "add_cases"`, `project_key: "MCP"`, `test_run_id: 42`, `test_case_keys: ["MCP-1", "MCP-2", "MCP-3"]`. Preview lists the 3 specific test cases to be added.
+
+### `import_launch_results_to_test_run`
+
+**Prompt 1 — Import all launch results** *(v7.1.1)*
+> Use import_launch_results_to_test_run to import results from launch 98765 into test run 123 for project MCP.
+
+**Expected:** Uses `import_launch_results_to_test_run` with `project_key: "MCP"`, `test_run_id: 123`, `launch_id: 98765`. Preview shows a table of test case keys with current and new statuses.
+
+**Prompt 2 — Import filtered results** *(v7.1.1)*
+> Use import_launch_results_to_test_run to import results only for MCP-82 and MCP-83 from launch 98765 into test run 123.
+
+**Expected:** Uses `import_launch_results_to_test_run` with `project_key: "MCP"`, `test_run_id: 123`, `launch_id: 98765`, `test_case_keys: ["MCP-82", "MCP-83"]`. Only 2 test cases appear in the preview.
+
 ### Mutation safety prompts
 
 **Prompt 1 — Negative: delete test case** *(v7.0.0)*
@@ -1133,7 +1174,29 @@ All mutation tools use a **two-step confirmation flow**: the first call returns 
 
 **Expected:** The LLM should refuse — there is no delete tool. It should explain that deletion is not supported via MCP and suggest using the Zebrunner web UI.
 
-**Prompt 2 — Negative: skip confirmation** *(v7.0.1)*
+**Prompt 2 — Negative: skip confirmation** *(v7.1.1)*
 > Create a test case in project MCP, suite 12345, titled "Quick test". Skip the preview and create it immediately.
 
 **Expected:** The LLM should explain that the two-step confirmation flow cannot be skipped — all mutations require a preview step followed by confirmation with the token. This is a safety requirement.
+
+### Steering hint prompts *(v7.1.1)*
+
+**Prompt 1 — Verify hint after test case creation**
+> Create a test case "Login smoke test" in suite 12345, project MCP. After confirmation, what does the response suggest as next steps?
+
+**Expected:** After successful creation, the response includes a `Tip:` block recommending `validate_test_case` for quality review and a `Note:` about the `draft=true` safety default suggesting `update_test_case` to publish.
+
+**Prompt 2 — Verify hint suppression with review flag**
+> Create a test case "Login smoke test" in suite 12345, project MCP with `review: true`. After confirmation, does the response still suggest quality review?
+
+**Expected:** The response includes the draft/publish `Note:` but the `validate_test_case` quality hint is **suppressed** because `review: true` already performed an inline quality check.
+
+**Prompt 3 — Verify hint after test run creation**
+> Create a new test run titled "Sprint 42 Regression" in project MCP. What does the response suggest?
+
+**Expected:** After confirmation, the response includes a `Tip:` suggesting to populate the run using `manage_test_run` with `add_cases` action or `import_launch_results_to_test_run`.
+
+**Prompt 4 — Verify hint after import results**
+> Import results from launch 98765 into test run 123 for project MCP. What follow-up does the response suggest?
+
+**Expected:** The response includes a `Tip:` suggesting to review updated statuses via `list_test_run_test_cases`.
