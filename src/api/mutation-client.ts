@@ -26,6 +26,13 @@ export class ZebrunnerMutationClient {
       ...config,
     };
 
+    if (!this.config.username?.trim() || !this.config.token?.trim()) {
+      throw new Error(
+        "ZebrunnerMutationClient: username and token must be non-empty strings. " +
+        "Set ZEBRUNNER_USERNAME and ZEBRUNNER_TOKEN environment variables.",
+      );
+    }
+
     const baseURL = this.config.baseUrl.replace(/\/+$/, "");
     const basic = Buffer.from(
       `${this.config.username}:${this.config.token}`,
@@ -235,8 +242,8 @@ export class ZebrunnerMutationClient {
           ...form.getHeaders(),
           Authorization: this.authHeader,
         },
-        maxBodyLength: 1_073_741_824,
-        maxContentLength: 1_073_741_824,
+        maxBodyLength: 104_857_600,     // 100 MB
+        maxContentLength: 104_857_600,  // 100 MB
       });
       return response.data;
     } catch (error) {
