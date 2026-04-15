@@ -241,11 +241,11 @@ describe("about_mcp_tools summary includes prompts and resources", () => {
 
 describe("markdownForPrompts formatting", () => {
   const prompts = getPromptsCatalog();
-  const md = markdownForPrompts(prompts, "7.2.1");
+  const md = markdownForPrompts(prompts, "7.2.2");
 
   it("includes header and version", () => {
     assert.ok(md.includes("# Zebrunner MCP Prompts"));
-    assert.ok(md.includes("MCP version: 7.2.1"));
+    assert.ok(md.includes("MCP version: 7.2.2"));
   });
 
   it("shows total count", () => {
@@ -272,11 +272,11 @@ describe("markdownForPrompts formatting", () => {
 
 describe("markdownForResources formatting", () => {
   const resources = getResourcesCatalog();
-  const md = markdownForResources(resources, "7.2.1");
+  const md = markdownForResources(resources, "7.2.2");
 
   it("includes header and version", () => {
     assert.ok(md.includes("# Zebrunner MCP Resources"));
-    assert.ok(md.includes("MCP version: 7.2.1"));
+    assert.ok(md.includes("MCP version: 7.2.2"));
   });
 
   it("shows total count", () => {

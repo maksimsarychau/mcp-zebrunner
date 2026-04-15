@@ -3,6 +3,19 @@ import type { EvalConfig } from "./eval-config.js";
 import type { PromptCategory, NegativeCategory } from "./eval-prompts.js";
 import type { JudgeScore } from "./eval-judges.js";
 
+export interface TokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+}
+
+export interface TokenSummary {
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  judgeInputTokens: number;
+  judgeOutputTokens: number;
+  estimatedCost: { input: number; output: number; total: number };
+}
+
 export interface EvalResult {
   id: string;
   category: PromptCategory;
@@ -26,6 +39,8 @@ export interface EvalResult {
   negativeCategory?: NegativeCategory;
   negativePass?: boolean;
   negativeReason?: string;
+  tokenUsage?: TokenUsage;
+  judgeTokenUsage?: TokenUsage;
 }
 
 export interface NegativeSummary {
@@ -50,6 +65,29 @@ export interface EvalSummary {
   failures: { id: string; reason: string }[];
   negative?: NegativeSummary;
   durationMs: number;
+  tokens?: TokenSummary;
+}
+
+const ANTHROPIC_PRICING: Record<string, { inputPer1M: number; outputPer1M: number }> = {
+  "claude-sonnet-4-6":  { inputPer1M: 3,    outputPer1M: 15 },
+  "claude-sonnet-4-5":  { inputPer1M: 3,    outputPer1M: 15 },
+  "claude-haiku-3-5":   { inputPer1M: 0.80, outputPer1M: 4 },
+  "claude-opus-4":      { inputPer1M: 15,   outputPer1M: 75 },
+};
+const DEFAULT_PRICING = { inputPer1M: 3, outputPer1M: 15 };
+
+export function estimateCost(
+  model: string,
+  inputTokens: number,
+  outputTokens: number
+): { input: number; output: number; total: number } {
+  const pricing = Object.entries(ANTHROPIC_PRICING).find(
+    ([key]) => model.includes(key)
+  )?.[1] ?? DEFAULT_PRICING;
+
+  const input = (inputTokens / 1_000_000) * pricing.inputPer1M;
+  const output = (outputTokens / 1_000_000) * pricing.outputPer1M;
+  return { input, output, total: input + output };
 }
 
 export class EvalReporter {
@@ -163,6 +201,25 @@ export class EvalReporter {
       };
     }
 
+    const allExecuted = [...executed, ...negExecuted];
+    const totalInput = allExecuted.reduce((s, r) => s + (r.tokenUsage?.inputTokens ?? 0), 0);
+    const totalOutput = allExecuted.reduce((s, r) => s + (r.tokenUsage?.outputTokens ?? 0), 0);
+    const judgeInput = allExecuted.reduce((s, r) => s + (r.judgeTokenUsage?.inputTokens ?? 0), 0);
+    const judgeOutput = allExecuted.reduce((s, r) => s + (r.judgeTokenUsage?.outputTokens ?? 0), 0);
+    const grandInput = totalInput + judgeInput;
+    const grandOutput = totalOutput + judgeOutput;
+
+    const tokens: TokenSummary | undefined =
+      grandInput > 0 || grandOutput > 0
+        ? {
+            totalInputTokens: grandInput,
+            totalOutputTokens: grandOutput,
+            judgeInputTokens: judgeInput,
+            judgeOutputTokens: judgeOutput,
+            estimatedCost: estimateCost(config.model, grandInput, grandOutput),
+          }
+        : undefined;
+
     return {
       timestamp: new Date().toISOString(),
       model: config.model,
@@ -177,6 +234,7 @@ export class EvalReporter {
       failures,
       negative,
       durationMs: Date.now() - this.startTime,
+      tokens,
     };
   }
 
@@ -260,6 +318,21 @@ function printScorecard(s: EvalSummary, config: EvalConfig): void {
     }
   }
 
+  if (s.tokens) {
+    lines.push(`╠${line}╣`);
+    lines.push(`║  Token Usage:${" ".repeat(38)}║`);
+    const inK = (s.tokens.totalInputTokens / 1000).toFixed(1) + "k";
+    const outK = (s.tokens.totalOutputTokens / 1000).toFixed(1) + "k";
+    lines.push(`║    Input / Output:     ${inK.padStart(7)} / ${outK.padEnd(20)}║`);
+    if (s.tokens.judgeInputTokens > 0) {
+      const jInK = (s.tokens.judgeInputTokens / 1000).toFixed(1) + "k";
+      const jOutK = (s.tokens.judgeOutputTokens / 1000).toFixed(1) + "k";
+      lines.push(`║    (of which judge):   ${jInK.padStart(7)} / ${jOutK.padEnd(20)}║`);
+    }
+    const cost = `$${s.tokens.estimatedCost.total.toFixed(4)}`;
+    lines.push(`║    Estimated cost:     ${cost.padEnd(28)}║`);
+  }
+
   lines.push(`╠${line}╣`);
   lines.push(`║  Duration: ${(s.durationMs / 1000).toFixed(1)}s${" ".repeat(37 - String((s.durationMs / 1000).toFixed(1)).length)}║`);
   lines.push(`╚${line}╝`);
@@ -286,6 +359,12 @@ function generateMarkdown(s: EvalSummary, results: EvalResult[]): string {
     `- **Model:** ${s.model}`,
     `- **Layer:** ${s.layer}`,
     `- **Duration:** ${(s.durationMs / 1000).toFixed(1)}s`,
+    ...(s.tokens
+      ? [
+          `- **Tokens:** ${s.tokens.totalInputTokens.toLocaleString()} input + ${s.tokens.totalOutputTokens.toLocaleString()} output`,
+          `- **Estimated cost:** $${s.tokens.estimatedCost.total.toFixed(4)}`,
+        ]
+      : []),
     "",
     `## Scores`,
     "",
@@ -375,6 +454,35 @@ function generateMarkdown(s: EvalSummary, results: EvalResult[]): string {
 
       lines.push(`- **Duration:** ${(r.durationMs / 1000).toFixed(1)}s`);
       lines.push("");
+    }
+  }
+
+  if (s.tokens) {
+    lines.push("", "## Token Usage", "");
+    lines.push(`| Metric | Value |`);
+    lines.push(`|--------|-------|`);
+    lines.push(`| Total input tokens | ${s.tokens.totalInputTokens.toLocaleString()} |`);
+    lines.push(`| Total output tokens | ${s.tokens.totalOutputTokens.toLocaleString()} |`);
+    if (s.tokens.judgeInputTokens > 0) {
+      lines.push(`| Judge input tokens | ${s.tokens.judgeInputTokens.toLocaleString()} |`);
+      lines.push(`| Judge output tokens | ${s.tokens.judgeOutputTokens.toLocaleString()} |`);
+    }
+    lines.push(`| Estimated cost (input) | $${s.tokens.estimatedCost.input.toFixed(4)} |`);
+    lines.push(`| Estimated cost (output) | $${s.tokens.estimatedCost.output.toFixed(4)} |`);
+    lines.push(`| **Estimated total cost** | **$${s.tokens.estimatedCost.total.toFixed(4)}** |`);
+
+    const withTokens = results.filter((r) => !r.skipped && r.tokenUsage);
+    if (withTokens.length > 0) {
+      lines.push("", "### Per-Prompt Token Breakdown", "");
+      lines.push(`| ID | Input | Output | Judge In | Judge Out |`);
+      lines.push(`|----|-------|--------|----------|-----------|`);
+      for (const r of withTokens) {
+        const jIn = r.judgeTokenUsage?.inputTokens ?? 0;
+        const jOut = r.judgeTokenUsage?.outputTokens ?? 0;
+        lines.push(
+          `| ${r.id} | ${r.tokenUsage!.inputTokens.toLocaleString()} | ${r.tokenUsage!.outputTokens.toLocaleString()} | ${jIn ? jIn.toLocaleString() : "-"} | ${jOut ? jOut.toLocaleString() : "-"} |`
+        );
+      }
     }
   }
 

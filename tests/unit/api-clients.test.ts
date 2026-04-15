@@ -283,7 +283,7 @@ describe('API Clients Unit Tests', () => {
       const defaultHeaders = {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        'User-Agent': 'mcp-zebrunner/7.2.1'
+        'User-Agent': 'mcp-zebrunner/7.2.2'
       };
       
       assert.equal(defaultHeaders['Content-Type'], 'application/json', 'should set JSON content type');

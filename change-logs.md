@@ -1,5 +1,66 @@
 # Change Logs
 
+## v7.2.2 (2026-04-15)
+
+### Server-Side Tool Metrics
+
+Added automatic performance tracking for every MCP tool call within a session.
+
+- **`ToolMetrics` class** (`src/utils/tool-metrics.ts`) — records per-tool call count, avg/min/max duration (ms), total response size (chars), and error count.
+- **`wrapToolHandler()`** — generic higher-order function that transparently instruments all tool handlers via monkey-patching `server.registerTool`. Zero changes needed per-tool.
+- **Shutdown summary** — on `SIGINT`/`SIGTERM`, a markdown metrics summary is logged to stderr for post-session review.
+
+### Eval Token Tracking & Cost Estimation
+
+LLM evaluation tests now capture Anthropic API token usage and estimate costs.
+
+- **Token capture** — all 7 `client.messages.create()` call sites in `tests/eval/eval-runner.test.ts` now extract `response.usage.input_tokens` and `response.usage.output_tokens`.
+- **Judge token tracking** — `judgeToolOutput()` in `tests/eval/eval-judges.ts` returns `JudgeResult` with separate judge token counts.
+- **Cost estimation** — `estimateCost()` in `tests/eval/eval-report.ts` uses hardcoded Anthropic pricing (Claude 4 Opus/Sonnet/Haiku) to calculate `$input + $output = $total`.
+- **Report integration** — console scorecard and markdown/JSON reports now include "Token Usage" sections with totals, judge breakdown, and estimated cost.
+
+### Extended `about_mcp_tools` — Metrics Mode
+
+- New `mode: "metrics"` — returns a markdown table of per-tool session stats (calls, durations, response sizes, errors), or "No tool calls recorded" for empty sessions.
+- All modes now display `MCP version: X.Y.Z` in their output header.
+- Removed standalone `get_tool_metrics` tool — functionality fully integrated into `about_mcp_tools` (tool count remains at 60).
+
+### New `/session-metrics` Prompt
+
+Added a 14th MCP prompt accessible via `/session-metrics` in Claude Desktop/Code.
+
+- No arguments required — instructs the LLM to call `about_mcp_tools` with `mode: "metrics"` and present a session usage summary.
+- Category: Utility.
+- Prompt count updated from 13 → 14 across all files.
+
+### Security Fixes (from PR Review)
+
+Three issues identified during code review, all fixed:
+
+1. **Cache eviction** (`src/resources.ts`) — `ResourceCache.evictOldest()` now properly finds the entry with the minimum `expiry` timestamp instead of deleting by insertion order.
+2. **Path traversal** (`src/utils/screenshot-analyzer.ts`) — `saveScreenshotToTemp()` now sanitizes filenames via `path.basename()` + regex and validates the resolved path stays within the temp directory.
+3. **Unbounded caches** (`src/api/reporting-client.ts`) — `projectCache` (max 100 entries) and `fieldsLayoutCache` (max 50 entries) now evict the oldest entry when full.
+
+### Tests
+
+1067+ total tests (up from 1047 in v7.2.1).
+
+- **New:** `tests/unit/tool-metrics.test.ts` — 10 tests for `ToolMetrics.record()`, `getSummaryMarkdown()`, `reset()`, and `wrapToolHandler()` (success, error, exception, arg passthrough).
+- **New:** `tests/unit/eval-token-tracking.test.ts` — 5 tests for `estimateCost()` across Claude models, zero tokens, and interface structure validation.
+- **Updated:** `tests/unit/prompt-registry.test.ts` — prompt count assertions 13 → 14.
+- **Updated:** `tests/unit/tool-schema-coverage.test.ts` — `about_mcp_tools` mode enum now includes `"metrics"`.
+- **New eval prompt:** `about_mcp_tools.metrics` in `tests/eval/eval-prompts.ts`.
+
+### Documentation
+
+- **Updated:** `docs/TEST_PROMPTS.md` — added Section 17 (Tool Metrics & Token Tracking) with 7 test scenarios covering empty sessions, multi-tool metrics, error tracking, MCP Inspector verification, eval token reports, and JSON/markdown report validation. Added `about_mcp_tools` prompts 5–6 for metrics mode. Updated Section 15 with `/session-metrics` prompt test.
+- **Updated:** `docs/RESOURCES_AND_PROMPTS.md` — prompt count 13 → 14, added `/session-metrics` row to prompt reference table.
+- **Updated:** `README.md` — prompt count 13 → 14.
+- **Updated:** `change-logs.md`, `server.json`, `custom-catalog.yaml`, `mcp-catalog.yaml` — prompt count 13 → 14.
+- Version bumped to 7.2.2 across all 31+ files.
+
+---
+
 ## v7.2.1 (2026-04-14)
 
 ### MCP Resources (13 resources)
@@ -28,7 +89,7 @@ Added read-only reference data accessible via the `@` menu in MCP clients (Claud
 - `resourceTrace()` debug logging for all template resource handlers to diagnose Inspector routing issues.
 - `getResourcesCatalog()` export for use by `about_mcp_tools`.
 
-### MCP Prompts (13 prompts)
+### MCP Prompts (14 prompts)
 
 Added pre-built workflow instructions accessible via the `/` command in MCP clients. Each prompt injects expert-crafted multi-step instructions that guide the LLM through complex multi-tool workflows.
 
@@ -50,9 +111,10 @@ Added pre-built workflow instructions accessible via the `/` command in MCP clie
 - `/daily-qa-standup` — Concise daily status with action items.
 - `/automation-gaps` — Identify lowest-coverage suites and prioritize automation work.
 - `/project-overview` — Comprehensive project health card.
+- `/session-metrics` — Show tool usage metrics for the current MCP session.
 
 **Implementation:**
-- `src/prompts.ts` — 13 builder functions (exported for unit testing) and `registerPrompts()`.
+- `src/prompts.ts` — 14 builder functions (exported for unit testing) and `registerPrompts()`.
 - `getPromptsCatalog()` export for use by `about_mcp_tools`.
 
 ### Tool Annotations (all 60 tools)

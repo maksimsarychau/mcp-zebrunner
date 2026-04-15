@@ -137,7 +137,7 @@ describe("Tool Schema Coverage", () => {
     }
 
     const aboutSchema = schemaBlockForTool(source, "about_mcp_tools");
-    assert.ok(/mode\s*:\s*z\.enum\(\["summary",\s*"tool",\s*"prompts",\s*"resources"\]\)/.test(aboutSchema), "about_mcp_tools should enforce mode enum");
+    assert.ok(/mode\s*:\s*z\.enum\(\["summary",\s*"tool",\s*"prompts",\s*"resources",\s*"metrics"\]\)/.test(aboutSchema), "about_mcp_tools should enforce mode enum");
     assert.ok(/tool_name\s*:/.test(aboutSchema), "about_mcp_tools should expose tool_name");
     assert.ok(/include_examples\s*:/.test(aboutSchema), "about_mcp_tools should expose include_examples");
     assert.ok(/include_token_estimates\s*:/.test(aboutSchema), "about_mcp_tools should expose include_token_estimates");

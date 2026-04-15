@@ -44,6 +44,7 @@ import {
   markdownForPrompts,
   markdownForResources,
 } from "./utils/tool-intel.js";
+import { ToolMetrics, wrapToolHandler } from "./utils/tool-metrics.js";
 
 // Mutation tools imports
 import { ZebrunnerMutationClient } from "./api/mutation-client.js";
@@ -954,7 +955,7 @@ async function main() {
   const server = new McpServer(
     {
       name: "mcp-zebrunner",
-      version: "7.2.1"
+      version: "7.2.2"
     },
     {
       capabilities: {
@@ -964,6 +965,14 @@ async function main() {
       }
     }
   );
+
+  const toolMetrics = new ToolMetrics();
+  _metricsRef = toolMetrics;
+
+  const origRegisterTool = server.registerTool.bind(server);
+  server.registerTool = ((name: string, config: any, handler: any) => {
+    return origRegisterTool(name, config, wrapToolHandler(name, handler, toolMetrics));
+  }) as typeof server.registerTool;
 
   debugLog("🚀 Starting Zebrunner Unified MCP Server with Reporting API", {
     url: ZEBRUNNER_URL,
@@ -6803,8 +6812,8 @@ if (args.format === 'raw') {
     {
       description: "📚 Discover Zebrunner MCP capabilities: tools summary/detail, prompts catalog (/commands), resources catalog (@data). Use mode='summary' for a full overview including tool, prompt, and resource counts.",
       inputSchema: {
-        mode: z.enum(["summary", "tool", "prompts", "resources"]).default("summary")
-          .describe("summary: full overview (tools + prompts + resources counts); tool: detailed view for one tool; prompts: list all /prompts; resources: list all @resources"),
+        mode: z.enum(["summary", "tool", "prompts", "resources", "metrics"]).default("summary")
+          .describe("summary: full overview (tools + prompts + resources counts); tool: detailed view for one tool; prompts: list all /prompts; resources: list all @resources; metrics: session tool usage stats"),
         tool_name: z.string().optional()
           .describe("Tool name for mode='tool', e.g. analyze_test_execution_video"),
         include_examples: z.boolean().default(true)
@@ -6853,6 +6862,11 @@ if (args.format === 'raw') {
           const resources = getResourcesCatalog();
           const text = markdownForResources(resources, snapshot.mcpVersion);
           return { content: [{ type: "text" as const, text }] };
+        }
+
+        if (args.mode === "metrics") {
+          const header = `MCP version: ${snapshot.mcpVersion}\n\n`;
+          return { content: [{ type: "text" as const, text: header + toolMetrics.getSummaryMarkdown() }] };
         }
 
         const toolsSummary = markdownForAllTools(snapshot, {
@@ -10057,12 +10071,20 @@ process.on('unhandledRejection', (reason, promise) => {
   process.exit(1);
 });
 
+let _metricsRef: ToolMetrics | undefined;
+
 process.on('SIGINT', () => {
+  if (_metricsRef && _metricsRef.getStats().size > 0) {
+    console.error('\n' + _metricsRef.getSummaryMarkdown());
+  }
   console.error('🛑 Received SIGINT, shutting down gracefully...');
   process.exit(0);
 });
 
 process.on('SIGTERM', () => {
+  if (_metricsRef && _metricsRef.getStats().size > 0) {
+    console.error('\n' + _metricsRef.getSummaryMarkdown());
+  }
   console.error('🛑 Received SIGTERM, shutting down gracefully...');
   process.exit(0);
 });

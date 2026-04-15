@@ -279,6 +279,20 @@ Steps:
 Present as a structured project health card suitable for onboarding or project review.`;
 }
 
+export function buildSessionMetricsPrompt(): string {
+  return `Show current MCP session tool usage metrics and performance stats.
+
+Steps:
+1. Call about_mcp_tools with mode "metrics" to retrieve server-side session metrics
+2. Present the results as a clear summary including:
+   - Total tool calls made in this session
+   - Per-tool breakdown: call count, avg/min/max duration, response size, errors
+   - Highlight any tools with errors or unusually high durations
+3. If no tools have been called yet, report that the session has no recorded calls
+
+This is useful for understanding which tools were used, how they performed, and whether any errors occurred during the current MCP session.`;
+}
+
 // ── Prompt catalog (used by about_mcp_tools) ────────────────────────────────
 
 export type PromptMeta = {
@@ -304,6 +318,7 @@ export function getPromptsCatalog(): PromptMeta[] {
     { name: "daily-qa-standup", title: "Daily QA Standup", description: "Prepare a concise daily QA standup summary with pass rates, blockers, flaky tests, and action items", category: "Role-Specific", args: ["projects"] },
     { name: "automation-gaps", title: "Automation Gaps Analysis", description: "Identify suites and test cases with lowest automation coverage and prioritize automation work", category: "Role-Specific", args: ["projects"] },
     { name: "project-overview", title: "Project Overview", description: "Comprehensive project health card: suites, coverage, recent launches, milestones, flaky tests", category: "Role-Specific", args: ["project"] },
+    { name: "session-metrics", title: "Session Metrics", description: "Show tool usage metrics for the current MCP session: call counts, durations, errors", category: "Utility", args: [] },
   ];
 }
 
@@ -536,6 +551,22 @@ export function registerPrompts(server: McpServer): void {
       messages: [{
         role: "user" as const,
         content: { type: "text" as const, text: buildProjectOverviewPrompt(project) },
+      }],
+    }),
+  );
+
+  // ── Utility Prompts ─────────────────────────────────────────────────────
+
+  server.registerPrompt(
+    "session-metrics",
+    {
+      title: "Session Metrics",
+      description: "Show tool usage metrics for the current MCP session: call counts, durations, errors",
+    },
+    async () => ({
+      messages: [{
+        role: "user" as const,
+        content: { type: "text" as const, text: buildSessionMetricsPrompt() },
       }],
     }),
   );

@@ -90,6 +90,7 @@ export class ZebrunnerReportingClient {
   private tokenExpiresAt: Date | null = null;
   private projectCache: Map<string, { project: ProjectResponse, timestamp: number }> = new Map();
   private fieldsLayoutCache: Map<number, { data: FieldsLayout, timestamp: number }> = new Map();
+  private cacheMetrics = { projectHits: 0, projectMisses: 0, fieldsHits: 0, fieldsMisses: 0 };
   private jiraBaseUrlCache: string | null = null;
   private _jiraResolutionWarning: string | null = null;
 
@@ -326,11 +327,12 @@ export class ZebrunnerReportingClient {
    * Get project by key
    */
   async getProject(projectKey: string): Promise<ProjectResponse> {
-    // Check cache first (cache for 5 minutes)
     const cached = this.projectCache.get(projectKey);
     if (cached && Date.now() - cached.timestamp < 5 * 60 * 1000) {
+      this.cacheMetrics.projectHits++;
       return cached.project;
     }
+    this.cacheMetrics.projectMisses++;
 
     const url = `/api/projects/v1/projects/${projectKey}`;
     const response = await this.makeAuthenticatedRequest<any>('GET', url);
@@ -751,8 +753,10 @@ export class ZebrunnerReportingClient {
   async getFieldsLayout(projectId: number): Promise<FieldsLayout> {
     const cached = this.fieldsLayoutCache.get(projectId);
     if (cached && Date.now() - cached.timestamp < 10 * 60 * 1000) {
+      this.cacheMetrics.fieldsHits++;
       return cached.data;
     }
+    this.cacheMetrics.fieldsMisses++;
 
     const url = `/api/tcm/v1/test-case-settings/fields-layout?projectId=${projectId}`;
     const response = await this.makeAuthenticatedRequest<any>('GET', url);
@@ -797,6 +801,14 @@ export class ZebrunnerReportingClient {
    */
   clearProjectCache(): void {
     this.projectCache.clear();
+  }
+
+  getCacheMetrics(): { projectHits: number; projectMisses: number; fieldsHits: number; fieldsMisses: number; projectSize: number; fieldsSize: number } {
+    return {
+      ...this.cacheMetrics,
+      projectSize: this.projectCache.size,
+      fieldsSize: this.fieldsLayoutCache.size,
+    };
   }
 
   /**

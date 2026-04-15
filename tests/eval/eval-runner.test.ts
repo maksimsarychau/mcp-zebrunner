@@ -107,16 +107,16 @@ describe("LLM Evaluation Tests", () => {
     }
   });
 
-  // ── Layer 1: Tool Selection Accuracy ──
+  // ── Layers 1+2: Tool Selection + Argument Validation (single API call per prompt) ──
 
-  describe("Layer 1: Tool Selection", () => {
-    const layer1Prompts = EVAL_PROMPTS.filter(
-      (p) => p.layer <= 1 && !p.isMultiTool && !p.isNegative && shouldRun(p.id)
+  describe("Layers 1+2: Tool Selection & Arguments", () => {
+    const prompts = EVAL_PROMPTS.filter(
+      (p) => p.layer <= 2 && !p.isMultiTool && !p.isNegative && shouldRun(p.id)
     );
 
-    for (const ep of layer1Prompts) {
-      it(`[${ep.id}] selects correct tool`, async () => {
-        const result = await runToolSelection(ep);
+    for (const ep of prompts) {
+      it(`[${ep.id}] selects correct tool${ep.expectedArgKeys ? " with correct arguments" : ""}`, async () => {
+        const result = await runArgValidation(ep);
         reporter.addResult(result);
 
         if (result.skipped) return;
@@ -124,31 +124,12 @@ describe("LLM Evaluation Tests", () => {
           result.toolSelectionCorrect,
           `Expected ${ep.expectedTools.join("|")}, got ${result.selectedTool || "none"}`
         );
-      });
-    }
-  });
-
-  // ── Layer 2: Argument Correctness ──
-
-  describe("Layer 2: Argument Validation", () => {
-    const layer2Prompts = EVAL_PROMPTS.filter(
-      (p) => p.layer <= 2 && p.expectedArgKeys && !p.isMultiTool && !p.isNegative && shouldRun(p.id)
-    );
-
-    for (const ep of layer2Prompts) {
-      it(`[${ep.id}] provides correct arguments`, async () => {
-        const result = await runArgValidation(ep);
-        reporter.addResult(result);
-
-        if (result.skipped) return;
-        assert.ok(
-          result.toolSelectionCorrect,
-          `Wrong tool: expected ${ep.expectedTools.join("|")}, got ${result.selectedTool}`
-        );
-        assert.ok(
-          result.argsCorrect,
-          `Missing args: ${result.missingArgs?.join(", ")}`
-        );
+        if (ep.expectedArgKeys) {
+          assert.ok(
+            result.argsCorrect,
+            `Missing args: ${result.missingArgs?.join(", ")}`
+          );
+        }
       });
     }
   });
@@ -302,6 +283,10 @@ describe("LLM Evaluation Tests", () => {
         negativeReason: refusal.refused
           ? "Correctly refused (no tool called)"
           : `Should have refused but called ${refusal.selectedTool}`,
+        tokenUsage: {
+          inputTokens: response.usage?.input_tokens ?? 0,
+          outputTokens: response.usage?.output_tokens ?? 0,
+        },
       };
     } catch (err: any) {
       return {
@@ -378,6 +363,10 @@ describe("LLM Evaluation Tests", () => {
         negativeCategory: ep.negativeCategory,
         negativePass: pass,
         negativeReason: reason,
+        tokenUsage: {
+          inputTokens: response.usage?.input_tokens ?? 0,
+          outputTokens: response.usage?.output_tokens ?? 0,
+        },
       };
     } catch (err: any) {
       return {
@@ -451,6 +440,10 @@ describe("LLM Evaluation Tests", () => {
         negativeCategory: ep.negativeCategory,
         negativePass: pass,
         negativeReason: reason,
+        tokenUsage: {
+          inputTokens: response.usage?.input_tokens ?? 0,
+          outputTokens: response.usage?.output_tokens ?? 0,
+        },
       };
     } catch (err: any) {
       return {
@@ -468,43 +461,6 @@ describe("LLM Evaluation Tests", () => {
         negativePass: false,
         negativeReason: `Error: ${err.message}`,
       };
-    }
-  }
-
-  async function runToolSelection(ep: EvalPrompt): Promise<EvalResult> {
-    if (!isReady(ep)) {
-      return skipResult(ep, "Missing required context");
-    }
-
-    const populated = populatePrompt(ep.promptTemplate, ctx);
-    const start = Date.now();
-
-    try {
-      const response = await client.messages.create({
-        model: config.model,
-        max_tokens: config.maxTokens,
-        temperature: config.temperature,
-        system: SYSTEM_PROMPT,
-        tools: anthropicTools,
-        tool_choice: { type: "auto" },
-        messages: [{ role: "user", content: populated }],
-      });
-
-      const toolUse = response.content.find((b) => b.type === "tool_use");
-      const selectedTool = toolUse?.type === "tool_use" ? toolUse.name : undefined;
-
-      return {
-        id: ep.id,
-        category: ep.category,
-        layer: ep.layer,
-        prompt: populated,
-        expectedTools: ep.expectedTools,
-        selectedTool,
-        toolSelectionCorrect: checkToolSelection(selectedTool, ep.expectedTools),
-        durationMs: Date.now() - start,
-      };
-    } catch (err: any) {
-      return errorResult(ep, populated, err, Date.now() - start);
     }
   }
 
@@ -546,6 +502,10 @@ describe("LLM Evaluation Tests", () => {
         argsCorrect: argCheck.pass,
         missingArgs: argCheck.missing,
         durationMs: Date.now() - start,
+        tokenUsage: {
+          inputTokens: response.usage?.input_tokens ?? 0,
+          outputTokens: response.usage?.output_tokens ?? 0,
+        },
       };
     } catch (err: any) {
       return errorResult(ep, populated, err, Date.now() - start);
@@ -562,9 +522,9 @@ describe("LLM Evaluation Tests", () => {
 
     let selectedTool: string | undefined;
     let args: Record<string, unknown> = {};
+    let tokenUsage = { inputTokens: 0, outputTokens: 0 };
 
     try {
-      // Step 1: Get tool selection from Claude
       const response = await client.messages.create({
         model: config.model,
         max_tokens: config.maxTokens,
@@ -574,6 +534,11 @@ describe("LLM Evaluation Tests", () => {
         tool_choice: { type: "auto" },
         messages: [{ role: "user", content: populated }],
       });
+
+      tokenUsage = {
+        inputTokens: response.usage?.input_tokens ?? 0,
+        outputTokens: response.usage?.output_tokens ?? 0,
+      };
 
       const toolUse = response.content.find((b) => b.type === "tool_use");
       selectedTool = toolUse?.type === "tool_use" ? toolUse.name : undefined;
@@ -588,22 +553,22 @@ describe("LLM Evaluation Tests", () => {
       ? checkArgKeys(args, ep.expectedArgKeys)
       : { pass: true, missing: [] as string[] };
 
-    // Step 2: Execute the tool via MCP
     let mcpOutput = "";
     let judgeScore;
+    let judgeTokenUsage;
     let patternMatch;
 
     try {
       if (selectedTool) {
         mcpOutput = await callMCPTool(selectedTool, args);
 
-        // Step 3: Pattern matching
         if (ep.expectedOutputPatterns?.length) {
           patternMatch = checkOutputPatterns(mcpOutput, ep.expectedOutputPatterns);
         }
 
-        // Step 4: Judge the output
-        judgeScore = await judgeToolOutput(client, config, ep, populated, mcpOutput);
+        const judgeResult = await judgeToolOutput(client, config, ep, populated, mcpOutput);
+        judgeScore = judgeResult.score;
+        judgeTokenUsage = judgeResult.tokenUsage;
       }
     } catch (err: any) {
       return {
@@ -619,6 +584,7 @@ describe("LLM Evaluation Tests", () => {
         missingArgs: argCheck.missing,
         error: err.message || String(err),
         durationMs: Date.now() - start,
+        tokenUsage,
       };
     }
 
@@ -638,6 +604,8 @@ describe("LLM Evaluation Tests", () => {
       judgeScore,
       mcpOutput: mcpOutput.slice(0, 5000),
       durationMs: Date.now() - start,
+      tokenUsage,
+      judgeTokenUsage,
     };
   }
 
@@ -664,7 +632,6 @@ describe("LLM Evaluation Tests", () => {
       const selectedTool = toolUse?.type === "tool_use" ? toolUse.name : undefined;
       const args = (toolUse?.type === "tool_use" ? toolUse.input : {}) as Record<string, unknown>;
 
-      // For multi-tool prompts, check if the first tool selected is one of the expected tools
       const toolCorrect = checkToolSelection(selectedTool, ep.expectedTools);
 
       return {
@@ -677,6 +644,10 @@ describe("LLM Evaluation Tests", () => {
         selectedArgs: args,
         toolSelectionCorrect: toolCorrect,
         durationMs: Date.now() - start,
+        tokenUsage: {
+          inputTokens: response.usage?.input_tokens ?? 0,
+          outputTokens: response.usage?.output_tokens ?? 0,
+        },
       };
     } catch (err: any) {
       return errorResult(ep, populated, err, Date.now() - start);

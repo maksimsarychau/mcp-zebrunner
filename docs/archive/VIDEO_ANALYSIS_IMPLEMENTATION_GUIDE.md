@@ -2,7 +2,7 @@
 
 ## Status: Implemented (v5.7.0+)
 
-> **Note:** This is a historical implementation guide. The feature is fully shipped and active in the current version (7.2.1). See `analyze_test_execution_video` tool.
+> **Note:** This is a historical implementation guide. The feature is fully shipped and active in the current version (7.2.2). See `analyze_test_execution_video` tool.
 
 ## ✅ Already Complete
 
