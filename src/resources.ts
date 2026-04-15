@@ -35,11 +35,22 @@ export class ResourceCache {
     if (this.store.size >= MAX_CACHE_ENTRIES) {
       this.evictExpired();
       if (this.store.size >= MAX_CACHE_ENTRIES) {
-        const oldest = this.store.keys().next().value;
-        if (oldest) this.store.delete(oldest);
+        this.evictOldest();
       }
     }
     this.store.set(key, { data, expiry: Date.now() + ttlMs });
+  }
+
+  private evictOldest(): void {
+    let oldestKey: string | null = null;
+    let oldestExpiry = Infinity;
+    for (const [key, entry] of this.store) {
+      if (entry.expiry < oldestExpiry) {
+        oldestExpiry = entry.expiry;
+        oldestKey = key;
+      }
+    }
+    if (oldestKey) this.store.delete(oldestKey);
   }
 
   clear(): void {

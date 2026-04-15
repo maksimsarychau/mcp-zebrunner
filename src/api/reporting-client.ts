@@ -354,7 +354,10 @@ export class ZebrunnerReportingClient {
       throw new ZebrunnerReportingError(`Failed to parse project data for ${projectKey}: ${error instanceof Error ? error.message : error}`);
     }
     
-    // Cache the result
+    if (this.projectCache.size >= 100) {
+      const firstKey = this.projectCache.keys().next().value;
+      if (firstKey) this.projectCache.delete(firstKey);
+    }
     this.projectCache.set(projectKey, { project, timestamp: Date.now() });
     
     return project;
@@ -768,6 +771,10 @@ export class ZebrunnerReportingClient {
       }))
     };
 
+    if (this.fieldsLayoutCache.size >= 50) {
+      const firstKey = this.fieldsLayoutCache.keys().next().value;
+      if (firstKey) this.fieldsLayoutCache.delete(firstKey);
+    }
     this.fieldsLayoutCache.set(projectId, { data: layout, timestamp: Date.now() });
     return layout;
   }

@@ -319,15 +319,19 @@ export async function saveScreenshotToTemp(
   filename: string
 ): Promise<string> {
   const tempDir = process.env.SCREENSHOT_DOWNLOAD_DIR || path.join(os.tmpdir(), 'mcp-zebrunner', 'screenshots');
-  
-  // Create directory if it doesn't exist
+
   if (!fs.existsSync(tempDir)) {
     fs.mkdirSync(tempDir, { recursive: true });
   }
-  
-  const filepath = path.join(tempDir, filename);
+
+  const safeName = path.basename(filename).replace(/[^a-zA-Z0-9_.-]/g, '_');
+  const filepath = path.join(tempDir, safeName);
+  const resolved = path.resolve(filepath);
+  if (!resolved.startsWith(path.resolve(tempDir) + path.sep)) {
+    throw new Error('Security: screenshot path escapes temp directory');
+  }
+
   await fs.promises.writeFile(filepath, buffer);
-  
   return filepath;
 }
 
