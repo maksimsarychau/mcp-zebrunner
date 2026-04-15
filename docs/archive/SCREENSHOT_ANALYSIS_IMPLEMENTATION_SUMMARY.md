@@ -1,6 +1,6 @@
 # Screenshot Analysis & Visual Forensics - Implementation Summary
 
-> **Note:** This is a historical implementation record from v4.10.0. The feature is fully shipped and active in the current version (7.1.1). See `analyze_test_screenshots` tool.
+> **Note:** This is a historical implementation record from v4.10.0. The feature is fully shipped and active in the current version (7.2.1). See `analyze_test_screenshots` tool.
 
 ## 🎯 Implementation Complete - v4.10.0
 

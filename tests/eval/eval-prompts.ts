@@ -13,6 +13,7 @@ export type PromptCategory =
   | "chart"
   | "field_filter"
   | "report"
+  | "resource"
   | "mutation"
   | "negative";
 
@@ -627,6 +628,26 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
     layer: 2,
   },
   {
+    id: "about_mcp_tools.prompts",
+    toolSection: "4. Utility",
+    promptTemplate:
+      "What prompts (slash commands) are available in Zebrunner MCP? List all of them.",
+    expectedTools: ["about_mcp_tools"],
+    expectedArgKeys: ["mode"],
+    category: "utility",
+    layer: 1,
+  },
+  {
+    id: "about_mcp_tools.resources",
+    toolSection: "4. Utility",
+    promptTemplate:
+      "What MCP resources (@ data) are available in Zebrunner? Show me all static and template resources.",
+    expectedTools: ["about_mcp_tools"],
+    expectedArgKeys: ["mode"],
+    category: "utility",
+    layer: 1,
+  },
+  {
     id: "get_available_projects.list",
     toolSection: "4. Utility",
     promptTemplate: "What projects are available in Zebrunner?",
@@ -1028,6 +1049,59 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
     expectedArgKeys: ["report_types", "projects"],
     category: "report",
     layer: 2,
+    requiredContext: ["projectKey"],
+  },
+
+  // ── Section 14-15: Resource-aware prompts ──
+  // These test whether the LLM correctly uses resource data to inform tool calls
+
+  {
+    id: "resource.report_types_aware",
+    toolSection: "14. Resources",
+    promptTemplate:
+      "Given that zebrunner://reports/types lists 6 report types including 'coverage' and 'pass_rate', " +
+      "generate both a coverage and pass rate report for the {{project_key}} project.",
+    expectedTools: ["generate_report"],
+    expectedArgKeys: ["report_types", "projects"],
+    expectedOutputPatterns: ["coverage", "pass_rate"],
+    category: "resource",
+    layer: 1,
+    requiredContext: ["projectKey"],
+  },
+  {
+    id: "resource.periods_aware",
+    toolSection: "14. Resources",
+    promptTemplate:
+      "According to zebrunner://periods, 'Last 30 Days' maps to 30 days. " +
+      "Get the top bugs for the {{project_key}} project for the Last 30 Days period.",
+    expectedTools: ["get_top_bugs"],
+    expectedArgKeys: ["project", "period"],
+    category: "resource",
+    layer: 1,
+    requiredContext: ["projectKey"],
+  },
+  {
+    id: "resource.chart_options_aware",
+    toolSection: "14. Resources",
+    promptTemplate:
+      "Based on zebrunner://charts, the available chart types include 'pie'. " +
+      "Show me a pie chart of test results for launch {{launch_id}} in the {{project_key}} project.",
+    expectedTools: ["get_launch_test_summary", "get_launch_summary"],
+    expectedArgKeys: ["project_key", "launch_id"],
+    category: "resource",
+    layer: 2,
+    requiredContext: ["projectKey", "launchId"],
+  },
+  {
+    id: "resource.projects_context",
+    toolSection: "14. Resources",
+    promptTemplate:
+      "I already have the project list from zebrunner://projects. " +
+      "Generate an executive dashboard report for the {{project_key}} project for the last 30 days.",
+    expectedTools: ["generate_report"],
+    expectedArgKeys: ["report_types", "projects"],
+    category: "resource",
+    layer: 1,
     requiredContext: ["projectKey"],
   },
 

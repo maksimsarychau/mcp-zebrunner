@@ -27,7 +27,7 @@ export class TestCaseComparator {
     }
 
     if (this.debug) {
-      console.log(`[TestCaseComparator] Analyzing ${testCaseKeys.length} test cases: ${testCaseKeys.join(', ')}`);
+      console.error(`[TestCaseComparator] Analyzing ${testCaseKeys.length} test cases: ${testCaseKeys.join(', ')}`);
     }
 
     // Step 1: Analyze each test case individually AND fetch URLs
@@ -55,7 +55,7 @@ export class TestCaseComparator {
 
     if (individualComparisons.length === 0) {
       if (this.debug) {
-        console.log('[TestCaseComparator] No test cases could be analyzed');
+        console.error('[TestCaseComparator] No test cases could be analyzed');
       }
       return null;
     }
@@ -130,8 +130,8 @@ export class TestCaseComparator {
     const bestMatch = rankedTestCases[0];
 
     if (this.debug) {
-      console.log(`[TestCaseComparator] Best match: ${bestMatch.testCaseKey} (${bestMatch.coverageAnalysis.coveragePercentage}% coverage, ${bestMatch.averageVisualConfidence}% visual confidence)`);
-      console.log(`[TestCaseComparator] Combined coverage: ${combinedCoverage}% (${mergedSteps.length} merged steps)`);
+      console.error(`[TestCaseComparator] Best match: ${bestMatch.testCaseKey} (${bestMatch.coverageAnalysis.coveragePercentage}% coverage, ${bestMatch.averageVisualConfidence}% visual confidence)`);
+      console.error(`[TestCaseComparator] Combined coverage: ${combinedCoverage}% (${mergedSteps.length} merged steps)`);
     }
 
     return {
@@ -163,7 +163,7 @@ export class TestCaseComparator {
   ): Promise<TestCaseComparison | null> {
     try {
       if (this.debug) {
-        console.log(`[TestCaseComparator] Fetching test case: ${testCaseKey}`);
+        console.error(`[TestCaseComparator] Fetching test case: ${testCaseKey}`);
       }
 
       // Fetch test case from TCM
@@ -171,14 +171,14 @@ export class TestCaseComparator {
 
       if (!testCase) {
         if (this.debug) {
-          console.log('[TestCaseComparator] Test case not found');
+          console.error('[TestCaseComparator] Test case not found');
         }
         return null;
       }
 
       if (this.debug) {
-        console.log(`[TestCaseComparator] Test case has ${testCase.steps.length} steps`);
-        console.log(`[TestCaseComparator] Analyzing ${videoFrames.length} video frames for visual verification`);
+        console.error(`[TestCaseComparator] Test case has ${testCase.steps.length} steps`);
+        console.error(`[TestCaseComparator] Analyzing ${videoFrames.length} video frames for visual verification`);
       }
 
       // Parse test case steps
@@ -373,7 +373,7 @@ export class TestCaseComparator {
     const comparison: Array<any> = [];
 
     if (this.debug) {
-      console.log(`[TestCaseComparator] Starting visual verification for ${testCaseSteps.length} test case steps against ${videoFrames.length} frames`);
+      console.error(`[TestCaseComparator] Starting visual verification for ${testCaseSteps.length} test case steps against ${videoFrames.length} frames`);
     }
 
     for (const tcStep of testCaseSteps) {
@@ -437,7 +437,7 @@ export class TestCaseComparator {
       const highConfidence = comparison.filter(c => c.visualConfidence === 'high').length;
       const mediumConfidence = comparison.filter(c => c.visualConfidence === 'medium').length;
       const lowConfidence = comparison.filter(c => c.visualConfidence === 'low').length;
-      console.log(`[TestCaseComparator] Visual verification complete: ${highConfidence} high, ${mediumConfidence} medium, ${lowConfidence} low confidence`);
+      console.error(`[TestCaseComparator] Visual verification complete: ${highConfidence} high, ${mediumConfidence} medium, ${lowConfidence} low confidence`);
     }
 
     return comparison;
@@ -456,7 +456,7 @@ export class TestCaseComparator {
     const expected = expectedAction.toLowerCase();
 
     if (this.debug) {
-      console.log(`[TestCaseComparator] Matching: "${expectedAction}" vs "${executedAction}"`);
+      console.error(`[TestCaseComparator] Matching: "${expectedAction}" vs "${executedAction}"`);
     }
 
     // FIX 1: Better synonym matching for common phrases
@@ -481,7 +481,7 @@ export class TestCaseComparator {
       const expectedHas = group.some(syn => expected.includes(syn));
       if (execHas && expectedHas) {
         if (this.debug) {
-          console.log(`[TestCaseComparator] ✓ Synonym match: ${group.find(s => exec.includes(s))} ≈ ${group.find(s => expected.includes(s))}`);
+          console.error(`[TestCaseComparator] ✓ Synonym match: ${group.find(s => exec.includes(s))} ≈ ${group.find(s => expected.includes(s))}`);
         }
         // Continue to check for more evidence, don't return immediately
       }
@@ -492,8 +492,8 @@ export class TestCaseComparator {
     const expectedKeyTerms = this.extractKeyTermsEnhanced(expected);
 
     if (this.debug) {
-      console.log(`[TestCaseComparator]   Exec terms: [${execKeyTerms.join(', ')}]`);
-      console.log(`[TestCaseComparator]   Expected terms: [${expectedKeyTerms.join(', ')}]`);
+      console.error(`[TestCaseComparator]   Exec terms: [${execKeyTerms.join(', ')}]`);
+      console.error(`[TestCaseComparator]   Expected terms: [${expectedKeyTerms.join(', ')}]`);
     }
 
     // Match if they share 2+ key terms
@@ -505,7 +505,7 @@ export class TestCaseComparator {
 
     if (sharedKeyTerms.length >= 2) {
       if (this.debug) {
-        console.log(`[TestCaseComparator] ✓ Key term match: [${sharedKeyTerms.join(', ')}]`);
+        console.error(`[TestCaseComparator] ✓ Key term match: [${sharedKeyTerms.join(', ')}]`);
       }
       return true;
     }
@@ -523,7 +523,7 @@ export class TestCaseComparator {
         // Check if targets are similar
         if (execTarget.includes(expectedTarget) || expectedTarget.includes(execTarget)) {
           if (this.debug) {
-            console.log(`[TestCaseComparator] ✓ Action+Target match: ${execActionNorm} ${execTarget} ≈ ${expectedActionNorm} ${expectedTarget}`);
+            console.error(`[TestCaseComparator] ✓ Action+Target match: ${execActionNorm} ${execTarget} ≈ ${expectedActionNorm} ${expectedTarget}`);
           }
           return true;
         }
@@ -542,7 +542,7 @@ export class TestCaseComparator {
 
     if (sharedElements.length >= 1) {
       if (this.debug) {
-        console.log(`[TestCaseComparator] ✓ UI element match: [${sharedElements.join(', ')}]`);
+        console.error(`[TestCaseComparator] ✓ UI element match: [${sharedElements.join(', ')}]`);
       }
       return true;
     }
@@ -550,7 +550,7 @@ export class TestCaseComparator {
     // Substring match (at least 60% of expected action in executed)
     if (exec.includes(expected)) {
       if (this.debug) {
-        console.log(`[TestCaseComparator] ✓ Substring match`);
+        console.error(`[TestCaseComparator] ✓ Substring match`);
       }
       return true;
     }
@@ -564,13 +564,13 @@ export class TestCaseComparator {
 
     if (overlap >= 0.3) { // Lowered from 0.4 to 0.3
       if (this.debug) {
-        console.log(`[TestCaseComparator] ✓ Word overlap: ${Math.round(overlap * 100)}%`);
+        console.error(`[TestCaseComparator] ✓ Word overlap: ${Math.round(overlap * 100)}%`);
       }
       return true;
     }
 
     if (this.debug) {
-      console.log(`[TestCaseComparator] ✗ No match found`);
+      console.error(`[TestCaseComparator] ✗ No match found`);
     }
     return false;
   }
@@ -779,7 +779,7 @@ export class TestCaseComparator {
     }
 
     if (this.debug) {
-      console.log(`[TestCaseComparator] Quality Assessment: isOutdated=${isOutdated}, confidence=${confidence}%, semanticMatch=${semanticAnalysis.matchedSteps}/${tcStepCount}`);
+      console.error(`[TestCaseComparator] Quality Assessment: isOutdated=${isOutdated}, confidence=${confidence}%, semanticMatch=${semanticAnalysis.matchedSteps}/${tcStepCount}`);
     }
 
     return {
@@ -890,7 +890,7 @@ export class TestCaseComparator {
     const keyTerms = this.extractKeyTerms(actionLower);
     
     if (this.debug) {
-      console.log(`[TestCaseComparator] Verifying step "${expectedAction}" (key terms: ${keyTerms.join(', ')})`);
+      console.error(`[TestCaseComparator] Verifying step "${expectedAction}" (key terms: ${keyTerms.join(', ')})`);
     }
 
     // Search through frames for visual evidence
@@ -973,7 +973,7 @@ export class TestCaseComparator {
     }
 
     if (this.debug) {
-      console.log(`[TestCaseComparator] Found visual evidence: score=${bestMatch.score}, confidence=${confidence}, frame=${bestMatch.frame.timestamp}s`);
+      console.error(`[TestCaseComparator] Found visual evidence: score=${bestMatch.score}, confidence=${confidence}, frame=${bestMatch.frame.timestamp}s`);
     }
 
     return {
@@ -1074,7 +1074,7 @@ export class TestCaseComparator {
     const seenSteps = new Map<string, TestCaseStep & { sourceTestCase: string }>();
 
     if (this.debug) {
-      console.log(`[TestCaseComparator] Merging steps from ${testCases.length} test cases`);
+      console.error(`[TestCaseComparator] Merging steps from ${testCases.length} test cases`);
     }
 
     for (const tc of testCases) {
@@ -1087,12 +1087,12 @@ export class TestCaseComparator {
           const existing = seenSteps.get(signature)!;
           if (step.expectedAction.length > existing.expectedAction.length) {
             if (this.debug) {
-              console.log(`[TestCaseComparator] Replacing duplicate step with more detailed version: "${existing.expectedAction}" → "${step.expectedAction}"`);
+              console.error(`[TestCaseComparator] Replacing duplicate step with more detailed version: "${existing.expectedAction}" → "${step.expectedAction}"`);
             }
             seenSteps.set(signature, { ...step, sourceTestCase: tc.testCaseKey });
           } else {
             if (this.debug) {
-              console.log(`[TestCaseComparator] Skipping duplicate step: "${step.expectedAction}" (already have: "${existing.expectedAction}")`);
+              console.error(`[TestCaseComparator] Skipping duplicate step: "${step.expectedAction}" (already have: "${existing.expectedAction}")`);
             }
           }
         } else {
@@ -1112,7 +1112,7 @@ export class TestCaseComparator {
     }
 
     if (this.debug) {
-      console.log(`[TestCaseComparator] Merged ${seenSteps.size} unique steps from ${testCases.reduce((sum, tc) => sum + tc.testCaseSteps.length, 0)} total steps`);
+      console.error(`[TestCaseComparator] Merged ${seenSteps.size} unique steps from ${testCases.reduce((sum, tc) => sum + tc.testCaseSteps.length, 0)} total steps`);
     }
 
     return mergedSteps;

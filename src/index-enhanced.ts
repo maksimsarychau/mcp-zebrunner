@@ -75,7 +75,7 @@ function renderTestCaseMarkdown(tcRaw: any): string {
 
 async function main() {
   const server = new McpServer(
-    { name: "zebrunner-mcp-enhanced", version: "7.1.1" },
+    { name: "zebrunner-mcp-enhanced", version: "7.2.1" },
     { 
       capabilities: {
         tools: {}
@@ -371,7 +371,7 @@ async function main() {
   await server.connect(transport);
   
   if (DEBUG_MODE) {
-    console.log("Zebrunner MCP Server Enhanced started in debug mode");
+    console.error("Zebrunner MCP Server Enhanced started in debug mode");
   }
 }
 

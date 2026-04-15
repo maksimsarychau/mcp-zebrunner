@@ -44,7 +44,7 @@ export class VideoDownloader {
   ): Promise<TestSessionVideo | null> {
     try {
       if (this.debug) {
-        console.log(`[VideoDownloader] Fetching test sessions for test ${testId}, launch ${testRunId}`);
+        console.error(`[VideoDownloader] Fetching test sessions for test ${testId}, launch ${testRunId}`);
       }
 
       // Fetch test sessions for this specific test
@@ -56,20 +56,20 @@ export class VideoDownloader {
 
       if (!sessionsResponse.items || sessionsResponse.items.length === 0) {
         if (this.debug) {
-          console.log('[VideoDownloader] No test sessions found');
+          console.error('[VideoDownloader] No test sessions found');
         }
         return null;
       }
 
       if (this.debug) {
-        console.log(`[VideoDownloader] Found ${sessionsResponse.items.length} test session(s)`);
+        console.error(`[VideoDownloader] Found ${sessionsResponse.items.length} test session(s)`);
       }
 
       // Get the LAST session (most recent execution)
       const lastSession = sessionsResponse.items[sessionsResponse.items.length - 1];
 
       if (this.debug) {
-        console.log(`[VideoDownloader] Using last session: ${lastSession.sessionId}`);
+        console.error(`[VideoDownloader] Using last session: ${lastSession.sessionId}`);
       }
 
       // Check if video artifact exists
@@ -79,7 +79,7 @@ export class VideoDownloader {
 
       if (!videoArtifact) {
         if (this.debug) {
-          console.log('[VideoDownloader] No video artifact found in session');
+          console.error('[VideoDownloader] No video artifact found in session');
         }
         return null;
       }
@@ -101,7 +101,7 @@ export class VideoDownloader {
       const videoUrl = `${baseUrl}/${validatedPath}`;
 
       if (this.debug) {
-        console.log(`[VideoDownloader] Video URL constructed: ${videoUrl}`);
+        console.error(`[VideoDownloader] Video URL constructed: ${videoUrl}`);
       }
 
       return {
@@ -133,7 +133,7 @@ export class VideoDownloader {
   ): Promise<VideoDownloadResult> {
     try {
       if (this.debug) {
-        console.log(`[VideoDownloader] Downloading video from: ${videoUrl}`);
+        console.error(`[VideoDownloader] Downloading video from: ${videoUrl}`);
       }
 
       // Get authenticated bearer token
@@ -163,7 +163,7 @@ export class VideoDownloader {
       const tempPath = path.join(this.tempDir, filename);
 
       if (this.debug) {
-        console.log(`[VideoDownloader] Saving video to: ${tempPath}`);
+        console.error(`[VideoDownloader] Saving video to: ${tempPath}`);
       }
 
       // Create write stream
@@ -179,7 +179,7 @@ export class VideoDownloader {
       });
 
       if (this.debug) {
-        console.log('[VideoDownloader] Video download complete');
+        console.error('[VideoDownloader] Video download complete');
       }
 
       // Get file size
@@ -195,7 +195,7 @@ export class VideoDownloader {
       }
 
       if (this.debug) {
-        console.log(`[VideoDownloader] Video file size: ${(fileSize / 1024 / 1024).toFixed(2)} MB`);
+        console.error(`[VideoDownloader] Video file size: ${(fileSize / 1024 / 1024).toFixed(2)} MB`);
       }
 
       // Get video metadata using ffprobe
@@ -252,7 +252,7 @@ export class VideoDownloader {
           const resolution = `${width}x${height}`;
 
           if (this.debug) {
-            console.log(`[VideoDownloader] Video metadata: ${duration}s, ${resolution}`);
+            console.error(`[VideoDownloader] Video metadata: ${duration}s, ${resolution}`);
           }
 
           resolve({ duration, resolution });
@@ -271,7 +271,7 @@ export class VideoDownloader {
       if (fs.existsSync(videoPath)) {
         fs.unlinkSync(videoPath);
         if (this.debug) {
-          console.log(`[VideoDownloader] Cleaned up video: ${videoPath}`);
+          console.error(`[VideoDownloader] Cleaned up video: ${videoPath}`);
         }
       }
     } catch (error) {
@@ -307,7 +307,7 @@ export class VideoDownloader {
       }
 
       if (this.debug && deletedCount > 0) {
-        console.log(`[VideoDownloader] Cleaned up ${deletedCount} old video(s)`);
+        console.error(`[VideoDownloader] Cleaned up ${deletedCount} old video(s)`);
       }
     } catch (error) {
       if (this.debug) {
@@ -368,7 +368,7 @@ function setupVideoCleanupHandlers(): void {
       });
 
       if (totalCleaned > 0 && process.env.DEBUG === 'true') {
-        console.log(`[VideoDownloader] Cleaned ${totalCleaned} video(s) on ${signal}`);
+        console.error(`[VideoDownloader] Cleaned ${totalCleaned} video(s) on ${signal}`);
       }
     } catch (error) {
       if (process.env.DEBUG === 'true') {

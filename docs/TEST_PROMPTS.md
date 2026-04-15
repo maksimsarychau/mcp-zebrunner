@@ -1,6 +1,6 @@
 # Test Prompts for Zebrunner MCP Tools
 
-> **Version:** 7.1.1
+> **Version:** 7.2.1
 >
 > This document contains 1–3 test prompts per tool with expected behavior, plus end-to-end metric collection prompts. All prompts use generic platform references (iOS / Android / Web) without specific project keys, launch IDs, or milestones.
 
@@ -633,15 +633,25 @@
 
 ### `about_mcp_tools`
 
-**Prompt 1 — Tool summary**
+**Prompt 1 — Tool summary (default)**
 > Give me a summary of all available Zebrunner MCP tools.
 
-**Expected:** Returns categorized list of all 55+ tools with brief descriptions.
+**Expected:** Returns categorized list of all 60 tools with brief descriptions. The summary footer includes "Additional MCP Capabilities" with prompt and resource counts.
 
 **Prompt 2 — Specific tool details**
 > Show me detailed info for the analyze_regression_runtime tool with examples.
 
 **Expected:** Returns full parameter documentation, usage examples, and approximate token estimates.
+
+**Prompt 3 — List all prompts** *(v7.2.1)*
+> What prompts are available in Zebrunner MCP? Use mode "prompts".
+
+**Expected:** Returns a table of all 13 `/prompts` grouped by category (E2E Metrics, Analysis, Role-Specific) with titles, descriptions, and accepted arguments.
+
+**Prompt 4 — List all resources** *(v7.2.1)*
+> What MCP resources are available? Use mode "resources".
+
+**Expected:** Returns two tables: 5 static resources (no parameters) and 8 template resources (require project_key) with URIs and descriptions.
 
 ---
 
@@ -1049,7 +1059,7 @@ These prompts combine multiple tools to collect real business metrics. The LLM s
 
 All mutation tools use a **two-step confirmation flow**: the first call returns a preview with a `confirmation_token`, and only after user approval does the second call with `confirm: true` execute the mutation. Created test cases are always forced to `draft: true` for safety.
 
-**Next-step steering (v7.1.1):** After every successful mutation, the server appends a `Tip:` block suggesting the most logical follow-up action. This is inspired by the [Strands Agents steering pattern](https://strandsagents.com/blog/steering-accuracy-beats-prompts-workflows/) -- just-in-time guidance delivered at the moment the LLM needs it.
+**Next-step steering (v7.2.1):** After every successful mutation, the server appends a `Tip:` block suggesting the most logical follow-up action. This is inspired by the [Strands Agents steering pattern](https://strandsagents.com/blog/steering-accuracy-beats-prompts-workflows/) -- just-in-time guidance delivered at the moment the LLM needs it.
 
 Hints are conditional:
 - `create_test_case` -- always shows draft/publish reminder; quality check hint is skipped if `review: true` was used.
@@ -1087,7 +1097,7 @@ The `steeringHint()` helper in `src/helpers/steering.ts` is a pure, deterministi
 
 **Expected:** Uses `create_test_case` with `project_key`, `test_suite_id`, `title`, `priority: { name: "High" }`, `description`, `pre_conditions`, `steps` (3), `requirements: [{ source: "JIRA", reference: "PROJ-100" }]`. Preview shows all fields to be set. `draft` is forced to `true` regardless of input.
 
-**Prompt 4 — Draft enforcement** *(v7.1.1)*
+**Prompt 4 — Draft enforcement** *(v7.2.1)*
 > Create a test case titled "Smoke test" in suite 12345 of project MCP with draft set to false.
 
 **Expected:** Uses `create_test_case` with `draft: false`, but the preview shows `draft → true (forced for safety)`. The created test case is always a draft. The user must use `update_test_case` to publish it.
@@ -1109,7 +1119,7 @@ The `steeringHint()` helper in `src/helpers/steering.ts` is a pure, deterministi
 
 **Expected:** Uses `update_test_case` with `identifier: "MCP-10"`, `project_key: "MCP"`, `steps` (2 steps). The preview should warn that steps use ATOMIC replacement — all existing steps will be replaced.
 
-**Prompt 4 — Publish a draft** *(v7.1.1)*
+**Prompt 4 — Publish a draft** *(v7.2.1)*
 > Set test case MCP-33 in project MCP to draft: false so it becomes published.
 
 **Expected:** Uses `update_test_case` with `identifier: "MCP-33"`, `project_key: "MCP"`, `draft: false`. This is the intended way to publish test cases created via `create_test_case`.
@@ -1140,29 +1150,29 @@ The `steeringHint()` helper in `src/helpers/steering.ts` is a pure, deterministi
 
 ### `manage_test_run`
 
-**Prompt 1 — Create a test run** *(v7.1.1)*
+**Prompt 1 — Create a test run** *(v7.2.1)*
 > Use manage_test_run to create a test run titled "Sprint 42 Regression" in project MCP.
 
 **Expected:** Uses `manage_test_run` with `action: "create"`, `project_key: "MCP"`, `title: "Sprint 42 Regression"`. Returns preview with title and empty configurations/requirements. Returns `confirmation_token`.
 
-**Prompt 2 — Update a test run milestone** *(v7.1.1)*
+**Prompt 2 — Update a test run milestone** *(v7.2.1)*
 > Use manage_test_run to update test run 42 in project MCP. Change the milestone to "Release 3.0".
 
 **Expected:** Uses `manage_test_run` with `action: "update"`, `project_key: "MCP"`, `test_run_id: 42`, `milestone: { name: "Release 3.0" }`. Preview shows only the milestone field being changed.
 
-**Prompt 3 — Add test cases to a run** *(v7.1.1)*
+**Prompt 3 — Add test cases to a run** *(v7.2.1)*
 > Use manage_test_run to add test cases MCP-1, MCP-2, and MCP-3 to test run 42 in project MCP.
 
 **Expected:** Uses `manage_test_run` with `action: "add_cases"`, `project_key: "MCP"`, `test_run_id: 42`, `test_case_keys: ["MCP-1", "MCP-2", "MCP-3"]`. Preview lists the 3 specific test cases to be added.
 
 ### `import_launch_results_to_test_run`
 
-**Prompt 1 — Import all launch results** *(v7.1.1)*
+**Prompt 1 — Import all launch results** *(v7.2.1)*
 > Use import_launch_results_to_test_run to import results from launch 98765 into test run 123 for project MCP.
 
 **Expected:** Uses `import_launch_results_to_test_run` with `project_key: "MCP"`, `test_run_id: 123`, `launch_id: 98765`. Preview shows a table of test case keys with current and new statuses.
 
-**Prompt 2 — Import filtered results** *(v7.1.1)*
+**Prompt 2 — Import filtered results** *(v7.2.1)*
 > Use import_launch_results_to_test_run to import results only for MCP-82 and MCP-83 from launch 98765 into test run 123.
 
 **Expected:** Uses `import_launch_results_to_test_run` with `project_key: "MCP"`, `test_run_id: 123`, `launch_id: 98765`, `test_case_keys: ["MCP-82", "MCP-83"]`. Only 2 test cases appear in the preview.
@@ -1174,12 +1184,12 @@ The `steeringHint()` helper in `src/helpers/steering.ts` is a pure, deterministi
 
 **Expected:** The LLM should refuse — there is no delete tool. It should explain that deletion is not supported via MCP and suggest using the Zebrunner web UI.
 
-**Prompt 2 — Negative: skip confirmation** *(v7.1.1)*
+**Prompt 2 — Negative: skip confirmation** *(v7.2.1)*
 > Create a test case in project MCP, suite 12345, titled "Quick test". Skip the preview and create it immediately.
 
 **Expected:** The LLM should explain that the two-step confirmation flow cannot be skipped — all mutations require a preview step followed by confirmation with the token. This is a safety requirement.
 
-### Steering hint prompts *(v7.1.1)*
+### Steering hint prompts *(v7.2.1)*
 
 **Prompt 1 — Verify hint after test case creation**
 > Create a test case "Login smoke test" in suite 12345, project MCP. After confirmation, what does the response suggest as next steps?
@@ -1200,3 +1210,192 @@ The `steeringHint()` helper in `src/helpers/steering.ts` is a pure, deterministi
 > Import results from launch 98765 into test run 123 for project MCP. What follow-up does the response suggest?
 
 **Expected:** The response includes a `Tip:` suggesting to review updated statuses via `list_test_run_test_cases`.
+
+---
+
+## 14. MCP Resources *(v7.2.1)*
+
+MCP resources provide read-only reference data accessible via the `@` menu in MCP clients (Claude Desktop, Claude Code). Resources are fetched on demand and cached for 20 minutes.
+
+### Static Resources (no API calls)
+
+**Resource 1 — Report types reference**
+> Attach `@zebrunner://reports/types` and ask: "What report types are available for generate_report?"
+
+**Expected:** The resource provides a structured catalog of 6 report types (quality_dashboard, coverage, pass_rate, runtime_efficiency, executive_dashboard, release_readiness) with descriptions, optional parameters, default targets, and usage examples. Claude should answer from the resource context without calling any tool.
+
+**Resource 2 — Time periods reference**
+> Attach `@zebrunner://periods` and ask: "What time periods can I use for reports and bug analysis?"
+
+**Expected:** The resource lists all 12 valid period strings (Today, Last 24 Hours, Week, Last 7 Days, etc.) with their day equivalents and which tools accept them. Claude should use exact period strings (e.g., "Last 30 Days" not "last 30 days") in subsequent tool calls.
+
+**Resource 3 — Chart options reference**
+> Attach `@zebrunner://charts` and ask: "Show me a pie chart of launch results."
+
+**Expected:** The resource lists chart delivery formats (none, png, html, text) and chart types (auto, pie, bar, stacked_bar, horizontal_bar, line) with 17 supported tools. Claude should correctly use `chart: "png"`, `chart_type: "pie"` in the tool call.
+
+**Resource 4 — Output format reference**
+> Attach `@zebrunner://formats` and ask: "What format options are available for test case tools?"
+
+**Expected:** The resource documents 5 format families (data, data_simple, raw_formatted, verbosity, metadata) with valid values per family and which tools use them.
+
+### Dynamic Resources (cached API calls)
+
+**Resource 5 — Available projects**
+> Open the `@` menu and select `zebrunner://projects`.
+
+**Expected:** Returns a JSON list of all Zebrunner projects accessible to the current user with name, key, ID, starred status, and public accessibility. Subsequent `@` accesses within 20 minutes return cached data.
+
+**Resource 6 — Root suites for project**
+> Attach `@zebrunner://projects/MFPAND/suites` and ask: "What root suites exist in the Android project?"
+
+**Expected:** Returns root-level test suites (suites with no parent) with IDs and names. The `@` menu should show one entry per project (e.g., "Android — Root Suites", "iOS — Root Suites").
+
+**Resource 7 — Automation states for project**
+> Attach `@zebrunner://projects/MFPIOS/automation-states` and ask: "What automation states exist?"
+
+**Expected:** Returns the list of automation states (e.g., Automated, Manual, Not Automated, To Be Automated) with IDs for the selected project.
+
+**Resource 8 — Priorities for project**
+> Attach `@zebrunner://projects/MFPWEB/priorities` and ask: "What priority levels are configured?"
+
+**Expected:** Returns the list of priorities (e.g., Critical, High, Medium, Low) with IDs for the selected project.
+
+### Phase 2 Dynamic Resources (deeper project data)
+
+**Resource 9 — Milestones for project**
+> Attach `@zebrunner://projects/MFPAND/milestones` and ask: "What milestones exist for Android?"
+
+**Expected:** Returns active and completed milestones with IDs, names, and completion status. Useful for filtering launches by milestone version.
+
+**Resource 10 — Result statuses for project**
+> Attach `@zebrunner://projects/MFPAND/result-statuses` and ask: "What test run result statuses are configured?"
+
+**Expected:** Returns the configured result statuses (e.g., Passed, Failed, Skipped, In Progress, Blocked) with IDs for the project.
+
+**Resource 11 — Configuration groups for project**
+> Attach `@zebrunner://projects/MFPAND/configuration-groups` and ask: "What configuration groups are available?"
+
+**Expected:** Returns test run configuration groups and their options (e.g., Browser: Chrome/Firefox, OS: Windows/macOS).
+
+**Resource 12 — Fields layout for project**
+> Attach `@zebrunner://projects/MFPAND/fields` and ask: "What custom fields are defined for test cases?"
+
+**Expected:** Returns system and custom field definitions with types, tab placement, and enabled status. Useful for understanding which custom fields (e.g., manualOnly, testrailId) are available.
+
+**Resource 13 — Suite hierarchy for project**
+> Attach `@zebrunner://projects/MFPAND/suite-hierarchy` and ask: "Show me the full suite tree."
+
+**Expected:** Returns all test suites with parent-child relationships (parentId). Claude can reconstruct the tree structure from flat data.
+
+### Combined Resource Usage
+
+**Resource 14 — Resource-assisted report generation**
+> Attach both `@zebrunner://projects` and `@zebrunner://reports/types`, then ask: "Generate an executive dashboard for all starred projects."
+
+**Expected:** Claude uses project keys from the projects resource and the correct `report_types: ["executive_dashboard"]` from the report types resource to construct an accurate `generate_report` call without guessing or calling discovery tools first.
+
+---
+
+## 15. MCP Prompts *(v7.2.1)*
+
+MCP prompts provide pre-built, tested workflow instructions accessible via the `/` command in MCP clients. Each prompt injects expert-crafted multi-step instructions that guide Claude through complex multi-tool workflows.
+
+### E2E Metric Prompts
+
+**Prompt 1 — Pass rate via /pass-rate**
+> Use `/pass-rate` with projects: "android,ios,web"
+
+**Expected:** Prompt injects multi-platform pass rate collection instructions. Claude should call `get_all_launches_with_filter` and `get_launch_test_summary` for each platform, calculate pass rates, and compare against targets (Android/iOS >= 90%, Web >= 65%).
+
+**Prompt 2 — Runtime efficiency via /runtime-efficiency**
+> Use `/runtime-efficiency` with projects: "android,ios,web"
+
+**Expected:** Prompt drives cross-platform runtime analysis. Claude should call `analyze_regression_runtime` for each platform with `previous_milestone` for baseline comparison.
+
+**Prompt 3 — Automation coverage via /automation-coverage**
+> Use `/automation-coverage` with projects: "android,ios,web"
+
+**Expected:** Prompt drives 7-metric coverage collection including intake rate. Claude should call `get_automation_states`, `get_test_cases_by_automation_state` with `count_only: true`, and `get_test_case_by_filter` with date ranges.
+
+**Prompt 4 — Executive dashboard via /executive-dashboard**
+> Use `/executive-dashboard` with projects: "android,ios,web"
+
+**Expected:** Prompt drives a 5-section executive report combining pass rate, runtime, top bugs, coverage, and flaky tests across all platforms.
+
+**Prompt 5 — Release readiness via /release-readiness**
+> Use `/release-readiness` with project: "android", milestone: "25.40.0"
+
+**Expected:** Prompt drives a 5-check Go/No-Go assessment. Claude should provide a structured assessment with per-check PASS/FAIL status and a final recommendation.
+
+**Prompt 6 — Suite coverage via /suite-coverage**
+> Use `/suite-coverage` with projects: "android,ios,web"
+
+**Expected:** Prompt drives per-suite automation coverage collection. Claude should handle "Manual Only" detection (automation state vs custom field), collect per-suite counts with `count_only: true`, and present tables with TOTAL and TOTAL REGRESSION rows.
+
+### Analysis Prompts
+
+**Prompt 7 — Test case review via /review-test-case**
+> Use `/review-test-case` with case_key: "MCP-5"
+
+**Expected:** Prompt drives a validate-then-improve workflow. Claude should call `get_test_case_by_key`, `validate_test_case`, and `improve_test_case` in sequence, presenting a quality report with actionable suggestions.
+
+**Prompt 8 — Launch triage via /launch-triage**
+> Use `/launch-triage` with project: "android"
+
+**Expected:** Prompt drives post-regression failure analysis. Claude should find the latest launch, identify failures without linked Jira issues, and analyze top failures with root cause analysis.
+
+**Prompt 9 — Flaky test review via /flaky-review**
+> Use `/flaky-review` with project: "android"
+
+**Expected:** Prompt drives flaky test detection and analysis. Claude should call `find_flaky_tests` with history enabled and present a prioritized stabilization plan.
+
+**Prompt 10 — Duplicate detection via /find-duplicates**
+> Use `/find-duplicates` with project: "android", suite_id: "42"
+
+**Expected:** Prompt drives structural (and optionally semantic) duplicate analysis within the specified scope. Claude should present duplicate groups with similarity scores and merge recommendations.
+
+### Role-Specific Prompts
+
+**Prompt 11 — Daily QA standup via /daily-qa-standup**
+> Use `/daily-qa-standup` with projects: "android,ios,web"
+
+**Expected:** Prompt drives a concise daily status collection. Claude should get the latest launch per platform, check for unresolved failures, scan for flaky tests in the last 7 days, and present a standup-ready summary with action items.
+
+**Prompt 12 — Automation gaps via /automation-gaps**
+> Use `/automation-gaps` with projects: "android,ios,web"
+
+**Expected:** Prompt drives gap analysis. Claude should check per-suite coverage, identify the least automated suites, find recently created manual test cases, and present a prioritized automation backlog.
+
+**Prompt 13 — Project overview via /project-overview**
+> Use `/project-overview` with project: "android"
+
+**Expected:** Prompt drives comprehensive project health collection. Claude should gather suite structure, coverage metrics, recent launches, milestones, priorities, and flaky test counts, presenting a structured project health card.
+
+### Combined Resources + Prompts
+
+**Prompt 14 — Resource context + prompt workflow**
+> Attach `@zebrunner://projects` via the `@` menu, then use `/launch-triage` with project: "android"
+
+**Expected:** The project resource context provides project metadata, and the prompt instructions guide Claude through the triage workflow. Claude should use the project key from the resource context for accurate tool calls.
+
+---
+
+## 16. Tool Annotations *(v7.2.1)*
+
+All 60 tools now include MCP Tool Annotations (readOnlyHint, destructiveHint, idempotentHint, openWorldHint) that inform clients about tool behavior characteristics.
+
+**Verification 1 — Read-only tools respected**
+> In the MCP Inspector, examine any read-only tool (e.g., `list_test_suites`). Check its annotations.
+
+**Expected:** The tool should have `readOnlyHint: true`, `destructiveHint: false`, `idempotentHint: true`, `openWorldHint: false`. This applies to all 54 non-mutation tools.
+
+**Verification 2 — Mutation tools flagged correctly**
+> In the MCP Inspector, examine a mutation tool (e.g., `create_test_case`). Check its annotations.
+
+**Expected:** The tool should have `readOnlyHint: false`. `create_test_case` and `create_test_suite` have `idempotentHint: false` (creating twice makes two entities). `update_test_suite` and `update_test_case` have `idempotentHint: true` (same update = same result). `import_launch_results_to_test_run` has `destructiveHint: true` (overrides results).
+
+**Verification 3 — Client hint usage**
+> Ask Claude Desktop: "Is it safe to call list_test_suites multiple times?"
+
+**Expected:** Claude may reference the readOnlyHint and idempotentHint annotations to confirm the tool is safe to retry and does not modify server state.

@@ -214,7 +214,7 @@ export class ConfigManager {
       }
 
       // File exists and has meaningful content
-      console.log(`✅ Auto-detected rules file '${DEFAULT_CONFIG.rulesFileName}' - Rules engine enabled`);
+      console.error(`✅ Auto-detected rules file '${DEFAULT_CONFIG.rulesFileName}' - Rules engine enabled`);
       return true;
 
     } catch (error: any) {
@@ -254,18 +254,18 @@ export class ConfigManager {
    */
   public printConfigSummary(): void {
     if (this.config.debug) {
-      console.log('🔧 Zebrunner MCP Configuration:');
-      console.log(`   - Base URL: ${this.config.baseUrl ? 'Set' : 'Not set'}`);
-      console.log(`   - Login: ${this.config.login ? 'Set' : 'Not set'}`);
-      console.log(`   - Token: ${this.config.authToken ? 'Set' : 'Not set'}`);
-      console.log(`   - Debug Mode: ${this.config.debug}`);
-      console.log(`   - Rules Engine: ${this.config.enableRulesEngine} ${process.env.ENABLE_RULES_ENGINE ? '(explicit)' : '(auto-detected)'}`);
-      console.log(`   - Max Page Size: ${this.config.maxPageSize}`);
-      console.log(`   - Default Page Size: ${this.config.defaultPageSize}`);
+      console.error('🔧 Zebrunner MCP Configuration:');
+      console.error(`   - Base URL: ${this.config.baseUrl ? 'Set' : 'Not set'}`);
+      console.error(`   - Login: ${this.config.login ? 'Set' : 'Not set'}`);
+      console.error(`   - Token: ${this.config.authToken ? 'Set' : 'Not set'}`);
+      console.error(`   - Debug Mode: ${this.config.debug}`);
+      console.error(`   - Rules Engine: ${this.config.enableRulesEngine} ${process.env.ENABLE_RULES_ENGINE ? '(explicit)' : '(auto-detected)'}`);
+      console.error(`   - Max Page Size: ${this.config.maxPageSize}`);
+      console.error(`   - Default Page Size: ${this.config.defaultPageSize}`);
       
       if (this.warnings.length > 0) {
-        console.log('⚠️  Configuration Warnings:');
-        this.warnings.forEach(warning => console.log(`   ${warning}`));
+        console.error('⚠️  Configuration Warnings:');
+        this.warnings.forEach(warning => console.error(`   ${warning}`));
       }
     }
   }
