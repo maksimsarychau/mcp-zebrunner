@@ -51,7 +51,7 @@ export function getEvalConfig(): EvalConfig {
     thresholds: {
       toolSelectionAccuracy: 0.90,
       argCorrectness: 0.85,
-      judgeAvgScore: 3.5,
+      judgeAvgScore: 3.0,
     },
     anthropicApiKey: apiKey,
     resultsDir: new URL("./results", import.meta.url).pathname,

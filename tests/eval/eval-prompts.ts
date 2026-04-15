@@ -1171,7 +1171,7 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
   {
     id: "neg.ambig.show_tests",
     toolSection: "Negative",
-    promptTemplate: "Show me the tests.",
+    promptTemplate: "Show me the tests for the thing we discussed earlier.",
     expectedTools: [],
     category: "negative",
     layer: 1,

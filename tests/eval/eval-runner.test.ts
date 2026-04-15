@@ -107,16 +107,16 @@ describe("LLM Evaluation Tests", () => {
     }
   });
 
-  // ── Layer 1: Tool Selection Accuracy ──
+  // ── Layers 1+2: Tool Selection + Argument Validation (single API call per prompt) ──
 
-  describe("Layer 1: Tool Selection", () => {
-    const layer1Prompts = EVAL_PROMPTS.filter(
-      (p) => p.layer <= 1 && !p.isMultiTool && !p.isNegative && shouldRun(p.id)
+  describe("Layers 1+2: Tool Selection & Arguments", () => {
+    const prompts = EVAL_PROMPTS.filter(
+      (p) => p.layer <= 2 && !p.isMultiTool && !p.isNegative && shouldRun(p.id)
     );
 
-    for (const ep of layer1Prompts) {
-      it(`[${ep.id}] selects correct tool`, async () => {
-        const result = await runToolSelection(ep);
+    for (const ep of prompts) {
+      it(`[${ep.id}] selects correct tool${ep.expectedArgKeys ? " with correct arguments" : ""}`, async () => {
+        const result = await runArgValidation(ep);
         reporter.addResult(result);
 
         if (result.skipped) return;
@@ -124,31 +124,12 @@ describe("LLM Evaluation Tests", () => {
           result.toolSelectionCorrect,
           `Expected ${ep.expectedTools.join("|")}, got ${result.selectedTool || "none"}`
         );
-      });
-    }
-  });
-
-  // ── Layer 2: Argument Correctness ──
-
-  describe("Layer 2: Argument Validation", () => {
-    const layer2Prompts = EVAL_PROMPTS.filter(
-      (p) => p.layer <= 2 && p.expectedArgKeys && !p.isMultiTool && !p.isNegative && shouldRun(p.id)
-    );
-
-    for (const ep of layer2Prompts) {
-      it(`[${ep.id}] provides correct arguments`, async () => {
-        const result = await runArgValidation(ep);
-        reporter.addResult(result);
-
-        if (result.skipped) return;
-        assert.ok(
-          result.toolSelectionCorrect,
-          `Wrong tool: expected ${ep.expectedTools.join("|")}, got ${result.selectedTool}`
-        );
-        assert.ok(
-          result.argsCorrect,
-          `Missing args: ${result.missingArgs?.join(", ")}`
-        );
+        if (ep.expectedArgKeys) {
+          assert.ok(
+            result.argsCorrect,
+            `Missing args: ${result.missingArgs?.join(", ")}`
+          );
+        }
       });
     }
   });
@@ -480,47 +461,6 @@ describe("LLM Evaluation Tests", () => {
         negativePass: false,
         negativeReason: `Error: ${err.message}`,
       };
-    }
-  }
-
-  async function runToolSelection(ep: EvalPrompt): Promise<EvalResult> {
-    if (!isReady(ep)) {
-      return skipResult(ep, "Missing required context");
-    }
-
-    const populated = populatePrompt(ep.promptTemplate, ctx);
-    const start = Date.now();
-
-    try {
-      const response = await client.messages.create({
-        model: config.model,
-        max_tokens: config.maxTokens,
-        temperature: config.temperature,
-        system: SYSTEM_PROMPT,
-        tools: anthropicTools,
-        tool_choice: { type: "auto" },
-        messages: [{ role: "user", content: populated }],
-      });
-
-      const toolUse = response.content.find((b) => b.type === "tool_use");
-      const selectedTool = toolUse?.type === "tool_use" ? toolUse.name : undefined;
-
-      return {
-        id: ep.id,
-        category: ep.category,
-        layer: ep.layer,
-        prompt: populated,
-        expectedTools: ep.expectedTools,
-        selectedTool,
-        toolSelectionCorrect: checkToolSelection(selectedTool, ep.expectedTools),
-        durationMs: Date.now() - start,
-        tokenUsage: {
-          inputTokens: response.usage?.input_tokens ?? 0,
-          outputTokens: response.usage?.output_tokens ?? 0,
-        },
-      };
-    } catch (err: any) {
-      return errorResult(ep, populated, err, Date.now() - start);
     }
   }
 
