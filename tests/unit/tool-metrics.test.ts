@@ -130,7 +130,7 @@ describe("wrapToolHandler()", () => {
 
     const wrapped = wrapToolHandler("crash_tool", handler, metrics);
 
-    await assert.rejects(() => wrapped({}), { message: "boom" });
+    await assert.rejects(() => wrapped({}), { message: "[crash_tool] boom" });
 
     const stats = metrics.getStats().get("crash_tool")!;
     assert.equal(stats.callCount, 1);

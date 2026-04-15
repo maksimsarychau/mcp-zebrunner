@@ -90,16 +90,18 @@ export function wrapToolHandler<T extends (...args: any[]) => any>(
     try {
       result = await handler(...args);
       isError = result?.isError === true;
-    } catch (err) {
+    } catch (err: any) {
       isError = true;
       metrics.record(name, Date.now() - start, 0, true);
-      throw err;
+      const wrapped = err instanceof Error ? err : new Error(String(err));
+      wrapped.message = `[${name}] ${wrapped.message}`;
+      throw wrapped;
     }
 
-    const responseChars = (result?.content ?? []).reduce(
-      (sum: number, block: any) => sum + (block.text?.length ?? 0),
-      0
-    );
+    const content = result?.content;
+    const responseChars = Array.isArray(content)
+      ? content.reduce((sum: number, block: any) => sum + (typeof block?.text === "string" ? block.text.length : 0), 0)
+      : 0;
 
     metrics.record(name, Date.now() - start, responseChars, isError);
     return result;
