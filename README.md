@@ -1,6 +1,6 @@
 # Zebrunner MCP Server
 ![version](https://img.shields.io/github/package-json/v/maksimsarychau/mcp-zebrunner)
-<!--**Current version:** 🟢 --> <!--VERSION_START--><!--7.2.1--> <!--VERSION_END--> 
+<!--**Current version:** 🟢 --> <!--VERSION_START--><!--7.2.2--> <!--VERSION_END--> 
 
 A **Model Context Protocol (MCP)** server that integrates with **Zebrunner Test Case Management** to help QA teams manage test cases, test suites, and test execution data through AI assistants like Claude.
 
@@ -529,7 +529,7 @@ Once connected, you can use these tools through natural language in your AI assi
 
 > **Safety Model:** Every mutation tool follows a **two-call confirmation gate**. The first call returns a preview; only after user approval should `confirm: true` be passed to execute the mutation. All mutations are audit-logged to `~/.mcp-zebrunner-audit.jsonl`. Use `dry_run: true` for raw payload inspection.
 >
-> **Next-step steering (v7.2.1):** After every successful mutation, the server appends a `Tip:` block guiding the LLM to the most useful next action (e.g., "validate quality", "publish the draft", "populate the test run"). Hints are conditional -- they are suppressed when redundant. For example, the quality-check hint is omitted if `review: true` was already used. Created test cases are always forced to `draft=true`, and the hint always reminds the LLM to publish via `update_test_case`. This approach is inspired by the [Strands Agents steering pattern](https://strandsagents.com/blog/steering-accuracy-beats-prompts-workflows/) and delivers just-in-time guidance without bloating system prompts.
+> **Next-step steering (v7.2.2):** After every successful mutation, the server appends a `Tip:` block guiding the LLM to the most useful next action (e.g., "validate quality", "publish the draft", "populate the test run"). Hints are conditional -- they are suppressed when redundant. For example, the quality-check hint is omitted if `review: true` was already used. Created test cases are always forced to `draft=true`, and the hint always reminds the LLM to publish via `update_test_case`. This approach is inspired by the [Strands Agents steering pattern](https://strandsagents.com/blog/steering-accuracy-beats-prompts-workflows/) and delivers just-in-time guidance without bloating system prompts.
 
 #### **Suite Mutations**
 | Tool | Description | Example Usage | Best For |
@@ -663,7 +663,7 @@ Once connected, you can use these tools through natural language in your AI assi
 |------|-------------|---------------|----------|
 | `get_available_projects` | Discover all accessible projects | `"What projects can I access?"` | All roles |
 | `test_reporting_connection` | Test API connectivity | `"Test my connection to Zebrunner"` | All roles |
-| `about_mcp_tools` | Summarize all tools or show detailed info for one tool with examples, role value, and approximate token usage | `"Using Zebrunner MCP make a summary of all tools with examples"` | All roles |
+| `about_mcp_tools` | Summarize tools, prompts, resources, or show session metrics. Modes: summary, tool, prompts, resources, metrics | `"Using Zebrunner MCP make a summary of all tools with examples"` or `"Show me tool usage metrics for this session"` | All roles |
 
 ### 🏃 Test Run Management
 
@@ -684,7 +684,7 @@ Once connected, you can use these tools through natural language in your AI assi
 
 > **Full guide:** [docs/RESOURCES_AND_PROMPTS.md](docs/RESOURCES_AND_PROMPTS.md) — detailed usage, examples, reference tables, and contributor guide.
 
-In addition to 60 tools, the server now provides **13 resources** and **13 prompts** that improve discoverability and automate complex workflows.
+In addition to 60 tools, the server now provides **13 resources** and **14 prompts** that improve discoverability and automate complex workflows.
 
 ### Resources — `@` Context Injection
 
@@ -732,6 +732,7 @@ Prompts are pre-built workflow instructions triggered via the `/` command menu. 
 | `/daily-qa-standup` | `projects` | Daily standup summary with action items |
 | `/automation-gaps` | `projects` | Automation backlog prioritization |
 | `/project-overview` | `project` | Comprehensive project health card |
+| `/session-metrics` | *(none)* | Show tool usage stats for the current session |
 
 **Quick example:**
 ```

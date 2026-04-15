@@ -75,7 +75,7 @@ function renderTestCaseMarkdown(tcRaw: any): string {
 
 async function main() {
   const server = new McpServer(
-    { name: "zebrunner-mcp-enhanced", version: "7.2.1" },
+    { name: "zebrunner-mcp-enhanced", version: "7.2.2" },
     { 
       capabilities: {
         tools: {}

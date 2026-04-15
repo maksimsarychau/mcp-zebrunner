@@ -42,7 +42,7 @@ describe("Prompt Registry Coverage", () => {
   const registeredPrompts = extractPromptRegistrations(promptSource);
 
   it("registers the expected number of prompts", () => {
-    assert.equal(registeredPrompts.length, 13, `Expected 13 prompts, got ${registeredPrompts.length}: ${registeredPrompts.join(", ")}`);
+    assert.equal(registeredPrompts.length, 14, `Expected 14 prompts, got ${registeredPrompts.length}: ${registeredPrompts.join(", ")}`);
   });
 
   it("has unique prompt names", () => {
@@ -323,8 +323,8 @@ describe("Project Overview Prompt", () => {
 describe("getPromptsCatalog()", () => {
   const catalog = getPromptsCatalog();
 
-  it("returns exactly 13 prompts matching registered count", () => {
-    assert.equal(catalog.length, 13);
+  it("returns exactly 14 prompts matching registered count", () => {
+    assert.equal(catalog.length, 14);
   });
 
   it("every entry has required fields", () => {

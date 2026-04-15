@@ -1,6 +1,6 @@
 # MCP Resources & Prompts Guide
 
-> **Version:** 7.2.1 | **Since:** v7.2.1
+> **Version:** 7.2.2 | **Since:** v7.2.2
 
 This guide covers two MCP features that complement the existing 60 tools:
 
@@ -356,6 +356,16 @@ Generates a comprehensive project health card: suite structure, coverage metrics
 
 **Best for:** New team members or project health reviews.
 
+### Utility Prompts
+
+#### `/session-metrics`
+
+**Parameters:** *(none)*
+
+Shows tool usage metrics for the current MCP session by calling `about_mcp_tools` with `mode: "metrics"`. Displays per-tool call counts, average/min/max durations, response sizes, and error counts.
+
+**Best for:** Debugging performance, understanding session activity, and verifying tool behavior.
+
 ---
 
 ## Combining Resources + Prompts
@@ -449,6 +459,7 @@ The AI knows exactly which custom fields and automation states exist, avoiding t
 | `/daily-qa-standup` | Role | `projects` | Yes | Daily standup summary |
 | `/automation-gaps` | Role | `projects` | Yes | Automation backlog prioritization |
 | `/project-overview` | Role | `project` | Yes | Comprehensive project health card |
+| `/session-metrics` | Utility | *(none)* | No | Show tool usage metrics for the current session |
 
 ---
 
@@ -459,7 +470,7 @@ The AI knows exactly which custom fields and automation states exist, avoiding t
 ```
 src/
   resources.ts       # ResourceCache class + registerResources() — 13 resources
-  prompts.ts         # Prompt builders + registerPrompts() — 13 prompts
+  prompts.ts         # Prompt builders + registerPrompts() — 14 prompts
   server.ts          # Wires resources and prompts: registerResources(server, deps) + registerPrompts(server)
 
 tests/

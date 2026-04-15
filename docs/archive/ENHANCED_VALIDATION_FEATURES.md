@@ -1,6 +1,6 @@
 # Enhanced Test Case Validation & Improvement Features
 
-> **Note:** This is a historical implementation record. All phases are complete. These features are fully shipped and active in the current version (7.2.1).
+> **Note:** This is a historical implementation record. All phases are complete. These features are fully shipped and active in the current version (7.2.2).
 
 ## Overview
 

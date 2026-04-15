@@ -1,6 +1,6 @@
 # Test Prompts for Zebrunner MCP Tools
 
-> **Version:** 7.2.1
+> **Version:** 7.2.2
 >
 > This document contains 1–3 test prompts per tool with expected behavior, plus end-to-end metric collection prompts. All prompts use generic platform references (iOS / Android / Web) without specific project keys, launch IDs, or milestones.
 
@@ -21,6 +21,10 @@
 11. [Reports (generate_report)](#11-reports-generate_report)
 12. [Suite Coverage Report](#12-suite-coverage-report)
 13. [Mutation Tools (Beta)](#13-mutation-tools-beta)
+14. [MCP Resources](#14-mcp-resources-v721)
+15. [MCP Prompts](#15-mcp-prompts-v721)
+16. [Tool Annotations](#16-tool-annotations-v721)
+17. [Tool Metrics & Token Tracking](#17-tool-metrics--token-tracking-v721)
 
 ---
 
@@ -643,15 +647,25 @@
 
 **Expected:** Returns full parameter documentation, usage examples, and approximate token estimates.
 
-**Prompt 3 — List all prompts** *(v7.2.1)*
+**Prompt 3 — List all prompts** *(v7.2.2)*
 > What prompts are available in Zebrunner MCP? Use mode "prompts".
 
 **Expected:** Returns a table of all 13 `/prompts` grouped by category (E2E Metrics, Analysis, Role-Specific) with titles, descriptions, and accepted arguments.
 
-**Prompt 4 — List all resources** *(v7.2.1)*
+**Prompt 4 — List all resources** *(v7.2.2)*
 > What MCP resources are available? Use mode "resources".
 
 **Expected:** Returns two tables: 5 static resources (no parameters) and 8 template resources (require project_key) with URIs and descriptions.
+
+**Prompt 5 — Session tool metrics** *(v7.2.2)*
+> Show me tool usage metrics for this session. Use mode "metrics".
+
+**Expected:** Returns a markdown table with per-tool call counts, average/min/max durations, total response sizes, and error counts for all tools invoked in the current MCP session. If no tools have been called yet, shows "No tool calls recorded in this session." The output starts with the MCP version header.
+
+**Prompt 6 — Quick token check workflow** *(v7.2.2)*
+> First list all projects, then show me the tool metrics.
+
+**Expected:** After `get_available_projects` returns data, the second call with `mode: "metrics"` shows at least 1 tool call recorded (`get_available_projects` with its duration and response size).
 
 ---
 
@@ -1059,7 +1073,7 @@ These prompts combine multiple tools to collect real business metrics. The LLM s
 
 All mutation tools use a **two-step confirmation flow**: the first call returns a preview with a `confirmation_token`, and only after user approval does the second call with `confirm: true` execute the mutation. Created test cases are always forced to `draft: true` for safety.
 
-**Next-step steering (v7.2.1):** After every successful mutation, the server appends a `Tip:` block suggesting the most logical follow-up action. This is inspired by the [Strands Agents steering pattern](https://strandsagents.com/blog/steering-accuracy-beats-prompts-workflows/) -- just-in-time guidance delivered at the moment the LLM needs it.
+**Next-step steering (v7.2.2):** After every successful mutation, the server appends a `Tip:` block suggesting the most logical follow-up action. This is inspired by the [Strands Agents steering pattern](https://strandsagents.com/blog/steering-accuracy-beats-prompts-workflows/) -- just-in-time guidance delivered at the moment the LLM needs it.
 
 Hints are conditional:
 - `create_test_case` -- always shows draft/publish reminder; quality check hint is skipped if `review: true` was used.
@@ -1097,7 +1111,7 @@ The `steeringHint()` helper in `src/helpers/steering.ts` is a pure, deterministi
 
 **Expected:** Uses `create_test_case` with `project_key`, `test_suite_id`, `title`, `priority: { name: "High" }`, `description`, `pre_conditions`, `steps` (3), `requirements: [{ source: "JIRA", reference: "PROJ-100" }]`. Preview shows all fields to be set. `draft` is forced to `true` regardless of input.
 
-**Prompt 4 — Draft enforcement** *(v7.2.1)*
+**Prompt 4 — Draft enforcement** *(v7.2.2)*
 > Create a test case titled "Smoke test" in suite 12345 of project MCP with draft set to false.
 
 **Expected:** Uses `create_test_case` with `draft: false`, but the preview shows `draft → true (forced for safety)`. The created test case is always a draft. The user must use `update_test_case` to publish it.
@@ -1119,7 +1133,7 @@ The `steeringHint()` helper in `src/helpers/steering.ts` is a pure, deterministi
 
 **Expected:** Uses `update_test_case` with `identifier: "MCP-10"`, `project_key: "MCP"`, `steps` (2 steps). The preview should warn that steps use ATOMIC replacement — all existing steps will be replaced.
 
-**Prompt 4 — Publish a draft** *(v7.2.1)*
+**Prompt 4 — Publish a draft** *(v7.2.2)*
 > Set test case MCP-33 in project MCP to draft: false so it becomes published.
 
 **Expected:** Uses `update_test_case` with `identifier: "MCP-33"`, `project_key: "MCP"`, `draft: false`. This is the intended way to publish test cases created via `create_test_case`.
@@ -1150,29 +1164,29 @@ The `steeringHint()` helper in `src/helpers/steering.ts` is a pure, deterministi
 
 ### `manage_test_run`
 
-**Prompt 1 — Create a test run** *(v7.2.1)*
+**Prompt 1 — Create a test run** *(v7.2.2)*
 > Use manage_test_run to create a test run titled "Sprint 42 Regression" in project MCP.
 
 **Expected:** Uses `manage_test_run` with `action: "create"`, `project_key: "MCP"`, `title: "Sprint 42 Regression"`. Returns preview with title and empty configurations/requirements. Returns `confirmation_token`.
 
-**Prompt 2 — Update a test run milestone** *(v7.2.1)*
+**Prompt 2 — Update a test run milestone** *(v7.2.2)*
 > Use manage_test_run to update test run 42 in project MCP. Change the milestone to "Release 3.0".
 
 **Expected:** Uses `manage_test_run` with `action: "update"`, `project_key: "MCP"`, `test_run_id: 42`, `milestone: { name: "Release 3.0" }`. Preview shows only the milestone field being changed.
 
-**Prompt 3 — Add test cases to a run** *(v7.2.1)*
+**Prompt 3 — Add test cases to a run** *(v7.2.2)*
 > Use manage_test_run to add test cases MCP-1, MCP-2, and MCP-3 to test run 42 in project MCP.
 
 **Expected:** Uses `manage_test_run` with `action: "add_cases"`, `project_key: "MCP"`, `test_run_id: 42`, `test_case_keys: ["MCP-1", "MCP-2", "MCP-3"]`. Preview lists the 3 specific test cases to be added.
 
 ### `import_launch_results_to_test_run`
 
-**Prompt 1 — Import all launch results** *(v7.2.1)*
+**Prompt 1 — Import all launch results** *(v7.2.2)*
 > Use import_launch_results_to_test_run to import results from launch 98765 into test run 123 for project MCP.
 
 **Expected:** Uses `import_launch_results_to_test_run` with `project_key: "MCP"`, `test_run_id: 123`, `launch_id: 98765`. Preview shows a table of test case keys with current and new statuses.
 
-**Prompt 2 — Import filtered results** *(v7.2.1)*
+**Prompt 2 — Import filtered results** *(v7.2.2)*
 > Use import_launch_results_to_test_run to import results only for MCP-82 and MCP-83 from launch 98765 into test run 123.
 
 **Expected:** Uses `import_launch_results_to_test_run` with `project_key: "MCP"`, `test_run_id: 123`, `launch_id: 98765`, `test_case_keys: ["MCP-82", "MCP-83"]`. Only 2 test cases appear in the preview.
@@ -1184,12 +1198,12 @@ The `steeringHint()` helper in `src/helpers/steering.ts` is a pure, deterministi
 
 **Expected:** The LLM should refuse — there is no delete tool. It should explain that deletion is not supported via MCP and suggest using the Zebrunner web UI.
 
-**Prompt 2 — Negative: skip confirmation** *(v7.2.1)*
+**Prompt 2 — Negative: skip confirmation** *(v7.2.2)*
 > Create a test case in project MCP, suite 12345, titled "Quick test". Skip the preview and create it immediately.
 
 **Expected:** The LLM should explain that the two-step confirmation flow cannot be skipped — all mutations require a preview step followed by confirmation with the token. This is a safety requirement.
 
-### Steering hint prompts *(v7.2.1)*
+### Steering hint prompts *(v7.2.2)*
 
 **Prompt 1 — Verify hint after test case creation**
 > Create a test case "Login smoke test" in suite 12345, project MCP. After confirmation, what does the response suggest as next steps?
@@ -1213,7 +1227,7 @@ The `steeringHint()` helper in `src/helpers/steering.ts` is a pure, deterministi
 
 ---
 
-## 14. MCP Resources *(v7.2.1)*
+## 14. MCP Resources *(v7.2.2)*
 
 MCP resources provide read-only reference data accessible via the `@` menu in MCP clients (Claude Desktop, Claude Code). Resources are fetched on demand and cached for 20 minutes.
 
@@ -1297,7 +1311,7 @@ MCP resources provide read-only reference data accessible via the `@` menu in MC
 
 ---
 
-## 15. MCP Prompts *(v7.2.1)*
+## 15. MCP Prompts *(v7.2.2)*
 
 MCP prompts provide pre-built, tested workflow instructions accessible via the `/` command in MCP clients. Each prompt injects expert-crafted multi-step instructions that guide Claude through complex multi-tool workflows.
 
@@ -1372,16 +1386,23 @@ MCP prompts provide pre-built, tested workflow instructions accessible via the `
 
 **Expected:** Prompt drives comprehensive project health collection. Claude should gather suite structure, coverage metrics, recent launches, milestones, priorities, and flaky test counts, presenting a structured project health card.
 
+### Utility Prompts
+
+**Prompt 14 — Session metrics via /session-metrics**
+> Use `/session-metrics` (no arguments required)
+
+**Expected:** Prompt instructs Claude to call `about_mcp_tools` with `mode: "metrics"` and present a summary of tool calls, durations, errors, and response sizes for the current session. If no tools were called before invoking this prompt, it reports an empty session.
+
 ### Combined Resources + Prompts
 
-**Prompt 14 — Resource context + prompt workflow**
+**Prompt 15 — Resource context + prompt workflow**
 > Attach `@zebrunner://projects` via the `@` menu, then use `/launch-triage` with project: "android"
 
 **Expected:** The project resource context provides project metadata, and the prompt instructions guide Claude through the triage workflow. Claude should use the project key from the resource context for accurate tool calls.
 
 ---
 
-## 16. Tool Annotations *(v7.2.1)*
+## 16. Tool Annotations *(v7.2.2)*
 
 All 60 tools now include MCP Tool Annotations (readOnlyHint, destructiveHint, idempotentHint, openWorldHint) that inform clients about tool behavior characteristics.
 
@@ -1399,3 +1420,56 @@ All 60 tools now include MCP Tool Annotations (readOnlyHint, destructiveHint, id
 > Ask Claude Desktop: "Is it safe to call list_test_suites multiple times?"
 
 **Expected:** Claude may reference the readOnlyHint and idempotentHint annotations to confirm the tool is safe to retry and does not modify server state.
+
+## 17. Tool Metrics & Token Tracking *(v7.2.2)*
+
+Server-side tool metrics are collected automatically for every tool call in a session. Eval tests now track Anthropic API token usage with cost estimation.
+
+### Session Tool Metrics (via `about_mcp_tools` mode: "metrics")
+
+**Test 1 — Empty session**
+> Call `about_mcp_tools` with `mode: "metrics"` immediately after server start (no prior tool calls).
+
+**Expected:** Output shows "No tool calls recorded in this session." preceded by the MCP version header.
+
+**Test 2 — After several tool calls**
+> 1. Call `get_available_projects`
+> 2. Call `list_test_suites` for a project
+> 3. Call `about_mcp_tools` with `mode: "metrics"`
+
+**Expected:** A markdown table showing 2 rows (one for each tool called) with columns: Tool, Calls, Avg (ms), Min (ms), Max (ms), Resp (chars), Errors. Total calls should be 2. Error count should be 0. The `about_mcp_tools` call itself (with mode "metrics") is also instrumented but runs after the stats snapshot.
+
+**Test 3 — Error tracking**
+> Call a tool with invalid arguments (e.g., `get_test_case_by_key` with a non-existent key), then check metrics.
+
+**Expected:** The metrics table shows 1 call for that tool with `Errors: 0` or `Errors: 1` depending on whether the tool returns `isError: true` in the response (most tools return an error message as regular text content).
+
+**Test 4 — MCP Inspector verification**
+> In the MCP Inspector, call `about_mcp_tools` with arguments `{ "mode": "metrics" }`.
+
+**Expected:** Returns a well-formatted markdown response starting with `MCP version: 7.2.2` followed by the metrics summary table or the empty-session message.
+
+### Eval Token Tracking (CLI)
+
+**Test 5 — Run eval tests and check token report**
+> ```bash
+> npm run test:eval
+> ```
+
+**Expected:** The console scorecard now includes a "Token Usage" section showing:
+- Input / Output token counts (e.g., `15.2k / 2.1k`)
+- If Layer 3 tests ran: judge token breakdown
+- Estimated cost (e.g., `$0.0516`)
+
+**Test 6 — Check eval markdown report for token details**
+> After running `npm run test:eval`, open the latest report in `results/`.
+
+**Expected:** The markdown report includes:
+- Header line: `**Tokens:** X input + Y output`
+- Header line: `**Estimated cost:** $X.XXXX`
+- A "Token Usage" section with a summary table and a per-prompt breakdown table showing input/output tokens and judge tokens for each eval prompt.
+
+**Test 7 — Check eval JSON report for token data**
+> After running `npm run test:eval`, open the latest `.json` in `results/`.
+
+**Expected:** Each result object in the `results` array contains `tokenUsage: { inputTokens, outputTokens }`. Layer 3 results also contain `judgeTokenUsage`. The `summary` object contains `tokens: { totalInputTokens, totalOutputTokens, judgeInputTokens, judgeOutputTokens, estimatedCost: { input, output, total } }`.

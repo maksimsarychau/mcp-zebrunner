@@ -1,6 +1,6 @@
 # New Launcher Details MCP Tool
 
-> **Note:** This is a historical implementation record. The `get_launch_details` tool is fully shipped and active in the current version (7.2.1).
+> **Note:** This is a historical implementation record. The `get_launch_details` tool is fully shipped and active in the current version (7.2.2).
 
 ## Overview
 

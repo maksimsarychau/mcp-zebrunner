@@ -648,6 +648,16 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
     layer: 1,
   },
   {
+    id: "about_mcp_tools.metrics",
+    toolSection: "4. Utility",
+    promptTemplate:
+      "Show me tool usage metrics for this MCP session — how many calls, durations, and errors per tool.",
+    expectedTools: ["about_mcp_tools"],
+    expectedArgKeys: ["mode"],
+    category: "utility",
+    layer: 1,
+  },
+  {
     id: "get_available_projects.list",
     toolSection: "4. Utility",
     promptTemplate: "What projects are available in Zebrunner?",

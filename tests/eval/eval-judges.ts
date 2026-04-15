@@ -1,12 +1,18 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { EvalConfig } from "./eval-config.js";
 import type { EvalPrompt } from "./eval-prompts.js";
+import type { TokenUsage } from "./eval-report.js";
 
 export interface JudgeScore {
   relevance: number;
   completeness: number;
   format: number;
   reasoning: string;
+}
+
+export interface JudgeResult {
+  score: JudgeScore;
+  tokenUsage?: TokenUsage;
 }
 
 const JUDGE_TOOL = {
@@ -38,6 +44,7 @@ const JUDGE_TOOL = {
 
 /**
  * Use Claude as a judge to score tool output quality.
+ * Returns both the score and the token usage from the judge LLM call.
  */
 export async function judgeToolOutput(
   client: Anthropic,
@@ -45,7 +52,7 @@ export async function judgeToolOutput(
   prompt: EvalPrompt,
   populatedPrompt: string,
   toolOutput: string
-): Promise<JudgeScore> {
+): Promise<JudgeResult> {
   const expectedPatterns = prompt.expectedOutputPatterns?.length
     ? `\nExpected output patterns: ${prompt.expectedOutputPatterns.join(", ")}`
     : "";
@@ -68,17 +75,28 @@ export async function judgeToolOutput(
     ],
   });
 
+  const tokenUsage: TokenUsage = {
+    inputTokens: response.usage?.input_tokens ?? 0,
+    outputTokens: response.usage?.output_tokens ?? 0,
+  };
+
   const toolUse = response.content.find((b) => b.type === "tool_use");
   if (!toolUse || toolUse.type !== "tool_use") {
-    return { relevance: 1, completeness: 1, format: 1, reasoning: "Judge failed to produce scores" };
+    return {
+      score: { relevance: 1, completeness: 1, format: 1, reasoning: "Judge failed to produce scores" },
+      tokenUsage,
+    };
   }
 
   const input = toolUse.input as Record<string, unknown>;
   return {
-    relevance: clampScore(input.relevance),
-    completeness: clampScore(input.completeness),
-    format: clampScore(input.format),
-    reasoning: String(input.reasoning || ""),
+    score: {
+      relevance: clampScore(input.relevance),
+      completeness: clampScore(input.completeness),
+      format: clampScore(input.format),
+      reasoning: String(input.reasoning || ""),
+    },
+    tokenUsage,
   };
 }
 
