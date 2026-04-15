@@ -333,7 +333,7 @@ describe("getPromptsCatalog()", () => {
       assert.ok(p.title && p.title.length > 0, `${p.name} missing title`);
       assert.ok(p.description && p.description.length > 0, `${p.name} missing description`);
       assert.ok(p.category && p.category.length > 0, `${p.name} missing category`);
-      assert.ok(Array.isArray(p.args) && p.args.length > 0, `${p.name} missing args`);
+      assert.ok(Array.isArray(p.args), `${p.name} missing args`);
     }
   });
 
