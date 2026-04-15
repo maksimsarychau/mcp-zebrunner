@@ -44,22 +44,22 @@ export async function generateCoverageReport(
   const projectContexts = await ctx.resolveProjects(projects);
 
   const platformResults: PlatformCoverage[] = [];
+  const fetchWarnings: string[] = [];
 
   for (const pCtx of projectContexts) {
     try {
       const result = await buildPlatformCoverage(ctx, pCtx, excludePatterns);
       platformResults.push(result);
     } catch (error: any) {
-      platformResults.push({
-        platform: pCtx.alias,
-        suites: [],
-        totalRow: emptySuiteRow('TOTAL'),
-        regressionRow: emptySuiteRow('TOTAL REGRESSION'),
-      });
+      const reason = error?.message || String(error);
+      fetchWarnings.push(`⚠️ [${pCtx.alias}] Coverage fetch failed: ${reason}`);
     }
   }
 
-  const markdown = buildCoverageMarkdown(platformResults);
+  const warningBlock = fetchWarnings.length > 0
+    ? fetchWarnings.join('\n') + '\n\n---\n\n'
+    : '';
+  const markdown = warningBlock + buildCoverageMarkdown(platformResults);
   return { content: [{ type: "text" as const, text: markdown }] };
 }
 
@@ -130,15 +130,11 @@ async function collectSuiteCoverage(
   manualOnlyStateId: number | undefined,
 ): Promise<SuiteCoverage> {
   const countByFilter = async (filter: string): Promise<number> => {
-    try {
-      const result = await ctx.publicClient.getTestCases(pCtx.projectKey, {
-        filter,
-        size: 1,
-      });
-      return (result._meta as any)?.total ?? result._meta?.totalElements ?? result.items?.length ?? 0;
-    } catch {
-      return 0;
-    }
+    const result = await ctx.publicClient.getTestCases(pCtx.projectKey, {
+      filter,
+      size: 1,
+    });
+    return (result._meta as any)?.total ?? result._meta?.totalElements ?? result.items?.length ?? 0;
   };
 
   const totalP = countByFilter(`testSuite.id = ${suite.id}`);
@@ -204,8 +200,8 @@ async function countManualOnlyByCustomField(
       pageToken = result._meta?.nextPageToken;
       pages++;
     } while (pageToken && pages < 50);
-  } catch {
-    // Safe fallback — return 0
+  } catch (error) {
+    throw new Error(`Failed to count manual-only test cases for suite ${suiteId}: ${error instanceof Error ? error.message : error}`);
   }
 
   return count;

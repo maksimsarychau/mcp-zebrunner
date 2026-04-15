@@ -42,25 +42,32 @@ export class ZebrunnerToolHandlers {
       
       // If includeSteps is true, fetch detailed info for each test case
       if (includeSteps && response.items.length > 0) {
+        const detailWarnings: string[] = [];
         const detailedCases = await Promise.all(
-          response.items.slice(0, 10).map(async (testCase) => { // Limit to 10 for performance
+          response.items.slice(0, 10).map(async (testCase) => {
             try {
               if (testCase.key) {
                 return await this.client.getTestCaseByKey(projectKey, testCase.key);
               }
               return testCase;
             } catch (error) {
-              return testCase; // Fallback to basic info if detailed fetch fails
+              const msg = error instanceof Error ? error.message : String(error);
+              detailWarnings.push(`⚠️ [${testCase.key || testCase.id}] Detailed fetch failed: ${msg}`);
+              console.error(`⚠️ [getTestCaseByKey] Failed for ${testCase.key}: ${msg}`);
+              return testCase;
             }
           })
         );
         
         const formattedData = FormatProcessor.format(detailedCases, format);
+        const warningPrefix = detailWarnings.length > 0
+          ? detailWarnings.join('\n') + '\n\n'
+          : '';
         return {
           content: [
             {
               type: "text" as const,
-              text: typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2)
+              text: warningPrefix + (typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2))
             }
           ]
         };

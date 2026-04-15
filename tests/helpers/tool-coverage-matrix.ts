@@ -64,3 +64,43 @@ export const TOOL_SMOKE_INPUTS: Record<string, Record<string, unknown>> = {
 export const TOOL_SCHEMA_REQUIRED_KEYS: Record<string, string[]> = Object.fromEntries(
   Object.entries(TOOL_SMOKE_INPUTS).map(([tool, input]) => [tool, Object.keys(input)])
 );
+
+/**
+ * Manifest of registered MCP resources (static + template).
+ * Mirrors the 8 resources in src/resources.ts.
+ */
+export const RESOURCE_MANIFEST: Record<string, { uri: string; type: "static" | "template" }> = {
+  available_projects:              { uri: "zebrunner://projects",                                      type: "static" },
+  report_types:                    { uri: "zebrunner://reports/types",                                 type: "static" },
+  project_root_suites:             { uri: "zebrunner://projects/{project_key}/suites",                 type: "template" },
+  project_automation_states:       { uri: "zebrunner://projects/{project_key}/automation-states",      type: "template" },
+  project_priorities:              { uri: "zebrunner://projects/{project_key}/priorities",              type: "template" },
+  time_periods:                    { uri: "zebrunner://periods",                                       type: "static" },
+  chart_options:                   { uri: "zebrunner://charts",                                        type: "static" },
+  output_formats:                  { uri: "zebrunner://formats",                                       type: "static" },
+  project_milestones:              { uri: "zebrunner://projects/{project_key}/milestones",              type: "template" },
+  project_result_statuses:         { uri: "zebrunner://projects/{project_key}/result-statuses",        type: "template" },
+  project_configuration_groups:    { uri: "zebrunner://projects/{project_key}/configuration-groups",   type: "template" },
+  project_fields_layout:           { uri: "zebrunner://projects/{project_key}/fields",                 type: "template" },
+  project_suite_hierarchy:         { uri: "zebrunner://projects/{project_key}/suite-hierarchy",        type: "template" },
+};
+
+/**
+ * Manifest of registered MCP prompts (E2E + analysis).
+ * Mirrors the 10 prompts in src/prompts.ts.
+ */
+export const PROMPT_MANIFEST: Record<string, { category: "e2e" | "analysis" | "role"; args: string[] }> = {
+  "pass-rate":            { category: "e2e",      args: ["projects"] },
+  "runtime-efficiency":   { category: "e2e",      args: ["projects"] },
+  "automation-coverage":  { category: "e2e",      args: ["projects"] },
+  "executive-dashboard":  { category: "e2e",      args: ["projects"] },
+  "release-readiness":    { category: "e2e",      args: ["project", "milestone"] },
+  "suite-coverage":       { category: "e2e",      args: ["projects"] },
+  "review-test-case":     { category: "analysis", args: ["case_key"] },
+  "launch-triage":        { category: "analysis", args: ["project"] },
+  "flaky-review":         { category: "analysis", args: ["project"] },
+  "find-duplicates":      { category: "analysis", args: ["project", "suite_id"] },
+  "daily-qa-standup":     { category: "role",     args: ["projects"] },
+  "automation-gaps":      { category: "role",     args: ["projects"] },
+  "project-overview":     { category: "role",     args: ["project"] },
+};

@@ -77,7 +77,7 @@ async function main() {
   const server = new McpServer(
     { 
       name: "zebrunner-mcp-with-reporting", 
-      version: "7.1.1"
+      version: "7.2.1"
     },
     { 
       capabilities: {

@@ -1,7 +1,7 @@
 # AI + MCP: Benefits for Test Management
 
 **Author:** Maksim Sarychau
-**Current Version:** 7.1.1
+**Current Version:** 7.2.1
 
 ---
 
@@ -110,13 +110,13 @@ Accelerate automation with AI-generated test code:
 Available across multiple channels:
 
 - **npm** — `npm install -g mcp-zebrunner`
-- **Docker** — `msarychau/mcp-zebrunner:7.1.1`
+- **Docker** — `msarychau/mcp-zebrunner:7.2.1`
 - **GitHub** — [github.com/maksimsarychau/mcp-zebrunner](https://github.com/maksimsarychau/mcp-zebrunner)
 - **MCP Registry** — discoverable at [registry.modelcontextprotocol.io](https://registry.modelcontextprotocol.io)
 
 ---
 
-## 55+ Tools Across Three Domains
+## 60 Tools Across Three Domains
 
 **Test Case Management:** retrieve, search, filter, validate, improve, **create**, and **update** test cases and suites.
 

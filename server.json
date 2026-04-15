@@ -2,19 +2,19 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.maksimsarychau/mcp-zebrunner",
   "title": "Zebrunner TCM & Reporting MCP",
-  "description": "Unified Zebrunner MCP server for TCM test cases, suites, coverage analysis, launchers, etc.",
+  "description": "Unified Zebrunner MCP server — 60 tools, 13 resources, 13 prompts for TCM test cases, suites, coverage analysis, launches, reporting, and more.",
   "websiteUrl": "https://github.com/maksimsarychau/mcp-zebrunner",
   "repository": {
     "url": "https://github.com/maksimsarychau/mcp-zebrunner",
     "source": "github"
   },
   "license": "AGPL-3.0",
-  "version": "7.1.1",
+  "version": "7.2.1",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "mcp-zebrunner",
-      "version": "7.1.1",
+      "version": "7.2.1",
       "transport": {
         "type": "stdio"
       },

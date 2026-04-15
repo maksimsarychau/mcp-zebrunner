@@ -1,6 +1,6 @@
 # Zebrunner MCP Server
 ![version](https://img.shields.io/github/package-json/v/maksimsarychau/mcp-zebrunner)
-<!--**Current version:** 🟢 --> <!--VERSION_START--><!--7.1.1--> <!--VERSION_END--> 
+<!--**Current version:** 🟢 --> <!--VERSION_START--><!--7.2.1--> <!--VERSION_END--> 
 
 A **Model Context Protocol (MCP)** server that integrates with **Zebrunner Test Case Management** to help QA teams manage test cases, test suites, and test execution data through AI assistants like Claude.
 
@@ -34,8 +34,11 @@ A **Model Context Protocol (MCP)** server that integrates with **Zebrunner Test 
    - 6.7. [📊 Reporting & Analytics](#-reporting--analytics)
    - 6.8. [🏃 Test Run Management](#-test-run-management)
    - 6.9. [🎯 Management-Focused Quick Commands](#-management-focused-quick-commands)
-7. [🎭 Role-Specific Prompts & Workflows](#-role-specific-prompts--workflows)
-   - <details><summary>7.1. 👩‍💻 Manual QA Engineers</summary>
+7. [📎 MCP Resources & Prompts (NEW)](#-mcp-resources--prompts-new)
+   - 7.1. [Resources — `@` Context Injection](#resources--context-injection)
+   - 7.2. [Prompts — `/` Workflow Commands](#prompts---workflow-commands)
+8. [🎭 Role-Specific Prompts & Workflows](#-role-specific-prompts--workflows)
+   - <details><summary>8.1. 👩‍💻 Manual QA Engineers</summary>
      
      - [Daily Test Case Review](#daily-test-case-review)
      - [Test Case Creation & Improvement](#test-case-creation--improvement)
@@ -73,16 +76,16 @@ A **Model Context Protocol (MCP)** server that integrates with **Zebrunner Test 
      - [Risk Assessment](#risk-assessment)
      - [Planning & Resource Allocation](#planning--resource-allocation)
      </details>
-8. [📖 Output Formats](#-output-formats)
-9. [⚙️ Configuration Options](#️-configuration-options)
-10. [🧪 Testing Your Setup](#-testing-your-setup)
-11. [🔍 Troubleshooting](#-troubleshooting)
-12. [🎯 Example Workflows](#-example-workflows)
-13. [🔧 Advanced Features](#-advanced-features)
-14. [📚 Additional Documentation](#-additional-documentation)
-15. [🤝 Contributing](#-contributing)
-16. [📄 License](#-license)
-17. [🎉 You're Ready!](#-youre-ready)
+9. [📖 Output Formats](#-output-formats)
+10. [⚙️ Configuration Options](#️-configuration-options)
+11. [🧪 Testing Your Setup](#-testing-your-setup)
+12. [🔍 Troubleshooting](#-troubleshooting)
+13. [🎯 Example Workflows](#-example-workflows)
+14. [🔧 Advanced Features](#-advanced-features)
+15. [📚 Additional Documentation](#-additional-documentation)
+16. [🤝 Contributing](#-contributing)
+17. [📄 License](#-license)
+18. [🎉 You're Ready!](#-youre-ready)
 
 ---
 
@@ -526,7 +529,7 @@ Once connected, you can use these tools through natural language in your AI assi
 
 > **Safety Model:** Every mutation tool follows a **two-call confirmation gate**. The first call returns a preview; only after user approval should `confirm: true` be passed to execute the mutation. All mutations are audit-logged to `~/.mcp-zebrunner-audit.jsonl`. Use `dry_run: true` for raw payload inspection.
 >
-> **Next-step steering (v7.1.1):** After every successful mutation, the server appends a `Tip:` block guiding the LLM to the most useful next action (e.g., "validate quality", "publish the draft", "populate the test run"). Hints are conditional -- they are suppressed when redundant. For example, the quality-check hint is omitted if `review: true` was already used. Created test cases are always forced to `draft=true`, and the hint always reminds the LLM to publish via `update_test_case`. This approach is inspired by the [Strands Agents steering pattern](https://strandsagents.com/blog/steering-accuracy-beats-prompts-workflows/) and delivers just-in-time guidance without bloating system prompts.
+> **Next-step steering (v7.2.1):** After every successful mutation, the server appends a `Tip:` block guiding the LLM to the most useful next action (e.g., "validate quality", "publish the draft", "populate the test run"). Hints are conditional -- they are suppressed when redundant. For example, the quality-check hint is omitted if `review: true` was already used. Created test cases are always forced to `draft=true`, and the hint always reminds the LLM to publish via `update_test_case`. This approach is inspired by the [Strands Agents steering pattern](https://strandsagents.com/blog/steering-accuracy-beats-prompts-workflows/) and delivers just-in-time guidance without bloating system prompts.
 
 #### **Suite Mutations**
 | Tool | Description | Example Usage | Best For |
@@ -676,6 +679,67 @@ Once connected, you can use these tools through natural language in your AI assi
 |------|-------------|---------------|----------|
 | `get_test_run_result_statuses` | Available result statuses | `"What result statuses are configured for project MCP?"` | QA, SDETs |
 | `get_test_run_configuration_groups` | Configuration options | `"Show me configuration groups for project MCP"` | SDETs, Leads |
+
+## 📎 MCP Resources & Prompts (NEW)
+
+> **Full guide:** [docs/RESOURCES_AND_PROMPTS.md](docs/RESOURCES_AND_PROMPTS.md) — detailed usage, examples, reference tables, and contributor guide.
+
+In addition to 60 tools, the server now provides **13 resources** and **13 prompts** that improve discoverability and automate complex workflows.
+
+### Resources — `@` Context Injection
+
+Resources are read-only reference data you attach to your conversation via the `@` menu. They help the AI use exact parameter values instead of guessing.
+
+| Resource | What it provides |
+|----------|-----------------|
+| `@zebrunner://reports/types` | 6 report types with params, defaults, and examples |
+| `@zebrunner://periods` | 12 valid time period values (case-sensitive) |
+| `@zebrunner://charts` | Chart formats, types, and 17 supported tools |
+| `@zebrunner://formats` | 5 output format families with valid values |
+| `@zebrunner://projects` | All accessible projects with keys and IDs |
+| `@zebrunner://projects/{key}/suites` | Root test suites for a project |
+| `@zebrunner://projects/{key}/suite-hierarchy` | Full suite tree with parent-child relationships |
+| `@zebrunner://projects/{key}/automation-states` | Automation state names and IDs |
+| `@zebrunner://projects/{key}/priorities` | Priority levels and IDs |
+| `@zebrunner://projects/{key}/milestones` | Active and completed milestones |
+| `@zebrunner://projects/{key}/result-statuses` | Test run result statuses |
+| `@zebrunner://projects/{key}/configuration-groups` | Test run config groups and options |
+| `@zebrunner://projects/{key}/fields` | System and custom field definitions |
+
+**Quick example:**
+```
+@ zebrunner://reports/types
+@ zebrunner://projects
+Generate an executive dashboard for all starred projects.
+```
+
+### Prompts — `/` Workflow Commands
+
+Prompts are pre-built workflow instructions triggered via the `/` command menu. Each prompt guides the AI through a tested multi-tool orchestration.
+
+| Prompt | Parameters | What it does |
+|--------|-----------|--------------|
+| `/pass-rate` | `projects` | Cross-platform pass rate with target comparison |
+| `/runtime-efficiency` | `projects` | Runtime metrics with milestone delta |
+| `/automation-coverage` | `projects` | 7-metric coverage + automation intake rate |
+| `/executive-dashboard` | `projects` | 5-section standup-ready dashboard |
+| `/release-readiness` | `project`, `milestone?` | Go/No-Go assessment with evidence |
+| `/suite-coverage` | `projects` | Per-suite coverage tables (TOTAL + TOTAL REGRESSION) |
+| `/review-test-case` | `case_key` | Validate + improve a test case |
+| `/launch-triage` | `project` | Post-regression failure analysis |
+| `/flaky-review` | `project` | Flaky test detection + stabilization plan |
+| `/find-duplicates` | `project`, `suite_id?` | Structural + semantic duplicate analysis |
+| `/daily-qa-standup` | `projects` | Daily standup summary with action items |
+| `/automation-gaps` | `projects` | Automation backlog prioritization |
+| `/project-overview` | `project` | Comprehensive project health card |
+
+**Quick example:**
+```
+/executive-dashboard
+  projects: android,ios,web
+```
+
+[⬆️ Back to top](#-table-of-contents)
 
 ## 🎯 Management-Focused Quick Commands
 
@@ -1257,7 +1321,8 @@ Leverage intelligent validation:
 ## 📚 Additional Documentation
 
 ### 📖 Tool References
-- **[TOOLS_CATALOG.md](TOOLS_CATALOG.md)** - 🆕 **Complete catalog of all 55+ tools with natural language examples**
+- **[TOOLS_CATALOG.md](TOOLS_CATALOG.md)** - 🆕 **Complete catalog of all 60 tools with natural language examples**
+- **[docs/RESOURCES_AND_PROMPTS.md](docs/RESOURCES_AND_PROMPTS.md)** - 📎 **MCP Resources & Prompts — full usage guide, reference tables, and contributor guide**
 - **[INSTALL-GUIDE.md](INSTALL-GUIDE.md)** - 📥 **Step-by-step installation and setup guide**
 
 ### 🧠 Intelligent Rules System

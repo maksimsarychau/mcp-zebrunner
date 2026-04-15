@@ -161,19 +161,21 @@ Configuration is loaded by `ConfigManager` from environment variables. Three var
 
 ### SDK Capabilities
 
-The installed SDK (`@modelcontextprotocol/sdk ^1.0.0`, resolved to **1.28.0** in lockfile) already includes HTTP transport, Express integration, and a full OAuth authorization server framework — none of which are currently utilized:
+The installed SDK (`@modelcontextprotocol/sdk ^1.29.0`, resolved to **1.29.0** in lockfile) already includes HTTP transport, Express integration, and a full OAuth authorization server framework — none of which are currently utilized for auth:
 
 | Module | Import Path | Status |
 |--------|-------------|--------|
 | `StdioServerTransport` | `server/stdio.js` | In use |
 | `SSEServerTransport` | `server/sse.js` | Available (deprecated) |
-| `StreamableHTTPServerTransport` | `server/streamableHttp.js` | Available (recommended for HTTP) |
+| `StreamableHTTPServerTransport` | `server/streamableHttp.js` | Available (recommended for HTTP on Node.js/Express) |
+| `WebStandardStreamableHTTPServerTransport` | `server/webStandardStreamableHttp.js` | Available (Web Standards — Cloudflare Workers, Deno, Bun) |
 | `createMcpExpressApp` | `server/express.js` | Available (Express app factory with DNS rebinding protection) |
-| `mcpAuthRouter` | `server/auth/router.js` | Available (full OAuth 2.1 authorization server) |
+| `mcpAuthRouter` | `server/auth/router.js` | Available (full OAuth 2.1 authorization server with built-in rate limiting) |
 | `mcpAuthMetadataRouter` | `server/auth/router.js` | Available (Protected Resource Metadata for resource-server-only mode) |
 | `OAuthServerProvider` | `server/auth/provider.js` | Available (interface to implement custom OAuth logic) |
+| `ProxyOAuthServerProvider` | `server/auth/providers/proxyProvider.js` | **New in 1.29.0** — proxies OAuth to an upstream server (e.g., Okta) |
 
-The built-in auth router provides authorization endpoints, dynamic client registration, token issuance/revocation, and metadata discovery out of the box. This significantly reduces the implementation effort for Phases 1 and 2.
+The built-in auth router provides authorization endpoints, dynamic client registration, token issuance/revocation, metadata discovery, and rate limiting out of the box. The new `ProxyOAuthServerProvider` (SDK 1.29.0) is particularly relevant for Phase 2 — it proxies OAuth operations to Okta without requiring a full custom `OAuthServerProvider` implementation.
 
 ---
 
@@ -248,6 +250,8 @@ if (process.env.MCP_TRANSPORT === 'http') {
 ```
 
 Existing STDIO users see no change. HTTP mode is opt-in. The SDK's `createMcpExpressApp()` provides DNS rebinding protection by default.
+
+> **Edge deployment alternative:** SDK 1.29.0 also provides `WebStandardStreamableHTTPServerTransport` which uses Web Standards (Request/Response/ReadableStream) instead of Express. This enables deployment on Cloudflare Workers, Deno, Bun, and other edge runtimes without Express as a dependency.
 
 **2. New module: `src/auth/token-store.ts`**
 
@@ -493,30 +497,54 @@ MCP_SERVER_URL=https://mcp.company.internal
 
 **SDK built-in auth support:**
 
-The MCP SDK 1.28.0 provides a complete OAuth authorization server framework. Instead of building custom OAuth middleware, we implement the `OAuthServerProvider` interface and plug it into the SDK's `mcpAuthRouter`:
+The MCP SDK 1.29.0 provides a complete OAuth authorization server framework. Two approaches are available:
+
+**Option A: `ProxyOAuthServerProvider` (recommended, new in SDK 1.29.0)**
+
+The simplest path — proxies OAuth requests to Okta's endpoints directly. No need to implement the full `OAuthServerProvider` interface:
+
+```typescript
+import { mcpAuthRouter } from "@modelcontextprotocol/sdk/server/auth/router.js";
+import { ProxyOAuthServerProvider } from "@modelcontextprotocol/sdk/server/auth/providers/proxyProvider.js";
+
+const oktaProvider = new ProxyOAuthServerProvider({
+  endpoints: {
+    authorizationUrl: `https://${OKTA_DOMAIN}/oauth2/${OKTA_AUTH_SERVER_ID}/v1/authorize`,
+    tokenUrl: `https://${OKTA_DOMAIN}/oauth2/${OKTA_AUTH_SERVER_ID}/v1/token`,
+    revocationUrl: `https://${OKTA_DOMAIN}/oauth2/${OKTA_AUTH_SERVER_ID}/v1/revoke`,
+  },
+  async verifyAccessToken(token) {
+    const jwt = await oktaVerifier.verifyAccessToken(token, 'api://default');
+    return { token, clientId: jwt.claims.cid, scopes: jwt.claims.scp, extra: { email: jwt.claims.email } };
+  },
+  async getClient(clientId) {
+    return registeredClientsStore.getClient(clientId);
+  },
+});
+```
+
+**Option B: Custom `OAuthServerProvider` (full control)**
+
+For more complex scenarios, implement the interface directly:
 
 ```typescript
 import { mcpAuthRouter } from "@modelcontextprotocol/sdk/server/auth/router.js";
 import type { OAuthServerProvider } from "@modelcontextprotocol/sdk/server/auth/provider.js";
 
-// Implement the OAuthServerProvider interface with Okta as the backing IdP
 const oktaProvider: OAuthServerProvider = {
   get clientsStore() { return registeredClientsStore; },
 
   async authorize(client, params, res) {
-    // Redirect to Okta for authentication
     const oktaAuthUrl = `https://${OKTA_DOMAIN}/oauth2/${OKTA_AUTH_SERVER_ID}/v1/authorize`;
     res.redirect(`${oktaAuthUrl}?client_id=${OKTA_CLIENT_ID}&...`);
   },
 
   async exchangeAuthorizationCode(client, code, codeVerifier, redirectUri, resource) {
-    // Exchange code at Okta, then look up Zebrunner token for this user
     const oktaTokens = await exchangeCodeAtOkta(code, codeVerifier, redirectUri);
     return { access_token: oktaTokens.access_token, token_type: 'bearer' };
   },
 
   async verifyAccessToken(token) {
-    // Validate Okta access token, return user identity
     const jwt = await oktaVerifier.verifyAccessToken(token, 'api://default');
     return { token, clientId: '...', scopes: [...], extra: { email: jwt.claims.email } };
   },
@@ -530,9 +558,12 @@ const oktaProvider: OAuthServerProvider = {
 // - POST /token
 // - POST /register (dynamic client registration)
 // - POST /revoke (token revocation)
+// Built-in rate limiting is applied to all endpoints by default.
 app.use(mcpAuthRouter({
   provider: oktaProvider,
   issuerUrl: new URL(MCP_SERVER_URL),
+  resourceServerUrl: new URL(MCP_SERVER_URL),
+  resourceName: 'Zebrunner MCP Server',
   scopesSupported: ['zebrunner:read', 'zebrunner:write'],
 }));
 ```
@@ -574,7 +605,7 @@ The `mcpAuthRouter` provides these endpoints out of the box, eliminating the nee
 
 **MCP Protocol compliance:**
 
-The SDK's auth router implements the [MCP Authorization Specification (2025-11-25)](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization) natively:
+The SDK's auth router (with built-in rate limiting on all endpoints) implements the [MCP Authorization Specification (2025-11-25)](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization) natively:
 
 - Protected Resource Metadata at `/.well-known/oauth-protected-resource` per [RFC 9728](https://datatracker.ietf.org/doc/html/rfc9728)
 - Authorization server discovery via `/.well-known/oauth-authorization-server` per [RFC 8414](https://datatracker.ietf.org/doc/html/rfc8414)
@@ -837,7 +868,7 @@ Docker deployment uses the same STDIO transport with environment-variable creden
 servers:
   zebrunner-mcp:
     name: "Zebrunner MCP"
-    version: "7.1.1"
+    version: "7.2.1"
     image: "msarychau/mcp-zebrunner:latest"
     transport: "stdio"
     env:

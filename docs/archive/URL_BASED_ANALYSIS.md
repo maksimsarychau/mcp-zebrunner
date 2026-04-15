@@ -1,6 +1,6 @@
 # 🔗 Smart URL-Based Analysis Guide
 
-> URL-based analysis added in v5.5.0. Fully active in current version (7.1.1).
+> URL-based analysis added in v5.5.0. Fully active in current version (7.2.1).
 
 ## 🎯 Overview
 

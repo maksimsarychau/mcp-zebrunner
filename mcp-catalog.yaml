@@ -9,11 +9,12 @@
 # ══════════════════════════════════════════════════════════════════════════════
 
 name: zebrunner-mcp
-version: "7.1.1"
+version: "7.2.1"
 description: |
   Zebrunner MCP Server - Comprehensive test management integration for AI assistants.
   
   Features:
+  • 60 Tools with annotations (readOnly, destructive, idempotent hints)
   • Test Case Management (CRUD operations, search, bulk actions)
   • Test Suite Organization (hierarchy, coverage analysis)
   • Test Execution & Reporting (launches, results, dashboards)
@@ -21,6 +22,8 @@ description: |
   • Video & Screenshot Analysis (AI-powered)
   • Automation State Management
   • Dynamic Test Generation (with Rules Engine)
+  • 13 MCP Resources — read-only reference data via @ menu (projects, suites, statuses)
+  • 13 MCP Prompts — pre-built workflow instructions via / command (pass rate, coverage, triage)
 
 author: Maksim Sarychau
 license: AGPL-3.0
@@ -119,8 +122,8 @@ config:
 # ──────────────────────────────────────────────────────────────────────────────
 capabilities:
   tools: true
-  resources: false
-  prompts: false
+  resources: true
+  prompts: true
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Tool Categories (for UI grouping)
@@ -138,6 +141,10 @@ categories:
     description: "Video analysis, screenshot analysis, coverage reports"
   - name: "Automation"
     description: "Automation state management and test generation"
+  - name: "Resources"
+    description: "Read-only reference data (projects, suites, statuses, periods) via @ menu"
+  - name: "Prompts"
+    description: "Pre-built workflow instructions (pass rate, coverage, triage) via / command"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Health Check

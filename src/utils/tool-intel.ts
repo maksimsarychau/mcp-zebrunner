@@ -1,6 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import type { PromptMeta } from "../prompts.js";
+import type { ResourceMeta } from "../resources.js";
 
 export type ToolCatalogEntry = {
   name: string;
@@ -281,6 +283,82 @@ export function markdownForToolDetails(snapshot: ToolIntelSnapshot, toolName: st
     lines.push("");
     lines.push("_Token usage is approximate and depends on filters, input size, and output format._");
   }
+
+  return lines.join("\n");
+}
+
+export function markdownForPrompts(prompts: PromptMeta[], mcpVersion: string): string {
+  const lines: string[] = [];
+  lines.push("# Zebrunner MCP Prompts");
+  lines.push("");
+  lines.push(`MCP version: ${mcpVersion}`);
+  lines.push("");
+  lines.push(`Total prompts: ${prompts.length}`);
+  lines.push("");
+  lines.push("Prompts are pre-built workflow instructions selected via the **/** command in MCP clients.");
+  lines.push("Each prompt injects expert instructions that guide the LLM through multi-tool orchestration.");
+  lines.push("");
+
+  const groups = new Map<string, PromptMeta[]>();
+  for (const p of prompts) {
+    if (!groups.has(p.category)) groups.set(p.category, []);
+    groups.get(p.category)!.push(p);
+  }
+
+  for (const [category, items] of groups) {
+    lines.push(`## ${category}`);
+    lines.push("");
+    lines.push("| Prompt | Title | Description | Arguments |");
+    lines.push("|--------|-------|-------------|-----------|");
+    for (const p of items) {
+      lines.push(`| \`/${p.name}\` | ${p.title} | ${p.description} | ${p.args.join(", ")} |`);
+    }
+    lines.push("");
+  }
+
+  lines.push("_Use `/prompt-name` in Claude Desktop or Claude Code to activate a prompt._");
+
+  return lines.join("\n");
+}
+
+export function markdownForResources(resources: ResourceMeta[], mcpVersion: string): string {
+  const lines: string[] = [];
+  lines.push("# Zebrunner MCP Resources");
+  lines.push("");
+  lines.push(`MCP version: ${mcpVersion}`);
+  lines.push("");
+  lines.push(`Total resources: ${resources.length}`);
+  lines.push("");
+  lines.push("Resources provide read-only reference data attached via the **@** menu (plug icon) in MCP clients.");
+  lines.push("Static resources require no parameters. Template resources require a `{project_key}`.");
+  lines.push("");
+
+  const statics = resources.filter(r => r.type === "static");
+  const templates = resources.filter(r => r.type === "template");
+
+  if (statics.length > 0) {
+    lines.push("## Static Resources (no parameters)");
+    lines.push("");
+    lines.push("| Resource | URI | Description |");
+    lines.push("|----------|-----|-------------|");
+    for (const r of statics) {
+      lines.push(`| \`${r.name}\` | \`${r.uri}\` | ${r.description} |`);
+    }
+    lines.push("");
+  }
+
+  if (templates.length > 0) {
+    lines.push("## Template Resources (require project_key)");
+    lines.push("");
+    lines.push("| Resource | URI Pattern | Description |");
+    lines.push("|----------|-------------|-------------|");
+    for (const r of templates) {
+      lines.push(`| \`${r.name}\` | \`${r.uri}\` | ${r.description} |`);
+    }
+    lines.push("");
+  }
+
+  lines.push("_Use the @ menu or plug icon in your MCP client to browse and attach resources._");
 
   return lines.join("\n");
 }

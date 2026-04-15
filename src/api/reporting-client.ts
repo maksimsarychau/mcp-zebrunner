@@ -120,16 +120,16 @@ export class ZebrunnerReportingClient {
     this.http.interceptors.request.use(
       (config) => {
         if (this.config.debug) {
-          console.log(`[ZebrunnerReportingClient] ${config.method?.toUpperCase()} ${config.url}`);
+          console.error(`[ZebrunnerReportingClient] ${config.method?.toUpperCase()} ${config.url}`);
           
           // Mask Authorization header if present
           if (config.headers?.Authorization) {
             const maskedHeader = maskAuthHeader(config.headers.Authorization as string);
-            console.log('[ZebrunnerReportingClient] Authorization:', maskedHeader);
+            console.error('[ZebrunnerReportingClient] Authorization:', maskedHeader);
           }
           
           if (config.data) {
-            console.log('[ZebrunnerReportingClient] Request data:', config.data);
+            console.error('[ZebrunnerReportingClient] Request data:', config.data);
           }
         }
         return config;
@@ -146,7 +146,7 @@ export class ZebrunnerReportingClient {
     this.http.interceptors.response.use(
       (response) => {
         if (this.config.debug) {
-          console.log(`[ZebrunnerReportingClient] Response ${response.status}:`, response.data);
+          console.error(`[ZebrunnerReportingClient] Response ${response.status}:`, response.data);
         }
         return response;
       },
@@ -204,7 +204,7 @@ export class ZebrunnerReportingClient {
 
       if (this.config.debug) {
         const maskedToken = maskToken(this.bearerToken);
-        console.log(`[ZebrunnerReportingClient] Authentication successful, token: ${maskedToken}, expires at:`, this.tokenExpiresAt);
+        console.error(`[ZebrunnerReportingClient] Authentication successful, token: ${maskedToken}, expires at:`, this.tokenExpiresAt);
       }
 
       return this.bearerToken;
@@ -289,7 +289,7 @@ export class ZebrunnerReportingClient {
     const url = `/api/reporting/v1/launches/${launchId}/attempts?projectId=${projectId}`;
 
     if (this.config.debug) {
-      console.log(`[ZebrunnerReportingClient] Fetching launch attempts for launch ${launchId}`);
+      console.error(`[ZebrunnerReportingClient] Fetching launch attempts for launch ${launchId}`);
     }
 
     const response = await this.makeAuthenticatedRequest<any>('GET', url);
@@ -354,7 +354,10 @@ export class ZebrunnerReportingClient {
       throw new ZebrunnerReportingError(`Failed to parse project data for ${projectKey}: ${error instanceof Error ? error.message : error}`);
     }
     
-    // Cache the result
+    if (this.projectCache.size >= 100) {
+      const firstKey = this.projectCache.keys().next().value;
+      if (firstKey) this.projectCache.delete(firstKey);
+    }
     this.projectCache.set(projectKey, { project, timestamp: Date.now() });
     
     return project;
@@ -429,7 +432,7 @@ export class ZebrunnerReportingClient {
       allItems.push(...parsed.items);
 
       if (this.config.debug) {
-        console.log(`[ZebrunnerReportingClient] Sessions page ${currentPage}: ${parsed.items.length} items (total: ${allItems.length}/${totalElements})`);
+        console.error(`[ZebrunnerReportingClient] Sessions page ${currentPage}: ${parsed.items.length} items (total: ${allItems.length}/${totalElements})`);
       }
       currentPage++;
     }
@@ -504,7 +507,7 @@ export class ZebrunnerReportingClient {
       hasMorePages = fetchedSoFar < totalElements;
 
       if (this.config.debug) {
-        console.log(`[ZebrunnerReportingClient] Fetched page ${currentPage}: ${response.items.length} items (total: ${allItems.length}/${totalElements})`);
+        console.error(`[ZebrunnerReportingClient] Fetched page ${currentPage}: ${response.items.length} items (total: ${allItems.length}/${totalElements})`);
       }
 
       currentPage++;
@@ -538,7 +541,7 @@ export class ZebrunnerReportingClient {
     const url = `/api/reporting/v1/launches/${launchId}/tests/${testId}/history?projectId=${projectId}&limit=${limit}`;
     
     if (this.config.debug) {
-      console.log(`[ZebrunnerReportingClient] Fetching test execution history for test ${testId} (limit: ${limit})`);
+      console.error(`[ZebrunnerReportingClient] Fetching test execution history for test ${testId} (limit: ${limit})`);
     }
     
     const response = await this.makeAuthenticatedRequest<any>('GET', url);
@@ -582,7 +585,7 @@ export class ZebrunnerReportingClient {
     const sessionsData = response.data || response;
     
     if (this.config.debug) {
-      console.log(`[ZebrunnerReportingClient] Test sessions response for test ${testId}:`, JSON.stringify(sessionsData, null, 2));
+      console.error(`[ZebrunnerReportingClient] Test sessions response for test ${testId}:`, JSON.stringify(sessionsData, null, 2));
     }
     
     return TestSessionsResponseSchema.parse(sessionsData);
@@ -616,7 +619,7 @@ export class ZebrunnerReportingClient {
       }
       
       if (this.config.debug) {
-        console.log(`[ZebrunnerReportingClient] Downloading screenshot: ${fullUrl}`);
+        console.error(`[ZebrunnerReportingClient] Downloading screenshot: ${fullUrl}`);
       }
       
       const response = await this.http.get(fullUrl, {
@@ -627,7 +630,7 @@ export class ZebrunnerReportingClient {
       });
       
       if (this.config.debug) {
-        console.log(`[ZebrunnerReportingClient] Screenshot downloaded successfully, size: ${response.data.byteLength} bytes`);
+        console.error(`[ZebrunnerReportingClient] Screenshot downloaded successfully, size: ${response.data.byteLength} bytes`);
       }
       
       return Buffer.from(response.data);
@@ -768,6 +771,10 @@ export class ZebrunnerReportingClient {
       }))
     };
 
+    if (this.fieldsLayoutCache.size >= 50) {
+      const firstKey = this.fieldsLayoutCache.keys().next().value;
+      if (firstKey) this.fieldsLayoutCache.delete(firstKey);
+    }
     this.fieldsLayoutCache.set(projectId, { data: layout, timestamp: Date.now() });
     return layout;
   }

@@ -1,29 +1,135 @@
 # Change Logs
 
-## v7.1.1 (2026-04-13)
+## v7.2.1 (2026-04-14)
+
+### MCP Resources (13 resources)
+
+Added read-only reference data accessible via the `@` menu in MCP clients (Claude Desktop, Claude Code). Resources are fetched on demand and cached for 20 minutes.
+
+**Static resources (no API calls):**
+- `zebrunner://reports/types` — 6 report types for `generate_report` with descriptions, parameters, and examples.
+- `zebrunner://periods` — 12 valid time period values (e.g., "Last 30 Days", "Week") with day equivalents and which tools accept them.
+- `zebrunner://charts` — Chart delivery formats (png, html, text) and chart types (pie, bar, line, etc.) for 17 tools.
+- `zebrunner://formats` — 5 output format parameter families used across tools.
+
+**Dynamic resources (cached API calls):**
+- `zebrunner://projects` — All accessible projects with keys, IDs, and metadata.
+- `zebrunner://projects/{project_key}/suites` — Root test suites for a project.
+- `zebrunner://projects/{project_key}/automation-states` — Automation states with IDs.
+- `zebrunner://projects/{project_key}/priorities` — Automation priorities with IDs.
+- `zebrunner://projects/{project_key}/milestones` — Active milestones.
+- `zebrunner://projects/{project_key}/result-statuses` — Test result statuses.
+- `zebrunner://projects/{project_key}/configuration-groups` — Configuration groups (browsers, devices, etc.).
+- `zebrunner://projects/{project_key}/fields` — Custom fields layout.
+- `zebrunner://projects/{project_key}/suite-hierarchy` — Full suite hierarchy tree.
+
+**Implementation:**
+- `src/resources.ts` — `ResourceCache` class with configurable TTL (default 20 min), LRU eviction (max 200 entries), and `registerResources()` function.
+- `resourceTrace()` debug logging for all template resource handlers to diagnose Inspector routing issues.
+- `getResourcesCatalog()` export for use by `about_mcp_tools`.
+
+### MCP Prompts (13 prompts)
+
+Added pre-built workflow instructions accessible via the `/` command in MCP clients. Each prompt injects expert-crafted multi-step instructions that guide the LLM through complex multi-tool workflows.
+
+**E2E metric prompts:**
+- `/pass-rate` — Cross-platform pass rate with target comparison.
+- `/runtime-efficiency` — Regression runtime metrics with delta comparison.
+- `/automation-coverage` — Coverage and intake rate metrics.
+- `/executive-dashboard` — Standup-ready 5-section executive report.
+- `/release-readiness` — Go/No-Go assessment with 5 quality checks.
+- `/suite-coverage` — Per-suite automation coverage table.
+
+**Analysis prompts:**
+- `/review-test-case` — Validate-then-improve workflow for a single test case.
+- `/launch-triage` — Post-regression failure analysis with root cause recommendations.
+- `/flaky-review` — Flaky test detection with stabilization priorities.
+- `/find-duplicates` — Structural and semantic duplicate analysis.
+
+**Role-specific prompts:**
+- `/daily-qa-standup` — Concise daily status with action items.
+- `/automation-gaps` — Identify lowest-coverage suites and prioritize automation work.
+- `/project-overview` — Comprehensive project health card.
+
+**Implementation:**
+- `src/prompts.ts` — 13 builder functions (exported for unit testing) and `registerPrompts()`.
+- `getPromptsCatalog()` export for use by `about_mcp_tools`.
+
+### Tool Annotations (all 60 tools)
+
+Added MCP Tool Annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) to every registered tool, enabling clients to understand tool behavior.
+
+- 54 read-only tools: `readOnlyHint: true`, `destructiveHint: false`, `idempotentHint: true`.
+- 6 mutation tools: `readOnlyHint: false` with per-tool flags:
+  - `update_test_suite`, `update_test_case`: `idempotentHint: true` (PUT/PATCH).
+  - `create_test_suite`, `create_test_case`, `manage_test_run`: `idempotentHint: false`.
+  - `import_launch_results_to_test_run`: `destructiveHint: true`, `idempotentHint: true`.
+
+### Extended `about_mcp_tools`
+
+The `about_mcp_tools` tool now discovers all MCP capabilities, not just tools.
+
+- New `mode: "prompts"` — returns a formatted catalog of all 13 `/prompts` grouped by category with titles, descriptions, and arguments.
+- New `mode: "resources"` — returns a formatted catalog of all 13 `@resources` split into static and template with URIs and descriptions.
+- `mode: "summary"` — now appends an "Additional MCP Capabilities" section with prompt and resource counts.
+- Added `markdownForPrompts()` and `markdownForResources()` formatters in `src/utils/tool-intel.ts`.
 
 ### Steering-Inspired "Next Step" Guidance
 
 Mutation tool responses now include just-in-time "next step" hints that guide the LLM toward logical follow-up actions. Inspired by the [Strands Agents steering pattern](https://strandsagents.com/blog/steering-accuracy-beats-prompts-workflows/), hints are delivered at the moment the LLM needs them rather than front-loaded into system prompts.
 
-**How it works:** After a successful mutation, the server appends a `Tip:` block suggesting the most useful next tool call. Hints are conditional — they are suppressed when redundant (e.g., the quality check hint is skipped if `review: true` was already used).
+- After a successful mutation, the server appends a `Tip:` block suggesting the most useful next tool call. Hints are conditional — suppressed when redundant (e.g., quality check hint skipped if `review: true` was already used).
+- Extracted `steeringHint()` helper into `src/helpers/steering.ts`.
 
-**Hints by tool:**
-- **`create_test_suite`** — suggests `create_test_case` or sub-suite creation with the new suite ID.
-- **`create_test_case`** — always reminds that the case is draft and suggests `update_test_case` to publish. If `review` was not used, also suggests `validate_test_case` for a quality check.
-- **`create_test_case` preview** — reinforces the `draft=true` safety rule before confirmation via a `Note:` marker.
-- **`update_test_case`** — suggests `validate_test_case` (skipped if `review: true` was already used inline).
-- **`manage_test_run` create** — suggests populating the empty run via `add_cases` or importing launch results.
-- **`manage_test_run` update** — suggests `list_test_run_test_cases` to view current assignments.
-- **`manage_test_run` add_cases** — suggests importing results or viewing the case list.
-- **`import_launch_results_to_test_run`** — suggests viewing updated statuses or the run summary.
+### Error Handling Audit
 
-**Implementation:**
-- Extracted `steeringHint()` helper into `src/helpers/steering.ts` — a pure, deterministic function that takes a tool name and context (ID, reviewUsed flag) and returns the hint text.
-- All 8 inline hint blocks in `src/server.ts` refactored to call the helper.
-- 25 new unit tests in `tests/unit/steering-hints.test.ts` covering all tool types, conditional logic, edge cases, and no-emoji validation.
+Comprehensive audit and refactoring of error handling across all handlers to eliminate silent failures and prevent "fake data."
+
+- **Hybrid strategy:** single-resource fetches throw explicit errors; multi-section/multi-project aggregations return partial results with visible `⚠️` warnings.
+- Removed silent `catch(() => [])` / `catch(() => null)` fallbacks from `fetchRuntime`, `fetchCoverage`, `fetchFlaky`, `countByFilter`, `countManualOnlyByCustomField`, `findSimilarFailures`, `getAllSessionsWithArtifacts`.
+- Added `Promise.allSettled` with per-project/per-section warning collection in `pass-rate-report.ts`, `quality-dashboard.ts`, `coverage-report.ts`, `reporting-tools.ts`.
+- Visible warnings prepended to report output for any partial data.
+- LLM fallback degradation now visible: `[Basic fallback — LLM unavailable]` in semantic analyzer, `⚠️ LLM insight generation failed` in duplicate analyzer.
+- 82 `console.log` → `console.error` migrations across 14 files to prevent MCP stdio protocol pollution.
+
+### Dependency Updates (11 packages)
+
+All dependencies reviewed and updated to latest stable versions. `npm audit` reports 0 vulnerabilities.
+
+| Package | From | To | Notes |
+|---------|------|-----|-------|
+| `@modelcontextprotocol/sdk` | `^1.0.0` | `^1.29.0` | Tool Annotations, Elicitation, ReDoS security fix |
+| `zod` | `^3.23.8` | `^4.3.6` | Required `z.record()` API migration (2-arg) |
+| `tesseract.js` | `^5.1.1` | `^7.0.0` | Required `Page` data structure migration |
+| `typescript` | `^5.6.3` | `^6.0.2` | |
+| `dotenv` | `^16.4.5` | `^17.4.2` | |
+| `axios` | `^1.7.3` | `^1.15.0` | Security fixes |
+| `sharp` | `^0.33.5` | `^0.34.5` | |
+| `tsx` | `^4.17.0` | `^4.21.0` | |
+| `@ffprobe-installer/ffprobe` | `^1.4.1` | `^2.1.2` | |
+| `@anthropic-ai/sdk` | `^0.86.1` | `^0.88.0` | |
+| `@types/node` | `^22.0.0` | `^25.6.0` | |
+
+**Code migrations required by dependency updates:**
+- `z.record(z.any())` → `z.record(z.string(), z.any())` in `src/types.ts` and `src/types/core.ts` (Zod 4 API).
+- `worker.recognize()` response parsing updated for Tesseract.js v7 `Page` structure in `src/utils/screenshot-analyzer.ts`.
+
+### Tests
+
+1047 total tests, 0 failures (up from ~990 in v7.1.0).
+
+- 31 new unit tests: tool annotation coverage (6 tests), catalog exports for prompts and resources (13 tests), `markdownForPrompts`/`markdownForResources` formatting (10 tests), `about_mcp_tools` extended modes (2 tests).
+- 25 new unit tests for steering hints.
+- 8 new eval prompts: `about_mcp_tools.prompts`, `about_mcp_tools.resources`, 4 resource-aware prompts, 2 mutation eval prompts.
 - 10 mutation eval prompts extended with `expectedOutputPatterns` for steering hint markers.
-- Version bumped to 7.1.1 across all entry points, configs, catalogs, and documentation.
+
+### Documentation
+
+- **New:** `docs/RESOURCES_AND_PROMPTS.md` (610 lines) — detailed guide for both end users and contributors.
+- **Updated:** `README.md` — added "MCP Resources & Prompts" overview section with reference tables.
+- **Updated:** `docs/TEST_PROMPTS.md` — added sections 14 (MCP Resources), 15 (MCP Prompts), 16 (Tool Annotations) with manual test steps.
+- **Added:** `npm run inspector` script in `package.json` for MCP Inspector debugging.
+- Version bumped to 7.2.1 across all 31 files.
 
 ---
 

@@ -107,20 +107,31 @@ export async function extractTextOCR(
       tessedit_pageseg_mode: psm as any,
     });
     
-    const { data } = await worker.recognize(buffer);
+    const { data } = await worker.recognize(buffer, {}, { text: true, blocks: true });
     
-    const words = data.words.map(word => ({
-      text: word.text,
-      confidence: word.confidence,
-      bbox: {
-        x: word.bbox.x0,
-        y: word.bbox.y0,
-        width: word.bbox.x1 - word.bbox.x0,
-        height: word.bbox.y1 - word.bbox.y0
-      }
-    }));
+    const allBlocks = data.blocks || [];
+    const words = allBlocks.flatMap(b =>
+      b.paragraphs.flatMap(p =>
+        p.lines.flatMap(l =>
+          l.words.map(word => ({
+            text: word.text,
+            confidence: word.confidence,
+            bbox: {
+              x: word.bbox.x0,
+              y: word.bbox.y0,
+              width: word.bbox.x1 - word.bbox.x0,
+              height: word.bbox.y1 - word.bbox.y0
+            }
+          }))
+        )
+      )
+    );
     
-    const lines = data.lines.map(line => line.text);
+    const lines = allBlocks.flatMap(b =>
+      b.paragraphs.flatMap(p =>
+        p.lines.map(l => l.text)
+      )
+    );
     
     return {
       text: data.text.trim(),
@@ -308,15 +319,19 @@ export async function saveScreenshotToTemp(
   filename: string
 ): Promise<string> {
   const tempDir = process.env.SCREENSHOT_DOWNLOAD_DIR || path.join(os.tmpdir(), 'mcp-zebrunner', 'screenshots');
-  
-  // Create directory if it doesn't exist
+
   if (!fs.existsSync(tempDir)) {
     fs.mkdirSync(tempDir, { recursive: true });
   }
-  
-  const filepath = path.join(tempDir, filename);
+
+  const safeName = path.basename(filename).replace(/[^a-zA-Z0-9_.-]/g, '_');
+  const filepath = path.join(tempDir, safeName);
+  const resolved = path.resolve(filepath);
+  if (!resolved.startsWith(path.resolve(tempDir) + path.sep)) {
+    throw new Error('Security: screenshot path escapes temp directory');
+  }
+
   await fs.promises.writeFile(filepath, buffer);
-  
   return filepath;
 }
 
@@ -440,7 +455,7 @@ export function clearAllScreenshots(): number {
 try {
   const cleaned = cleanupOldScreenshots(3600000); // 1 hour
   if (cleaned > 0) {
-    console.log(`[Screenshot Cleanup] Removed ${cleaned} old screenshot(s)`);
+    console.error(`[Screenshot Cleanup] Removed ${cleaned} old screenshot(s)`);
   }
 } catch (error) {
   console.error('[Screenshot Cleanup] Failed:', error);
@@ -460,7 +475,7 @@ function setupCleanupHandlers(): void {
     try {
       const count = clearAllScreenshots();
       if (count > 0 && process.env.DEBUG === 'true') {
-        console.log(`[Screenshot Cleanup] Cleaned ${count} screenshot(s) on ${signal}`);
+        console.error(`[Screenshot Cleanup] Cleaned ${count} screenshot(s) on ${signal}`);
       }
     } catch (error) {
       if (process.env.DEBUG === 'true') {

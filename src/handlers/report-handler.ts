@@ -104,12 +104,23 @@ export class ReportHandler implements ReportContext {
     );
 
     const resolved: ProjectContext[] = [];
-    for (const r of results) {
-      if (r.status === 'fulfilled') resolved.push(r.value);
+    const failed: string[] = [];
+    for (let i = 0; i < results.length; i++) {
+      const r = results[i];
+      if (r.status === 'fulfilled') {
+        resolved.push(r.value);
+      } else {
+        const reason = r.reason instanceof Error ? r.reason.message : String(r.reason);
+        failed.push(`${projects[i]}: ${reason}`);
+      }
+    }
+
+    if (failed.length > 0) {
+      console.error(`⚠️ [resolveProjects] Failed to resolve ${failed.length}/${projects.length} project(s): ${failed.join('; ')}`);
     }
 
     if (resolved.length === 0) {
-      throw new Error(`Could not resolve any of the specified projects: ${projects.join(', ')}`);
+      throw new Error(`Could not resolve any of the specified projects: ${projects.join(', ')}. Errors: ${failed.join('; ')}`);
     }
 
     return resolved;
@@ -122,8 +133,11 @@ export class ReportHandler implements ReportContext {
       period,
       milestone: milestone ? [milestone] : [],
     });
-    const rows: any[] = await this.callWidgetSql(ctx.projectId, TEMPLATE.RESULTS_BY_PLATFORM, params)
-      .then(d => Array.isArray(d) ? d : []);
+    const widgetData = await this.callWidgetSql(ctx.projectId, TEMPLATE.RESULTS_BY_PLATFORM, params);
+    if (!Array.isArray(widgetData)) {
+      console.error(`⚠️ [fetchPassRate] Widget SQL returned non-array for project ${ctx.alias} (got ${typeof widgetData}), falling back to launches API`);
+    }
+    const rows: any[] = Array.isArray(widgetData) ? widgetData : [];
 
     let passed = 0, failed = 0, skipped = 0, knownIssue = 0, aborted = 0;
 
@@ -173,85 +187,59 @@ export class ReportHandler implements ReportContext {
   }
 
   async fetchRuntime(ctx: ProjectContext, milestone?: string): Promise<RuntimeData> {
-    try {
-      const result = await this.reportingHandlers.analyzeRegressionRuntime({
-        projectId: ctx.projectId,
-        projectKey: ctx.projectKey,
-        milestone,
-        includeTestDetails: false,
-        includeAttemptsDetails: false,
-        format: 'dto',
-        chart: 'none',
-      });
+    const result = await this.reportingHandlers.analyzeRegressionRuntime({
+      projectId: ctx.projectId,
+      projectKey: ctx.projectKey,
+      milestone,
+      includeTestDetails: false,
+      includeAttemptsDetails: false,
+      format: 'dto',
+      chart: 'none',
+    });
 
-      const textBlock = result.content?.find((c: any) => c.type === 'text') as { type: 'text'; text: string } | undefined;
-      if (!textBlock?.text) throw new Error('No runtime data');
+    const textBlock = result.content?.find((c: any) => c.type === 'text') as { type: 'text'; text: string } | undefined;
+    if (!textBlock?.text) throw new Error(`No runtime data returned for project ${ctx.alias}`);
 
-      const dto = JSON.parse(textBlock.text);
-      const agg = dto.aggregated || dto;
-      const dist = agg.durationDistribution || {};
+    const dto = JSON.parse(textBlock.text);
+    const agg = dto.aggregated || dto;
+    const dist = agg.durationDistribution || {};
 
-      return {
-        project: ctx.alias,
-        short: dist.shortCount ?? 0,
-        medium: dist.mediumCount ?? 0,
-        long: dist.longCount ?? 0,
-        totalTests: agg.totalTests ?? 0,
-        totalTestCases: agg.totalTestCasesCovered ?? 0,
-        totalElapsedSec: agg.totalElapsedSeconds ?? 0,
-        avgRuntimePerTest: agg.overallAvgRuntimePerTest ?? 0,
-        avgRuntimePerTestCase: agg.overallAvgRuntimePerTestCase ?? 0,
-        wri: agg.overallWeightedRuntimeIndex ?? 0,
-        shortPercent: dist.shortPercent ?? 0,
-        mediumPercent: dist.mediumPercent ?? 0,
-        longPercent: dist.longPercent ?? 0,
-      };
-    } catch {
-      return {
-        project: ctx.alias,
-        short: 0, medium: 0, long: 0,
-        totalTests: 0, totalTestCases: 0, totalElapsedSec: 0,
-        avgRuntimePerTest: 0, avgRuntimePerTestCase: 0, wri: 0,
-        shortPercent: 0, mediumPercent: 0, longPercent: 0,
-      };
-    }
+    return {
+      project: ctx.alias,
+      short: dist.shortCount ?? 0,
+      medium: dist.mediumCount ?? 0,
+      long: dist.longCount ?? 0,
+      totalTests: agg.totalTests ?? 0,
+      totalTestCases: agg.totalTestCasesCovered ?? 0,
+      totalElapsedSec: agg.totalElapsedSeconds ?? 0,
+      avgRuntimePerTest: agg.overallAvgRuntimePerTest ?? 0,
+      avgRuntimePerTestCase: agg.overallAvgRuntimePerTestCase ?? 0,
+      wri: agg.overallWeightedRuntimeIndex ?? 0,
+      shortPercent: dist.shortPercent ?? 0,
+      mediumPercent: dist.mediumPercent ?? 0,
+      longPercent: dist.longPercent ?? 0,
+    };
   }
 
   async fetchCoverage(ctx: ProjectContext): Promise<CoverageData> {
-    let automated = 0, manual = 0, notAutomated = 0;
+    const states = await this.reportingClient.getAutomationStates(ctx.projectId);
+    const stateMap = new Map(states.map(s => [s.name.toLowerCase(), s.id]));
 
-    try {
-      const states = await this.reportingClient.getAutomationStates(ctx.projectId);
-      const stateMap = new Map(states.map(s => [s.name.toLowerCase(), s.id]));
+    const countByState = async (stateName: string): Promise<number> => {
+      const stateId = stateMap.get(stateName.toLowerCase());
+      if (!stateId) return 0;
+      const result = await this.publicClient.getTestCases(ctx.projectKey, {
+        filter: `automationState.id = ${stateId}`,
+        size: 1,
+      });
+      return (result._meta as any)?.total ?? result._meta?.totalElements ?? result.items?.length ?? 0;
+    };
 
-      const countByState = async (stateName: string): Promise<number> => {
-        const stateId = stateMap.get(stateName.toLowerCase());
-        if (!stateId) return 0;
-        try {
-          const result = await this.publicClient.getTestCases(ctx.projectKey, {
-            filter: `automationState.id = ${stateId}`,
-            size: 1,
-          });
-          return (result._meta as any)?.total ?? result._meta?.totalElements ?? result.items?.length ?? 0;
-        } catch {
-          return 0;
-        }
-      };
-
-      [automated, manual, notAutomated] = await Promise.all([
-        countByState('Automated'),
-        countByState('Manual'),
-        countByState('Not Automated'),
-      ]);
-    } catch {
-      try {
-        const result = await this.publicClient.getTestCases(ctx.projectKey, { size: 1 });
-        const total = (result._meta as any)?.total ?? result._meta?.totalElements ?? 0;
-        return { project: ctx.alias, automated: 0, manual: 0, notAutomated: 0, total };
-      } catch {
-        return { project: ctx.alias, automated: 0, manual: 0, notAutomated: 0, total: 0 };
-      }
-    }
+    const [automated, manual, notAutomated] = await Promise.all([
+      countByState('Automated'),
+      countByState('Manual'),
+      countByState('Not Automated'),
+    ]);
 
     return {
       project: ctx.alias,
@@ -268,8 +256,11 @@ export class ReportHandler implements ReportContext {
       milestone: milestone ? [milestone] : [],
       dashboardName: 'Bugs repro rate',
     });
-    const rows: any[] = await this.callWidgetSql(ctx.projectId, TEMPLATE.TOP_BUGS, params)
-      .then(d => Array.isArray(d) ? d : []);
+    const bugsWidgetData = await this.callWidgetSql(ctx.projectId, TEMPLATE.TOP_BUGS, params);
+    if (!Array.isArray(bugsWidgetData)) {
+      console.error(`⚠️ [fetchBugs] Widget SQL returned non-array for project ${ctx.alias} (got ${typeof bugsWidgetData})`);
+    }
+    const rows: any[] = Array.isArray(bugsWidgetData) ? bugsWidgetData : [];
 
     const bugs: BugEntry[] = rows.slice(0, limit).map(row => {
       const defectHtml = row.DEFECT || '';
@@ -321,41 +312,37 @@ export class ReportHandler implements ReportContext {
   }
 
   async fetchFlaky(ctx: ProjectContext, periodDays: number, milestone?: string): Promise<FlakyData> {
-    try {
-      const result = await this.reportingHandlers.findFlakyTests({
-        projectId: ctx.projectId,
-        projectKey: ctx.projectKey,
-        period_days: Math.min(periodDays, 30),
-        milestone,
-        limit: 10,
-        include_manual: true,
-        include_history: false,
-        format: 'json',
-        count_only: false,
-        chart: 'none',
-      });
+    const result = await this.reportingHandlers.findFlakyTests({
+      projectId: ctx.projectId,
+      projectKey: ctx.projectKey,
+      period_days: Math.min(periodDays, 30),
+      milestone,
+      limit: 10,
+      include_manual: true,
+      include_history: false,
+      format: 'json',
+      count_only: false,
+      chart: 'none',
+    });
 
-      const textBlock = result.content?.find((c: any) => c.type === 'text') as { type: 'text'; text: string } | undefined;
-      if (!textBlock?.text) return { project: ctx.alias, flaky: [], total: 0 };
+    const textBlock = result.content?.find((c: any) => c.type === 'text') as { type: 'text'; text: string } | undefined;
+    if (!textBlock?.text) throw new Error(`No flaky test data returned for project ${ctx.alias}`);
 
-      const data = JSON.parse(textBlock.text);
-      const items = data.flaky_tests || data.automated_flaky || data.items || [];
+    const data = JSON.parse(textBlock.text);
+    const items = data.flaky_tests || data.automated_flaky || data.items || [];
 
-      const flaky: FlakyEntry[] = items.slice(0, 10).map((item: any) => ({
-        testName: item.test_name || item.testName || item.name || 'Unknown',
-        flipCount: item.flip_count || item.flipCount || 0,
-        passRate: item.pass_rate ?? item.passRate ?? 0,
-        stability: item.stability ?? item.avg_stability ?? 0,
-      }));
+    const flaky: FlakyEntry[] = items.slice(0, 10).map((item: any) => ({
+      testName: item.test_name || item.testName || item.name || 'Unknown',
+      flipCount: item.flip_count || item.flipCount || 0,
+      passRate: item.pass_rate ?? item.passRate ?? 0,
+      stability: item.stability ?? item.avg_stability ?? 0,
+    }));
 
-      return {
-        project: ctx.alias,
-        flaky,
-        total: data.total_flaky ?? data.totalFlaky ?? flaky.length,
-      };
-    } catch {
-      return { project: ctx.alias, flaky: [], total: 0 };
-    }
+    return {
+      project: ctx.alias,
+      flaky,
+      total: data.total_flaky ?? data.totalFlaky ?? flaky.length,
+    };
   }
 
   // ── Utilities ─────────────────────────────────────────────────────────
