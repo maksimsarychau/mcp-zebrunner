@@ -17,7 +17,7 @@ servers:
     # ── Basic Info ──────────────────────────────────────────────────────────────
     name: "Zebrunner MCP"
     description: "Comprehensive test management integration for AI assistants — 60 tools, 13 resources, 14 prompts for test cases, suites, launches, reporting, and analysis"
-    version: "7.2.2"
+    version: "8.0.0"
     author: "Maksim Sarychau"
     license: "AGPL-3.0"
     
@@ -46,8 +46,6 @@ servers:
       - "ZEBRUNNER_TOKEN"
       - "-e"
       - "DEBUG"
-      - "-e"
-      - "EXPERIMENTAL_FEATURES"
       - "-e"
       - "MAX_PAGE_SIZE"
       - "-e"
@@ -78,11 +76,6 @@ servers:
         required: false
         default: "false"
         
-      EXPERIMENTAL_FEATURES:
-        description: "Enable experimental API endpoints"
-        required: false
-        default: "false"
-        
       MAX_PAGE_SIZE:
         description: "Maximum items per API page (1-1000)"
         required: false
@@ -97,6 +90,20 @@ servers:
         description: "Enable rules-based test generation"
         required: false
         default: "false"
+
+      MCP_TRANSPORT:
+        description: "Transport mode: stdio (default), http, or auto"
+        required: false
+        default: "auto"
+
+      PORT:
+        description: "HTTP server port (enables StreamableHTTP mode when set)"
+        required: false
+
+      MCP_AUTH_MODE:
+        description: "Auth mode for HTTP: headers (default), oauth, or both"
+        required: false
+        default: "headers"
 
     # ── Metadata ────────────────────────────────────────────────────────────────
     tags:

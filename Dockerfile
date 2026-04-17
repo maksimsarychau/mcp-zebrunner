@@ -1,3 +1,4 @@
+# check=skip=SecretsUsedInArgOrEnv
 # ══════════════════════════════════════════════════════════════════════════════
 # Zebrunner MCP Server - Multi-stage Docker Build
 # ══════════════════════════════════════════════════════════════════════════════
@@ -17,6 +18,7 @@ RUN apk add --no-cache \
     python3 \
     make \
     g++ \
+    pkgconfig \
     vips-dev
 
 WORKDIR /build
@@ -25,6 +27,7 @@ WORKDIR /build
 COPY package.json package-lock.json ./
 
 # Install ALL dependencies (including devDependencies for TypeScript compilation)
+# sharp@0.34 needs node-addon-api + node-gyp to build from source on Alpine
 RUN npm ci
 
 # Copy source code and config files
@@ -51,7 +54,7 @@ LABEL org.opencontainers.image.url="https://github.com/maksimsarychau/mcp-zebrun
 LABEL org.opencontainers.image.source="https://github.com/maksimsarychau/mcp-zebrunner"
 LABEL org.opencontainers.image.licenses="AGPL-3.0"
 LABEL ai.mcp.server="true"
-LABEL ai.mcp.transport="stdio"
+LABEL ai.mcp.transport="stdio,streamablehttp"
 
 # Install runtime dependencies for native modules
 # - vips: required by sharp for image processing
@@ -83,14 +86,14 @@ COPY --from=builder --chown=mcpuser:mcpuser /build/dist ./dist
 COPY --from=builder --chown=mcpuser:mcpuser /build/node_modules ./node_modules
 COPY --from=builder --chown=mcpuser:mcpuser /build/package.json ./
 
-# Copy integrity signature if it exists (wildcard avoids build failure)
 COPY --from=builder --chown=mcpuser:mcpuser /build/.integrity-signatur[e] ./
+COPY --chown=mcpuser:mcpuser .mcp-statu[s] ./
 
 # Copy default rules file if it exists (use wildcard to avoid build failure)
 COPY --chown=mcpuser:mcpuser mcp-zebrunner-rules.md* ./
 
-# Create directory for optional config mounts
-RUN mkdir -p /config && chown mcpuser:mcpuser /config
+# Create directories for optional config mounts and token store
+RUN mkdir -p /config /data && chown mcpuser:mcpuser /config /data
 
 # Switch to non-root user
 USER mcpuser
@@ -98,16 +101,22 @@ USER mcpuser
 # Environment variables with defaults
 ENV NODE_ENV=production
 ENV DEBUG=false
-ENV EXPERIMENTAL_FEATURES=false
 ENV MAX_PAGE_SIZE=100
 ENV DEFAULT_PAGE_SIZE=10
 ENV ENABLE_RULES_ENGINE=false
 
-# Required environment variables (must be provided at runtime)
-# ENV ZEBRUNNER_URL=
-# ENV ZEBRUNNER_LOGIN=
-# ENV ZEBRUNNER_TOKEN=
+# Transport configuration (auto-detect: PORT present = HTTP, otherwise STDIO)
+ENV MCP_TRANSPORT=auto
+ENV PORT=""
+ENV MCP_AUTH_MODE=headers
+ENV MCP_SERVER_URL=""
 
-# Start MCP server (stdio transport)
-# Note: Use 'docker run --init' for proper signal handling instead of tini
+# Required environment variables (must be provided at runtime)
+# STDIO mode: ZEBRUNNER_URL, ZEBRUNNER_LOGIN, ZEBRUNNER_TOKEN
+# HTTP mode: ZEBRUNNER_URL only (credentials come per-request via headers)
+
+# Expose port for HTTP mode (no-op in STDIO mode)
+EXPOSE 3000
+
+# Start MCP server — auto-detects STDIO vs HTTP based on PORT
 CMD ["node", "dist/server.js"]

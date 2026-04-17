@@ -1,8 +1,6 @@
 # MCP Zebrunner: Executive Summary
 
-**Author:** Maksim Sarychau  
-**Current Version:** 7.2.2
-**Last Updated:** April 2026
+**Author:** Maksim Sarychau
 
 ---
 
@@ -104,7 +102,7 @@ MCP Zebrunner provides a natural‑language interface for test management. Inste
 
 ### Distribution
 - ✅ **npm Registry** — `npm install -g mcp-zebrunner`  
-- ✅ **Docker Hub** — `msarychau/mcp-zebrunner:7.2.2`
+- ✅ **Docker Hub** — `msarychau/mcp-zebrunner:latest`
 - ✅ **GitHub** — open source at github.com/maksimsarychau/mcp-zebrunner  
 - ⚠️ **MCP Registry** — publication in progress
 
@@ -192,3 +190,7 @@ Planned enhancements:
 ---
 
 **Bottom line:** MCP Zebrunner makes test intelligence accessible across roles, reduces reporting overhead, and improves release decision speed and quality.
+
+---
+
+*Last Updated: April 2026*

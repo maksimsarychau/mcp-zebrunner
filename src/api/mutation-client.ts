@@ -26,25 +26,19 @@ export class ZebrunnerMutationClient {
       ...config,
     };
 
-    if (!this.config.username?.trim() || !this.config.token?.trim()) {
-      throw new Error(
-        "ZebrunnerMutationClient: username and token must be non-empty strings. " +
-        "Set ZEBRUNNER_USERNAME and ZEBRUNNER_TOKEN environment variables.",
-      );
-    }
+    const hasCredentials = !!(this.config.username?.trim() && this.config.token?.trim());
 
     const baseURL = this.config.baseUrl.replace(/\/+$/, "");
-    const basic = Buffer.from(
-      `${this.config.username}:${this.config.token}`,
-      "utf8",
-    ).toString("base64");
-    this.authHeader = `Basic ${basic}`;
+    const basic = hasCredentials
+      ? Buffer.from(`${this.config.username}:${this.config.token}`, "utf8").toString("base64")
+      : "";
+    this.authHeader = basic ? `Basic ${basic}` : "";
 
     this.http = axios.create({
       baseURL,
       timeout: this.config.timeout,
       headers: {
-        Authorization: `Basic ${basic}`,
+        ...(this.authHeader ? { Authorization: this.authHeader } : {}),
         "Content-Type": "application/json",
         Accept: "application/json",
       },

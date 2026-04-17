@@ -9,7 +9,7 @@
 # ══════════════════════════════════════════════════════════════════════════════
 
 name: zebrunner-mcp
-version: "7.2.2"
+version: "8.0.0"
 description: |
   Zebrunner MCP Server - Comprehensive test management integration for AI assistants.
   
@@ -85,13 +85,6 @@ config:
     title: "Debug Mode"
     description: "Enable verbose debug logging"
 
-  EXPERIMENTAL_FEATURES:
-    type: boolean
-    required: false
-    default: false
-    title: "Experimental Features"
-    description: "Enable experimental API endpoints and features"
-
   MAX_PAGE_SIZE:
     type: number
     required: false
@@ -116,6 +109,26 @@ config:
     default: false
     title: "Rules Engine"
     description: "Enable rules-based test generation and validation"
+
+  MCP_TRANSPORT:
+    type: string
+    required: false
+    default: "auto"
+    title: "Transport Mode"
+    description: "Transport protocol: stdio (default), http (StreamableHTTP), or auto"
+
+  PORT:
+    type: number
+    required: false
+    title: "HTTP Port"
+    description: "Port for StreamableHTTP mode (setting this enables HTTP transport)"
+
+  MCP_AUTH_MODE:
+    type: string
+    required: false
+    default: "headers"
+    title: "Auth Mode"
+    description: "Authentication mode for HTTP: headers, oauth, or both"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # MCP Server Capabilities

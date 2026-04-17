@@ -1,7 +1,5 @@
 # Test Prompts for Zebrunner MCP Tools
 
-> **Version:** 7.2.2
->
 > This document contains 1–3 test prompts per tool with expected behavior, plus end-to-end metric collection prompts. All prompts use generic platform references (iOS / Android / Web) without specific project keys, launch IDs, or milestones.
 
 ---
@@ -1261,44 +1259,44 @@ MCP resources provide read-only reference data accessible via the `@` menu in MC
 **Expected:** Returns a JSON list of all Zebrunner projects accessible to the current user with name, key, ID, starred status, and public accessibility. Subsequent `@` accesses within 20 minutes return cached data.
 
 **Resource 6 — Root suites for project**
-> Attach `@zebrunner://projects/MFPAND/suites` and ask: "What root suites exist in the Android project?"
+> Attach `@zebrunner://projects/MCP/suites` and ask: "What root suites exist in the Android project?"
 
 **Expected:** Returns root-level test suites (suites with no parent) with IDs and names. The `@` menu should show one entry per project (e.g., "Android — Root Suites", "iOS — Root Suites").
 
 **Resource 7 — Automation states for project**
-> Attach `@zebrunner://projects/MFPIOS/automation-states` and ask: "What automation states exist?"
+> Attach `@zebrunner://projects/MCP/automation-states` and ask: "What automation states exist?"
 
 **Expected:** Returns the list of automation states (e.g., Automated, Manual, Not Automated, To Be Automated) with IDs for the selected project.
 
 **Resource 8 — Priorities for project**
-> Attach `@zebrunner://projects/MFPWEB/priorities` and ask: "What priority levels are configured?"
+> Attach `@zebrunner://projects/MCP/priorities` and ask: "What priority levels are configured?"
 
 **Expected:** Returns the list of priorities (e.g., Critical, High, Medium, Low) with IDs for the selected project.
 
 ### Phase 2 Dynamic Resources (deeper project data)
 
 **Resource 9 — Milestones for project**
-> Attach `@zebrunner://projects/MFPAND/milestones` and ask: "What milestones exist for Android?"
+> Attach `@zebrunner://projects/MCP/milestones` and ask: "What milestones exist for Android?"
 
 **Expected:** Returns active and completed milestones with IDs, names, and completion status. Useful for filtering launches by milestone version.
 
 **Resource 10 — Result statuses for project**
-> Attach `@zebrunner://projects/MFPAND/result-statuses` and ask: "What test run result statuses are configured?"
+> Attach `@zebrunner://projects/MCP/result-statuses` and ask: "What test run result statuses are configured?"
 
 **Expected:** Returns the configured result statuses (e.g., Passed, Failed, Skipped, In Progress, Blocked) with IDs for the project.
 
 **Resource 11 — Configuration groups for project**
-> Attach `@zebrunner://projects/MFPAND/configuration-groups` and ask: "What configuration groups are available?"
+> Attach `@zebrunner://projects/MCP/configuration-groups` and ask: "What configuration groups are available?"
 
 **Expected:** Returns test run configuration groups and their options (e.g., Browser: Chrome/Firefox, OS: Windows/macOS).
 
 **Resource 12 — Fields layout for project**
-> Attach `@zebrunner://projects/MFPAND/fields` and ask: "What custom fields are defined for test cases?"
+> Attach `@zebrunner://projects/MCP/fields` and ask: "What custom fields are defined for test cases?"
 
 **Expected:** Returns system and custom field definitions with types, tab placement, and enabled status. Useful for understanding which custom fields (e.g., manualOnly, testrailId) are available.
 
 **Resource 13 — Suite hierarchy for project**
-> Attach `@zebrunner://projects/MFPAND/suite-hierarchy` and ask: "Show me the full suite tree."
+> Attach `@zebrunner://projects/MCP/suite-hierarchy` and ask: "Show me the full suite tree."
 
 **Expected:** Returns all test suites with parent-child relationships (parentId). Claude can reconstruct the tree structure from flat data.
 
@@ -1447,7 +1445,7 @@ Server-side tool metrics are collected automatically for every tool call in a se
 **Test 4 — MCP Inspector verification**
 > In the MCP Inspector, call `about_mcp_tools` with arguments `{ "mode": "metrics" }`.
 
-**Expected:** Returns a well-formatted markdown response starting with `MCP version: 7.2.2` followed by the metrics summary table or the empty-session message.
+**Expected:** Returns a well-formatted markdown response starting with `MCP version: X.Y.Z` followed by the metrics summary table or the empty-session message.
 
 ### Eval Token Tracking (CLI)
 
@@ -1473,3 +1471,7 @@ Server-side tool metrics are collected automatically for every tool call in a se
 > After running `npm run test:eval`, open the latest `.json` in `results/`.
 
 **Expected:** Each result object in the `results` array contains `tokenUsage: { inputTokens, outputTokens }`. Layer 3 results also contain `judgeTokenUsage`. The `summary` object contains `tokens: { totalInputTokens, totalOutputTokens, judgeInputTokens, judgeOutputTokens, estimatedCost: { input, output, total } }`.
+
+---
+
+*Last Updated: April 2026*

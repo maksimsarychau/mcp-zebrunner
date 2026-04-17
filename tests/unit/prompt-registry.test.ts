@@ -379,9 +379,9 @@ describe("Prompt Hygiene", () => {
   for (const { name, fn } of builders) {
     it(`${name}: does not hardcode specific project keys`, () => {
       const text = fn();
-      assert.ok(!text.includes("MFPWEB"), `${name} should not hardcode MFPWEB`);
-      assert.ok(!text.includes("MFPAND"), `${name} should not hardcode MFPAND`);
-      assert.ok(!text.includes("MFPIOS"), `${name} should not hardcode MFPIOS`);
+      assert.ok(!text.includes("MCP"), `${name} should not hardcode MCP`);
+      assert.ok(!text.includes("MCP"), `${name} should not hardcode MCP`);
+      assert.ok(!text.includes("MCP"), `${name} should not hardcode MCP`);
     });
 
     it(`${name}: includes the user-provided project argument`, () => {

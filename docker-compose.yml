@@ -36,7 +36,6 @@ services:
 
       # Optional configuration with defaults
       DEBUG: ${DEBUG:-false}
-      EXPERIMENTAL_FEATURES: ${EXPERIMENTAL_FEATURES:-false}
       MAX_PAGE_SIZE: ${MAX_PAGE_SIZE:-100}
       DEFAULT_PAGE_SIZE: ${DEFAULT_PAGE_SIZE:-10}
       ENABLE_RULES_ENGINE: ${ENABLE_RULES_ENGINE:-false}

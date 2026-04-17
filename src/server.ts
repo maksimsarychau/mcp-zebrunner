@@ -3,6 +3,8 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { ConfigManager } from "./config/manager.js";
+import { resolveTransportMode } from "./config/transport.js";
+import { createClientProxy, initClientFactory, type PerUserClients } from "./http/client-factory.js";
 
 // Enhanced imports
 import { EnhancedZebrunnerClient } from "./api/enhanced-client.js";
@@ -119,11 +121,12 @@ if (configWarnings.length > 0) {
 
 /** Enhanced API client configuration — timeout sourced from TIMEOUT env var (default: 60s) */
 const API_TIMEOUT = appConfig.timeout ?? 60_000;
+const TRANSPORT_MODE = resolveTransportMode();
 
 const config: ZebrunnerConfig = {
   baseUrl: ZEBRUNNER_URL,
-  username: ZEBRUNNER_LOGIN,
-  token: ZEBRUNNER_TOKEN,
+  username: ZEBRUNNER_LOGIN ?? '',
+  token: ZEBRUNNER_TOKEN ?? '',
   timeout: API_TIMEOUT,
   retryAttempts: 3,
   retryDelay: 1000,
@@ -132,35 +135,65 @@ const config: ZebrunnerConfig = {
   maxPageSize: MAX_PAGE_SIZE
 };
 
-const client = new EnhancedZebrunnerClient(config);
-const mutationClient = new ZebrunnerMutationClient(config);
+// Create singleton clients — in HTTP mode these are placeholders wrapped by Proxy
+const _singletonClient = new EnhancedZebrunnerClient(config);
+const _singletonMutationClient = new ZebrunnerMutationClient(config);
 
-// Initialize reporting client (new authentication method)
 const reportingConfig: ZebrunnerReportingConfig = {
   baseUrl: ZEBRUNNER_URL.replace('/api/public/v1', ''),
-  accessToken: ZEBRUNNER_TOKEN,
+  accessToken: ZEBRUNNER_TOKEN ?? '',
   timeout: API_TIMEOUT,
   debug: DEBUG_MODE
 };
 
-const reportingClient = new ZebrunnerReportingClient(reportingConfig);
-const reportingHandlers = new ZebrunnerReportingToolHandlers(reportingClient, client);
+const _singletonReportingClient = new ZebrunnerReportingClient(reportingConfig);
+const _singletonReportingHandlers = new ZebrunnerReportingToolHandlers(_singletonReportingClient, _singletonClient);
 
-// Wire up resolvers: automation states and priorities live on the TCM API (Bearer auth),
-// not the Public API (Basic auth), so the enhanced client delegates to the reporting client.
-client.setAutomationStatesResolver(async (projectKey: string) => {
+// In HTTP mode, wrap clients with Proxy that resolves to per-user instances via AsyncLocalStorage.
+// In STDIO mode, the proxy falls through to the singleton (zero overhead).
+const clientFactory = TRANSPORT_MODE === 'http'
+  ? initClientFactory({ timeout: API_TIMEOUT, debug: DEBUG_MODE, defaultPageSize: DEFAULT_PAGE_SIZE, maxPageSize: MAX_PAGE_SIZE })
+  : undefined;
+
+const client: EnhancedZebrunnerClient = clientFactory
+  ? createClientProxy(_singletonClient, clientFactory, ZEBRUNNER_URL, (c: PerUserClients) => c.client)
+  : _singletonClient;
+
+const mutationClient: ZebrunnerMutationClient = clientFactory
+  ? createClientProxy(_singletonMutationClient, clientFactory, ZEBRUNNER_URL, (c: PerUserClients) => c.mutationClient)
+  : _singletonMutationClient;
+
+const reportingClient: ZebrunnerReportingClient = clientFactory
+  ? createClientProxy(_singletonReportingClient, clientFactory, ZEBRUNNER_URL, (c: PerUserClients) => c.reportingClient)
+  : _singletonReportingClient;
+
+const reportingHandlers: ZebrunnerReportingToolHandlers = clientFactory
+  ? createClientProxy(_singletonReportingHandlers, clientFactory, ZEBRUNNER_URL, (c: PerUserClients) => c.reportingHandlers)
+  : _singletonReportingHandlers;
+
+// Wire up resolvers on the singleton (HTTP mode wiring happens inside ClientFactory)
+_singletonClient.setAutomationStatesResolver(async (projectKey: string) => {
   const { projectId } = await resolveProjectId(projectKey);
-  return reportingClient.getAutomationStates(projectId);
+  return _singletonReportingClient.getAutomationStates(projectId);
 });
-client.setPrioritiesResolver(async (projectKey: string) => {
+_singletonClient.setPrioritiesResolver(async (projectKey: string) => {
   const { projectId } = await resolveProjectId(projectKey);
-  return reportingClient.getPriorities(projectId);
+  return _singletonReportingClient.getPriorities(projectId);
 });
 
 // === Auto-detect test case review rules/checkpoints files ===
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as crypto from "node:crypto";
+import { fileURLToPath } from "node:url";
+
+const PKG_VERSION: string = (() => {
+  try {
+    const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+    const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf-8'));
+    return pkg.version ?? '0.0.0';
+  } catch { return '0.0.0'; }
+})();
 
 const REVIEW_RULES_FILE = (() => {
   const p = path.resolve(process.cwd(), "test_case_review_rules.md");
@@ -949,13 +982,16 @@ function generateCodeComments(analysis: any): string {
   return `/**\n * Coverage Analysis: ${analysis.testCase.key}\n * Score: ${analysis.coverage.overallScore}%\n */\n`;
 }
 
-async function main() {
-  await stealthIntegrityCheck();
-
+/**
+ * Create a fully configured McpServer with all tools, resources, and prompts registered.
+ * Called once for STDIO mode, and once per session in HTTP mode (MCP SDK requires
+ * a dedicated McpServer instance per transport).
+ */
+function createConfiguredServer(): McpServer {
   const server = new McpServer(
     {
       name: "mcp-zebrunner",
-      version: "7.2.2"
+      version: PKG_VERSION
     },
     {
       capabilities: {
@@ -8715,8 +8751,7 @@ ${detailsInfo.map((detail, i) => {
           throw new Error(`Invalid project: ${args.project}. ${suggestions || 'Use web, android, ios, api, or a valid project key.'}`);
         }
 
-        const publicClient = new EnhancedZebrunnerClient(config);
-        const response = await publicClient.listResultStatuses({ projectKey });
+        const response = await client.listResultStatuses({ projectKey });
 
         if (args.format === "raw") {
           return {
@@ -8794,8 +8829,7 @@ ${detailsInfo.map((detail, i) => {
           throw new Error(`Invalid project: ${args.project}. ${suggestions || 'Use web, android, ios, api, or a valid project key.'}`);
         }
 
-        const publicClient = new EnhancedZebrunnerClient(config);
-        const response = await publicClient.listConfigurationGroups({ projectKey });
+        const response = await client.listConfigurationGroups({ projectKey });
 
         if (args.format === "raw") {
           return {
@@ -10043,13 +10077,102 @@ ${detailsInfo.map((detail, i) => {
   registerResources(server, { client, reportingClient, resolveProjectId, PROJECT_ALIASES, DEBUG_MODE });
   registerPrompts(server);
 
+  return server;
+}
+
+async function main() {
+  await stealthIntegrityCheck();
+
   // ========== SERVER STARTUP ==========
 
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
+  if (TRANSPORT_MODE === 'http') {
+    const port = parseInt(process.env.PORT || '3000', 10);
+    const { startHttpServer } = await import('./http/server.js');
+    const { resolveAuthMode, hasStrategy } = await import('./config/transport.js');
+    const authMode = resolveAuthMode();
+
+    let verifyBearer: ((token: string) => Promise<{ username: string; zebrunnerToken: string }>) | undefined;
+    let tokenStore: import('./http/token-store.js').TokenStore | undefined;
+    let oauthProvider: import('@modelcontextprotocol/sdk/server/auth/provider.js').OAuthServerProvider | undefined;
+
+    const { createTokenStore } = await import('./http/token-store.js');
+    tokenStore = createTokenStore() ?? undefined;
+
+    const mcpServerUrl = process.env.MCP_SERVER_URL ?? `http://localhost:${port}`;
+
+    // --- Mode 3: Self-service OAuth (no Okta) ---
+    if (hasStrategy(authMode, 'selfauth')) {
+      if (!tokenStore) {
+        throw new Error(
+          'MCP_AUTH_MODE=selfauth requires TOKEN_STORE_KEY and TOKEN_STORE_PATH. ' +
+          'These are needed to store per-user Zebrunner credentials.',
+        );
+      }
+      const { createSelfAuthProvider } = await import('./http/selfauth-provider.js');
+      const jwtSecret = process.env.TOKEN_STORE_KEY ?? 'mcp-zebrunner-selfauth';
+      const provider = createSelfAuthProvider({
+        tokenStore,
+        serverUrl: mcpServerUrl,
+        zebrunnerBaseUrl: ZEBRUNNER_URL,
+        jwtSecret,
+      });
+      oauthProvider = provider;
+      verifyBearer = async (token: string) => {
+        const authInfo = await provider.verifyAccessToken(token);
+        return {
+          username: authInfo.extra?.username as string,
+          zebrunnerToken: authInfo.extra?.zebrunnerToken as string,
+        };
+      };
+      console.error(`🔑 Self-service OAuth configured (credentials stored per-user)`);
+    }
+
+    // --- Mode 4: Okta OAuth (with per-user credentials) ---
+    if (hasStrategy(authMode, 'okta')) {
+      if (!tokenStore) {
+        throw new Error(
+          'MCP_AUTH_MODE=okta requires TOKEN_STORE_KEY and TOKEN_STORE_PATH. ' +
+          'These are needed to store per-user Zebrunner credentials after Okta login.',
+        );
+      }
+      const { loadOktaConfigFromEnv } = await import('./http/oauth-provider.js');
+      const oktaConfig = loadOktaConfigFromEnv();
+
+      if (oktaConfig) {
+        const { createMcpOAuthProvider } = await import('./http/mcp-oauth-provider.js');
+        const provider = createMcpOAuthProvider(oktaConfig, tokenStore, ZEBRUNNER_URL);
+        oauthProvider = provider;
+
+        const { createOktaBearerVerifier } = await import('./http/oauth-provider.js');
+        verifyBearer = createOktaBearerVerifier({ config: oktaConfig, tokenStore });
+
+        console.error(`🔐 Okta OAuth configured (domain: ${oktaConfig.domain})`);
+      } else {
+        console.error(`⚠️  MCP_AUTH_MODE includes 'okta' but Okta config is missing.`);
+        console.error('   Missing: OKTA_DOMAIN, OKTA_CLIENT_ID, or OKTA_CLIENT_SECRET');
+      }
+    }
+
+    await startHttpServer(
+      async () => createConfiguredServer(),
+      {
+        port,
+        serverVersion: PKG_VERSION,
+        verifyBearer,
+        tokenStore,
+        zebrunnerBaseUrl: ZEBRUNNER_URL,
+        oauthProvider,
+        mcpServerUrl,
+      },
+    );
+  } else {
+    const server = createConfiguredServer();
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
+  }
 
   // Always print startup message for tests and debugging
-  console.error("✅ Zebrunner Unified MCP Server started successfully");
+  console.error(`✅ Zebrunner MCP Server started (transport: ${TRANSPORT_MODE})`);
 
   if (DEBUG_MODE) {
     console.error(`🔍 Debug mode: ${DEBUG_MODE}`);

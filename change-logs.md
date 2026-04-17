@@ -1,5 +1,93 @@
 # Change Logs
 
+## v8.0.0 (2026-04-17)
+
+### HTTP Transport — Modes 2, 3, 4
+
+Added Streamable HTTP transport with three authentication strategies. The same Docker image supports both STDIO (Mode 1) and HTTP (Modes 2–4) — transport is selected at runtime via `MCP_TRANSPORT` and `PORT`.
+
+**Mode 2 — HTTP + Headers (`MCP_AUTH_MODE=headers`):**
+- Clients pass `X-Zebrunner-Username` and `X-Zebrunner-Api-Token` on each request.
+- No server-side credential storage needed.
+
+**Mode 3 — Self-Service OAuth (`MCP_AUTH_MODE=selfauth`):**
+- Built-in OAuth 2.1 authorization server with Dynamic Client Registration (DCR).
+- Users complete a one-time Zebrunner credential form in the browser.
+- Credentials stored encrypted in `TOKEN_STORE_PATH` via `FileTokenStore` (AES-256-GCM).
+- Subsequent connections are automatic — no re-login needed.
+
+**Mode 4 — Okta OIDC (`MCP_AUTH_MODE=okta`):**
+- Okta SSO as the access gate; per-user Zebrunner credentials captured via the same credential form.
+- No shared `ZEBRUNNER_LOGIN`/`ZEBRUNNER_TOKEN` on the server — each user's access is isolated.
+- Auto-recovery for `mcp_*` client IDs across server restarts (on-the-fly DCR fallback).
+
+**Combined modes** (`headers,selfauth`, `headers,okta`) supported for migration.
+
+### New Source Files
+
+| File | Purpose |
+|------|---------|
+| `src/http/server.ts` | Express-based HTTP server with session management |
+| `src/http/auth-middleware.ts` | Bearer token verification and header extraction |
+| `src/http/selfauth-provider.ts` | OAuth provider for Mode 3 (self-service) |
+| `src/http/mcp-oauth-provider.ts` | OAuth provider for Mode 4 (Okta OIDC) |
+| `src/http/oauth-provider.ts` | Shared Okta config loader |
+| `src/http/login-routes.ts` | Zebrunner credential form with ownership validation |
+| `src/http/token-store.ts` | Encrypted per-user token storage (AES-256-GCM) |
+| `src/http/token-validator.ts` | Daily Zebrunner token validation with cache |
+| `src/http/request-context.ts` | Per-request context (AsyncLocalStorage) |
+| `src/http/auth-callback.ts` | Okta OAuth callback handler |
+| `src/http/client-factory.ts` | Per-request Zebrunner API client factory |
+| `src/config/transport.ts` | Transport and auth mode resolution |
+| `src/admin/manage-tokens.ts` | CLI for listing/deleting stored user tokens |
+
+### Security
+
+- **Token ownership validation** — the login form verifies that the entered API token belongs to the authenticated user by checking the JWT `unm`/`username` claim from Zebrunner IAM.
+- **Read-only email field** — when Okta provides the user's email, the form prevents editing to avoid ownership bypass.
+- **Daily token validation** — stored Zebrunner tokens are validated every 24 hours; invalid tokens are deleted and users are re-prompted.
+- **Integrity checks in Docker** — `.integrity-signature` and `.mcp-status` are now copied into the Docker production image, enabling all 3 integrity layers (hash, origin, kill-switch) in containerized deployments.
+
+### MCP Resource Filtering
+
+Template resources (per-project) are now filtered to reduce clutter:
+- By default, only **starred** projects generate resources.
+- `MCP_RESOURCE_PROJECTS` env var overrides with explicit comma-separated project keys.
+- No template resources are listed if no projects match.
+
+### New Environment Variables
+
+| Variable | Mode(s) | Description |
+|----------|---------|-------------|
+| `MCP_TRANSPORT` | 2–4 | `stdio`, `http`, or `auto` |
+| `PORT` | 2–4 | HTTP listen port |
+| `MCP_AUTH_MODE` | 2–4 | `headers`, `selfauth`, `okta`, or combined |
+| `TOKEN_STORE_PATH` | 3–4 | Encrypted credential store file path |
+| `TOKEN_STORE_KEY` | 3–4 | Encryption key for the store |
+| `OKTA_DOMAIN` | 4 | Okta org domain |
+| `OKTA_CLIENT_ID` | 4 | OIDC client ID |
+| `OKTA_CLIENT_SECRET` | 4 | OIDC client secret |
+| `OKTA_AUTH_SERVER_ID` | 4 | Okta authorization server ID |
+| `MCP_SERVER_URL` | 3–4 | Public URL for OAuth metadata/redirects |
+| `MCP_DANGEROUSLY_ALLOW_INSECURE_ISSUER_URL` | 3–4 | Allow HTTP issuer URLs for local dev |
+| `MCP_RESOURCE_PROJECTS` | All | Comma-separated project keys for resource filtering |
+
+### Docker
+
+- Dockerfile updated: `.integrity-signature` and `.mcp-status` copied into the production image.
+- Added `docker-compose.http.yml` overlay for HTTP modes.
+- Build workflow: `npm run build` → `npm run sign-release` → `docker build`.
+
+### Documentation
+
+- **Updated:** `docs/DOCKER_USAGE.md` — added Mode 2/3/4 Docker run commands, Docker Compose instructions, client configs for all modes, build-with-signing workflow, environment variable reference, credential management, and troubleshooting sections.
+- **Updated:** `docs/RESOURCES_AND_PROMPTS.md` — added Resource Filtering section with `MCP_RESOURCE_PROJECTS` documentation.
+- **Updated:** `.env.example` — added `MCP_RESOURCE_PROJECTS`, `MCP_DANGEROUSLY_ALLOW_INSECURE_ISSUER_URL`.
+- **Updated:** `docs/PRIVATE_CREDENTIALS.md` — added Docker build command, client-side cache clearing, clean-slate reset procedures.
+- Version bumped to 8.0.0 across all documentation files.
+
+---
+
 ## v7.2.2 (2026-04-15)
 
 ### Server-Side Tool Metrics

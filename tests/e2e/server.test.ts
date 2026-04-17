@@ -101,7 +101,7 @@ describe('Zebrunner MCP Server E2E Tests', () => {
 
       const handleOutput = (data: Buffer) => {
         const output = data.toString();
-        if (output.includes('Zebrunner Unified MCP Server started successfully')) {
+        if (output.includes('Zebrunner MCP Server started')) {
           serverReady = true;
           clearTimeout(timeout);
           console.log('✅ Server started successfully');

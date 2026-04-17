@@ -358,3 +358,4 @@ async function dirExists(dirPath: string): Promise<boolean> {
     return false;
   }
 }
+

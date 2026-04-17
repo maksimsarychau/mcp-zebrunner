@@ -6,6 +6,70 @@ This guide covers how to build, run, and use the Zebrunner MCP server with Docke
 
 ---
 
+## Table of Contents
+
+1. [Overview](#overview)
+2. [Zebrunner Native MCP vs this server](#zebrunner-native-mcp-vs-this-server)
+3. [Quick Start](#quick-start)
+   - [Prerequisites](#prerequisites)
+   - [Build the Docker Image](#build-the-docker-image)
+   - [Run Locally with Docker Compose](#run-locally-with-docker-compose)
+4. [HTTP Mode (StreamableHTTP)](#http-mode-streamablehttp)
+   - [Mode 2: HTTP + header auth](#mode-2-http--header-auth)
+   - [Mode 3: Self-service auth (selfauth)](#mode-3-self-service-auth-selfauth)
+   - [Mode 4: Okta OIDC (okta)](#mode-4-okta-oidc-okta)
+   - [Selecting HTTP auth mode with Docker Compose](#selecting-http-auth-mode-with-docker-compose)
+   - [Transport mode reference](#transport-mode-reference)
+5. [Docker MCP Gateway — Remote Server with OAuth](#docker-mcp-gateway--remote-server-with-oauth)
+6. [Docker Files Overview](#docker-files-overview)
+7. [Docker MCP Toolkit Integration](#docker-mcp-toolkit-integration)
+   - [Step 1: Import Custom Catalog](#step-1-import-custom-catalog)
+   - [Step 2: Enable the Server](#step-2-enable-the-server)
+   - [Step 3: Configure Credentials (CLI)](#step-3-configure-credentials-cli)
+   - [Step 4: Run the Gateway](#step-4-run-the-gateway)
+   - [Step 5: Verify](#step-5-verify)
+8. [Connecting to MCP Clients](#connecting-to-mcp-clients)
+   - [Option A: Cursor IDE](#option-a-cursor-ide)
+   - [Option B: Claude Desktop](#option-b-claude-desktop)
+   - [Option C: Docker MCP Gateway Client Connect](#option-c-docker-mcp-gateway-client-connect)
+9. [Docker Commands Reference](#docker-commands-reference)
+   - [Building](#building)
+   - [Running](#running)
+   - [Testing](#testing)
+   - [Publishing to Docker Hub](#publishing-to-docker-hub)
+10. [Docker MCP Toolkit Commands](#docker-mcp-toolkit-commands)
+    - [Catalog Management](#catalog-management)
+    - [Server Management](#server-management)
+    - [Configuration](#configuration)
+    - [Gateway](#gateway)
+11. [Troubleshooting](#troubleshooting)
+    - [Clearing Stored Credentials (Modes 3 & 4)](#clearing-stored-credentials-modes-3--4)
+    - [Server Won't Start](#server-wont-start)
+    - [Server Not in Docker Desktop UI](#server-not-in-docker-desktop-ui)
+    - [MCP_DANGEROUSLY_ALLOW_INSECURE_ISSUER_URL Warning](#mcp_dangerously_allow_insecure_issuer_url-is-enabled-warning)
+    - [Image Build Fails](#image-build-fails)
+    - [Permission Denied on Docker Hub Push](#permission-denied-on-docker-hub-push)
+12. [Environment Variables](#environment-variables)
+    - [Required variables by mode](#required-variables-by-mode)
+    - [Variable reference](#variable-reference)
+13. [TODO: Docker MCP Registry Submission](#todo-docker-mcp-registry-submission)
+
+---
+
+## Zebrunner Native MCP vs this server
+
+Zebrunner ships a **native MCP** endpoint on each workspace:
+
+`https://{workspace}.zebrunner.com/api/mcp`
+
+That built-in server exposes on the order of **~30 tools** and expects **header-based** Zebrunner API authentication (same idea as `X-Zebrunner-*` style access to your workspace API).
+
+**This repository** (`mcp-zebrunner`) is a separate, fuller integration: **60+ tools** spanning reporting, analytics, screenshots, charts, flaky-test signals, and broader automation beyond basic TCM CRUD.
+
+If you only need **lightweight test-case management** against Zebrunner’s API, the **native** endpoint may be enough. If you want the **extended analytics and reporting surface**, run this server (STDIO or HTTP) instead or alongside it.
+
+---
+
 ## Quick Start
 
 ### Prerequisites
@@ -21,11 +85,16 @@ This guide covers how to build, run, and use the Zebrunner MCP server with Docke
 git clone https://github.com/maksimsarychau/mcp-zebrunner.git
 cd mcp-zebrunner
 
-# Build the Docker image
+# Build with integrity signing (recommended)
+npm run build
+npm run sign-release
+docker build -t msarychau/mcp-zebrunner:latest .
+
+# Or build with Docker Compose
 docker compose build
 
-# Or build with version tag
-VERSION=7.2.2 docker compose build
+# Or build via Docker Compose with version tag
+VERSION=8.0.0 docker compose build
 ```
 
 ### Run Locally with Docker Compose
@@ -46,12 +115,243 @@ docker compose up
 
 ---
 
+## HTTP Mode (StreamableHTTP)
+
+Starting with v8.0.0, the server supports StreamableHTTP transport for remote access. The same Docker image supports both STDIO and HTTP — transport is selected at runtime.
+
+HTTP authentication is grouped into **modes** (aligned with project docs):
+
+| Mode | `MCP_AUTH_MODE` | How Zebrunner credentials reach the server |
+|------|-----------------|---------------------------------------------|
+| **2** | `headers` (default) | Client sends `X-Zebrunner-Username` / `X-Zebrunner-Api-Token` on each request |
+| **3** | `selfauth` | Users complete a one-time browser form; credentials are encrypted in `TOKEN_STORE_PATH` |
+| **4** | `okta` | Okta OIDC gate + same per-user store as selfauth (**no** shared `ZEBRUNNER_LOGIN` / `ZEBRUNNER_TOKEN` on the server) |
+
+Combined values `headers,selfauth` and `headers,okta` are also supported for migration (try headers first, then OAuth).
+
+### Mode 2: HTTP + header auth
+
+```bash
+# HTTP mode with header auth (simplest)
+docker compose -f docker-compose.yml -f docker-compose.http.yml up
+```
+
+Ensure `.env` sets at least `ZEBRUNNER_URL` and `PORT` (see [Environment variables](#environment-variables)); `docker-compose.http.yml` sets `MCP_TRANSPORT=http` and a default `PORT` mapping.
+
+#### Client configuration (HTTP mode, headers)
+
+**Cursor** (`~/.cursor/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "zebrunner": {
+      "url": "http://localhost:3000/mcp",
+      "headers": {
+        "X-Zebrunner-Username": "your.name",
+        "X-Zebrunner-Api-Token": "your-token"
+      }
+    }
+  }
+}
+```
+
+**Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+
+> Claude Desktop does not support Streamable HTTP natively. Use the
+> [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) bridge.
+
+```json
+{
+  "mcpServers": {
+    "zebrunner": {
+      "command": "npx",
+      "args": [
+        "-y", "mcp-remote",
+        "http://localhost:3000/mcp",
+        "--header", "X-Zebrunner-Username: your.name",
+        "--header", "X-Zebrunner-Api-Token: your-token"
+      ]
+    }
+  }
+}
+```
+
+#### Health check
+
+```bash
+curl http://localhost:3000/health
+# {"status":"ok","version":"8.0.0","transport":"streamablehttp","authMode":"headers","activeSessions":0}
+```
+
+(`authMode` reflects `MCP_AUTH_MODE`, e.g. `selfauth` or `okta` when configured.)
+
+### Mode 3: Self-service auth (`selfauth`)
+
+Users sign in through the server’s **credential form** once; tokens are stored encrypted. Clients only need the MCP **URL** — no Zebrunner headers in the MCP client config.
+
+**.env (server)**
+
+```bash
+ZEBRUNNER_URL=https://your-workspace.zebrunner.com/api/public/v1
+MCP_TRANSPORT=http
+PORT=3000
+MCP_AUTH_MODE=selfauth
+TOKEN_STORE_PATH=/data/tokens.enc
+TOKEN_STORE_KEY=use-a-long-random-secret-for-encryption
+MCP_SERVER_URL=http://localhost:3000
+```
+
+Use a persistent volume for `/data` in Docker (the HTTP compose file mounts `token-data` at `/data`).
+
+**Client configuration (URL only)**
+
+**Cursor** (`~/.cursor/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "zebrunner": {
+      "url": "http://localhost:3000/mcp"
+    }
+  }
+}
+```
+
+**Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+
+> Claude Desktop does not support Streamable HTTP natively. Use the
+> [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) bridge.
+> For OAuth modes, `mcp-remote` handles the full OAuth flow automatically.
+
+```json
+{
+  "mcpServers": {
+    "zebrunner": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "http://localhost:3000/mcp"]
+    }
+  }
+}
+```
+
+Start with:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.http.yml up
+```
+
+(after setting `MCP_AUTH_MODE=selfauth` and `TOKEN_STORE_KEY` in `.env`).
+
+### Mode 4: Okta OIDC (`okta`)
+
+Okta verifies the user; Zebrunner credentials are still captured per user and stored in the encrypted token store. **Do not** put shared `ZEBRUNNER_LOGIN` / `ZEBRUNNER_TOKEN` in the server environment for this mode — each user’s access is isolated in the store.
+
+**`TOKEN_STORE_KEY` is required** (encryption key for the token file).
+
+**.env (server)**
+
+```bash
+ZEBRUNNER_URL=https://your-workspace.zebrunner.com/api/public/v1
+MCP_TRANSPORT=http
+PORT=3000
+MCP_AUTH_MODE=okta
+TOKEN_STORE_PATH=/data/tokens.enc
+TOKEN_STORE_KEY=use-a-long-random-secret-for-encryption
+
+OKTA_DOMAIN=your-org.okta.com
+OKTA_CLIENT_ID=0oa...
+OKTA_CLIENT_SECRET=...
+OKTA_AUTH_SERVER_ID=default
+
+# Public base URL of this MCP server (OAuth metadata / redirects)
+MCP_SERVER_URL=https://mcp.yourcompany.com
+```
+
+**Client configuration (URL only)**
+
+**Cursor** (`~/.cursor/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "zebrunner": {
+      "url": "https://mcp.yourcompany.com/mcp"
+    }
+  }
+}
+```
+
+**Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+
+> Claude Desktop does not support Streamable HTTP natively. Use the
+> [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) bridge.
+> For OAuth modes, `mcp-remote` handles the full OAuth flow automatically.
+
+```json
+{
+  "mcpServers": {
+    "zebrunner": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "https://mcp.yourcompany.com/mcp"]
+    }
+  }
+}
+```
+
+Start with:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.http.yml up
+```
+
+(after filling Okta and token-store variables in `.env`).
+
+### Selecting HTTP auth mode with Docker Compose
+
+HTTP mode uses a **single** override file: `docker-compose.http.yml`. Switch strategies by editing **`.env`** (or your shell environment) and **restarting** the stack:
+
+1. Set `MCP_AUTH_MODE` to `headers`, `selfauth`, `okta`, `headers,selfauth`, or `headers,okta`.
+2. Ensure mode-specific variables from [Environment variables](#environment-variables) are present (`TOKEN_STORE_KEY` for selfauth/okta, `OKTA_*` for okta, etc.).
+3. Run:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.http.yml up
+```
+
+Change `MCP_AUTH_MODE` in `.env` and `docker compose up` again to switch modes — no separate compose file per auth mode.
+
+### Transport mode reference
+
+| `MCP_TRANSPORT` | `PORT` | Result |
+|----------------|--------|--------|
+| `stdio` | (ignored) | STDIO mode (default) |
+| `http` | must be set | HTTP mode (fails if PORT missing) |
+| `auto` or not set | set | HTTP (auto-detected) |
+| `auto` or not set | not set | STDIO (auto-detected) |
+
+---
+
+## Docker MCP Gateway — Remote Server with OAuth
+
+For teams using Docker Desktop, register the HTTP server as a remote MCP server:
+
+```bash
+docker mcp server enable zebrunner-remote
+docker mcp oauth authorize zebrunner-remote  # opens browser for Okta SSO
+```
+
+The gateway manages token lifecycle automatically. Both local (STDIO) and remote (HTTP) catalog entries can coexist.
+
+---
+
 ## Docker Files Overview
 
 | File | Purpose |
 |------|---------|
 | `Dockerfile` | Multi-stage build with native dependencies (ffmpeg, tesseract, sharp) |
-| `docker-compose.yml` | Local development and testing |
+| `docker-compose.yml` | Local development and testing (STDIO) |
+| `docker-compose.http.yml` | HTTP mode override (StreamableHTTP); auth mode from `MCP_AUTH_MODE` in `.env` |
 | `.dockerignore` | Excludes unnecessary files from build context |
 | `catalogs/mcp-zebrunner/catalog.yaml` | Docker MCP Toolkit catalog definition |
 | `server.yaml` | Docker MCP Registry submission format |
@@ -143,7 +443,7 @@ After editing, restart Cursor (Cmd+Shift+P → "Developer: Reload Window").
 
 ### Option B: Claude Desktop
 
-Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
+**STDIO mode** — edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 ```json
 {
@@ -161,6 +461,22 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
   }
 }
 ```
+
+**HTTP mode** — Claude Desktop does not support Streamable HTTP natively. Use the [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) bridge:
+
+```json
+{
+  "mcpServers": {
+    "zebrunner-mcp": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "http://localhost:3000/mcp"]
+    }
+  }
+}
+```
+
+> For Mode 2 (headers), add `--header` flags:
+> `"args": ["-y", "mcp-remote", "http://localhost:3000/mcp", "--header", "X-Zebrunner-Username: your.name", "--header", "X-Zebrunner-Api-Token: your-token"]`
 
 ### Option C: Docker MCP Gateway Client Connect
 
@@ -182,14 +498,19 @@ docker mcp client connect claude
 ### Building
 
 ```bash
-# Build image
+# Build with integrity signing (recommended for releases)
+npm run build
+npm run sign-release
+docker build -t msarychau/mcp-zebrunner:latest .
+
+# Build via Docker Compose
 docker compose build
 
 # Build with no cache
 docker compose build --no-cache
 
 # Build with version tag
-VERSION=7.2.2 docker compose build
+VERSION=8.0.0 docker compose build
 ```
 
 ### Running
@@ -233,10 +554,10 @@ docker run --rm \
 docker login -u msarychau
 
 # Tag with version
-docker tag msarychau/mcp-zebrunner:latest msarychau/mcp-zebrunner:7.2.2
+docker tag msarychau/mcp-zebrunner:latest msarychau/mcp-zebrunner:8.0.0
 
 # Push both tags
-docker push msarychau/mcp-zebrunner:7.2.2
+docker push msarychau/mcp-zebrunner:8.0.0
 docker push msarychau/mcp-zebrunner:latest
 ```
 
@@ -318,6 +639,53 @@ docker mcp gateway run
 
 ## Troubleshooting
 
+### Clearing Stored Credentials (Modes 3 & 4)
+
+In selfauth and Okta modes, user Zebrunner credentials are stored in an encrypted file (`TOKEN_STORE_PATH`) backed by a Docker volume. The server-signed JWT has **no expiration**, so users are never re-prompted automatically.
+
+#### Delete a single user's credentials (admin CLI)
+
+Use `manage-tokens` to remove one user without affecting others:
+
+```bash
+# List all stored users
+docker run --rm \
+  -v mcp-zebrunner_token-data:/data \
+  -e TOKEN_STORE_PATH=/data/tokens.enc \
+  -e TOKEN_STORE_KEY=<your-secret> \
+  msarychau/mcp-zebrunner:latest \
+  node dist/admin/manage-tokens.js list
+
+# Delete a single user
+docker run --rm \
+  -v mcp-zebrunner_token-data:/data \
+  -e TOKEN_STORE_PATH=/data/tokens.enc \
+  -e TOKEN_STORE_KEY=<your-secret> \
+  msarychau/mcp-zebrunner:latest \
+  node dist/admin/manage-tokens.js delete user@company.com
+```
+
+The deleted user will be prompted to re-authenticate on their next MCP connection. Other users are unaffected.
+
+> **Volume name:** Docker Compose creates a volume named `<project>_token-data` (e.g. `mcp-zebrunner_token-data`). If you used `docker run -v mcp-token-data:/data`, use that name instead.
+
+#### Wipe the entire store
+
+To force all users to re-authenticate:
+
+```bash
+# Docker Compose — removes the token-data volume:
+docker compose -f docker-compose.yml -f docker-compose.http.yml down -v
+
+# Docker standalone — remove the named volume:
+docker volume rm mcp-token-data
+
+# Local (npx / node) — delete the file:
+rm ./data/tokens.enc
+```
+
+After deleting, restart the server. The next MCP connection triggers the login flow.
+
 ### Server Won't Start
 
 **Error**: `Can't start mcp-zebrunner: failed to connect: calling "initialize": EOF`
@@ -339,6 +707,18 @@ docker mcp secret set mcp-zebrunner.api_token="..."
 
 **Solution**: Use CLI commands or submit to official Docker MCP Registry (see TODO section).
 
+### "MCP_DANGEROUSLY_ALLOW_INSECURE_ISSUER_URL is enabled" Warning
+
+**Message**: `MCP_DANGEROUSLY_ALLOW_INSECURE_ISSUER_URL is enabled - HTTP issuer URLs are allowed. Do not use in production.`
+
+**Cause**: The OAuth 2.1 spec requires HTTPS for the issuer URL. When running locally over plain HTTP (`http://localhost:3000`), this flag relaxes that check.
+
+**Safe to ignore** for local development. In production behind a TLS reverse proxy:
+1. Set `MCP_SERVER_URL=https://mcp.yourcompany.com`
+2. Remove `MCP_DANGEROUSLY_ALLOW_INSECURE_ISSUER_URL` or set it to `false`
+
+Only affects Modes 3 and 4 (OAuth). Mode 2 (headers) doesn't use OAuth discovery.
+
 ### Image Build Fails
 
 **Error**: Native dependency compilation errors
@@ -359,16 +739,40 @@ docker login -u your-username
 
 ## Environment Variables
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `ZEBRUNNER_URL` | ✅ Yes | - | Base URL of Zebrunner instance |
-| `ZEBRUNNER_LOGIN` | ✅ Yes | - | Zebrunner username |
-| `ZEBRUNNER_TOKEN` | ✅ Yes | - | Zebrunner API token |
-| `DEBUG` | No | `false` | Enable debug logging |
-| `EXPERIMENTAL_FEATURES` | No | `false` | Enable experimental endpoints |
-| `MAX_PAGE_SIZE` | No | `100` | Maximum API page size |
-| `DEFAULT_PAGE_SIZE` | No | `10` | Default API page size |
-| `ENABLE_RULES_ENGINE` | No | `false` | Enable rules-based test generation |
+### Required variables by mode
+
+| Mode | Name | Required on server |
+|------|------|---------------------|
+| **1** — STDIO | Local / Toolkit stdio | `ZEBRUNNER_URL`, `ZEBRUNNER_LOGIN`, `ZEBRUNNER_TOKEN` |
+| **2** — HTTP + headers | `MCP_AUTH_MODE=headers` | `ZEBRUNNER_URL`, `PORT` (and `MCP_TRANSPORT=http` or auto via compose); Zebrunner credentials come from **client headers** |
+| **3** — HTTP + selfauth | `MCP_AUTH_MODE=selfauth` | `ZEBRUNNER_URL`, `PORT`, `TOKEN_STORE_PATH`, `TOKEN_STORE_KEY` |
+| **4** — HTTP + Okta | `MCP_AUTH_MODE=okta` | `ZEBRUNNER_URL`, `PORT`, `TOKEN_STORE_PATH`, `TOKEN_STORE_KEY`, plus `OKTA_DOMAIN`, `OKTA_CLIENT_ID`, `OKTA_CLIENT_SECRET` (and typically `MCP_SERVER_URL` for correct OAuth metadata) |
+
+For combined modes (`headers,selfauth`, `headers,okta`), satisfy the union of requirements (e.g. token store + key whenever selfauth or okta is included).
+
+### Variable reference
+
+| Variable | Mode(s) | Default | Description |
+|----------|-----------|---------|-------------|
+| `ZEBRUNNER_URL` | All | — | Base URL of Zebrunner API for this server |
+| `ZEBRUNNER_LOGIN` | **1** (STDIO) | — | Zebrunner username (not used as a shared server secret in modes 3–4) |
+| `ZEBRUNNER_TOKEN` | **1** (STDIO) | — | Zebrunner API token (per-request in mode 2 via headers) |
+| `MCP_TRANSPORT` | 2–4 | `auto` | `stdio`, `http`, or `auto` |
+| `PORT` | 2–4 | — | HTTP listen port (required for HTTP) |
+| `MCP_AUTH_MODE` | 2–4 | `headers` | `headers`, `selfauth`, `okta`, `headers,selfauth`, `headers,okta` (legacy: `oauth` → `okta`, `both` → `headers,okta`) |
+| `TOKEN_STORE_PATH` | 3–4 | — | Encrypted credential store path (e.g. `/data/tokens.enc` in Docker) |
+| `TOKEN_STORE_KEY` | 3–4 | — | **Required** for selfauth/okta — encryption key for the store |
+| `OKTA_DOMAIN` | 4 | — | Okta org domain |
+| `OKTA_CLIENT_ID` | 4 | — | OIDC client ID |
+| `OKTA_CLIENT_SECRET` | 4 | — | OIDC client secret |
+| `OKTA_AUTH_SERVER_ID` | 4 | `default` | Okta authorization server ID |
+| `MCP_SERVER_URL` | 3–4 (recommended) | — | Public URL of this MCP server (OAuth redirects / metadata) |
+| `MCP_DANGEROUSLY_ALLOW_INSECURE_ISSUER_URL` | 3–4 | `true` (in compose) | Allow HTTP issuer URLs for local development. Set to `false` in production behind HTTPS. |
+| `MCP_RESOURCE_PROJECTS` | All | — | Comma-separated project keys to expose as MCP resources (e.g. `ANDROID,IOS`). When unset, only starred projects are listed. |
+| `DEBUG` | All | `false` | Enable debug logging |
+| `MAX_PAGE_SIZE` | All | `100` | Maximum API page size |
+| `DEFAULT_PAGE_SIZE` | All | `10` | Default API page size |
+| `ENABLE_RULES_ENGINE` | All | `false` | Enable rules-based test generation |
 
 ---
 

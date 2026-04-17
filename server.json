@@ -9,12 +9,12 @@
     "source": "github"
   },
   "license": "AGPL-3.0",
-  "version": "7.2.2",
+  "version": "8.0.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "mcp-zebrunner",
-      "version": "7.2.2",
+      "version": "8.0.0",
       "transport": {
         "type": "stdio"
       },
@@ -120,6 +120,51 @@
         {
           "name": "RATE_LIMITING_BURST",
           "description": "Allow burst of API requests (default: 10, max: 200)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false
+        }
+      ]
+    },
+    {
+      "registryType": "npm",
+      "identifier": "mcp-zebrunner",
+      "version": "8.0.0",
+      "transport": {
+        "type": "streamablehttp"
+      },
+      "environmentVariables": [
+        {
+          "name": "PORT",
+          "description": "HTTP server port (required for StreamableHTTP mode)",
+          "isRequired": true,
+          "format": "string",
+          "isSecret": false
+        },
+        {
+          "name": "ZEBRUNNER_URL",
+          "description": "Base URL for your Zebrunner instance (e.g., https://your-instance.zebrunner.com)",
+          "isRequired": true,
+          "format": "string",
+          "isSecret": false
+        },
+        {
+          "name": "MCP_TRANSPORT",
+          "description": "Transport mode: stdio, http, or auto (default: auto)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false
+        },
+        {
+          "name": "MCP_AUTH_MODE",
+          "description": "Authentication mode: headers, oauth, or both (default: headers)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false
+        },
+        {
+          "name": "MCP_SERVER_URL",
+          "description": "Public URL of this MCP server (for OAuth metadata)",
           "isRequired": false,
           "format": "string",
           "isSecret": false

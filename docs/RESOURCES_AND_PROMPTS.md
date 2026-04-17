@@ -1,7 +1,5 @@
 # MCP Resources & Prompts Guide
 
-> **Version:** 7.2.2 | **Since:** v7.2.2
-
 This guide covers two MCP features that complement the existing 60 tools:
 
 - **Resources** (`@` menu) — read-only reference data injected into the conversation context
@@ -212,6 +210,22 @@ System and custom field definitions with types, tab placement, and enabled statu
 
 **When to use:** To understand which custom fields (e.g., `manualOnly`, `testrailId`) are available for filtering.
 
+### Resource Filtering
+
+By default, template resources (per-project) are only generated for **starred** projects in your Zebrunner workspace. This keeps the resource list manageable — if you have 50 projects but only 3 starred, you'll see ~30 resources instead of ~500.
+
+To override this behavior, set the `MCP_RESOURCE_PROJECTS` environment variable to a comma-separated list of project keys:
+
+```bash
+MCP_RESOURCE_PROJECTS=ANDROID,IOS,WEB
+```
+
+| `MCP_RESOURCE_PROJECTS` | Starred projects exist | Result |
+|-------------------------|:----------------------:|--------|
+| Not set | Yes | Only starred projects listed |
+| Not set | No | No template resources |
+| `ANDROID,IOS` | (ignored) | Only ANDROID and IOS listed |
+
 ### Combining Resources
 
 Attach multiple resources to a single message for richer context:
@@ -386,7 +400,7 @@ The AI has both the project metadata and report type definitions in context, lea
 **Example 2: Targeted triage with project context**
 
 ```
-@ zebrunner://projects/MFPAND/milestones   [see available milestones]
+@ zebrunner://projects/MCP/milestones   [see available milestones]
 /release-readiness                          [trigger the workflow]
   project: android
   milestone: 25.40.0
@@ -395,8 +409,8 @@ The AI has both the project metadata and report type definitions in context, lea
 **Example 3: Coverage analysis with field knowledge**
 
 ```
-@ zebrunner://projects/MFPIOS/fields       [see custom fields]
-@ zebrunner://projects/MFPIOS/automation-states  [see automation states]
+@ zebrunner://projects/MCP/fields       [see custom fields]
+@ zebrunner://projects/MCP/automation-states  [see automation states]
 /suite-coverage
   projects: ios
 ```
@@ -494,7 +508,7 @@ Dynamic resources use an in-memory TTL cache (`ResourceCache`):
 - **TTL:** 20 minutes (configurable via `DEFAULT_TTL_MS`)
 - **Max entries:** 200 (LRU eviction when full)
 - **Scope:** Per-server-process (resets on server restart)
-- **Cache key pattern:** `{resource-type}:{project_key}` (e.g., `suites:MFPAND`)
+- **Cache key pattern:** `{resource-type}:{project_key}` (e.g., `suites:MCP`)
 
 The projects list is shared across template resources — a single `getCachedProjects()` call serves all list/complete callbacks.
 
@@ -618,3 +632,7 @@ The test suite validates:
 - **Cache behavior** — TTL expiry, size limits, eviction, clear
 - **Prompt hygiene** — no hardcoded project keys, user arguments are interpolated
 - **Prompt tool references** — each prompt mentions the tools it expects the AI to call
+
+---
+
+*Last Updated: April 2026*

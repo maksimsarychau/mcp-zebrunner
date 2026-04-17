@@ -1,6 +1,5 @@
 # Zebrunner MCP Server
-![version](https://img.shields.io/github/package-json/v/maksimsarychau/mcp-zebrunner)
-<!--**Current version:** 🟢 --> <!--VERSION_START--><!--7.2.2--> <!--VERSION_END--> 
+![version](https://img.shields.io/github/package-json/v/maksimsarychau/mcp-zebrunner) 
 
 A **Model Context Protocol (MCP)** server that integrates with **Zebrunner Test Case Management** to help QA teams manage test cases, test suites, and test execution data through AI assistants like Claude.
 

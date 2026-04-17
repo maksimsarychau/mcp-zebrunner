@@ -88,10 +88,18 @@ export const ENV_MAPPINGS = {
 } as const;
 
 /**
- * Required environment variables that must be set
+ * Required environment variables for STDIO mode (all three needed at startup).
+ * In HTTP mode, only ZEBRUNNER_URL is required — LOGIN and TOKEN come per-request via headers.
  */
-export const REQUIRED_ENV_VARS = [
+export const REQUIRED_ENV_VARS_STDIO = [
   'ZEBRUNNER_URL',
-  'ZEBRUNNER_LOGIN', 
-  'ZEBRUNNER_TOKEN'
+  'ZEBRUNNER_LOGIN',
+  'ZEBRUNNER_TOKEN',
 ] as const;
+
+export const REQUIRED_ENV_VARS_HTTP = [
+  'ZEBRUNNER_URL',
+] as const;
+
+/** @deprecated Use REQUIRED_ENV_VARS_STDIO / REQUIRED_ENV_VARS_HTTP instead */
+export const REQUIRED_ENV_VARS = REQUIRED_ENV_VARS_STDIO;

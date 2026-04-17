@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
-import { DEFAULT_CONFIG, REQUIRED_ENV_VARS, ZebrunnerDefaults } from './defaults.js';
+import { DEFAULT_CONFIG, REQUIRED_ENV_VARS_STDIO, REQUIRED_ENV_VARS_HTTP, ZebrunnerDefaults } from './defaults.js';
+import { resolveTransportMode, type TransportMode } from './transport.js';
 
 /**
  * Configuration Manager for Zebrunner MCP Server
@@ -15,6 +16,7 @@ export class ConfigManager {
   private static instance: ConfigManager;
   private config: any = {};
   private warnings: string[] = [];
+  private _transportMode: TransportMode = 'stdio';
 
   private constructor() {
     this.loadConfiguration();
@@ -160,14 +162,36 @@ export class ConfigManager {
   }
 
   /**
-   * Validate that required environment variables are set
+   * Check if running in HTTP transport mode
+   */
+  public isHttpMode(): boolean {
+    return this._transportMode === 'http';
+  }
+
+  /**
+   * Get the resolved transport mode
+   */
+  public getTransportMode(): TransportMode {
+    return this._transportMode;
+  }
+
+  /**
+   * Validate that required environment variables are set.
+   * In HTTP mode only ZEBRUNNER_URL is required — user credentials come per-request via headers.
    */
   private validateRequiredVariables(): void {
-    const missing = REQUIRED_ENV_VARS.filter(varName => !process.env[varName]);
-    
+    this._transportMode = resolveTransportMode();
+
+    const requiredVars = this._transportMode === 'http'
+      ? REQUIRED_ENV_VARS_HTTP
+      : REQUIRED_ENV_VARS_STDIO;
+
+    const missing = requiredVars.filter(varName => !process.env[varName]);
+
     if (missing.length > 0) {
       throw new Error(
-        `❌ Missing required environment variables: ${missing.join(', ')}\\n` +
+        `❌ Missing required environment variables: ${missing.join(', ')}\n` +
+        `Transport mode: ${this._transportMode}\n` +
         `Please set these variables in your .env file or environment.`
       );
     }

@@ -1,2 +1,7 @@
 !.env
 !.mcp.config.json
+!RELEASE_SIGNING_GUIDE.md
+!TODO-code-review.md
+!docs/OKTA_ACCESS_INVESTIGATION.md
+!docs/ZEBRUNNER_TOKEN_EXCHANGE_REQUEST.md
+!docs/HOSTING_GUIDE.md

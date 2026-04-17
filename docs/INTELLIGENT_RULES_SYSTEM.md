@@ -374,3 +374,7 @@ The rules system is designed to be extensible. Future enhancements may include:
 ---
 
 This intelligent rules system transforms test case management from a manual, subjective process into an automated, consistent, and continuously improving workflow that adapts to your team's specific needs and standards.
+
+---
+
+*Last Updated: April 2026*
