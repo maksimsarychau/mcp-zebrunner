@@ -1,5 +1,15 @@
 # Change Logs
 
+## v8.0.1 (2026-04-17)
+
+### Documentation
+
+- Created `docs/RELEASE_SIGNING_GUIDE.md` with full signing workflow, troubleshooting, and hash verification commands.
+- Removed hardcoded version numbers from `docs/DOCKER_USAGE.md` (dynamic version tags).
+- Updated `docs/REPUBLISH_INSTRUCTIONS.md` to current version.
+
+---
+
 ## v8.0.0 (2026-04-17)
 
 ### HTTP Transport — Modes 2, 3, 4

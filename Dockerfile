@@ -86,6 +86,9 @@ COPY --from=builder --chown=mcpuser:mcpuser /build/dist ./dist
 COPY --from=builder --chown=mcpuser:mcpuser /build/node_modules ./node_modules
 COPY --from=builder --chown=mcpuser:mcpuser /build/package.json ./
 
+# Copy source for integrity verification (same hash as local/git environments)
+COPY --from=builder --chown=mcpuser:mcpuser /build/src ./src
+
 COPY --from=builder --chown=mcpuser:mcpuser /build/.integrity-signatur[e] ./
 COPY --chown=mcpuser:mcpuser .mcp-statu[s] ./
 

@@ -21,21 +21,45 @@ const CONTROL_URL = 'https://raw.githubusercontent.com/maksimsarychau/mcp-zebrun
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 const WHITELIST_PATTERNS = [
+  // Runtime / generated
   'logs/',
-  '.env',
   'config/',
   'data/',
-  'node_modules/',
-  '.git/',
   'dist/',
+  'tmp/',
+  'temp/',
+  'coverage/',
+
+  // Dependencies
+  'node_modules/',
+
+  // Tests
   'tests/',
-  '.integrity-signature',
-  '.mcp-status',
+
+  // Documentation
   'docs/',
+
+  // Docker / deployment
+  'Dockerfile',
+  'docker-compose',
+
+  // Scripts (not part of runtime)
+  'scripts/',
+
+  // Metadata
   'package-lock.json',
+
+  // OS files
+  'Thumbs.db',
 ];
 
-const WHITELIST_EXTENSIONS = ['.md'];
+const WHITELIST_EXTENSIONS = [
+  '.md', '.log', '.swp', '.swo', '.yaml', '.yml',
+  '.json', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico',
+  '.traineddata', '.example', '.txt', '.csv', '.html', '.css',
+];
+
+const DOTFILE_PREFIX = '.';
 
 const GENERIC_ERROR = `Server initialization failed. Please reinstall from the official source:\nhttps://github.com/maksimsarychau/mcp-zebrunner`;
 
@@ -45,6 +69,8 @@ export function getProjectRoot(): string {
 }
 
 function isWhitelisted(relPath: string): boolean {
+  const topLevel = relPath.split(path.sep)[0];
+  if (topLevel.startsWith(DOTFILE_PREFIX)) return true;
   if (WHITELIST_EXTENSIONS.some(ext => relPath.endsWith(ext))) return true;
   return WHITELIST_PATTERNS.some(p => relPath === p.replace(/\/$/, '') || relPath.startsWith(p));
 }
@@ -70,29 +96,6 @@ async function walkDirectory(dir: string, root: string): Promise<string[]> {
       if (isWhitelisted(relPath)) continue;
       if (entry.isDirectory()) {
         result.push(...await walkDirectory(fullPath, root));
-      } else {
-        result.push(relPath);
-      }
-    }
-  } catch { /* skip inaccessible directories */ }
-  return result;
-}
-
-export async function getDistFiles(root: string): Promise<string[]> {
-  const distDir = path.join(root, 'dist');
-  const files = await walkDirectoryFlat(distDir, distDir);
-  return files.map(f => path.join('dist', f)).sort();
-}
-
-async function walkDirectoryFlat(dir: string, root: string): Promise<string[]> {
-  const result: string[] = [];
-  try {
-    const entries = await fs.readdir(dir, { withFileTypes: true });
-    for (const entry of entries) {
-      const fullPath = path.join(dir, entry.name);
-      const relPath = path.relative(root, fullPath);
-      if (entry.isDirectory()) {
-        result.push(...await walkDirectoryFlat(fullPath, root));
       } else {
         result.push(relPath);
       }
@@ -306,7 +309,7 @@ export async function stealthIntegrityCheck(): Promise<void> {
 
   // If no signature file, skip silently (dev mode / pre-signing / npm without it)
   const sigPath = path.join(root, '.integrity-signature');
-  let sigData: { version: number; source: string; dist: string };
+  let sigData: { version: number; signature: string; source?: string; dist?: string };
   try {
     const raw = await fs.readFile(sigPath, 'utf-8');
     sigData = JSON.parse(raw);
@@ -314,28 +317,23 @@ export async function stealthIntegrityCheck(): Promise<void> {
     return; // No signature file - skip all checks
   }
 
-  // Detect mode: source (git clone) vs dist (npm/Docker)
-  const srcExists = await dirExists(path.join(root, 'src'));
-
-  // Layer 1: Local integrity
-  if (srcExists) {
-    const files = await getCoreFiles(root);
-    const hash = await computeHash(root, files);
-    if (!verifySignatureWithKey(hash, sigData.source)) {
-      console.error(GENERIC_ERROR);
-      process.exit(1);
-    }
-  } else {
-    const files = await getDistFiles(root);
-    const hash = await computeHash(root, files);
-    if (!verifySignatureWithKey(hash, sigData.dist)) {
-      console.error(GENERIC_ERROR);
-      process.exit(1);
-    }
+  const sig = sigData.signature ?? sigData.source;
+  if (!sig) {
+    console.error(GENERIC_ERROR);
+    process.exit(1);
   }
 
-  // Layer 2: Fork protection (git clone mode only)
-  if (srcExists) {
+  // Layer 1: Source file integrity (same hash everywhere — local, Docker, npm)
+  const files = await getCoreFiles(root);
+  const hash = await computeHash(root, files);
+  if (!verifySignatureWithKey(hash, sig)) {
+    console.error(GENERIC_ERROR);
+    process.exit(1);
+  }
+
+  // Layer 2: Fork protection (git environments only)
+  const gitExists = await dirExists(path.join(root, '.git'));
+  if (gitExists) {
     if (!verifyRepositoryOrigin(root)) {
       console.error(GENERIC_ERROR);
       process.exit(1);

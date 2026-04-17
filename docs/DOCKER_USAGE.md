@@ -93,8 +93,8 @@ docker build -t msarychau/mcp-zebrunner:latest .
 # Or build with Docker Compose
 docker compose build
 
-# Or build via Docker Compose with version tag
-VERSION=8.0.0 docker compose build
+# Or build with Docker Compose
+docker compose build
 ```
 
 ### Run Locally with Docker Compose
@@ -117,7 +117,7 @@ docker compose up
 
 ## HTTP Mode (StreamableHTTP)
 
-Starting with v8.0.0, the server supports StreamableHTTP transport for remote access. The same Docker image supports both STDIO and HTTP — transport is selected at runtime.
+The server supports StreamableHTTP transport for remote access. The same Docker image supports both STDIO and HTTP — transport is selected at runtime.
 
 HTTP authentication is grouped into **modes** (aligned with project docs):
 
@@ -181,7 +181,7 @@ Ensure `.env` sets at least `ZEBRUNNER_URL` and `PORT` (see [Environment variabl
 
 ```bash
 curl http://localhost:3000/health
-# {"status":"ok","version":"8.0.0","transport":"streamablehttp","authMode":"headers","activeSessions":0}
+# {"status":"ok","version":"...","transport":"streamablehttp","authMode":"headers","activeSessions":0}
 ```
 
 (`authMode` reflects `MCP_AUTH_MODE`, e.g. `selfauth` or `okta` when configured.)
@@ -508,9 +508,6 @@ docker compose build
 
 # Build with no cache
 docker compose build --no-cache
-
-# Build with version tag
-VERSION=8.0.0 docker compose build
 ```
 
 ### Running
@@ -553,11 +550,11 @@ docker run --rm \
 # Login to Docker Hub
 docker login -u msarychau
 
-# Tag with version
-docker tag msarychau/mcp-zebrunner:latest msarychau/mcp-zebrunner:8.0.0
+# Tag with version (use current version from package.json)
+docker tag msarychau/mcp-zebrunner:latest msarychau/mcp-zebrunner:$(node -p "require('./package.json').version")
 
 # Push both tags
-docker push msarychau/mcp-zebrunner:8.0.0
+docker push msarychau/mcp-zebrunner:$(node -p "require('./package.json').version")
 docker push msarychau/mcp-zebrunner:latest
 ```
 

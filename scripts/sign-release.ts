@@ -16,43 +16,25 @@ async function main() {
     process.exit(1);
   }
 
-  const distDir = path.join(PROJECT_ROOT, 'dist');
-  if (!fs.existsSync(distDir)) {
-    console.error('ERROR: dist/ directory not found.');
-    console.error('Run "npm run build" first.');
-    process.exit(1);
-  }
-
-  const { getCoreFiles, getDistFiles, computeHash } = await import('../src/stealth-integrity.js');
+  const { getCoreFiles, computeHash } = await import('../src/stealth-integrity.js');
 
   const privateKey = fs.readFileSync(privateKeyPath);
 
-  // Compute source hash
+  // Compute source hash (same file set used everywhere: local, Docker, npm)
   const sourceFiles = await getCoreFiles(PROJECT_ROOT);
   const sourceHash = await computeHash(PROJECT_ROOT, sourceFiles);
   console.log(`Source files: ${sourceFiles.length}`);
   console.log(`Source hash:  ${sourceHash.toString('hex').substring(0, 16)}...`);
 
-  // Compute dist hash
-  const distFiles = await getDistFiles(PROJECT_ROOT);
-  const distHash = await computeHash(PROJECT_ROOT, distFiles);
-  console.log(`Dist files:   ${distFiles.length}`);
-  console.log(`Dist hash:    ${distHash.toString('hex').substring(0, 16)}...`);
-
-  // Sign both hashes
-  const sourceSigner = crypto.createSign('SHA256');
-  sourceSigner.update(sourceHash);
-  const sourceSignature = sourceSigner.sign(privateKey).toString('base64');
-
-  const distSigner = crypto.createSign('SHA256');
-  distSigner.update(distHash);
-  const distSignature = distSigner.sign(privateKey).toString('base64');
+  // Sign source hash
+  const signer = crypto.createSign('SHA256');
+  signer.update(sourceHash);
+  const signature = signer.sign(privateKey).toString('base64');
 
   // Write .integrity-signature
   const sigData = {
-    version: 1,
-    source: sourceSignature,
-    dist: distSignature,
+    version: 2,
+    signature,
   };
   const sigPath = path.join(PROJECT_ROOT, '.integrity-signature');
   fs.writeFileSync(sigPath, JSON.stringify(sigData, null, 2) + '\n');
