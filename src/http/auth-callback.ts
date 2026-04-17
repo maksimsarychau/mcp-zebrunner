@@ -9,6 +9,60 @@ function decodeJwtPayload(token: string): Record<string, any> {
 }
 
 /**
+ * Attempt Zebrunner OIDC token exchange (Mode 5).
+ *
+ * Sends the Okta ID token to Zebrunner's token-exchange endpoint.
+ * Returns { username, refreshToken } on success, or null if the endpoint
+ * is unavailable or the exchange fails (caller falls back to the /login form).
+ */
+async function attemptZebrunnerTokenExchange(
+  zebrunnerBaseUrl: string,
+  idToken: string,
+): Promise<{ username: string; refreshToken: string } | null> {
+  const iamBase = zebrunnerBaseUrl.replace(/\/api\/public\/v1\/?$/, '');
+  const url = `${iamBase}/api/iam/v1/auth/token-exchange`;
+
+  try {
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        subjectToken: idToken,
+        subjectTokenType: 'urn:ietf:params:oauth:token-type:id_token',
+        grantType: 'urn:ietf:params:oauth:grant-type:token-exchange',
+      }),
+    });
+
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => '');
+      console.error(`[token-exchange] Zebrunner returned ${resp.status}: ${body}`);
+      return null;
+    }
+
+    const data = (await resp.json()) as {
+      authToken?: string;
+      refreshToken?: string;
+      userId?: number;
+    };
+
+    if (!data.refreshToken) {
+      console.error('[token-exchange] Response missing refreshToken');
+      return null;
+    }
+
+    // Extract username from Zebrunner authToken JWT
+    const payload = data.authToken ? decodeJwtPayload(data.authToken) : {};
+    const username: string = payload.unm ?? payload.username ?? 'unknown';
+
+    console.error(`[token-exchange] Success for user ${username} (userId: ${data.userId})`);
+    return { username, refreshToken: data.refreshToken };
+  } catch (err: any) {
+    console.error(`[token-exchange] Failed: ${err.message}`);
+    return null;
+  }
+}
+
+/**
  * Express router that handles the Okta OAuth callback.
  *
  * Flow:
@@ -16,9 +70,10 @@ function decodeJwtPayload(token: string): Record<string, any> {
  * 2. We exchange Okta's authorization code for tokens using our OIDC app credentials
  * 3. We check if the user already has Zebrunner credentials in the token store
  * 4a. If YES → generate auth code and redirect to MCP client
- * 4b. If NO  → redirect to /login form (email pre-filled from Okta) to collect Zebrunner creds
+ * 4b. If NO (Mode 5 / okta-exchange) → try Zebrunner token exchange first
+ * 4c. If token exchange fails or Mode 4 → redirect to /login form
  */
-export function createAuthCallbackRouter(): Router {
+export function createAuthCallbackRouter(opts?: { zebrunnerBaseUrl?: string; enableTokenExchange?: boolean }): Router {
   const router = Router();
 
   router.get('/auth/callback', async (req: Request, res: Response) => {
@@ -89,7 +144,20 @@ export function createAuthCallbackRouter(): Router {
 
       // Check if user already has Zebrunner credentials stored
       const tokenStore = provider.tokenStore;
-      const stored = email ? await tokenStore.get(email) : null;
+      let stored = email ? await tokenStore.get(email) : null;
+
+      // Mode 5 (okta-exchange): try Zebrunner token exchange before showing the form
+      if (!stored && opts?.enableTokenExchange && oktaTokens.id_token && email && opts.zebrunnerBaseUrl) {
+        console.error(`[auth-callback] Attempting Zebrunner token exchange for ${email}...`);
+        const exchanged = await attemptZebrunnerTokenExchange(opts.zebrunnerBaseUrl, oktaTokens.id_token);
+        if (exchanged) {
+          await tokenStore.set(email, { username: exchanged.username, token: exchanged.refreshToken });
+          stored = { username: exchanged.username, token: exchanged.refreshToken };
+          console.error(`[auth-callback] Token exchange succeeded — skipping /login form`);
+        } else {
+          console.error(`[auth-callback] Token exchange unavailable — falling back to /login form`);
+        }
+      }
 
       if (!stored) {
         // No Zebrunner credentials — redirect to /login form to collect them.

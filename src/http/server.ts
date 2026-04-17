@@ -5,7 +5,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { IncomingMessage } from 'node:http';
 import { requestContext } from './request-context.js';
 import { createAuthMiddleware, type BearerVerifier } from './auth-middleware.js';
-import { resolveAuthMode, hasStrategy } from '../config/transport.js';
+import { resolveAuthMode, hasStrategy, hasTokenExchange } from '../config/transport.js';
 import type { TokenStore } from './token-store.js';
 import type { OAuthServerProvider } from '@modelcontextprotocol/sdk/server/auth/provider.js';
 
@@ -49,10 +49,13 @@ export async function startHttpServer(
       scopesSupported: ['zebrunner:read', 'zebrunner:write'],
     }));
 
-    // Mount Okta callback for Okta mode
+    // Mount Okta callback for Okta mode (with optional token exchange for Mode 5)
     if (hasStrategy(authMode, 'okta')) {
       const { createAuthCallbackRouter } = await import('./auth-callback.js');
-      app.use(createAuthCallbackRouter());
+      app.use(createAuthCallbackRouter({
+        zebrunnerBaseUrl,
+        enableTokenExchange: hasTokenExchange(authMode),
+      }));
     }
 
     // Mount login routes (credential form) for both selfauth and okta modes

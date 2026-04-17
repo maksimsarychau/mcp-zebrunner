@@ -18,6 +18,7 @@ This guide covers how to build, run, and use the Zebrunner MCP server with Docke
    - [Mode 2: HTTP + header auth](#mode-2-http--header-auth)
    - [Mode 3: Self-service auth (selfauth)](#mode-3-self-service-auth-selfauth)
    - [Mode 4: Okta OIDC (okta)](#mode-4-okta-oidc-okta)
+   - [Mode 5: Okta + Token Exchange (okta-exchange)](#mode-5-okta--token-exchange-okta-exchange)
    - [Selecting HTTP auth mode with Docker Compose](#selecting-http-auth-mode-with-docker-compose)
    - [Transport mode reference](#transport-mode-reference)
 5. [Docker MCP Gateway — Remote Server with OAuth](#docker-mcp-gateway--remote-server-with-oauth)
@@ -126,8 +127,9 @@ HTTP authentication is grouped into **modes** (aligned with project docs):
 | **2** | `headers` (default) | Client sends `X-Zebrunner-Username` / `X-Zebrunner-Api-Token` on each request |
 | **3** | `selfauth` | Users complete a one-time browser form; credentials are encrypted in `TOKEN_STORE_PATH` |
 | **4** | `okta` | Okta OIDC gate + same per-user store as selfauth (**no** shared `ZEBRUNNER_LOGIN` / `ZEBRUNNER_TOKEN` on the server) |
+| **5** | `okta-exchange` | Same as Mode 4 + automatic Zebrunner token via OIDC exchange (falls back to Mode 4 form if endpoint unavailable) |
 
-Combined values `headers,selfauth` and `headers,okta` are also supported for migration (try headers first, then OAuth).
+Combined values `headers,selfauth`, `headers,okta`, and `headers,okta-exchange` are also supported for migration (try headers first, then OAuth).
 
 ### Mode 2: HTTP + header auth
 
@@ -307,12 +309,24 @@ docker compose -f docker-compose.yml -f docker-compose.http.yml up
 
 (after filling Okta and token-store variables in `.env`).
 
+### Mode 5: Okta + Token Exchange (`okta-exchange`)
+
+Identical to Mode 4 except the server **automatically exchanges the Okta ID token for a Zebrunner API token** after SSO. If the Zebrunner token-exchange endpoint is unavailable, it falls back to Mode 4 behavior (credential form).
+
+Change only `MCP_AUTH_MODE` in `.env`:
+
+```bash
+MCP_AUTH_MODE=okta-exchange
+```
+
+All other variables (Okta, token store, etc.) remain the same as Mode 4.
+
 ### Selecting HTTP auth mode with Docker Compose
 
 HTTP mode uses a **single** override file: `docker-compose.http.yml`. Switch strategies by editing **`.env`** (or your shell environment) and **restarting** the stack:
 
-1. Set `MCP_AUTH_MODE` to `headers`, `selfauth`, `okta`, `headers,selfauth`, or `headers,okta`.
-2. Ensure mode-specific variables from [Environment variables](#environment-variables) are present (`TOKEN_STORE_KEY` for selfauth/okta, `OKTA_*` for okta, etc.).
+1. Set `MCP_AUTH_MODE` to `headers`, `selfauth`, `okta`, `okta-exchange`, `headers,selfauth`, `headers,okta`, or `headers,okta-exchange`.
+2. Ensure mode-specific variables from [Environment variables](#environment-variables) are present (`TOKEN_STORE_KEY` for selfauth/okta/okta-exchange, `OKTA_*` for okta/okta-exchange, etc.).
 3. Run:
 
 ```bash
@@ -744,8 +758,9 @@ docker login -u your-username
 | **2** — HTTP + headers | `MCP_AUTH_MODE=headers` | `ZEBRUNNER_URL`, `PORT` (and `MCP_TRANSPORT=http` or auto via compose); Zebrunner credentials come from **client headers** |
 | **3** — HTTP + selfauth | `MCP_AUTH_MODE=selfauth` | `ZEBRUNNER_URL`, `PORT`, `TOKEN_STORE_PATH`, `TOKEN_STORE_KEY` |
 | **4** — HTTP + Okta | `MCP_AUTH_MODE=okta` | `ZEBRUNNER_URL`, `PORT`, `TOKEN_STORE_PATH`, `TOKEN_STORE_KEY`, plus `OKTA_DOMAIN`, `OKTA_CLIENT_ID`, `OKTA_CLIENT_SECRET` (and typically `MCP_SERVER_URL` for correct OAuth metadata) |
+| **5** — HTTP + Okta + exchange | `MCP_AUTH_MODE=okta-exchange` | Same as Mode 4 (token exchange is attempted automatically after Okta login) |
 
-For combined modes (`headers,selfauth`, `headers,okta`), satisfy the union of requirements (e.g. token store + key whenever selfauth or okta is included).
+For combined modes (`headers,selfauth`, `headers,okta`, `headers,okta-exchange`), satisfy the union of requirements (e.g. token store + key whenever selfauth or okta is included).
 
 ### Variable reference
 
@@ -756,9 +771,9 @@ For combined modes (`headers,selfauth`, `headers,okta`), satisfy the union of re
 | `ZEBRUNNER_TOKEN` | **1** (STDIO) | — | Zebrunner API token (per-request in mode 2 via headers) |
 | `MCP_TRANSPORT` | 2–4 | `auto` | `stdio`, `http`, or `auto` |
 | `PORT` | 2–4 | — | HTTP listen port (required for HTTP) |
-| `MCP_AUTH_MODE` | 2–4 | `headers` | `headers`, `selfauth`, `okta`, `headers,selfauth`, `headers,okta` (legacy: `oauth` → `okta`, `both` → `headers,okta`) |
+| `MCP_AUTH_MODE` | 2–5 | `headers` | `headers`, `selfauth`, `okta`, `okta-exchange`, `headers,selfauth`, `headers,okta`, `headers,okta-exchange` (legacy: `oauth` → `okta`, `both` → `headers,okta`) |
 | `TOKEN_STORE_PATH` | 3–4 | — | Encrypted credential store path (e.g. `/data/tokens.enc` in Docker) |
-| `TOKEN_STORE_KEY` | 3–4 | — | **Required** for selfauth/okta — encryption key for the store |
+| `TOKEN_STORE_KEY` | 3–5 | — | **Required** for selfauth/okta/okta-exchange — encryption key for the store |
 | `OKTA_DOMAIN` | 4 | — | Okta org domain |
 | `OKTA_CLIENT_ID` | 4 | — | OIDC client ID |
 | `OKTA_CLIENT_SECRET` | 4 | — | OIDC client secret |

@@ -2,11 +2,22 @@
 
 ## v8.0.1 (2026-04-17)
 
+### Mode 5 — Okta + Token Exchange (`MCP_AUTH_MODE=okta-exchange`)
+
+- New auth mode: after Okta SSO, the server attempts `POST /api/iam/v1/auth/token-exchange` with the Okta ID token to obtain Zebrunner credentials automatically.
+- If the exchange succeeds, the user is fully authenticated without the `/login` credential form.
+- If the Zebrunner endpoint is unavailable (404/501), falls back to Mode 4 behavior (credential form).
+- `src/config/transport.ts` — added `okta-exchange` strategy, `hasTokenExchange()` helper.
+- `src/http/auth-callback.ts` — token exchange logic with `attemptZebrunnerTokenExchange()`.
+- `src/http/server.ts` — passes `enableTokenExchange` flag to callback router.
+
 ### Documentation
 
 - Created `docs/RELEASE_SIGNING_GUIDE.md` with full signing workflow, troubleshooting, and hash verification commands.
 - Removed hardcoded version numbers from `docs/DOCKER_USAGE.md` (dynamic version tags).
 - Updated `docs/REPUBLISH_INSTRUCTIONS.md` to current version.
+- Rewrote `docs/ZEBRUNNER_TOKEN_EXCHANGE_REQUEST.md` — shorter, admin-friendly format.
+- Updated `docs/OKTA_ACCESS_INVESTIGATION.md`, `docs/HOSTING_GUIDE.md`, `docs/DOCKER_USAGE.md` with Mode 5 details.
 
 ---
 

@@ -10127,11 +10127,11 @@ async function main() {
       console.error(`🔑 Self-service OAuth configured (credentials stored per-user)`);
     }
 
-    // --- Mode 4: Okta OAuth (with per-user credentials) ---
+    // --- Mode 4/5: Okta OAuth (with per-user credentials; Mode 5 adds token exchange) ---
     if (hasStrategy(authMode, 'okta')) {
       if (!tokenStore) {
         throw new Error(
-          'MCP_AUTH_MODE=okta requires TOKEN_STORE_KEY and TOKEN_STORE_PATH. ' +
+          'MCP_AUTH_MODE=okta/okta-exchange requires TOKEN_STORE_KEY and TOKEN_STORE_PATH. ' +
           'These are needed to store per-user Zebrunner credentials after Okta login.',
         );
       }
@@ -10146,7 +10146,9 @@ async function main() {
         const { createOktaBearerVerifier } = await import('./http/oauth-provider.js');
         verifyBearer = createOktaBearerVerifier({ config: oktaConfig, tokenStore });
 
-        console.error(`🔐 Okta OAuth configured (domain: ${oktaConfig.domain})`);
+        const { hasTokenExchange } = await import('./config/transport.js');
+        const exchangeLabel = hasTokenExchange(authMode) ? ' + token exchange (Mode 5)' : '';
+        console.error(`🔐 Okta OAuth configured (domain: ${oktaConfig.domain})${exchangeLabel}`);
       } else {
         console.error(`⚠️  MCP_AUTH_MODE includes 'okta' but Okta config is missing.`);
         console.error('   Missing: OKTA_DOMAIN, OKTA_CLIENT_ID, or OKTA_CLIENT_SECRET');

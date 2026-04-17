@@ -1,9 +1,9 @@
 export type TransportMode = 'stdio' | 'http';
 
-export type AuthMode = 'headers' | 'selfauth' | 'okta' | 'headers,selfauth' | 'headers,okta';
+export type AuthMode = 'headers' | 'selfauth' | 'okta' | 'okta-exchange' | 'headers,selfauth' | 'headers,okta' | 'headers,okta-exchange';
 
 /** Ordered list of individual auth strategies that can be composed. */
-export type AuthStrategy = 'headers' | 'selfauth' | 'okta';
+export type AuthStrategy = 'headers' | 'selfauth' | 'okta' | 'okta-exchange';
 
 export function resolveTransportMode(): TransportMode {
   const explicit = process.env.MCP_TRANSPORT?.toLowerCase();
@@ -22,17 +22,19 @@ export function resolveTransportMode(): TransportMode {
   );
 }
 
-const VALID_STRATEGIES: AuthStrategy[] = ['headers', 'selfauth', 'okta'];
+const VALID_STRATEGIES: AuthStrategy[] = ['headers', 'selfauth', 'okta', 'okta-exchange'];
 
 /**
  * Resolve the authentication mode from MCP_AUTH_MODE.
  *
  * Accepted values:
- *  - "headers"          → Mode 2 (X-Zebrunner-* headers only)
- *  - "selfauth"         → Mode 3 (self-service OAuth, credential form)
- *  - "okta"             → Mode 4 (Okta OIDC + credential form)
- *  - "headers,selfauth" → Mode 2 + 3 (try headers first, fall back to selfauth OAuth)
- *  - "headers,okta"     → Mode 2 + 4 (try headers first, fall back to Okta OAuth)
+ *  - "headers"              → Mode 2 (X-Zebrunner-* headers only)
+ *  - "selfauth"             → Mode 3 (self-service OAuth, credential form)
+ *  - "okta"                 → Mode 4 (Okta OIDC + credential form)
+ *  - "okta-exchange"        → Mode 5 (Okta OIDC + Zebrunner token exchange, form fallback)
+ *  - "headers,selfauth"     → Mode 2 + 3
+ *  - "headers,okta"         → Mode 2 + 4
+ *  - "headers,okta-exchange" → Mode 2 + 5
  *
  * Legacy: "oauth" is treated as "okta", "both" is treated as "headers,okta".
  */
@@ -52,18 +54,26 @@ export function resolveAuthMode(): AuthMode {
   if (parts.length === 2) {
     const sorted = parts.sort() as [string, string];
     const combo = sorted.join(',');
-    if (combo === 'headers,okta' || combo === 'headers,selfauth') {
+    if (combo === 'headers,okta' || combo === 'headers,selfauth' || combo === 'headers,okta-exchange') {
       return combo as AuthMode;
     }
   }
 
   throw new Error(
     `Invalid MCP_AUTH_MODE="${raw}". ` +
-    `Accepted: headers, selfauth, okta, headers,selfauth, headers,okta (legacy: oauth, both)`,
+    `Accepted: headers, selfauth, okta, okta-exchange, headers,selfauth, headers,okta, headers,okta-exchange (legacy: oauth, both)`,
   );
+}
+
+/** Check whether the resolved mode includes the Zebrunner token exchange feature. */
+export function hasTokenExchange(mode: AuthMode): boolean {
+  return mode === 'okta-exchange' || mode.includes('okta-exchange');
 }
 
 /** Check whether a given strategy is active in the resolved mode. */
 export function hasStrategy(mode: AuthMode, strategy: AuthStrategy): boolean {
-  return mode === strategy || mode.split(',').includes(strategy);
+  if (mode === strategy || mode.split(',').includes(strategy)) return true;
+  // okta-exchange implies okta (same Okta OIDC provider, plus token exchange)
+  if (strategy === 'okta' && (mode === 'okta-exchange' || mode.split(',').includes('okta-exchange'))) return true;
+  return false;
 }
