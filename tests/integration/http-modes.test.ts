@@ -129,6 +129,15 @@ describe('Mode 3: Self-Service OAuth — JWT lifecycle', () => {
     assert.equal(retrieved?.client_id, registered.client_id);
   });
 
+  it('recovered mcp_* client after cold start has loopback oauth redirect URIs', async () => {
+    const recovered = await provider.clientsStore.getClient('mcp_notindcrmap00001');
+    assert.ok(recovered);
+    assert.ok(
+      recovered!.redirect_uris.some((u) => u.endsWith('/oauth/callback')),
+      'Claude mcp-remote uses /oauth/callback on loopback',
+    );
+  });
+
   it('authorize redirects to /login with state', async () => {
     let redirectUrl = '';
     const mockRes = {

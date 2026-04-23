@@ -68,7 +68,7 @@ export function getProjectRoot(): string {
   return path.resolve(path.dirname(currentFile), '..');
 }
 
-function isWhitelisted(relPath: string): boolean {
+export function isWhitelisted(relPath: string): boolean {
   const topLevel = relPath.split(path.sep)[0];
   if (topLevel.startsWith(DOTFILE_PREFIX)) return true;
   if (WHITELIST_EXTENSIONS.some(ext => relPath.endsWith(ext))) return true;

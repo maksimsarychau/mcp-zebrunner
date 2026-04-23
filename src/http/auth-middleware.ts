@@ -6,6 +6,7 @@ export interface AuthResult {
   method: 'headers' | 'bearer';
   username: string;
   token: string;
+  baseUrl?: string;
 }
 
 declare global {
@@ -39,7 +40,7 @@ function extractBearerToken(req: Request): string | null {
   return header.slice(7);
 }
 
-export type BearerVerifier = (token: string) => Promise<{ username: string; zebrunnerToken: string }>;
+export type BearerVerifier = (token: string) => Promise<{ username: string; zebrunnerToken: string; baseUrl?: string }>;
 
 export interface AuthMiddlewareOptions {
   authMode?: AuthMode;
@@ -76,8 +77,8 @@ export function createAuthMiddleware(options: AuthMiddlewareOptions = {}) {
       const bearerToken = extractBearerToken(req);
       if (bearerToken) {
         try {
-          const { username, zebrunnerToken } = await options.verifyBearer(bearerToken);
-          req.auth = { method: 'bearer', username, token: zebrunnerToken };
+          const { username, zebrunnerToken, baseUrl } = await options.verifyBearer(bearerToken);
+          req.auth = { method: 'bearer', username, token: zebrunnerToken, baseUrl };
           next();
           return;
         } catch {

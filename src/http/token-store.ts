@@ -10,6 +10,7 @@ const AUTH_TAG_LENGTH = 16;
 export interface TokenEntry {
   username: string;
   token: string;
+  zebrunnerUrl?: string;
 }
 
 export interface TokenStore {

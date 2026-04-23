@@ -18,6 +18,7 @@ export interface HttpServerOptions {
   verifyBearer?: BearerVerifier;
   tokenStore?: TokenStore;
   zebrunnerBaseUrl?: string;
+  zebrunnerUrlFromEnv?: boolean;
   oauthProvider?: OAuthServerProvider;
   mcpServerUrl?: string;
 }
@@ -26,10 +27,11 @@ export async function startHttpServer(
   createServer: () => Promise<McpServer>,
   options: HttpServerOptions,
 ): Promise<void> {
-  const { port, serverVersion, verifyBearer, tokenStore, zebrunnerBaseUrl, oauthProvider, mcpServerUrl } = options;
+  const { port, serverVersion, verifyBearer, tokenStore, zebrunnerBaseUrl, zebrunnerUrlFromEnv = true, oauthProvider, mcpServerUrl } = options;
   const authMode = resolveAuthMode();
 
   const app = express();
+  app.set('trust proxy', 1);
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
@@ -58,11 +60,23 @@ export async function startHttpServer(
       }));
     }
 
-    // Mount login routes (credential form) for both selfauth and okta modes
-    if (zebrunnerBaseUrl) {
+    // Mount login routes (credential form) for both selfauth and okta modes.
+    // When zebrunnerUrlFromEnv is false the login form shows a URL field.
+    if (zebrunnerBaseUrl || !zebrunnerUrlFromEnv) {
       const { createLoginRouter } = await import('./login-routes.js');
-      app.use('/login', createLoginRouter({ zebrunnerBaseUrl }));
+      app.use('/login', createLoginRouter({ zebrunnerBaseUrl, zebrunnerUrlFromEnv }));
       console.error(`🔑 Login form available at /login`);
+    }
+
+    // Mount settings page for credential management
+    if (tokenStore) {
+      const { createSettingsRouter } = await import('./settings-routes.js');
+      app.use('/settings', createSettingsRouter({ tokenStore, zebrunnerBaseUrl, zebrunnerUrlFromEnv }));
+      console.error(`⚙️  Settings page available at /settings`);
+
+      const { createResetRouter } = await import('./reset-routes.js');
+      app.use('/reset', createResetRouter({ tokenStore, zebrunnerBaseUrl, zebrunnerUrlFromEnv }));
+      console.error(`🔄 Reset page available at /reset`);
     }
 
     console.error(`🔐 OAuth endpoints mounted (mode: ${authMode})`);
@@ -122,8 +136,8 @@ export async function startHttpServer(
 
     entry.lastUsed = Date.now();
 
-    const { username, token } = req.auth!;
-    await requestContext.run({ username, token }, async () => {
+    const { username, token, baseUrl } = req.auth!;
+    await requestContext.run({ username, token, baseUrl }, async () => {
       await entry!.transport.handleRequest(req as unknown as IncomingMessage, res, req.body);
     });
   });

@@ -6,6 +6,7 @@ import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import type { TokenStore } from './token-store.js';
 import { TokenValidator } from './token-validator.js';
+import { RECOVERED_MCP_CLIENT_REDIRECT_URIS } from './mcp-client-fallback-redirects.js';
 import type { OktaConfig } from './oauth-provider.js';
 
 // Re-export for convenience
@@ -98,7 +99,7 @@ export class McpOAuthServerProvider implements OAuthServerProvider {
         if (clientId.startsWith('mcp_')) {
           const fallback: RegisteredClient = {
             client_id: clientId,
-            redirect_uris: [],
+            redirect_uris: [...RECOVERED_MCP_CLIENT_REDIRECT_URIS],
             token_endpoint_auth_method: 'none',
             client_name: 'Auto-recovered MCP client',
             grant_types: ['authorization_code'],

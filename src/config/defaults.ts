@@ -101,5 +101,11 @@ export const REQUIRED_ENV_VARS_HTTP = [
   'ZEBRUNNER_URL',
 ] as const;
 
+/**
+ * In selfauth HTTP mode ZEBRUNNER_URL is optional — each user provides their
+ * own Zebrunner instance URL via the login form.
+ */
+export const REQUIRED_ENV_VARS_HTTP_SELFAUTH = [] as const;
+
 /** @deprecated Use REQUIRED_ENV_VARS_STDIO / REQUIRED_ENV_VARS_HTTP instead */
 export const REQUIRED_ENV_VARS = REQUIRED_ENV_VARS_STDIO;

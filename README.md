@@ -1082,10 +1082,17 @@ Example:
 ### Environment Variables
 
 ```env
-# Required
+# Required (STDIO mode) / Optional (HTTP selfauth mode — see below)
 ZEBRUNNER_URL=https://your-instance.zebrunner.com/api/public/v1
 ZEBRUNNER_LOGIN=your.email@company.com
 ZEBRUNNER_TOKEN=your_api_token
+
+# Optional - HTTP Authentication Mode
+MCP_AUTH_MODE=selfauth             # Enable per-user credential form (Mode 3)
+MCP_TRANSPORT=http                 # Use HTTP transport
+PORT=3000                          # HTTP server port
+TOKEN_STORE_KEY=your-secret        # Encryption key for stored credentials
+TOKEN_STORE_PATH=./tokens.enc      # Path for encrypted credential store
 
 # Optional - Basic Settings
 DEBUG=false                        # Enable detailed logging (default: false)
@@ -1099,6 +1106,15 @@ MIN_COVERAGE_THRESHOLD=70         # Minimum coverage percentage (optional)
 REQUIRE_UI_VALIDATION=true        # Require UI validation in tests (optional)
 REQUIRE_API_VALIDATION=true       # Require API validation in tests (optional)
 ```
+
+### Per-User Zebrunner URL (v8.1.0)
+
+When running in HTTP mode with `MCP_AUTH_MODE=selfauth` and **without** setting `ZEBRUNNER_URL`, each user provides their own Zebrunner instance URL on the login form. This enables multi-tenant hosting where a single MCP server serves users across different Zebrunner organizations.
+
+- Login form shows a **Zebrunner URL** field (e.g., `https://mfp.zebrunner.com`)
+- Users can update their URL, credentials, or disconnect at `/settings`
+- Per-user URLs are stored encrypted alongside credentials in the token store
+- When `ZEBRUNNER_URL` IS set as an environment variable, the URL field is hidden and the env value is used globally (existing behavior, no change)
 
 ### Rules System Configuration
 

@@ -26,17 +26,24 @@ export class TokenValidator {
    * Validate a user's stored Zebrunner token at most once per day.
    * Does nothing if last validation was < 24h ago.
    * Throws (and deletes token) if Zebrunner rejects it.
+   *
+   * @param zebrunnerBaseUrl — optional per-user API URL; when provided the
+   *   IAM endpoint is derived from it instead of the constructor default.
    */
-  async validateOncePerDay(email: string, zebrunnerToken: string): Promise<void> {
+  async validateOncePerDay(email: string, zebrunnerToken: string, zebrunnerBaseUrl?: string): Promise<void> {
     const now = Date.now();
     const last = this.lastValidated.get(email);
     if (last && now - last < VALIDATION_INTERVAL_MS) {
       return;
     }
 
+    const iamUrl = zebrunnerBaseUrl
+      ? zebrunnerBaseUrl.replace(/\/api\/public\/v1\/?$/, '') + '/api/iam/v1/auth/refresh'
+      : this.iamUrl;
+
     let resp: Response;
     try {
-      resp = await fetch(this.iamUrl, {
+      resp = await fetch(iamUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ refreshToken: zebrunnerToken }),

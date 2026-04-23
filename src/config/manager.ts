@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
-import { DEFAULT_CONFIG, REQUIRED_ENV_VARS_STDIO, REQUIRED_ENV_VARS_HTTP, ZebrunnerDefaults } from './defaults.js';
-import { resolveTransportMode, type TransportMode } from './transport.js';
+import { DEFAULT_CONFIG, REQUIRED_ENV_VARS_STDIO, REQUIRED_ENV_VARS_HTTP, REQUIRED_ENV_VARS_HTTP_SELFAUTH, ZebrunnerDefaults } from './defaults.js';
+import { resolveTransportMode, resolveAuthMode, hasStrategy, type TransportMode } from './transport.js';
 
 /**
  * Configuration Manager for Zebrunner MCP Server
@@ -182,9 +182,19 @@ export class ConfigManager {
   private validateRequiredVariables(): void {
     this._transportMode = resolveTransportMode();
 
-    const requiredVars = this._transportMode === 'http'
-      ? REQUIRED_ENV_VARS_HTTP
-      : REQUIRED_ENV_VARS_STDIO;
+    let requiredVars: readonly string[];
+    if (this._transportMode === 'http') {
+      try {
+        const authMode = resolveAuthMode();
+        requiredVars = hasStrategy(authMode, 'selfauth')
+          ? REQUIRED_ENV_VARS_HTTP_SELFAUTH
+          : REQUIRED_ENV_VARS_HTTP;
+      } catch {
+        requiredVars = REQUIRED_ENV_VARS_HTTP;
+      }
+    } else {
+      requiredVars = REQUIRED_ENV_VARS_STDIO;
+    }
 
     const missing = requiredVars.filter(varName => !process.env[varName]);
 

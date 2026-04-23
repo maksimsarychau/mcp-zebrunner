@@ -100,6 +100,7 @@ describe('Auth Middleware', () => {
         method: 'bearer',
         username: 'self-user',
         token: 'zeb-token',
+        baseUrl: undefined,
       });
     });
 
@@ -139,6 +140,7 @@ describe('Auth Middleware', () => {
         method: 'bearer',
         username: 'sso-user',
         token: 'zeb-token',
+        baseUrl: undefined,
       });
     });
 

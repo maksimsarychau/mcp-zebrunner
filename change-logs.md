@@ -1,5 +1,60 @@
 # Change Logs
 
+## v8.1.0 (2026-04-21)
+
+### Per-User Zebrunner URL (Multi-Tenant Hosting)
+
+When `ZEBRUNNER_URL` is **not** set as an environment variable and `MCP_AUTH_MODE=selfauth`, the login form now shows a **Zebrunner URL** field. Each user can point to a different Zebrunner instance, enabling a single hosted MCP server to serve multiple organizations.
+
+When `ZEBRUNNER_URL` IS set (env/Docker), everything works exactly as before — the URL field is hidden and the env value is used globally.
+
+**New files:**
+- `src/http/url-utils.ts` — `normalizeZebrunnerUrl()` and `toWebUrl()` utilities. Accepts user-friendly URLs like `https://mfp.zebrunner.com` and normalizes to `https://mfp.zebrunner.com/api/public/v1`.
+- `src/http/settings-routes.ts` — new `/settings` page where logged-in users can update their URL, username, or token, or disconnect entirely.
+- `tests/unit/url-utils.test.ts` — 14 unit tests for URL normalization edge cases.
+
+**Modified files:**
+- `src/http/token-store.ts` — `TokenEntry` extended with optional `zebrunnerUrl` field. Backward-compatible: existing entries without the field still work.
+- `src/http/login-routes.ts` — login form conditionally shows a URL field. POST handler normalizes and validates the URL against Zebrunner IAM before storing. Improved error handling: distinguishes "URL unreachable" from "invalid token".
+- `src/http/selfauth-provider.ts` — `verifyAccessToken` now includes `zebrunnerUrl` in `AuthInfo.extra`.
+- `src/http/token-validator.ts` — `validateOncePerDay` accepts optional per-user base URL for IAM validation.
+- `src/http/auth-middleware.ts` — `AuthResult` and `BearerVerifier` extended with optional `baseUrl`.
+- `src/http/server.ts` — propagates `baseUrl` into `RequestContext`; mounts `/settings` route; passes `zebrunnerUrlFromEnv` flag to login router.
+- `src/server.ts` — detects `ZEBRUNNER_URL_FROM_ENV` flag; uses placeholder URL for singleton clients when no env URL is set (per-user proxy replaces it).
+- `src/config/defaults.ts` — added `REQUIRED_ENV_VARS_HTTP_SELFAUTH` (empty list, since URL comes from the user).
+- `src/config/manager.ts` — `validateRequiredVariables` relaxes the `ZEBRUNNER_URL` requirement in selfauth HTTP mode.
+
+**Backward compatibility:**
+- `ZEBRUNNER_URL` set in env/Docker: zero behavior change.
+- `ZEBRUNNER_URL` not set, STDIO mode: still fails at startup (STDIO requires all 3 env vars).
+- Existing token store files: old entries without `zebrunnerUrl` treated as "use global URL".
+
+### Additional Fixes & Improvements (2026-04-23)
+
+**OAuth cold-start fix:**
+- `src/http/mcp-client-fallback-redirects.ts` (new) — common loopback `redirect_uris` for recovered `mcp_*` clients after a server restart.
+- `src/http/selfauth-provider.ts`, `src/http/mcp-oauth-provider.ts` — seed fallback redirect URIs for dynamically registered clients whose in-memory state is lost on Cloud Run cold starts, preventing `Unregistered redirect_uri` errors.
+
+**Unauthenticated `/reset` route:**
+- `src/http/reset-routes.ts` (new) — GET shows a credential-lookup form; POST validates the email and shows a confirmation page with a time-limited token; POST `/confirm` deletes the stored credentials. Useful when the normal `/login` flow is broken.
+- `src/http/server.ts` — mounts `/reset` alongside `/settings`; adds `app.set('trust proxy', 1)` to fix `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR` when running behind ngrok / Render / Cloud Run.
+
+**GCP Cloud Run documentation (docs/PRIVATE_CREDENTIALS.md — Option C):**
+- Replaced placeholder project ID with concrete values: project `zebrunner-mcp` (number `719764470143`), service URL `https://mcp-zebrunner-719764470143.us-central1.run.app`.
+- Step 2: correct Apple Silicon build instructions — `docker buildx create --name cloudbuilder --driver docker-container --use` + `docker buildx build --platform linux/amd64 … --push`. Explains that `unknown/unknown` in `imagetools inspect` is a build-provenance attestation, not an ARM image.
+- Docker disk space recovery subsection — 4 escalating levels (`docker buildx prune -af` → `docker system prune -af --volumes` → `docker image prune -af` → Docker Desktop disk limit increase) plus `docker system df`.
+- Step 3: hardcoded service-account email; "Secret already exists" note for reruns.
+- Step 4 notes: warning that `--set-env-vars` replaces the entire env var set — omitting `MCP_SERVER_URL` silently clears it, causing OAuth to fall back to `localhost:3000`.
+- Step 5: expanded with the two tell-tale symptoms of a missing `MCP_SERVER_URL` (Cursor `fetch failed`, Claude Desktop `localhost:3000/authorize`), a verify curl, and post-fix reconnect steps.
+- Step 7b (new): full Claude Desktop connection guide via `mcp-remote`.
+- Step 8 (new): redeploy-after-changes sequence with `MCP_SERVER_URL` baked into `--set-env-vars`.
+- Troubleshooting table: added rows for `localhost:3000` OAuth issuer and `ENOSPC`.
+
+**Client config:**
+- `~/.cursor/mcp.json` — renamed server entry from `zebrunner-google-cloud` (22 chars) to `zbr-gcp` (7 chars) to stay within Cursor's 60-character combined server+tool name limit (five tools were being filtered out).
+
+---
+
 ## v8.0.1 (2026-04-17)
 
 ### Mode 5 — Okta + Token Exchange (`MCP_AUTH_MODE=okta-exchange`)

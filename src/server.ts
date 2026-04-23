@@ -103,8 +103,11 @@ import {
 const configManager = ConfigManager.getInstance();
 const appConfig = configManager.getConfig();
 
-// Extract configuration values with auto-detection and defaults
-const ZEBRUNNER_URL = appConfig.baseUrl?.replace(/\/+$/, "");
+// Extract configuration values with auto-detection and defaults.
+// In selfauth HTTP mode ZEBRUNNER_URL may be absent — each user provides their own.
+// A placeholder is used for singleton client creation; the proxy replaces it per-request.
+const ZEBRUNNER_URL_FROM_ENV = !!process.env.ZEBRUNNER_URL;
+const ZEBRUNNER_URL = appConfig.baseUrl?.replace(/\/+$/, "") ?? 'https://placeholder.zebrunner.com/api/public/v1';
 const ZEBRUNNER_LOGIN = appConfig.login;
 const ZEBRUNNER_TOKEN = appConfig.authToken;
 const DEBUG_MODE = appConfig.debug;
@@ -10122,9 +10125,11 @@ async function main() {
         return {
           username: authInfo.extra?.username as string,
           zebrunnerToken: authInfo.extra?.zebrunnerToken as string,
+          baseUrl: authInfo.extra?.zebrunnerUrl as string | undefined,
         };
       };
-      console.error(`🔑 Self-service OAuth configured (credentials stored per-user)`);
+      const urlNote = ZEBRUNNER_URL_FROM_ENV ? '' : ' (per-user URL enabled)';
+      console.error(`🔑 Self-service OAuth configured (credentials stored per-user)${urlNote}`);
     }
 
     // --- Mode 4/5: Okta OAuth (with per-user credentials; Mode 5 adds token exchange) ---
@@ -10162,7 +10167,8 @@ async function main() {
         serverVersion: PKG_VERSION,
         verifyBearer,
         tokenStore,
-        zebrunnerBaseUrl: ZEBRUNNER_URL,
+        zebrunnerBaseUrl: ZEBRUNNER_URL_FROM_ENV ? ZEBRUNNER_URL : undefined,
+        zebrunnerUrlFromEnv: ZEBRUNNER_URL_FROM_ENV,
         oauthProvider,
         mcpServerUrl,
       },
