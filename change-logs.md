@@ -53,6 +53,13 @@ When `ZEBRUNNER_URL` IS set (env/Docker), everything works exactly as before —
 **Client config:**
 - `~/.cursor/mcp.json` — renamed server entry from `zebrunner-google-cloud` (22 chars) to `zbr-gcp` (7 chars) to stay within Cursor's 60-character combined server+tool name limit (five tools were being filtered out).
 
+**Persistent token storage via GCS (docs/PRIVATE_CREDENTIALS.md — Option C):**
+- Created GCS bucket `zbr-mcp-tokens` (us-central1, uniform access). Cloud Run service account (`719764470143-compute@`) granted `roles/storage.objectAdmin`.
+- Cloud Run service updated with a GCS volume mount: `--add-volume name=tokens,type=cloud-storage,bucket=zbr-mcp-tokens --add-volume-mount volume=tokens,mount-path=/mnt/tokens`. `TOKEN_STORE_PATH` changed from `/tmp/tokens.enc` (ephemeral) to `/mnt/tokens/tokens.enc` (persistent). `min-instances` reset to `0` (free tier).
+- Effect: credentials survive redeployments and cold starts — users no longer need to re-authenticate after each redeploy.
+- Cost: GCS storage for a few-KB file is negligible (well within the free 5 GB/month tier).
+- Updated Step 3, Step 4 deploy commands, Step 8 redeploy command, and troubleshooting table in docs to reflect the GCS volume setup.
+
 ---
 
 ## v8.0.1 (2026-04-17)
