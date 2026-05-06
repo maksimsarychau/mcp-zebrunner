@@ -1,6 +1,6 @@
 # Change Logs
 
-## v8.1.0 (2026-04-21)
+## v8.1.0
 
 ### Per-User Zebrunner URL (Multi-Tenant Hosting)
 
@@ -29,7 +29,7 @@ When `ZEBRUNNER_URL` IS set (env/Docker), everything works exactly as before —
 - `ZEBRUNNER_URL` not set, STDIO mode: still fails at startup (STDIO requires all 3 env vars).
 - Existing token store files: old entries without `zebrunnerUrl` treated as "use global URL".
 
-### Additional Fixes & Improvements (2026-04-23)
+### Additional Fixes & Improvements
 
 **OAuth cold-start fix:**
 - `src/http/mcp-client-fallback-redirects.ts` (new) — common loopback `redirect_uris` for recovered `mcp_*` clients after a server restart.
@@ -62,7 +62,7 @@ When `ZEBRUNNER_URL` IS set (env/Docker), everything works exactly as before —
 
 ---
 
-## v8.0.1 (2026-04-17)
+## v8.0.1 
 
 ### Mode 5 — Okta + Token Exchange (`MCP_AUTH_MODE=okta-exchange`)
 
