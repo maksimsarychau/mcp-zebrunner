@@ -168,11 +168,14 @@ class TestRunner {
         return;
       }
 
+      const nodeMajor = parseInt(process.version.slice(1), 10);
+
       const args = [
         '--test',
         '--test-reporter=spec',
+        ...(nodeMajor >= 22 ? ['--experimental-test-isolation=none'] : []),
         '--import=tsx',
-        ...testFiles  // Spread the individual file paths
+        ...testFiles
       ];
 
       if (this.watch) {
@@ -227,9 +230,9 @@ class TestRunner {
     const duration = Date.now() - startTime;
 
     if (success) {
-      this.log(`✅ ${config.name} completed successfully in ${duration}ms`);
+      this.log(`✅ ${config.name} passed in ${duration}ms`);
     } else {
-      this.log(`❌ ${config.name} failed after ${duration}ms`, 'error');
+      this.log(`⚠️  ${config.name} finished with failures in ${duration}ms (see details above)`, 'error');
     }
 
     return success;

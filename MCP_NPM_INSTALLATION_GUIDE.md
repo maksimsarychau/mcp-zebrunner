@@ -556,6 +556,4 @@ If you continue to experience issues:
 
 ---
 
-**Version:** 7.2.2  
-**Last Updated:** April 9, 2026  
 **Maintainer:** Maksim Sarychau

@@ -1,0 +1,67 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# Zebrunner MCP Server - HTTP Mode Override
+# ══════════════════════════════════════════════════════════════════════════════
+# Usage (header auth — default):
+#   docker compose -f docker-compose.yml -f docker-compose.http.yml up
+#
+# Usage (Okta OAuth — no ZEBRUNNER_LOGIN/TOKEN needed):
+#   MCP_AUTH_MODE=oauth OKTA_DOMAIN=dev-xxx.okta.com OKTA_CLIENT_ID=0oa... \
+#   OKTA_CLIENT_SECRET=... TOKEN_STORE_KEY=my-secret \
+#   docker compose -f docker-compose.yml -f docker-compose.http.yml up
+#
+# This override switches the MCP server from STDIO to StreamableHTTP transport.
+# Credentials are provided per-request via X-Zebrunner-* headers (or OAuth Bearer).
+# ══════════════════════════════════════════════════════════════════════════════
+
+services:
+  zebrunner-mcp:
+    environment:
+      MCP_TRANSPORT: http
+      PORT: 3000
+      MCP_AUTH_MODE: ${MCP_AUTH_MODE:-headers}
+      MCP_SERVER_URL: ${MCP_SERVER_URL:-http://localhost:3000}
+
+      # Override: ZEBRUNNER_LOGIN and ZEBRUNNER_TOKEN are optional in HTTP mode
+      # In oauth mode, these are NOT needed — credentials come via Okta + token store
+      ZEBRUNNER_LOGIN: ${ZEBRUNNER_LOGIN:-}
+      ZEBRUNNER_TOKEN: ${ZEBRUNNER_TOKEN:-}
+
+      # Okta OIDC config (only needed if MCP_AUTH_MODE=oauth or MCP_AUTH_MODE=both)
+      # Create a free Okta Developer account at https://developer.okta.com/signup/
+      OKTA_DOMAIN: ${OKTA_DOMAIN:-}
+      OKTA_CLIENT_ID: ${OKTA_CLIENT_ID:-}
+      OKTA_CLIENT_SECRET: ${OKTA_CLIENT_SECRET:-}
+      OKTA_AUTH_SERVER_ID: ${OKTA_AUTH_SERVER_ID:-default}
+
+      # Encrypted file-based token store for per-user Zebrunner credentials
+      TOKEN_STORE_PATH: /data/tokens.enc
+      TOKEN_STORE_KEY: ${TOKEN_STORE_KEY:-}
+
+      # Required for local HTTP testing (SDK enforces HTTPS for issuer URL otherwise)
+      # Localhost is already exempted, but Docker hostname may differ
+      MCP_DANGEROUSLY_ALLOW_INSECURE_ISSUER_URL: ${MCP_DANGEROUSLY_ALLOW_INSECURE_ISSUER_URL:-true}
+
+    ports:
+      - "${PORT:-3000}:3000"
+
+    volumes:
+      - token-data:/data
+
+    # HTTP mode does not need stdin
+    stdin_open: false
+    tty: false
+
+    # HTTP health check
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r=>r.ok?process.exit(0):process.exit(1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    labels:
+      - "ai.mcp.server=true"
+      - "ai.mcp.transport=streamablehttp"
+
+volumes:
+  token-data:

@@ -785,3 +785,7 @@ The eval suite is **excluded from `npm run test:all`** to prevent accidental LLM
 | **Negative Test** | A test with an intentionally wrong, vague, or adversarial prompt — verifying the system handles it gracefully |
 | **E2E** | End-to-End — tests that simulate complex multi-tool user workflows |
 | **stdio** | Standard input/output — the communication channel between the eval runner and the MCP server |
+
+---
+
+*Last Updated: April 2026*

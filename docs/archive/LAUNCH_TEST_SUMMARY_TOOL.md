@@ -1,6 +1,6 @@
 # Launch Test Summary Tool
 
-> **Note:** This is a historical implementation record. The `get_launch_test_summary` tool is fully shipped and active in the current version (7.2.2).
+> **Note:** This is a historical implementation record. The `get_launch_test_summary` tool is fully shipped and active in the current version.
 
 ## Overview
 

@@ -1,5 +1,176 @@
 # Change Logs
 
+## v8.1.0
+
+### Per-User Zebrunner URL (Multi-Tenant Hosting)
+
+When `ZEBRUNNER_URL` is **not** set as an environment variable and `MCP_AUTH_MODE=selfauth`, the login form now shows a **Zebrunner URL** field. Each user can point to a different Zebrunner instance, enabling a single hosted MCP server to serve multiple organizations.
+
+When `ZEBRUNNER_URL` IS set (env/Docker), everything works exactly as before — the URL field is hidden and the env value is used globally.
+
+**New files:**
+- `src/http/url-utils.ts` — `normalizeZebrunnerUrl()` and `toWebUrl()` utilities. Accepts user-friendly URLs like `https://mfp.zebrunner.com` and normalizes to `https://mfp.zebrunner.com/api/public/v1`.
+- `src/http/settings-routes.ts` — new `/settings` page where logged-in users can update their URL, username, or token, or disconnect entirely.
+- `tests/unit/url-utils.test.ts` — 14 unit tests for URL normalization edge cases.
+
+**Modified files:**
+- `src/http/token-store.ts` — `TokenEntry` extended with optional `zebrunnerUrl` field. Backward-compatible: existing entries without the field still work.
+- `src/http/login-routes.ts` — login form conditionally shows a URL field. POST handler normalizes and validates the URL against Zebrunner IAM before storing. Improved error handling: distinguishes "URL unreachable" from "invalid token".
+- `src/http/selfauth-provider.ts` — `verifyAccessToken` now includes `zebrunnerUrl` in `AuthInfo.extra`.
+- `src/http/token-validator.ts` — `validateOncePerDay` accepts optional per-user base URL for IAM validation.
+- `src/http/auth-middleware.ts` — `AuthResult` and `BearerVerifier` extended with optional `baseUrl`.
+- `src/http/server.ts` — propagates `baseUrl` into `RequestContext`; mounts `/settings` route; passes `zebrunnerUrlFromEnv` flag to login router.
+- `src/server.ts` — detects `ZEBRUNNER_URL_FROM_ENV` flag; uses placeholder URL for singleton clients when no env URL is set (per-user proxy replaces it).
+- `src/config/defaults.ts` — added `REQUIRED_ENV_VARS_HTTP_SELFAUTH` (empty list, since URL comes from the user).
+- `src/config/manager.ts` — `validateRequiredVariables` relaxes the `ZEBRUNNER_URL` requirement in selfauth HTTP mode.
+
+**Backward compatibility:**
+- `ZEBRUNNER_URL` set in env/Docker: zero behavior change.
+- `ZEBRUNNER_URL` not set, STDIO mode: still fails at startup (STDIO requires all 3 env vars).
+- Existing token store files: old entries without `zebrunnerUrl` treated as "use global URL".
+
+### Additional Fixes & Improvements
+
+**OAuth cold-start fix:**
+- `src/http/mcp-client-fallback-redirects.ts` (new) — common loopback `redirect_uris` for recovered `mcp_*` clients after a server restart.
+- `src/http/selfauth-provider.ts`, `src/http/mcp-oauth-provider.ts` — seed fallback redirect URIs for dynamically registered clients whose in-memory state is lost on Cloud Run cold starts, preventing `Unregistered redirect_uri` errors.
+
+**Unauthenticated `/reset` route:**
+- `src/http/reset-routes.ts` (new) — GET shows a credential-lookup form; POST validates the email and shows a confirmation page with a time-limited token; POST `/confirm` deletes the stored credentials. Useful when the normal `/login` flow is broken.
+- `src/http/server.ts` — mounts `/reset` alongside `/settings`; adds `app.set('trust proxy', 1)` to fix `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR` when running behind ngrok / Render / Cloud Run.
+
+**GCP Cloud Run documentation (docs/PRIVATE_CREDENTIALS.md — Option C):**
+- Replaced placeholder project ID with concrete values: project `zebrunner-mcp` (number `719764470143`), service URL `https://mcp-zebrunner-719764470143.us-central1.run.app`.
+- Step 2: correct Apple Silicon build instructions — `docker buildx create --name cloudbuilder --driver docker-container --use` + `docker buildx build --platform linux/amd64 … --push`. Explains that `unknown/unknown` in `imagetools inspect` is a build-provenance attestation, not an ARM image.
+- Docker disk space recovery subsection — 4 escalating levels (`docker buildx prune -af` → `docker system prune -af --volumes` → `docker image prune -af` → Docker Desktop disk limit increase) plus `docker system df`.
+- Step 3: hardcoded service-account email; "Secret already exists" note for reruns.
+- Step 4 notes: warning that `--set-env-vars` replaces the entire env var set — omitting `MCP_SERVER_URL` silently clears it, causing OAuth to fall back to `localhost:3000`.
+- Step 5: expanded with the two tell-tale symptoms of a missing `MCP_SERVER_URL` (Cursor `fetch failed`, Claude Desktop `localhost:3000/authorize`), a verify curl, and post-fix reconnect steps.
+- Step 7b (new): full Claude Desktop connection guide via `mcp-remote`.
+- Step 8 (new): redeploy-after-changes sequence with `MCP_SERVER_URL` baked into `--set-env-vars`.
+- Troubleshooting table: added rows for `localhost:3000` OAuth issuer and `ENOSPC`.
+
+**Client config:**
+- `~/.cursor/mcp.json` — renamed server entry from `zebrunner-google-cloud` (22 chars) to `zbr-gcp` (7 chars) to stay within Cursor's 60-character combined server+tool name limit (five tools were being filtered out).
+
+**Persistent token storage via GCS (docs/PRIVATE_CREDENTIALS.md — Option C):**
+- Created GCS bucket `zbr-mcp-tokens` (us-central1, uniform access). Cloud Run service account (`719764470143-compute@`) granted `roles/storage.objectAdmin`.
+- Cloud Run service updated with a GCS volume mount: `--add-volume name=tokens,type=cloud-storage,bucket=zbr-mcp-tokens --add-volume-mount volume=tokens,mount-path=/mnt/tokens`. `TOKEN_STORE_PATH` changed from `/tmp/tokens.enc` (ephemeral) to `/mnt/tokens/tokens.enc` (persistent). `min-instances` reset to `0` (free tier).
+- Effect: credentials survive redeployments and cold starts — users no longer need to re-authenticate after each redeploy.
+- Cost: GCS storage for a few-KB file is negligible (well within the free 5 GB/month tier).
+- Updated Step 3, Step 4 deploy commands, Step 8 redeploy command, and troubleshooting table in docs to reflect the GCS volume setup.
+
+---
+
+## v8.0.1 
+
+### Mode 5 — Okta + Token Exchange (`MCP_AUTH_MODE=okta-exchange`)
+
+- New auth mode: after Okta SSO, the server attempts `POST /api/iam/v1/auth/token-exchange` with the Okta ID token to obtain Zebrunner credentials automatically.
+- If the exchange succeeds, the user is fully authenticated without the `/login` credential form.
+- If the Zebrunner endpoint is unavailable (404/501), falls back to Mode 4 behavior (credential form).
+- `src/config/transport.ts` — added `okta-exchange` strategy, `hasTokenExchange()` helper.
+- `src/http/auth-callback.ts` — token exchange logic with `attemptZebrunnerTokenExchange()`.
+- `src/http/server.ts` — passes `enableTokenExchange` flag to callback router.
+
+### Documentation
+
+- Created `docs/RELEASE_SIGNING_GUIDE.md` with full signing workflow, troubleshooting, and hash verification commands.
+- Removed hardcoded version numbers from `docs/DOCKER_USAGE.md` (dynamic version tags).
+- Updated `docs/REPUBLISH_INSTRUCTIONS.md` to current version.
+- Rewrote `docs/ZEBRUNNER_TOKEN_EXCHANGE_REQUEST.md` — shorter, admin-friendly format.
+- Updated `docs/OKTA_ACCESS_INVESTIGATION.md`, `docs/HOSTING_GUIDE.md`, `docs/DOCKER_USAGE.md` with Mode 5 details.
+
+---
+
+## v8.0.0 (2026-04-17)
+
+### HTTP Transport — Modes 2, 3, 4
+
+Added Streamable HTTP transport with three authentication strategies. The same Docker image supports both STDIO (Mode 1) and HTTP (Modes 2–4) — transport is selected at runtime via `MCP_TRANSPORT` and `PORT`.
+
+**Mode 2 — HTTP + Headers (`MCP_AUTH_MODE=headers`):**
+- Clients pass `X-Zebrunner-Username` and `X-Zebrunner-Api-Token` on each request.
+- No server-side credential storage needed.
+
+**Mode 3 — Self-Service OAuth (`MCP_AUTH_MODE=selfauth`):**
+- Built-in OAuth 2.1 authorization server with Dynamic Client Registration (DCR).
+- Users complete a one-time Zebrunner credential form in the browser.
+- Credentials stored encrypted in `TOKEN_STORE_PATH` via `FileTokenStore` (AES-256-GCM).
+- Subsequent connections are automatic — no re-login needed.
+
+**Mode 4 — Okta OIDC (`MCP_AUTH_MODE=okta`):**
+- Okta SSO as the access gate; per-user Zebrunner credentials captured via the same credential form.
+- No shared `ZEBRUNNER_LOGIN`/`ZEBRUNNER_TOKEN` on the server — each user's access is isolated.
+- Auto-recovery for `mcp_*` client IDs across server restarts (on-the-fly DCR fallback).
+
+**Combined modes** (`headers,selfauth`, `headers,okta`) supported for migration.
+
+### New Source Files
+
+| File | Purpose |
+|------|---------|
+| `src/http/server.ts` | Express-based HTTP server with session management |
+| `src/http/auth-middleware.ts` | Bearer token verification and header extraction |
+| `src/http/selfauth-provider.ts` | OAuth provider for Mode 3 (self-service) |
+| `src/http/mcp-oauth-provider.ts` | OAuth provider for Mode 4 (Okta OIDC) |
+| `src/http/oauth-provider.ts` | Shared Okta config loader |
+| `src/http/login-routes.ts` | Zebrunner credential form with ownership validation |
+| `src/http/token-store.ts` | Encrypted per-user token storage (AES-256-GCM) |
+| `src/http/token-validator.ts` | Daily Zebrunner token validation with cache |
+| `src/http/request-context.ts` | Per-request context (AsyncLocalStorage) |
+| `src/http/auth-callback.ts` | Okta OAuth callback handler |
+| `src/http/client-factory.ts` | Per-request Zebrunner API client factory |
+| `src/config/transport.ts` | Transport and auth mode resolution |
+| `src/admin/manage-tokens.ts` | CLI for listing/deleting stored user tokens |
+
+### Security
+
+- **Token ownership validation** — the login form verifies that the entered API token belongs to the authenticated user by checking the JWT `unm`/`username` claim from Zebrunner IAM.
+- **Read-only email field** — when Okta provides the user's email, the form prevents editing to avoid ownership bypass.
+- **Daily token validation** — stored Zebrunner tokens are validated every 24 hours; invalid tokens are deleted and users are re-prompted.
+- **Integrity checks in Docker** — `.integrity-signature` and `.mcp-status` are now copied into the Docker production image, enabling all 3 integrity layers (hash, origin, kill-switch) in containerized deployments.
+
+### MCP Resource Filtering
+
+Template resources (per-project) are now filtered to reduce clutter:
+- By default, only **starred** projects generate resources.
+- `MCP_RESOURCE_PROJECTS` env var overrides with explicit comma-separated project keys.
+- No template resources are listed if no projects match.
+
+### New Environment Variables
+
+| Variable | Mode(s) | Description |
+|----------|---------|-------------|
+| `MCP_TRANSPORT` | 2–4 | `stdio`, `http`, or `auto` |
+| `PORT` | 2–4 | HTTP listen port |
+| `MCP_AUTH_MODE` | 2–4 | `headers`, `selfauth`, `okta`, or combined |
+| `TOKEN_STORE_PATH` | 3–4 | Encrypted credential store file path |
+| `TOKEN_STORE_KEY` | 3–4 | Encryption key for the store |
+| `OKTA_DOMAIN` | 4 | Okta org domain |
+| `OKTA_CLIENT_ID` | 4 | OIDC client ID |
+| `OKTA_CLIENT_SECRET` | 4 | OIDC client secret |
+| `OKTA_AUTH_SERVER_ID` | 4 | Okta authorization server ID |
+| `MCP_SERVER_URL` | 3–4 | Public URL for OAuth metadata/redirects |
+| `MCP_DANGEROUSLY_ALLOW_INSECURE_ISSUER_URL` | 3–4 | Allow HTTP issuer URLs for local dev |
+| `MCP_RESOURCE_PROJECTS` | All | Comma-separated project keys for resource filtering |
+
+### Docker
+
+- Dockerfile updated: `.integrity-signature` and `.mcp-status` copied into the production image.
+- Added `docker-compose.http.yml` overlay for HTTP modes.
+- Build workflow: `npm run build` → `npm run sign-release` → `docker build`.
+
+### Documentation
+
+- **Updated:** `docs/DOCKER_USAGE.md` — added Mode 2/3/4 Docker run commands, Docker Compose instructions, client configs for all modes, build-with-signing workflow, environment variable reference, credential management, and troubleshooting sections.
+- **Updated:** `docs/RESOURCES_AND_PROMPTS.md` — added Resource Filtering section with `MCP_RESOURCE_PROJECTS` documentation.
+- **Updated:** `.env.example` — added `MCP_RESOURCE_PROJECTS`, `MCP_DANGEROUSLY_ALLOW_INSECURE_ISSUER_URL`.
+- **Updated:** `docs/PRIVATE_CREDENTIALS.md` — added Docker build command, client-side cache clearing, clean-slate reset procedures.
+- Version bumped to 8.0.0 across all documentation files.
+
+---
+
 ## v7.2.2 (2026-04-15)
 
 ### Server-Side Tool Metrics

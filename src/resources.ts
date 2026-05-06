@@ -290,10 +290,26 @@ export function registerResources(server: McpServer, deps: ResourceDependencies)
     return result;
   }
 
-  // Shared list callback: enumerates all projects for template resources
+  // Filter projects for resource listing: MCP_RESOURCE_PROJECTS env override,
+  // then starred-only, then empty (no project resources if neither is set).
+  const explicitResourceProjects = process.env.MCP_RESOURCE_PROJECTS
+    ?.split(',')
+    .map((k) => k.trim().toUpperCase())
+    .filter(Boolean);
+
+  async function getResourceProjects() {
+    const all = await getCachedProjects();
+    if (explicitResourceProjects?.length) {
+      const allowed = new Set(explicitResourceProjects);
+      return all.filter((p) => allowed.has(p.key.toUpperCase()));
+    }
+    return all.filter((p) => p.starred);
+  }
+
+  // Shared list callback: enumerates filtered projects for template resources
   function projectListCallback(pathSuffix: string, labelSuffix: string) {
     return async () => {
-      const projects = await getCachedProjects();
+      const projects = await getResourceProjects();
       return {
         resources: projects.map((p) => ({
           uri: `zebrunner://projects/${p.key}/${pathSuffix}`,
@@ -304,10 +320,10 @@ export function registerResources(server: McpServer, deps: ResourceDependencies)
     };
   }
 
-  // Shared complete callback: autocomplete project keys
+  // Shared complete callback: autocomplete project keys (filtered set + aliases)
   function projectKeyComplete() {
     return async (value: string) => {
-      const projects = await getCachedProjects();
+      const projects = await getResourceProjects();
       const allKeys = [
         ...projects.map((p) => p.key),
         ...Object.keys(PROJECT_ALIASES),
