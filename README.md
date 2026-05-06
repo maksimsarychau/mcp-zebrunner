@@ -9,42 +9,54 @@ A **Model Context Protocol (MCP)** server that integrates with **Zebrunner Test 
 >
 > 📚 **Test vs Test Case vs Launch?** See [**Terminology & Glossary**](docs/TERMINOLOGY.md) — definitions, counting rules, and how metrics are calculated.
 
+## 🔥 Why This Server
+
+This is the **extended Zebrunner MCP solution** — built to go well beyond basic test case management and help QA teams work smarter and faster with AI. Compared to the Solvd Zebrunner MCP (~30 tools, CRUD-focused), this server provides **60+ tools** with deep analytics, reporting, and automation capabilities:
+
+- **[Reporting & Analytics](#-reporting--analytics)** — dashboards, pass-rate trends, regression stability reports, runtime efficiency analysis, bug reviews, and weekly delta tracking
+- **[Test Coverage & Analysis](#-test-coverage--analysis)** — coverage gaps, automation readiness scoring, and cross-suite analysis
+- **[Intelligent Rules System](#-intelligent-rules-system)** — 3-tier quality rules with 100+ automated checkpoints for test case validation and improvement
+- **[Screenshot & Video Analysis](#-test-code-generation--validation)** — OCR, image processing, and video analysis powered by sharp, ffmpeg, and tesseract
+- **[MCP Resources & Prompts](#-mcp-resources--prompts-new)** — `@` context injection and `/` workflow commands for streamlined daily operations
+- **[Multi-Transport & Multi-Auth](#-usage-methods)** — STDIO, Streamable HTTP, self-service OAuth, Okta SSO, and token exchange (Modes 1–5)
+
 ## 📑 Table of Contents
 
-1. [🎯 What is this tool?](#-what-is-this-tool)
-2. [🧠 Intelligent Rules System](#-intelligent-rules-system)
-   - 2.1. [What Makes This Tool Special](#what-makes-this-tool-special)
-   - 2.2. [How the Rules Work Together](#how-the-rules-work-together)
-   - 2.3. [Why This Matters](#why-this-matters)
-   - 2.4. [Customizing Rules for Your Project](#customizing-rules-for-your-project)
-3. [📋 Prerequisites](#-prerequisites)
-4. [🚀 Quick Start Guide](#-quick-start-guide)
-5. [🔧 Usage Methods](#-usage-methods)
-   - 5.1. [Method 1: Use with Claude Desktop/Code](#method-1-use-with-claude-desktopcode-recommended)
-   - 5.2. [Method 2: Run as standalone server](#method-2-run-as-standalone-server)
-   - 5.3. [Method 3: Smart URL-Based Analysis 🚀](#method-3-smart-url-based-analysis-)
-6. [🛠️ Available Tools](#️-available-tools)
-   - 6.1. [📋 Test Case Management](#-test-case-management)
-   - 6.2. [🌳 Test Suite Hierarchy & Organization](#-test-suite-hierarchy--organization)
-   - 6.3. [🔧 Mutation Tools (Beta)](#-mutation-tools-beta)
-   - 6.4. [🔍 Test Coverage & Analysis](#-test-coverage--analysis)
-   - 6.5. [🧪 Test Code Generation & Validation](#-test-code-generation--validation)
-   - 6.6. [🚀 Launch & Execution Management](#-launch--execution-management)
-   - 6.7. [📊 Reporting & Analytics](#-reporting--analytics)
-   - 6.8. [🏃 Test Run Management](#-test-run-management)
-   - 6.9. [🎯 Management-Focused Quick Commands](#-management-focused-quick-commands)
-7. [📎 MCP Resources & Prompts (NEW)](#-mcp-resources--prompts-new)
-   - 7.1. [Resources — `@` Context Injection](#resources--context-injection)
-   - 7.2. [Prompts — `/` Workflow Commands](#prompts---workflow-commands)
-8. [🎭 Role-Specific Prompts & Workflows](#-role-specific-prompts--workflows)
-   - <details><summary>8.1. 👩‍💻 Manual QA Engineers</summary>
+1. [🔥 Why This Server](#-why-this-server)
+2. [🎯 What is this tool?](#-what-is-this-tool)
+3. [🧠 Intelligent Rules System](#-intelligent-rules-system)
+   - 3.1. [What Makes This Tool Special](#what-makes-this-tool-special)
+   - 3.2. [How the Rules Work Together](#how-the-rules-work-together)
+   - 3.3. [Why This Matters](#why-this-matters)
+   - 3.4. [Customizing Rules for Your Project](#customizing-rules-for-your-project)
+4. [📋 Prerequisites](#-prerequisites)
+5. [🚀 Quick Start Guide](#-quick-start-guide)
+6. [🔧 Usage Methods](#-usage-methods)
+   - 6.1. [Method 1: Use with Claude Desktop/Code](#method-1-use-with-claude-desktopcode-recommended)
+   - 6.2. [Method 2: Run as standalone server](#method-2-run-as-standalone-server)
+   - 6.3. [Method 3: Smart URL-Based Analysis 🚀](#method-3-smart-url-based-analysis-)
+7. [🛠️ Available Tools](#️-available-tools)
+   - 7.1. [📋 Test Case Management](#-test-case-management)
+   - 7.2. [🌳 Test Suite Hierarchy & Organization](#-test-suite-hierarchy--organization)
+   - 7.3. [🔧 Mutation Tools (Beta)](#-mutation-tools-beta)
+   - 7.4. [🔍 Test Coverage & Analysis](#-test-coverage--analysis)
+   - 7.5. [🧪 Test Code Generation & Validation](#-test-code-generation--validation)
+   - 7.6. [🚀 Launch & Execution Management](#-launch--execution-management)
+   - 7.7. [📊 Reporting & Analytics](#-reporting--analytics)
+   - 7.8. [🏃 Test Run Management](#-test-run-management)
+   - 7.9. [🎯 Management-Focused Quick Commands](#-management-focused-quick-commands)
+8. [📎 MCP Resources & Prompts (NEW)](#-mcp-resources--prompts-new)
+   - 8.1. [Resources — `@` Context Injection](#resources--context-injection)
+   - 8.2. [Prompts — `/` Workflow Commands](#prompts---workflow-commands)
+9. [🎭 Role-Specific Prompts & Workflows](#-role-specific-prompts--workflows)
+   - <details><summary>9.1. 👩‍💻 Manual QA Engineers</summary>
      
      - [Daily Test Case Review](#daily-test-case-review)
      - [Test Case Creation & Improvement](#test-case-creation--improvement)
      - [Test Suite Organization](#test-suite-organization)
      - [Coverage Analysis](#coverage-analysis)
      </details>
-   - <details><summary>7.2. 🤖 Test Automation Engineers & SDETs</summary>
+   - <details><summary>9.2. 🤖 Test Automation Engineers & SDETs</summary>
      
      - [Automation Readiness Assessment](#automation-readiness-assessment)
      - [Test Code Generation](#test-code-generation-1)
@@ -52,14 +64,14 @@ A **Model Context Protocol (MCP)** server that integrates with **Zebrunner Test 
      - [Framework Integration](#framework-integration)
      - [Batch Automation Analysis](#batch-automation-analysis)
      </details>
-   - <details><summary>7.3. 👨‍💻 Developers</summary>
+   - <details><summary>9.3. 👨‍💻 Developers</summary>
      
      - [Test Case Understanding](#test-case-understanding)
      - [Implementation Validation](#implementation-validation)
      - [Code Generation for Testing](#code-generation-for-testing)
      - [Bug Analysis](#bug-analysis)
      </details>
-   - <details><summary>7.4. 👔 Test Managers & Team Leads</summary>
+   - <details><summary>9.4. 👔 Test Managers & Team Leads</summary>
      
      - [Team Quality Metrics](#team-quality-metrics)
      - [Test Suite Analysis](#test-suite-analysis)
@@ -67,7 +79,7 @@ A **Model Context Protocol (MCP)** server that integrates with **Zebrunner Test 
      - [Process Improvement](#process-improvement)
      - [Reporting & Stakeholder Communication](#reporting--stakeholder-communication)
      </details>
-   - <details><summary>7.5. 🏢 Project Owners & Product Managers</summary>
+   - <details><summary>9.5. 🏢 Project Owners & Product Managers</summary>
      
      - [Project Health Overview](#project-health-overview)
      - [Feature Testing Status](#feature-testing-status)
@@ -75,16 +87,16 @@ A **Model Context Protocol (MCP)** server that integrates with **Zebrunner Test 
      - [Risk Assessment](#risk-assessment)
      - [Planning & Resource Allocation](#planning--resource-allocation)
      </details>
-9. [📖 Output Formats](#-output-formats)
-10. [⚙️ Configuration Options](#️-configuration-options)
-11. [🧪 Testing Your Setup](#-testing-your-setup)
-12. [🔍 Troubleshooting](#-troubleshooting)
-13. [🎯 Example Workflows](#-example-workflows)
-14. [🔧 Advanced Features](#-advanced-features)
-15. [📚 Additional Documentation](#-additional-documentation)
-16. [🤝 Contributing](#-contributing)
-17. [📄 License](#-license)
-18. [🎉 You're Ready!](#-youre-ready)
+10. [📖 Output Formats](#-output-formats)
+11. [⚙️ Configuration Options](#️-configuration-options)
+12. [🧪 Testing Your Setup](#-testing-your-setup)
+13. [🔍 Troubleshooting](#-troubleshooting)
+14. [🎯 Example Workflows](#-example-workflows)
+15. [🔧 Advanced Features](#-advanced-features)
+16. [📚 Additional Documentation](#-additional-documentation)
+17. [🤝 Contributing](#-contributing)
+18. [📄 License](#-license)
+19. [🎉 You're Ready!](#-youre-ready)
 
 ---
 
