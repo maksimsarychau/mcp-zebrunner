@@ -776,7 +776,7 @@ describe('Utilities Unit Tests', () => {
     });
 
     it('should handle Zebrunner anchor tags correctly', () => {
-      const input = '<a href="https://myfitnesspal.atlassian.net/browse/APPS-2771" target="_blank">APPS-2771</a>';
+      const input = '<a href="https://example.atlassian.net/browse/APPS-2771" target="_blank">APPS-2771</a>';
       const result = stripHtmlTags(input);
       assert.equal(result, 'APPS-2771');
     });
