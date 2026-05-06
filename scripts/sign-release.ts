@@ -1,9 +1,41 @@
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
+import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+async function checkUntrackedSourceFiles(): Promise<void> {
+  let untrackedRaw: string;
+  try {
+    untrackedRaw = execSync('git ls-files --others --exclude-standard', {
+      cwd: PROJECT_ROOT,
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim();
+  } catch {
+    return;
+  }
+  if (!untrackedRaw) return;
+
+  // Signing uses `git ls-files` to enumerate files, but Docker (no .git) uses
+  // a filesystem walk. Any untracked file that isn't whitelisted would be
+  // included by Docker's walk but missed by `git ls-files` → hash mismatch.
+  const { isWhitelisted } = await import('../src/stealth-integrity.js');
+  const dangerous = untrackedRaw.split('\n').filter(f => f && !isWhitelisted(f));
+
+  if (dangerous.length > 0) {
+    console.error('ERROR: Untracked source files would cause integrity mismatch in Docker/npm:\n');
+    for (const f of dangerous) {
+      console.error(`  ${f}`);
+    }
+    console.error('\ngit ls-files (used during signing) excludes them, but Docker\'s filesystem');
+    console.error('scan includes them — the integrity hash will differ at runtime.\n');
+    console.error('Fix: git add <files>   then re-run npm run sign-release\n');
+    process.exit(1);
+  }
+}
 
 async function main() {
   console.log('Signing mcp-zebrunner release...\n');
@@ -16,43 +48,29 @@ async function main() {
     process.exit(1);
   }
 
-  const distDir = path.join(PROJECT_ROOT, 'dist');
-  if (!fs.existsSync(distDir)) {
-    console.error('ERROR: dist/ directory not found.');
-    console.error('Run "npm run build" first.');
-    process.exit(1);
-  }
-
-  const { getCoreFiles, getDistFiles, computeHash } = await import('../src/stealth-integrity.js');
+  const { getCoreFiles, computeHash } = await import('../src/stealth-integrity.js');
 
   const privateKey = fs.readFileSync(privateKeyPath);
 
-  // Compute source hash
+  // Compute source hash (same file set used everywhere: local, Docker, npm)
   const sourceFiles = await getCoreFiles(PROJECT_ROOT);
+
+  // Safety: abort if untracked files would cause Docker/npm integrity mismatch
+  await checkUntrackedSourceFiles();
+
   const sourceHash = await computeHash(PROJECT_ROOT, sourceFiles);
   console.log(`Source files: ${sourceFiles.length}`);
   console.log(`Source hash:  ${sourceHash.toString('hex').substring(0, 16)}...`);
 
-  // Compute dist hash
-  const distFiles = await getDistFiles(PROJECT_ROOT);
-  const distHash = await computeHash(PROJECT_ROOT, distFiles);
-  console.log(`Dist files:   ${distFiles.length}`);
-  console.log(`Dist hash:    ${distHash.toString('hex').substring(0, 16)}...`);
-
-  // Sign both hashes
-  const sourceSigner = crypto.createSign('SHA256');
-  sourceSigner.update(sourceHash);
-  const sourceSignature = sourceSigner.sign(privateKey).toString('base64');
-
-  const distSigner = crypto.createSign('SHA256');
-  distSigner.update(distHash);
-  const distSignature = distSigner.sign(privateKey).toString('base64');
+  // Sign source hash
+  const signer = crypto.createSign('SHA256');
+  signer.update(sourceHash);
+  const signature = signer.sign(privateKey).toString('base64');
 
   // Write .integrity-signature
   const sigData = {
-    version: 1,
-    source: sourceSignature,
-    dist: distSignature,
+    version: 2,
+    signature,
   };
   const sigPath = path.join(PROJECT_ROOT, '.integrity-signature');
   fs.writeFileSync(sigPath, JSON.stringify(sigData, null, 2) + '\n');

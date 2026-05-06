@@ -17,7 +17,7 @@ export class PredictionEngine {
     logs: string
   ): Prediction {
     if (this.debug) {
-      console.log('[PredictionEngine] Analyzing evidence to predict issue type');
+      console.error('[PredictionEngine] Analyzing evidence to predict issue type');
     }
 
     const evidenceForBug: string[] = [];
@@ -155,8 +155,8 @@ export class PredictionEngine {
     );
 
     if (this.debug) {
-      console.log(`[PredictionEngine] Prediction: ${verdict} (${confidence}% confidence)`);
-      console.log(`[PredictionEngine] Bug score: ${bugScore}, Test score: ${testScore}`);
+      console.error(`[PredictionEngine] Prediction: ${verdict} (${confidence}% confidence)`);
+      console.error(`[PredictionEngine] Bug score: ${bugScore}, Test score: ${testScore}`);
     }
 
     return {

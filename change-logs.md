@@ -1,29 +1,368 @@
 # Change Logs
 
-## v7.1.1 (2026-04-13)
+## v8.1.0
+
+### Per-User Zebrunner URL (Multi-Tenant Hosting)
+
+When `ZEBRUNNER_URL` is **not** set as an environment variable and `MCP_AUTH_MODE=selfauth`, the login form now shows a **Zebrunner URL** field. Each user can point to a different Zebrunner instance, enabling a single hosted MCP server to serve multiple organizations.
+
+When `ZEBRUNNER_URL` IS set (env/Docker), everything works exactly as before — the URL field is hidden and the env value is used globally.
+
+**New files:**
+- `src/http/url-utils.ts` — `normalizeZebrunnerUrl()` and `toWebUrl()` utilities. Accepts user-friendly URLs like `https://mfp.zebrunner.com` and normalizes to `https://mfp.zebrunner.com/api/public/v1`.
+- `src/http/settings-routes.ts` — new `/settings` page where logged-in users can update their URL, username, or token, or disconnect entirely.
+- `tests/unit/url-utils.test.ts` — 14 unit tests for URL normalization edge cases.
+
+**Modified files:**
+- `src/http/token-store.ts` — `TokenEntry` extended with optional `zebrunnerUrl` field. Backward-compatible: existing entries without the field still work.
+- `src/http/login-routes.ts` — login form conditionally shows a URL field. POST handler normalizes and validates the URL against Zebrunner IAM before storing. Improved error handling: distinguishes "URL unreachable" from "invalid token".
+- `src/http/selfauth-provider.ts` — `verifyAccessToken` now includes `zebrunnerUrl` in `AuthInfo.extra`.
+- `src/http/token-validator.ts` — `validateOncePerDay` accepts optional per-user base URL for IAM validation.
+- `src/http/auth-middleware.ts` — `AuthResult` and `BearerVerifier` extended with optional `baseUrl`.
+- `src/http/server.ts` — propagates `baseUrl` into `RequestContext`; mounts `/settings` route; passes `zebrunnerUrlFromEnv` flag to login router.
+- `src/server.ts` — detects `ZEBRUNNER_URL_FROM_ENV` flag; uses placeholder URL for singleton clients when no env URL is set (per-user proxy replaces it).
+- `src/config/defaults.ts` — added `REQUIRED_ENV_VARS_HTTP_SELFAUTH` (empty list, since URL comes from the user).
+- `src/config/manager.ts` — `validateRequiredVariables` relaxes the `ZEBRUNNER_URL` requirement in selfauth HTTP mode.
+
+**Backward compatibility:**
+- `ZEBRUNNER_URL` set in env/Docker: zero behavior change.
+- `ZEBRUNNER_URL` not set, STDIO mode: still fails at startup (STDIO requires all 3 env vars).
+- Existing token store files: old entries without `zebrunnerUrl` treated as "use global URL".
+
+### Additional Fixes & Improvements
+
+**OAuth cold-start fix:**
+- `src/http/mcp-client-fallback-redirects.ts` (new) — common loopback `redirect_uris` for recovered `mcp_*` clients after a server restart.
+- `src/http/selfauth-provider.ts`, `src/http/mcp-oauth-provider.ts` — seed fallback redirect URIs for dynamically registered clients whose in-memory state is lost on Cloud Run cold starts, preventing `Unregistered redirect_uri` errors.
+
+**Unauthenticated `/reset` route:**
+- `src/http/reset-routes.ts` (new) — GET shows a credential-lookup form; POST validates the email and shows a confirmation page with a time-limited token; POST `/confirm` deletes the stored credentials. Useful when the normal `/login` flow is broken.
+- `src/http/server.ts` — mounts `/reset` alongside `/settings`; adds `app.set('trust proxy', 1)` to fix `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR` when running behind ngrok / Render / Cloud Run.
+
+**GCP Cloud Run documentation (docs/PRIVATE_CREDENTIALS.md — Option C):**
+- Replaced placeholder project ID with concrete values: project `zebrunner-mcp` (number `719764470143`), service URL `https://mcp-zebrunner-719764470143.us-central1.run.app`.
+- Step 2: correct Apple Silicon build instructions — `docker buildx create --name cloudbuilder --driver docker-container --use` + `docker buildx build --platform linux/amd64 … --push`. Explains that `unknown/unknown` in `imagetools inspect` is a build-provenance attestation, not an ARM image.
+- Docker disk space recovery subsection — 4 escalating levels (`docker buildx prune -af` → `docker system prune -af --volumes` → `docker image prune -af` → Docker Desktop disk limit increase) plus `docker system df`.
+- Step 3: hardcoded service-account email; "Secret already exists" note for reruns.
+- Step 4 notes: warning that `--set-env-vars` replaces the entire env var set — omitting `MCP_SERVER_URL` silently clears it, causing OAuth to fall back to `localhost:3000`.
+- Step 5: expanded with the two tell-tale symptoms of a missing `MCP_SERVER_URL` (Cursor `fetch failed`, Claude Desktop `localhost:3000/authorize`), a verify curl, and post-fix reconnect steps.
+- Step 7b (new): full Claude Desktop connection guide via `mcp-remote`.
+- Step 8 (new): redeploy-after-changes sequence with `MCP_SERVER_URL` baked into `--set-env-vars`.
+- Troubleshooting table: added rows for `localhost:3000` OAuth issuer and `ENOSPC`.
+
+**Client config:**
+- `~/.cursor/mcp.json` — renamed server entry from `zebrunner-google-cloud` (22 chars) to `zbr-gcp` (7 chars) to stay within Cursor's 60-character combined server+tool name limit (five tools were being filtered out).
+
+**Persistent token storage via GCS (docs/PRIVATE_CREDENTIALS.md — Option C):**
+- Created GCS bucket `zbr-mcp-tokens` (us-central1, uniform access). Cloud Run service account (`719764470143-compute@`) granted `roles/storage.objectAdmin`.
+- Cloud Run service updated with a GCS volume mount: `--add-volume name=tokens,type=cloud-storage,bucket=zbr-mcp-tokens --add-volume-mount volume=tokens,mount-path=/mnt/tokens`. `TOKEN_STORE_PATH` changed from `/tmp/tokens.enc` (ephemeral) to `/mnt/tokens/tokens.enc` (persistent). `min-instances` reset to `0` (free tier).
+- Effect: credentials survive redeployments and cold starts — users no longer need to re-authenticate after each redeploy.
+- Cost: GCS storage for a few-KB file is negligible (well within the free 5 GB/month tier).
+- Updated Step 3, Step 4 deploy commands, Step 8 redeploy command, and troubleshooting table in docs to reflect the GCS volume setup.
+
+---
+
+## v8.0.1 
+
+### Mode 5 — Okta + Token Exchange (`MCP_AUTH_MODE=okta-exchange`)
+
+- New auth mode: after Okta SSO, the server attempts `POST /api/iam/v1/auth/token-exchange` with the Okta ID token to obtain Zebrunner credentials automatically.
+- If the exchange succeeds, the user is fully authenticated without the `/login` credential form.
+- If the Zebrunner endpoint is unavailable (404/501), falls back to Mode 4 behavior (credential form).
+- `src/config/transport.ts` — added `okta-exchange` strategy, `hasTokenExchange()` helper.
+- `src/http/auth-callback.ts` — token exchange logic with `attemptZebrunnerTokenExchange()`.
+- `src/http/server.ts` — passes `enableTokenExchange` flag to callback router.
+
+### Documentation
+
+- Created `docs/RELEASE_SIGNING_GUIDE.md` with full signing workflow, troubleshooting, and hash verification commands.
+- Removed hardcoded version numbers from `docs/DOCKER_USAGE.md` (dynamic version tags).
+- Updated `docs/REPUBLISH_INSTRUCTIONS.md` to current version.
+- Rewrote `docs/ZEBRUNNER_TOKEN_EXCHANGE_REQUEST.md` — shorter, admin-friendly format.
+- Updated `docs/OKTA_ACCESS_INVESTIGATION.md`, `docs/HOSTING_GUIDE.md`, `docs/DOCKER_USAGE.md` with Mode 5 details.
+
+---
+
+## v8.0.0 (2026-04-17)
+
+### HTTP Transport — Modes 2, 3, 4
+
+Added Streamable HTTP transport with three authentication strategies. The same Docker image supports both STDIO (Mode 1) and HTTP (Modes 2–4) — transport is selected at runtime via `MCP_TRANSPORT` and `PORT`.
+
+**Mode 2 — HTTP + Headers (`MCP_AUTH_MODE=headers`):**
+- Clients pass `X-Zebrunner-Username` and `X-Zebrunner-Api-Token` on each request.
+- No server-side credential storage needed.
+
+**Mode 3 — Self-Service OAuth (`MCP_AUTH_MODE=selfauth`):**
+- Built-in OAuth 2.1 authorization server with Dynamic Client Registration (DCR).
+- Users complete a one-time Zebrunner credential form in the browser.
+- Credentials stored encrypted in `TOKEN_STORE_PATH` via `FileTokenStore` (AES-256-GCM).
+- Subsequent connections are automatic — no re-login needed.
+
+**Mode 4 — Okta OIDC (`MCP_AUTH_MODE=okta`):**
+- Okta SSO as the access gate; per-user Zebrunner credentials captured via the same credential form.
+- No shared `ZEBRUNNER_LOGIN`/`ZEBRUNNER_TOKEN` on the server — each user's access is isolated.
+- Auto-recovery for `mcp_*` client IDs across server restarts (on-the-fly DCR fallback).
+
+**Combined modes** (`headers,selfauth`, `headers,okta`) supported for migration.
+
+### New Source Files
+
+| File | Purpose |
+|------|---------|
+| `src/http/server.ts` | Express-based HTTP server with session management |
+| `src/http/auth-middleware.ts` | Bearer token verification and header extraction |
+| `src/http/selfauth-provider.ts` | OAuth provider for Mode 3 (self-service) |
+| `src/http/mcp-oauth-provider.ts` | OAuth provider for Mode 4 (Okta OIDC) |
+| `src/http/oauth-provider.ts` | Shared Okta config loader |
+| `src/http/login-routes.ts` | Zebrunner credential form with ownership validation |
+| `src/http/token-store.ts` | Encrypted per-user token storage (AES-256-GCM) |
+| `src/http/token-validator.ts` | Daily Zebrunner token validation with cache |
+| `src/http/request-context.ts` | Per-request context (AsyncLocalStorage) |
+| `src/http/auth-callback.ts` | Okta OAuth callback handler |
+| `src/http/client-factory.ts` | Per-request Zebrunner API client factory |
+| `src/config/transport.ts` | Transport and auth mode resolution |
+| `src/admin/manage-tokens.ts` | CLI for listing/deleting stored user tokens |
+
+### Security
+
+- **Token ownership validation** — the login form verifies that the entered API token belongs to the authenticated user by checking the JWT `unm`/`username` claim from Zebrunner IAM.
+- **Read-only email field** — when Okta provides the user's email, the form prevents editing to avoid ownership bypass.
+- **Daily token validation** — stored Zebrunner tokens are validated every 24 hours; invalid tokens are deleted and users are re-prompted.
+- **Integrity checks in Docker** — `.integrity-signature` and `.mcp-status` are now copied into the Docker production image, enabling all 3 integrity layers (hash, origin, kill-switch) in containerized deployments.
+
+### MCP Resource Filtering
+
+Template resources (per-project) are now filtered to reduce clutter:
+- By default, only **starred** projects generate resources.
+- `MCP_RESOURCE_PROJECTS` env var overrides with explicit comma-separated project keys.
+- No template resources are listed if no projects match.
+
+### New Environment Variables
+
+| Variable | Mode(s) | Description |
+|----------|---------|-------------|
+| `MCP_TRANSPORT` | 2–4 | `stdio`, `http`, or `auto` |
+| `PORT` | 2–4 | HTTP listen port |
+| `MCP_AUTH_MODE` | 2–4 | `headers`, `selfauth`, `okta`, or combined |
+| `TOKEN_STORE_PATH` | 3–4 | Encrypted credential store file path |
+| `TOKEN_STORE_KEY` | 3–4 | Encryption key for the store |
+| `OKTA_DOMAIN` | 4 | Okta org domain |
+| `OKTA_CLIENT_ID` | 4 | OIDC client ID |
+| `OKTA_CLIENT_SECRET` | 4 | OIDC client secret |
+| `OKTA_AUTH_SERVER_ID` | 4 | Okta authorization server ID |
+| `MCP_SERVER_URL` | 3–4 | Public URL for OAuth metadata/redirects |
+| `MCP_DANGEROUSLY_ALLOW_INSECURE_ISSUER_URL` | 3–4 | Allow HTTP issuer URLs for local dev |
+| `MCP_RESOURCE_PROJECTS` | All | Comma-separated project keys for resource filtering |
+
+### Docker
+
+- Dockerfile updated: `.integrity-signature` and `.mcp-status` copied into the production image.
+- Added `docker-compose.http.yml` overlay for HTTP modes.
+- Build workflow: `npm run build` → `npm run sign-release` → `docker build`.
+
+### Documentation
+
+- **Updated:** `docs/DOCKER_USAGE.md` — added Mode 2/3/4 Docker run commands, Docker Compose instructions, client configs for all modes, build-with-signing workflow, environment variable reference, credential management, and troubleshooting sections.
+- **Updated:** `docs/RESOURCES_AND_PROMPTS.md` — added Resource Filtering section with `MCP_RESOURCE_PROJECTS` documentation.
+- **Updated:** `.env.example` — added `MCP_RESOURCE_PROJECTS`, `MCP_DANGEROUSLY_ALLOW_INSECURE_ISSUER_URL`.
+- **Updated:** `docs/PRIVATE_CREDENTIALS.md` — added Docker build command, client-side cache clearing, clean-slate reset procedures.
+- Version bumped to 8.0.0 across all documentation files.
+
+---
+
+## v7.2.2 (2026-04-15)
+
+### Server-Side Tool Metrics
+
+Added automatic performance tracking for every MCP tool call within a session.
+
+- **`ToolMetrics` class** (`src/utils/tool-metrics.ts`) — records per-tool call count, avg/min/max duration (ms), total response size (chars), and error count.
+- **`wrapToolHandler()`** — generic higher-order function that transparently instruments all tool handlers via monkey-patching `server.registerTool`. Zero changes needed per-tool.
+- **Shutdown summary** — on `SIGINT`/`SIGTERM`, a markdown metrics summary is logged to stderr for post-session review.
+
+### Eval Token Tracking & Cost Estimation
+
+LLM evaluation tests now capture Anthropic API token usage and estimate costs.
+
+- **Token capture** — all 7 `client.messages.create()` call sites in `tests/eval/eval-runner.test.ts` now extract `response.usage.input_tokens` and `response.usage.output_tokens`.
+- **Judge token tracking** — `judgeToolOutput()` in `tests/eval/eval-judges.ts` returns `JudgeResult` with separate judge token counts.
+- **Cost estimation** — `estimateCost()` in `tests/eval/eval-report.ts` uses hardcoded Anthropic pricing (Claude 4 Opus/Sonnet/Haiku) to calculate `$input + $output = $total`.
+- **Report integration** — console scorecard and markdown/JSON reports now include "Token Usage" sections with totals, judge breakdown, and estimated cost.
+
+### Extended `about_mcp_tools` — Metrics Mode
+
+- New `mode: "metrics"` — returns a markdown table of per-tool session stats (calls, durations, response sizes, errors), or "No tool calls recorded" for empty sessions.
+- All modes now display `MCP version: X.Y.Z` in their output header.
+- Removed standalone `get_tool_metrics` tool — functionality fully integrated into `about_mcp_tools` (tool count remains at 60).
+
+### New `/session-metrics` Prompt
+
+Added a 14th MCP prompt accessible via `/session-metrics` in Claude Desktop/Code.
+
+- No arguments required — instructs the LLM to call `about_mcp_tools` with `mode: "metrics"` and present a session usage summary.
+- Category: Utility.
+- Prompt count updated from 13 → 14 across all files.
+
+### Security Fixes (from PR Review)
+
+Three issues identified during code review, all fixed:
+
+1. **Cache eviction** (`src/resources.ts`) — `ResourceCache.evictOldest()` now properly finds the entry with the minimum `expiry` timestamp instead of deleting by insertion order.
+2. **Path traversal** (`src/utils/screenshot-analyzer.ts`) — `saveScreenshotToTemp()` now sanitizes filenames via `path.basename()` + regex and validates the resolved path stays within the temp directory.
+3. **Unbounded caches** (`src/api/reporting-client.ts`) — `projectCache` (max 100 entries) and `fieldsLayoutCache` (max 50 entries) now evict the oldest entry when full.
+
+### Tests
+
+1067+ total tests (up from 1047 in v7.2.1).
+
+- **New:** `tests/unit/tool-metrics.test.ts` — 10 tests for `ToolMetrics.record()`, `getSummaryMarkdown()`, `reset()`, and `wrapToolHandler()` (success, error, exception, arg passthrough).
+- **New:** `tests/unit/eval-token-tracking.test.ts` — 5 tests for `estimateCost()` across Claude models, zero tokens, and interface structure validation.
+- **Updated:** `tests/unit/prompt-registry.test.ts` — prompt count assertions 13 → 14.
+- **Updated:** `tests/unit/tool-schema-coverage.test.ts` — `about_mcp_tools` mode enum now includes `"metrics"`.
+- **New eval prompt:** `about_mcp_tools.metrics` in `tests/eval/eval-prompts.ts`.
+
+### Documentation
+
+- **Updated:** `docs/TEST_PROMPTS.md` — added Section 17 (Tool Metrics & Token Tracking) with 7 test scenarios covering empty sessions, multi-tool metrics, error tracking, MCP Inspector verification, eval token reports, and JSON/markdown report validation. Added `about_mcp_tools` prompts 5–6 for metrics mode. Updated Section 15 with `/session-metrics` prompt test.
+- **Updated:** `docs/RESOURCES_AND_PROMPTS.md` — prompt count 13 → 14, added `/session-metrics` row to prompt reference table.
+- **Updated:** `README.md` — prompt count 13 → 14.
+- **Updated:** `change-logs.md`, `server.json`, `custom-catalog.yaml`, `mcp-catalog.yaml` — prompt count 13 → 14.
+- Version bumped to 7.2.2 across all 31+ files.
+
+---
+
+## v7.2.1 (2026-04-14)
+
+### MCP Resources (13 resources)
+
+Added read-only reference data accessible via the `@` menu in MCP clients (Claude Desktop, Claude Code). Resources are fetched on demand and cached for 20 minutes.
+
+**Static resources (no API calls):**
+- `zebrunner://reports/types` — 6 report types for `generate_report` with descriptions, parameters, and examples.
+- `zebrunner://periods` — 12 valid time period values (e.g., "Last 30 Days", "Week") with day equivalents and which tools accept them.
+- `zebrunner://charts` — Chart delivery formats (png, html, text) and chart types (pie, bar, line, etc.) for 17 tools.
+- `zebrunner://formats` — 5 output format parameter families used across tools.
+
+**Dynamic resources (cached API calls):**
+- `zebrunner://projects` — All accessible projects with keys, IDs, and metadata.
+- `zebrunner://projects/{project_key}/suites` — Root test suites for a project.
+- `zebrunner://projects/{project_key}/automation-states` — Automation states with IDs.
+- `zebrunner://projects/{project_key}/priorities` — Automation priorities with IDs.
+- `zebrunner://projects/{project_key}/milestones` — Active milestones.
+- `zebrunner://projects/{project_key}/result-statuses` — Test result statuses.
+- `zebrunner://projects/{project_key}/configuration-groups` — Configuration groups (browsers, devices, etc.).
+- `zebrunner://projects/{project_key}/fields` — Custom fields layout.
+- `zebrunner://projects/{project_key}/suite-hierarchy` — Full suite hierarchy tree.
+
+**Implementation:**
+- `src/resources.ts` — `ResourceCache` class with configurable TTL (default 20 min), LRU eviction (max 200 entries), and `registerResources()` function.
+- `resourceTrace()` debug logging for all template resource handlers to diagnose Inspector routing issues.
+- `getResourcesCatalog()` export for use by `about_mcp_tools`.
+
+### MCP Prompts (14 prompts)
+
+Added pre-built workflow instructions accessible via the `/` command in MCP clients. Each prompt injects expert-crafted multi-step instructions that guide the LLM through complex multi-tool workflows.
+
+**E2E metric prompts:**
+- `/pass-rate` — Cross-platform pass rate with target comparison.
+- `/runtime-efficiency` — Regression runtime metrics with delta comparison.
+- `/automation-coverage` — Coverage and intake rate metrics.
+- `/executive-dashboard` — Standup-ready 5-section executive report.
+- `/release-readiness` — Go/No-Go assessment with 5 quality checks.
+- `/suite-coverage` — Per-suite automation coverage table.
+
+**Analysis prompts:**
+- `/review-test-case` — Validate-then-improve workflow for a single test case.
+- `/launch-triage` — Post-regression failure analysis with root cause recommendations.
+- `/flaky-review` — Flaky test detection with stabilization priorities.
+- `/find-duplicates` — Structural and semantic duplicate analysis.
+
+**Role-specific prompts:**
+- `/daily-qa-standup` — Concise daily status with action items.
+- `/automation-gaps` — Identify lowest-coverage suites and prioritize automation work.
+- `/project-overview` — Comprehensive project health card.
+- `/session-metrics` — Show tool usage metrics for the current MCP session.
+
+**Implementation:**
+- `src/prompts.ts` — 14 builder functions (exported for unit testing) and `registerPrompts()`.
+- `getPromptsCatalog()` export for use by `about_mcp_tools`.
+
+### Tool Annotations (all 60 tools)
+
+Added MCP Tool Annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) to every registered tool, enabling clients to understand tool behavior.
+
+- 54 read-only tools: `readOnlyHint: true`, `destructiveHint: false`, `idempotentHint: true`.
+- 6 mutation tools: `readOnlyHint: false` with per-tool flags:
+  - `update_test_suite`, `update_test_case`: `idempotentHint: true` (PUT/PATCH).
+  - `create_test_suite`, `create_test_case`, `manage_test_run`: `idempotentHint: false`.
+  - `import_launch_results_to_test_run`: `destructiveHint: true`, `idempotentHint: true`.
+
+### Extended `about_mcp_tools`
+
+The `about_mcp_tools` tool now discovers all MCP capabilities, not just tools.
+
+- New `mode: "prompts"` — returns a formatted catalog of all 13 `/prompts` grouped by category with titles, descriptions, and arguments.
+- New `mode: "resources"` — returns a formatted catalog of all 13 `@resources` split into static and template with URIs and descriptions.
+- `mode: "summary"` — now appends an "Additional MCP Capabilities" section with prompt and resource counts.
+- Added `markdownForPrompts()` and `markdownForResources()` formatters in `src/utils/tool-intel.ts`.
 
 ### Steering-Inspired "Next Step" Guidance
 
 Mutation tool responses now include just-in-time "next step" hints that guide the LLM toward logical follow-up actions. Inspired by the [Strands Agents steering pattern](https://strandsagents.com/blog/steering-accuracy-beats-prompts-workflows/), hints are delivered at the moment the LLM needs them rather than front-loaded into system prompts.
 
-**How it works:** After a successful mutation, the server appends a `Tip:` block suggesting the most useful next tool call. Hints are conditional — they are suppressed when redundant (e.g., the quality check hint is skipped if `review: true` was already used).
+- After a successful mutation, the server appends a `Tip:` block suggesting the most useful next tool call. Hints are conditional — suppressed when redundant (e.g., quality check hint skipped if `review: true` was already used).
+- Extracted `steeringHint()` helper into `src/helpers/steering.ts`.
 
-**Hints by tool:**
-- **`create_test_suite`** — suggests `create_test_case` or sub-suite creation with the new suite ID.
-- **`create_test_case`** — always reminds that the case is draft and suggests `update_test_case` to publish. If `review` was not used, also suggests `validate_test_case` for a quality check.
-- **`create_test_case` preview** — reinforces the `draft=true` safety rule before confirmation via a `Note:` marker.
-- **`update_test_case`** — suggests `validate_test_case` (skipped if `review: true` was already used inline).
-- **`manage_test_run` create** — suggests populating the empty run via `add_cases` or importing launch results.
-- **`manage_test_run` update** — suggests `list_test_run_test_cases` to view current assignments.
-- **`manage_test_run` add_cases** — suggests importing results or viewing the case list.
-- **`import_launch_results_to_test_run`** — suggests viewing updated statuses or the run summary.
+### Error Handling Audit
 
-**Implementation:**
-- Extracted `steeringHint()` helper into `src/helpers/steering.ts` — a pure, deterministic function that takes a tool name and context (ID, reviewUsed flag) and returns the hint text.
-- All 8 inline hint blocks in `src/server.ts` refactored to call the helper.
-- 25 new unit tests in `tests/unit/steering-hints.test.ts` covering all tool types, conditional logic, edge cases, and no-emoji validation.
+Comprehensive audit and refactoring of error handling across all handlers to eliminate silent failures and prevent "fake data."
+
+- **Hybrid strategy:** single-resource fetches throw explicit errors; multi-section/multi-project aggregations return partial results with visible `⚠️` warnings.
+- Removed silent `catch(() => [])` / `catch(() => null)` fallbacks from `fetchRuntime`, `fetchCoverage`, `fetchFlaky`, `countByFilter`, `countManualOnlyByCustomField`, `findSimilarFailures`, `getAllSessionsWithArtifacts`.
+- Added `Promise.allSettled` with per-project/per-section warning collection in `pass-rate-report.ts`, `quality-dashboard.ts`, `coverage-report.ts`, `reporting-tools.ts`.
+- Visible warnings prepended to report output for any partial data.
+- LLM fallback degradation now visible: `[Basic fallback — LLM unavailable]` in semantic analyzer, `⚠️ LLM insight generation failed` in duplicate analyzer.
+- 82 `console.log` → `console.error` migrations across 14 files to prevent MCP stdio protocol pollution.
+
+### Dependency Updates (11 packages)
+
+All dependencies reviewed and updated to latest stable versions. `npm audit` reports 0 vulnerabilities.
+
+| Package | From | To | Notes |
+|---------|------|-----|-------|
+| `@modelcontextprotocol/sdk` | `^1.0.0` | `^1.29.0` | Tool Annotations, Elicitation, ReDoS security fix |
+| `zod` | `^3.23.8` | `^4.3.6` | Required `z.record()` API migration (2-arg) |
+| `tesseract.js` | `^5.1.1` | `^7.0.0` | Required `Page` data structure migration |
+| `typescript` | `^5.6.3` | `^6.0.2` | |
+| `dotenv` | `^16.4.5` | `^17.4.2` | |
+| `axios` | `^1.7.3` | `^1.15.0` | Security fixes |
+| `sharp` | `^0.33.5` | `^0.34.5` | |
+| `tsx` | `^4.17.0` | `^4.21.0` | |
+| `@ffprobe-installer/ffprobe` | `^1.4.1` | `^2.1.2` | |
+| `@anthropic-ai/sdk` | `^0.86.1` | `^0.88.0` | |
+| `@types/node` | `^22.0.0` | `^25.6.0` | |
+
+**Code migrations required by dependency updates:**
+- `z.record(z.any())` → `z.record(z.string(), z.any())` in `src/types.ts` and `src/types/core.ts` (Zod 4 API).
+- `worker.recognize()` response parsing updated for Tesseract.js v7 `Page` structure in `src/utils/screenshot-analyzer.ts`.
+
+### Tests
+
+1047 total tests, 0 failures (up from ~990 in v7.1.0).
+
+- 31 new unit tests: tool annotation coverage (6 tests), catalog exports for prompts and resources (13 tests), `markdownForPrompts`/`markdownForResources` formatting (10 tests), `about_mcp_tools` extended modes (2 tests).
+- 25 new unit tests for steering hints.
+- 8 new eval prompts: `about_mcp_tools.prompts`, `about_mcp_tools.resources`, 4 resource-aware prompts, 2 mutation eval prompts.
 - 10 mutation eval prompts extended with `expectedOutputPatterns` for steering hint markers.
-- Version bumped to 7.1.1 across all entry points, configs, catalogs, and documentation.
+
+### Documentation
+
+- **New:** `docs/RESOURCES_AND_PROMPTS.md` (610 lines) — detailed guide for both end users and contributors.
+- **Updated:** `README.md` — added "MCP Resources & Prompts" overview section with reference tables.
+- **Updated:** `docs/TEST_PROMPTS.md` — added sections 14 (MCP Resources), 15 (MCP Prompts), 16 (Tool Annotations) with manual test steps.
+- **Added:** `npm run inspector` script in `package.json` for MCP Inspector debugging.
+- Version bumped to 7.2.1 across all 31 files.
 
 ---
 

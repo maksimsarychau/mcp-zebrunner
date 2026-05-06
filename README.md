@@ -1,6 +1,5 @@
 # Zebrunner MCP Server
-![version](https://img.shields.io/github/package-json/v/maksimsarychau/mcp-zebrunner)
-<!--**Current version:** 🟢 --> <!--VERSION_START--><!--7.1.1--> <!--VERSION_END--> 
+![version](https://img.shields.io/github/package-json/v/maksimsarychau/mcp-zebrunner) 
 
 A **Model Context Protocol (MCP)** server that integrates with **Zebrunner Test Case Management** to help QA teams manage test cases, test suites, and test execution data through AI assistants like Claude.
 
@@ -10,39 +9,54 @@ A **Model Context Protocol (MCP)** server that integrates with **Zebrunner Test 
 >
 > 📚 **Test vs Test Case vs Launch?** See [**Terminology & Glossary**](docs/TERMINOLOGY.md) — definitions, counting rules, and how metrics are calculated.
 
+## 🔥 Why This Server
+
+This is the **extended Zebrunner MCP solution** — built to go well beyond basic test case management and help QA teams work smarter and faster with AI. Compared to the Solvd Zebrunner MCP (~30 tools, CRUD-focused), this server provides **60+ tools** with deep analytics, reporting, and automation capabilities:
+
+- **[Reporting & Analytics](#-reporting--analytics)** — dashboards, pass-rate trends, regression stability reports, runtime efficiency analysis, bug reviews, and weekly delta tracking
+- **[Test Coverage & Analysis](#-test-coverage--analysis)** — coverage gaps, automation readiness scoring, and cross-suite analysis
+- **[Intelligent Rules System](#-intelligent-rules-system)** — 3-tier quality rules with 100+ automated checkpoints for test case validation and improvement
+- **[Screenshot & Video Analysis](#-test-code-generation--validation)** — OCR, image processing, and video analysis powered by sharp, ffmpeg, and tesseract
+- **[MCP Resources & Prompts](#-mcp-resources--prompts-new)** — `@` context injection and `/` workflow commands for streamlined daily operations
+- **[Multi-Transport & Multi-Auth](#-usage-methods)** — STDIO, Streamable HTTP, self-service OAuth, Okta SSO, and token exchange (Modes 1–5)
+
 ## 📑 Table of Contents
 
-1. [🎯 What is this tool?](#-what-is-this-tool)
-2. [🧠 Intelligent Rules System](#-intelligent-rules-system)
-   - 2.1. [What Makes This Tool Special](#what-makes-this-tool-special)
-   - 2.2. [How the Rules Work Together](#how-the-rules-work-together)
-   - 2.3. [Why This Matters](#why-this-matters)
-   - 2.4. [Customizing Rules for Your Project](#customizing-rules-for-your-project)
-3. [📋 Prerequisites](#-prerequisites)
-4. [🚀 Quick Start Guide](#-quick-start-guide)
-5. [🔧 Usage Methods](#-usage-methods)
-   - 5.1. [Method 1: Use with Claude Desktop/Code](#method-1-use-with-claude-desktopcode-recommended)
-   - 5.2. [Method 2: Run as standalone server](#method-2-run-as-standalone-server)
-   - 5.3. [Method 3: Smart URL-Based Analysis 🚀](#method-3-smart-url-based-analysis-)
-6. [🛠️ Available Tools](#️-available-tools)
-   - 6.1. [📋 Test Case Management](#-test-case-management)
-   - 6.2. [🌳 Test Suite Hierarchy & Organization](#-test-suite-hierarchy--organization)
-   - 6.3. [🔧 Mutation Tools (Beta)](#-mutation-tools-beta)
-   - 6.4. [🔍 Test Coverage & Analysis](#-test-coverage--analysis)
-   - 6.5. [🧪 Test Code Generation & Validation](#-test-code-generation--validation)
-   - 6.6. [🚀 Launch & Execution Management](#-launch--execution-management)
-   - 6.7. [📊 Reporting & Analytics](#-reporting--analytics)
-   - 6.8. [🏃 Test Run Management](#-test-run-management)
-   - 6.9. [🎯 Management-Focused Quick Commands](#-management-focused-quick-commands)
-7. [🎭 Role-Specific Prompts & Workflows](#-role-specific-prompts--workflows)
-   - <details><summary>7.1. 👩‍💻 Manual QA Engineers</summary>
+1. [🔥 Why This Server](#-why-this-server)
+2. [🎯 What is this tool?](#-what-is-this-tool)
+3. [🧠 Intelligent Rules System](#-intelligent-rules-system)
+   - 3.1. [What Makes This Tool Special](#what-makes-this-tool-special)
+   - 3.2. [How the Rules Work Together](#how-the-rules-work-together)
+   - 3.3. [Why This Matters](#why-this-matters)
+   - 3.4. [Customizing Rules for Your Project](#customizing-rules-for-your-project)
+4. [📋 Prerequisites](#-prerequisites)
+5. [🚀 Quick Start Guide](#-quick-start-guide)
+6. [🔧 Usage Methods](#-usage-methods)
+   - 6.1. [Method 1: Use with Claude Desktop/Code](#method-1-use-with-claude-desktopcode-recommended)
+   - 6.2. [Method 2: Run as standalone server](#method-2-run-as-standalone-server)
+   - 6.3. [Method 3: Smart URL-Based Analysis 🚀](#method-3-smart-url-based-analysis-)
+7. [🛠️ Available Tools](#️-available-tools)
+   - 7.1. [📋 Test Case Management](#-test-case-management)
+   - 7.2. [🌳 Test Suite Hierarchy & Organization](#-test-suite-hierarchy--organization)
+   - 7.3. [🔧 Mutation Tools (Beta)](#-mutation-tools-beta)
+   - 7.4. [🔍 Test Coverage & Analysis](#-test-coverage--analysis)
+   - 7.5. [🧪 Test Code Generation & Validation](#-test-code-generation--validation)
+   - 7.6. [🚀 Launch & Execution Management](#-launch--execution-management)
+   - 7.7. [📊 Reporting & Analytics](#-reporting--analytics)
+   - 7.8. [🏃 Test Run Management](#-test-run-management)
+   - 7.9. [🎯 Management-Focused Quick Commands](#-management-focused-quick-commands)
+8. [📎 MCP Resources & Prompts (NEW)](#-mcp-resources--prompts-new)
+   - 8.1. [Resources — `@` Context Injection](#resources--context-injection)
+   - 8.2. [Prompts — `/` Workflow Commands](#prompts---workflow-commands)
+9. [🎭 Role-Specific Prompts & Workflows](#-role-specific-prompts--workflows)
+   - <details><summary>9.1. 👩‍💻 Manual QA Engineers</summary>
      
      - [Daily Test Case Review](#daily-test-case-review)
      - [Test Case Creation & Improvement](#test-case-creation--improvement)
      - [Test Suite Organization](#test-suite-organization)
      - [Coverage Analysis](#coverage-analysis)
      </details>
-   - <details><summary>7.2. 🤖 Test Automation Engineers & SDETs</summary>
+   - <details><summary>9.2. 🤖 Test Automation Engineers & SDETs</summary>
      
      - [Automation Readiness Assessment](#automation-readiness-assessment)
      - [Test Code Generation](#test-code-generation-1)
@@ -50,14 +64,14 @@ A **Model Context Protocol (MCP)** server that integrates with **Zebrunner Test 
      - [Framework Integration](#framework-integration)
      - [Batch Automation Analysis](#batch-automation-analysis)
      </details>
-   - <details><summary>7.3. 👨‍💻 Developers</summary>
+   - <details><summary>9.3. 👨‍💻 Developers</summary>
      
      - [Test Case Understanding](#test-case-understanding)
      - [Implementation Validation](#implementation-validation)
      - [Code Generation for Testing](#code-generation-for-testing)
      - [Bug Analysis](#bug-analysis)
      </details>
-   - <details><summary>7.4. 👔 Test Managers & Team Leads</summary>
+   - <details><summary>9.4. 👔 Test Managers & Team Leads</summary>
      
      - [Team Quality Metrics](#team-quality-metrics)
      - [Test Suite Analysis](#test-suite-analysis)
@@ -65,7 +79,7 @@ A **Model Context Protocol (MCP)** server that integrates with **Zebrunner Test 
      - [Process Improvement](#process-improvement)
      - [Reporting & Stakeholder Communication](#reporting--stakeholder-communication)
      </details>
-   - <details><summary>7.5. 🏢 Project Owners & Product Managers</summary>
+   - <details><summary>9.5. 🏢 Project Owners & Product Managers</summary>
      
      - [Project Health Overview](#project-health-overview)
      - [Feature Testing Status](#feature-testing-status)
@@ -73,16 +87,16 @@ A **Model Context Protocol (MCP)** server that integrates with **Zebrunner Test 
      - [Risk Assessment](#risk-assessment)
      - [Planning & Resource Allocation](#planning--resource-allocation)
      </details>
-8. [📖 Output Formats](#-output-formats)
-9. [⚙️ Configuration Options](#️-configuration-options)
-10. [🧪 Testing Your Setup](#-testing-your-setup)
-11. [🔍 Troubleshooting](#-troubleshooting)
-12. [🎯 Example Workflows](#-example-workflows)
-13. [🔧 Advanced Features](#-advanced-features)
-14. [📚 Additional Documentation](#-additional-documentation)
-15. [🤝 Contributing](#-contributing)
-16. [📄 License](#-license)
-17. [🎉 You're Ready!](#-youre-ready)
+10. [📖 Output Formats](#-output-formats)
+11. [⚙️ Configuration Options](#️-configuration-options)
+12. [🧪 Testing Your Setup](#-testing-your-setup)
+13. [🔍 Troubleshooting](#-troubleshooting)
+14. [🎯 Example Workflows](#-example-workflows)
+15. [🔧 Advanced Features](#-advanced-features)
+16. [📚 Additional Documentation](#-additional-documentation)
+17. [🤝 Contributing](#-contributing)
+18. [📄 License](#-license)
+19. [🎉 You're Ready!](#-youre-ready)
 
 ---
 
@@ -526,7 +540,7 @@ Once connected, you can use these tools through natural language in your AI assi
 
 > **Safety Model:** Every mutation tool follows a **two-call confirmation gate**. The first call returns a preview; only after user approval should `confirm: true` be passed to execute the mutation. All mutations are audit-logged to `~/.mcp-zebrunner-audit.jsonl`. Use `dry_run: true` for raw payload inspection.
 >
-> **Next-step steering (v7.1.1):** After every successful mutation, the server appends a `Tip:` block guiding the LLM to the most useful next action (e.g., "validate quality", "publish the draft", "populate the test run"). Hints are conditional -- they are suppressed when redundant. For example, the quality-check hint is omitted if `review: true` was already used. Created test cases are always forced to `draft=true`, and the hint always reminds the LLM to publish via `update_test_case`. This approach is inspired by the [Strands Agents steering pattern](https://strandsagents.com/blog/steering-accuracy-beats-prompts-workflows/) and delivers just-in-time guidance without bloating system prompts.
+> **Next-step steering (v7.2.2):** After every successful mutation, the server appends a `Tip:` block guiding the LLM to the most useful next action (e.g., "validate quality", "publish the draft", "populate the test run"). Hints are conditional -- they are suppressed when redundant. For example, the quality-check hint is omitted if `review: true` was already used. Created test cases are always forced to `draft=true`, and the hint always reminds the LLM to publish via `update_test_case`. This approach is inspired by the [Strands Agents steering pattern](https://strandsagents.com/blog/steering-accuracy-beats-prompts-workflows/) and delivers just-in-time guidance without bloating system prompts.
 
 #### **Suite Mutations**
 | Tool | Description | Example Usage | Best For |
@@ -660,7 +674,7 @@ Once connected, you can use these tools through natural language in your AI assi
 |------|-------------|---------------|----------|
 | `get_available_projects` | Discover all accessible projects | `"What projects can I access?"` | All roles |
 | `test_reporting_connection` | Test API connectivity | `"Test my connection to Zebrunner"` | All roles |
-| `about_mcp_tools` | Summarize all tools or show detailed info for one tool with examples, role value, and approximate token usage | `"Using Zebrunner MCP make a summary of all tools with examples"` | All roles |
+| `about_mcp_tools` | Summarize tools, prompts, resources, or show session metrics. Modes: summary, tool, prompts, resources, metrics | `"Using Zebrunner MCP make a summary of all tools with examples"` or `"Show me tool usage metrics for this session"` | All roles |
 
 ### 🏃 Test Run Management
 
@@ -676,6 +690,68 @@ Once connected, you can use these tools through natural language in your AI assi
 |------|-------------|---------------|----------|
 | `get_test_run_result_statuses` | Available result statuses | `"What result statuses are configured for project MCP?"` | QA, SDETs |
 | `get_test_run_configuration_groups` | Configuration options | `"Show me configuration groups for project MCP"` | SDETs, Leads |
+
+## 📎 MCP Resources & Prompts (NEW)
+
+> **Full guide:** [docs/RESOURCES_AND_PROMPTS.md](docs/RESOURCES_AND_PROMPTS.md) — detailed usage, examples, reference tables, and contributor guide.
+
+In addition to 60 tools, the server now provides **13 resources** and **14 prompts** that improve discoverability and automate complex workflows.
+
+### Resources — `@` Context Injection
+
+Resources are read-only reference data you attach to your conversation via the `@` menu. They help the AI use exact parameter values instead of guessing.
+
+| Resource | What it provides |
+|----------|-----------------|
+| `@zebrunner://reports/types` | 6 report types with params, defaults, and examples |
+| `@zebrunner://periods` | 12 valid time period values (case-sensitive) |
+| `@zebrunner://charts` | Chart formats, types, and 17 supported tools |
+| `@zebrunner://formats` | 5 output format families with valid values |
+| `@zebrunner://projects` | All accessible projects with keys and IDs |
+| `@zebrunner://projects/{key}/suites` | Root test suites for a project |
+| `@zebrunner://projects/{key}/suite-hierarchy` | Full suite tree with parent-child relationships |
+| `@zebrunner://projects/{key}/automation-states` | Automation state names and IDs |
+| `@zebrunner://projects/{key}/priorities` | Priority levels and IDs |
+| `@zebrunner://projects/{key}/milestones` | Active and completed milestones |
+| `@zebrunner://projects/{key}/result-statuses` | Test run result statuses |
+| `@zebrunner://projects/{key}/configuration-groups` | Test run config groups and options |
+| `@zebrunner://projects/{key}/fields` | System and custom field definitions |
+
+**Quick example:**
+```
+@ zebrunner://reports/types
+@ zebrunner://projects
+Generate an executive dashboard for all starred projects.
+```
+
+### Prompts — `/` Workflow Commands
+
+Prompts are pre-built workflow instructions triggered via the `/` command menu. Each prompt guides the AI through a tested multi-tool orchestration.
+
+| Prompt | Parameters | What it does |
+|--------|-----------|--------------|
+| `/pass-rate` | `projects` | Cross-platform pass rate with target comparison |
+| `/runtime-efficiency` | `projects` | Runtime metrics with milestone delta |
+| `/automation-coverage` | `projects` | 7-metric coverage + automation intake rate |
+| `/executive-dashboard` | `projects` | 5-section standup-ready dashboard |
+| `/release-readiness` | `project`, `milestone?` | Go/No-Go assessment with evidence |
+| `/suite-coverage` | `projects` | Per-suite coverage tables (TOTAL + TOTAL REGRESSION) |
+| `/review-test-case` | `case_key` | Validate + improve a test case |
+| `/launch-triage` | `project` | Post-regression failure analysis |
+| `/flaky-review` | `project` | Flaky test detection + stabilization plan |
+| `/find-duplicates` | `project`, `suite_id?` | Structural + semantic duplicate analysis |
+| `/daily-qa-standup` | `projects` | Daily standup summary with action items |
+| `/automation-gaps` | `projects` | Automation backlog prioritization |
+| `/project-overview` | `project` | Comprehensive project health card |
+| `/session-metrics` | *(none)* | Show tool usage stats for the current session |
+
+**Quick example:**
+```
+/executive-dashboard
+  projects: android,ios,web
+```
+
+[⬆️ Back to top](#-table-of-contents)
 
 ## 🎯 Management-Focused Quick Commands
 
@@ -1018,10 +1094,17 @@ Example:
 ### Environment Variables
 
 ```env
-# Required
+# Required (STDIO mode) / Optional (HTTP selfauth mode — see below)
 ZEBRUNNER_URL=https://your-instance.zebrunner.com/api/public/v1
 ZEBRUNNER_LOGIN=your.email@company.com
 ZEBRUNNER_TOKEN=your_api_token
+
+# Optional - HTTP Authentication Mode
+MCP_AUTH_MODE=selfauth             # Enable per-user credential form (Mode 3)
+MCP_TRANSPORT=http                 # Use HTTP transport
+PORT=3000                          # HTTP server port
+TOKEN_STORE_KEY=your-secret        # Encryption key for stored credentials
+TOKEN_STORE_PATH=./tokens.enc      # Path for encrypted credential store
 
 # Optional - Basic Settings
 DEBUG=false                        # Enable detailed logging (default: false)
@@ -1035,6 +1118,15 @@ MIN_COVERAGE_THRESHOLD=70         # Minimum coverage percentage (optional)
 REQUIRE_UI_VALIDATION=true        # Require UI validation in tests (optional)
 REQUIRE_API_VALIDATION=true       # Require API validation in tests (optional)
 ```
+
+### Per-User Zebrunner URL (v8.1.0)
+
+When running in HTTP mode with `MCP_AUTH_MODE=selfauth` and **without** setting `ZEBRUNNER_URL`, each user provides their own Zebrunner instance URL on the login form. This enables multi-tenant hosting where a single MCP server serves users across different Zebrunner organizations.
+
+- Login form shows a **Zebrunner URL** field (e.g., `https://mfp.zebrunner.com`)
+- Users can update their URL, credentials, or disconnect at `/settings`
+- Per-user URLs are stored encrypted alongside credentials in the token store
+- When `ZEBRUNNER_URL` IS set as an environment variable, the URL field is hidden and the env value is used globally (existing behavior, no change)
 
 ### Rules System Configuration
 
@@ -1257,7 +1349,8 @@ Leverage intelligent validation:
 ## 📚 Additional Documentation
 
 ### 📖 Tool References
-- **[TOOLS_CATALOG.md](TOOLS_CATALOG.md)** - 🆕 **Complete catalog of all 55+ tools with natural language examples**
+- **[TOOLS_CATALOG.md](TOOLS_CATALOG.md)** - 🆕 **Complete catalog of all 60 tools with natural language examples**
+- **[docs/RESOURCES_AND_PROMPTS.md](docs/RESOURCES_AND_PROMPTS.md)** - 📎 **MCP Resources & Prompts — full usage guide, reference tables, and contributor guide**
 - **[INSTALL-GUIDE.md](INSTALL-GUIDE.md)** - 📥 **Step-by-step installation and setup guide**
 
 ### 🧠 Intelligent Rules System

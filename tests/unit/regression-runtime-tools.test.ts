@@ -352,7 +352,7 @@ describe('Regression Runtime Tools Unit Tests', () => {
     it('should accept all filter combinations', () => {
       const combinations = [
         { milestone: 'develop-49771' },
-        { build: 'myfitnesspal-develop-49771-qaRelease.apk' },
+        { build: 'app-develop-49771-qaRelease.apk' },
         { suite_names: ['Android-Social-AA', 'Android-Core'] },
         { launch_ids: [127644] },
         { milestone: 'develop-49771', suite_names: ['Android-Social-AA'] }

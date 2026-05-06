@@ -57,11 +57,14 @@ export async function generateQualityDashboardReport(
 
   const projectContexts = await ctx.resolveProjects(projects);
 
-  const allData = await Promise.all(
+  const allResults = await Promise.all(
     projectContexts.map(pCtx =>
       fetchProjectData(ctx, pCtx, period, periodDays, milestone, top_bugs_limit, enabledSections),
     ),
   );
+
+  const allData = allResults.map(r => r.data);
+  const allWarnings = allResults.flatMap(r => r.warnings);
 
   const dashboardSections: DashboardSection[] = [];
 
@@ -104,6 +107,12 @@ export async function generateQualityDashboardReport(
   const htmlDashboard = generateDashboardHtml(dashboardData);
 
   const contentBlocks: any[] = [];
+  if (allWarnings.length > 0) {
+    contentBlocks.push({
+      type: "text" as const,
+      text: `### Data Fetch Warnings\n${allWarnings.join('\n')}\n\n---\n`,
+    });
+  }
   contentBlocks.push({
     type: "text" as const,
     text: buildMarkdownSummary(dashboardData, allData, mergedTargets, ctx),
@@ -134,6 +143,11 @@ export async function generateQualityDashboardReport(
 
 // ── Data Fetching ────────────────────────────────────────────────────────
 
+interface ProjectDataResult {
+  data: ProjectDashboardData;
+  warnings: string[];
+}
+
 async function fetchProjectData(
   ctx: ReportContext,
   pCtx: ProjectContext,
@@ -142,41 +156,49 @@ async function fetchProjectData(
   milestone: string | undefined,
   bugsLimit: number,
   sections: Set<string>,
-): Promise<ProjectDashboardData> {
+): Promise<ProjectDataResult> {
   const fetchers: Promise<any>[] = [];
   const keys: string[] = [];
 
   if (sections.has('pass_rate')) {
     keys.push('passRate');
-    fetchers.push(ctx.fetchPassRate(pCtx, period, milestone).catch(() => null));
+    fetchers.push(ctx.fetchPassRate(pCtx, period, milestone));
   }
   if (sections.has('runtime')) {
     keys.push('runtime');
-    fetchers.push(ctx.fetchRuntime(pCtx, milestone).catch(() => null));
+    fetchers.push(ctx.fetchRuntime(pCtx, milestone));
   }
   if (sections.has('coverage')) {
     keys.push('coverage');
-    fetchers.push(ctx.fetchCoverage(pCtx).catch(() => null));
+    fetchers.push(ctx.fetchCoverage(pCtx));
   }
   if (sections.has('bugs')) {
     keys.push('bugs');
-    fetchers.push(ctx.fetchBugs(pCtx, period, bugsLimit, milestone).catch(() => null));
+    fetchers.push(ctx.fetchBugs(pCtx, period, bugsLimit, milestone));
   }
   if (sections.has('milestones')) {
     keys.push('milestones');
-    fetchers.push(ctx.fetchMilestones(pCtx, periodDays).catch(() => null));
+    fetchers.push(ctx.fetchMilestones(pCtx, periodDays));
   }
   if (sections.has('flaky')) {
     keys.push('flaky');
-    fetchers.push(ctx.fetchFlaky(pCtx, periodDays, milestone).catch(() => null));
+    fetchers.push(ctx.fetchFlaky(pCtx, periodDays, milestone));
   }
 
-  const results = await Promise.all(fetchers);
+  const results = await Promise.allSettled(fetchers);
   const data: ProjectDashboardData = {};
-  keys.forEach((k, i) => {
-    if (results[i] !== null) (data as any)[k] = results[i];
+  const warnings: string[] = [];
+
+  results.forEach((r, i) => {
+    if (r.status === 'fulfilled') {
+      (data as any)[keys[i]] = r.value;
+    } else {
+      const reason = r.reason instanceof Error ? r.reason.message : String(r.reason);
+      warnings.push(`⚠️ [${pCtx.alias}/${keys[i]}] Failed: ${reason}`);
+    }
   });
-  return data;
+
+  return { data, warnings };
 }
 
 // ── Section Builders ────────────────────────────────────────────────────

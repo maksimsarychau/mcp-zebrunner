@@ -67,18 +67,18 @@ export class SemanticDuplicateAnalyzer extends TestCaseDuplicateAnalyzer {
     llmAnalysisFunction?: (prompt: string) => Promise<string>
   ): Promise<SemanticDuplicateAnalysisResult> {
     
-    console.log(`🧠 Starting semantic analysis of ${testCases.length} test cases...`);
+    console.error(`🧠 Starting semantic analysis of ${testCases.length} test cases...`);
     
     // Phase 1: Extract and normalize all steps
     const allSteps = this.extractAllSteps(testCases);
-    console.log(`📝 Extracted ${allSteps.length} total steps`);
+    console.error(`📝 Extracted ${allSteps.length} total steps`);
     
     // Phase 2: Cluster similar steps (using LLM if available)
     const stepClusters = this.options.useStepClustering 
       ? await this.clusterStepsSemantically(allSteps, llmAnalysisFunction)
       : this.clusterStepsBasic(allSteps);
     
-    console.log(`🗂️ Created ${stepClusters.length} step clusters`);
+    console.error(`🗂️ Created ${stepClusters.length} step clusters`);
     
     // Phase 3: Represent test cases in step-cluster space
     const testCaseVectors = this.createTestCaseVectors(testCases, stepClusters);
@@ -154,7 +154,7 @@ export class SemanticDuplicateAnalyzer extends TestCaseDuplicateAnalyzer {
     const uniqueSteps = [...new Set(stepTexts)];
     
     if (uniqueSteps.length > 100) {
-      console.log(`⚠️ Large number of unique steps (${uniqueSteps.length}), using basic clustering`);
+      console.error(`⚠️ Large number of unique steps (${uniqueSteps.length}), using basic clustering`);
       return this.clusterStepsBasic(allSteps);
     }
 
@@ -200,8 +200,13 @@ Threshold: Group steps that are at least ${Math.round(this.options.stepClusterin
       }));
       
     } catch (error) {
-      console.log(`⚠️ LLM clustering failed, falling back to basic clustering: ${error}`);
-      return this.clusterStepsBasic(allSteps);
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error(`⚠️ LLM clustering failed, falling back to basic text-similarity clustering: ${msg}`);
+      const basicClusters = this.clusterStepsBasic(allSteps);
+      basicClusters.forEach(c => {
+        c.semanticSummary = `[Basic fallback — LLM unavailable: ${msg}] ${c.semanticSummary}`;
+      });
+      return basicClusters;
     }
   }
 
@@ -630,7 +635,9 @@ Focus on identifying:
         insights.commonStepPatterns = parsed.commonStepPatterns || insights.commonStepPatterns;
         
       } catch (error) {
-        console.log(`⚠️ LLM insights generation failed: ${error}`);
+        const msg = error instanceof Error ? error.message : String(error);
+        console.error(`⚠️ LLM insights generation failed: ${msg}`);
+        insights.automationOpportunities.push(`⚠️ LLM insight generation failed: ${msg}`);
       }
     }
     

@@ -1146,7 +1146,7 @@ export class ZebrunnerReportingToolHandlers {
 
         if (buildNumber) {
           if (debugEnabled) {
-            console.log(`[WeeklyReport] Build match via buildNumber: ${item.id} "${item.name}" buildNumber="${item.buildNumber}" query="${buildToken}"`);
+            console.error(`[WeeklyReport] Build match via buildNumber: ${item.id} "${item.name}" buildNumber="${item.buildNumber}" query="${buildToken}"`);
           }
           launches.push({
             suiteName: item.name,
@@ -1158,7 +1158,7 @@ export class ZebrunnerReportingToolHandlers {
         }
 
         if (debugEnabled) {
-          console.log(`[WeeklyReport] Build check via launch.build (no buildNumber): ${item.id} "${item.name}" query="${buildToken}"`);
+          console.error(`[WeeklyReport] Build check via launch.build (no buildNumber): ${item.id} "${item.name}" query="${buildToken}"`);
         }
         const launch = await this.reportingClient.getLaunch(item.id, projectId);
         const launchBuild = launch.build?.toLowerCase();
@@ -1171,7 +1171,7 @@ export class ZebrunnerReportingToolHandlers {
         }
 
         if (debugEnabled) {
-          console.log(`[WeeklyReport] Build match via launch.build: ${item.id} "${launch.name}" build="${launch.build}" query="${buildToken}"`);
+          console.error(`[WeeklyReport] Build match via launch.build: ${item.id} "${launch.name}" build="${launch.build}" query="${buildToken}"`);
         }
         const suiteName = launch.testSuite?.name || launch.name || `Launch ${launch.id}`;
         launches.push({
@@ -1789,16 +1789,21 @@ export class ZebrunnerReportingToolHandlers {
         ? this.extractScreenshots(logsAndScreenshots.items)
         : [];
 
-      // Find similar failures if requested
       let similarFailures: any[] = [];
+      let similarFailuresWarning: string | null = null;
       if (analyzeSimilarFailures && testRun.message) {
-        similarFailures = await this.findSimilarFailures(
-          testRunId,
-          resolvedProjectId!,
-          testRun.message,
-          testRun.testClass || '',
-          testId
-        );
+        try {
+          similarFailures = await this.findSimilarFailures(
+            testRunId,
+            resolvedProjectId!,
+            testRun.message,
+            testRun.testClass || '',
+            testId
+          );
+        } catch (error) {
+          similarFailuresWarning = `⚠️ Could not load similar failures: ${error instanceof Error ? error.message : error}`;
+          console.error(similarFailuresWarning);
+        }
       }
 
       // Classify the error
@@ -2045,8 +2050,7 @@ export class ZebrunnerReportingToolHandlers {
 
       return similar;
     } catch (error) {
-      console.error('Error finding similar failures:', error);
-      return [];
+      throw new Error(`Failed to find similar failures: ${error instanceof Error ? error.message : error}`);
     }
   }
 
@@ -2333,8 +2337,12 @@ export class ZebrunnerReportingToolHandlers {
     report += `- **Confidence:** ${errorClassification.confidence}\n`;
     report += `- **Stability:** ${stability}%\n`;
     
-    // Get device/OS info from sessions (FAILED first) for Executive Summary
-    const sessionsForSummary = await this.getAllSessionsWithArtifacts(testRunId, testId, projectId);
+    let sessionsForSummary: Awaited<ReturnType<typeof this.getAllSessionsWithArtifacts>> = [];
+    try {
+      sessionsForSummary = await this.getAllSessionsWithArtifacts(testRunId, testId, projectId);
+    } catch (error) {
+      report += `- **Sessions:** ⚠️ Failed to load (${error instanceof Error ? error.message : error})\n`;
+    }
     if (sessionsForSummary.length > 0) {
       const failedSession = sessionsForSummary.find(s => s.status === 'FAILED' || s.status === 'ABORTED');
       const primarySession = failedSession || sessionsForSummary[0];
@@ -2450,9 +2458,12 @@ export class ZebrunnerReportingToolHandlers {
     report += `- **Finished:** ${testRun.finishTime ? new Date(testRun.finishTime).toISOString() : 'N/A'}\n`;
     report += `- **Owner:** ${testRun.owner || 'Unknown'}\n\n`;
 
-    // Test Execution Sessions (Videos & Screenshots)
-    // Sessions are sorted: FAILED first, then newest within each status
-    const sessions = await this.getAllSessionsWithArtifacts(testRunId, testId, projectId);
+    let sessions: Awaited<ReturnType<typeof this.getAllSessionsWithArtifacts>> = [];
+    try {
+      sessions = await this.getAllSessionsWithArtifacts(testRunId, testId, projectId);
+    } catch (error) {
+      report += `## ⚠️ Test Execution Sessions\n\nFailed to load sessions: ${error instanceof Error ? error.message : error}\n\n`;
+    }
     if (sessions.length > 0) {
       report += `## 📹 Test Execution Sessions\n\n`;
       report += `**Total Sessions:** ${sessions.length}`;
@@ -2797,23 +2808,25 @@ export class ZebrunnerReportingToolHandlers {
       report += `**Test Cases:** ⚠️ Not linked to test case\n`;
     }
     
-    // Get sessions for device/OS info (FAILED sessions first)
-    const sessions = await this.getAllSessionsWithArtifacts(testRunId, testId, projectId);
-    if (sessions.length > 0) {
-      // Show device/OS info from FAILED session first, then others
-      const failedSession = sessions.find(s => s.status === 'FAILED' || s.status === 'ABORTED');
-      const sessionToShow = failedSession || sessions[0];
+    let sessionsForDevice: Awaited<ReturnType<typeof this.getAllSessionsWithArtifacts>> = [];
+    try {
+      sessionsForDevice = await this.getAllSessionsWithArtifacts(testRunId, testId, projectId);
+    } catch (error) {
+      report += `**Sessions:** ⚠️ Failed to load (${error instanceof Error ? error.message : error})\n`;
+    }
+    if (sessionsForDevice.length > 0) {
+      const failedSession = sessionsForDevice.find(s => s.status === 'FAILED' || s.status === 'ABORTED');
+      const sessionToShow = failedSession || sessionsForDevice[0];
       
       report += `**Device:** ${sessionToShow.device}\n`;
       report += `**Platform:** ${sessionToShow.platform}\n`;
       
-      // If there are multiple sessions with different devices, note that
-      if (sessions.length > 1) {
-        const uniqueDevices = [...new Set(sessions.map(s => s.device))];
-        const uniquePlatforms = [...new Set(sessions.map(s => s.platform))];
+      if (sessionsForDevice.length > 1) {
+        const uniqueDevices = [...new Set(sessionsForDevice.map(s => s.device))];
+        const uniquePlatforms = [...new Set(sessionsForDevice.map(s => s.platform))];
         if (uniqueDevices.length > 1 || uniquePlatforms.length > 1) {
           report += `**Other Environments:** `;
-          const otherSessions = sessions.filter(s => s.sessionId !== sessionToShow.sessionId);
+          const otherSessions = sessionsForDevice.filter(s => s.sessionId !== sessionToShow.sessionId);
           const envs = otherSessions.map(s => `${s.device} (${s.platform})`).slice(0, 2);
           report += envs.join(', ');
           if (otherSessions.length > 2) {
@@ -2844,24 +2857,20 @@ export class ZebrunnerReportingToolHandlers {
       }
     }
 
-    // Session artifacts (videos and screenshots)
-    if (sessions.length > 0) {
-      const latestSession = sessions[0];
+    if (sessionsForDevice.length > 0) {
+      const latestSession = sessionsForDevice[0];
       
-      // Video link from latest session
       if (latestSession.videos.length > 0) {
         report += `**🎥 Video:** [Watch Test Execution](${latestSession.videos[0].url})\n`;
       }
       
-      // Last screenshot from latest session
       if (latestSession.screenshots.length > 0) {
         const lastScreenshot = latestSession.screenshots[latestSession.screenshots.length - 1];
         report += `**📸 Screenshot:** [View Last Screenshot](${lastScreenshot.url})\n`;
       }
       
-      // Show session count if multiple
-      if (sessions.length > 1) {
-        report += `**📹 Sessions:** ${sessions.length} test executions recorded\n`;
+      if (sessionsForDevice.length > 1) {
+        report += `**📹 Sessions:** ${sessionsForDevice.length} test executions recorded\n`;
       }
     }
 
@@ -3299,10 +3308,7 @@ export class ZebrunnerReportingToolHandlers {
       
       return processedSessions;
     } catch (error) {
-      if (this.reportingClient['config'].debug) {
-        console.warn(`[getAllSessionsWithArtifacts] Failed to get sessions: ${error}`);
-      }
-      return [];
+      throw new Error(`Failed to get sessions with artifacts: ${error instanceof Error ? error.message : error}`);
     }
   }
 
@@ -3327,9 +3333,7 @@ export class ZebrunnerReportingToolHandlers {
       
       return null;
     } catch (error) {
-      if (this.reportingClient['config'].debug) {
-        console.warn(`[getVideoUrlForTest] Failed to get video URL: ${error}`);
-      }
+      console.error(`⚠️ [getVideoUrlForTest] Failed to get video URL: ${error instanceof Error ? error.message : error}`);
       return null;
     }
   }
@@ -3563,27 +3567,30 @@ export class ZebrunnerReportingToolHandlers {
       jiraContent += `|Retries|${jiraEff.sessionCount} sessions (total: ${Math.floor(wallClockDur / 60)}m ${wallClockDur % 60}s, longest: ${Math.floor(jiraEff.longestSessionDurationSeconds / 60)}m ${jiraEff.longestSessionDurationSeconds % 60}s)|\n`;
     }
     
-    // Get device/OS info from sessions (FAILED first)
-    const sessions = await this.getAllSessionsWithArtifacts(testRunId, testId, projectId);
-    if (sessions.length > 0) {
-      const failedSession = sessions.find(s => s.status === 'FAILED' || s.status === 'ABORTED');
-      const sessionToShow = failedSession || sessions[0];
+    let jiraSessions: Awaited<ReturnType<typeof this.getAllSessionsWithArtifacts>> = [];
+    try {
+      jiraSessions = await this.getAllSessionsWithArtifacts(testRunId, testId, projectId);
+    } catch (error) {
+      jiraContent += `|Sessions|⚠️ Failed to load: ${error instanceof Error ? error.message : error}|\n`;
+    }
+    if (jiraSessions.length > 0) {
+      const failedSession = jiraSessions.find(s => s.status === 'FAILED' || s.status === 'ABORTED');
+      const sessionToShow = failedSession || jiraSessions[0];
       
       jiraContent += `|Device|${sessionToShow.device}|\n`;
       jiraContent += `|Platform/OS|${sessionToShow.platform}|\n`;
       
-      // If there are multiple environments, add them too
-      if (sessions.length > 1) {
-        const uniqueEnvs = [...new Set(sessions.map(s => `${s.device} (${s.platform})`))];
+      if (jiraSessions.length > 1) {
+        const uniqueEnvs = [...new Set(jiraSessions.map(s => `${s.device} (${s.platform})`))];
         if (uniqueEnvs.length > 1) {
-          const otherEnvs = sessions
+          const otherEnvs = jiraSessions
             .filter(s => s.sessionId !== sessionToShow.sessionId)
             .map(s => `${s.device} (${s.platform})`)
             .slice(0, 3)
             .join(', ');
           jiraContent += `|Other Environments|${otherEnvs}`;
-          if (sessions.length > 4) {
-            jiraContent += `, +${sessions.length - 4} more`;
+          if (jiraSessions.length > 4) {
+            jiraContent += `, +${jiraSessions.length - 4} more`;
           }
           jiraContent += `|\n`;
         }
@@ -4758,11 +4765,15 @@ export class ZebrunnerReportingToolHandlers {
               ? test.errorMsg.substring(0, 80) 
               : (test.rootCause !== 'Unknown' ? test.rootCause.substring(0, 80) : 'Unknown error');
             
-            // Get video URL for evidence
-            const sessions = await this.getAllSessionsWithArtifacts(testRunId, test.testId, resolvedProjectId!);
-            const videoLink = sessions.length > 0 && sessions[0].videos.length > 0 
-              ? `[Video](${sessions[0].videos[0].url})` 
-              : 'N/A';
+            let videoLink = 'N/A';
+            try {
+              const testSessions = await this.getAllSessionsWithArtifacts(testRunId, test.testId, resolvedProjectId!);
+              if (testSessions.length > 0 && testSessions[0].videos.length > 0) {
+                videoLink = `[Video](${testSessions[0].videos[0].url})`;
+              }
+            } catch {
+              videoLink = '⚠️ Error';
+            }
             
             report += `| [${testNameDisplay}](${testUrl}) | ${test.stability}% | ${issueShort} | ${videoLink} |\n`;
           }
@@ -4799,11 +4810,15 @@ export class ZebrunnerReportingToolHandlers {
               ? test.errorMsg.substring(0, 80) 
               : (test.rootCause !== 'Unknown' ? test.rootCause.substring(0, 80) : 'Unknown error');
             
-            // Get video URL for evidence
-            const sessions = await this.getAllSessionsWithArtifacts(testRunId, test.testId, resolvedProjectId!);
-            const videoLink = sessions.length > 0 && sessions[0].videos.length > 0 
-              ? `[Video](${sessions[0].videos[0].url})` 
-              : 'N/A';
+            let videoLink = 'N/A';
+            try {
+              const testSessions = await this.getAllSessionsWithArtifacts(testRunId, test.testId, resolvedProjectId!);
+              if (testSessions.length > 0 && testSessions[0].videos.length > 0) {
+                videoLink = `[Video](${testSessions[0].videos[0].url})`;
+              }
+            } catch {
+              videoLink = '⚠️ Error';
+            }
             
             report += `| [${testNameDisplay}](${testUrl}) | ${test.stability}% | ${issueShort} | ${videoLink} |\n`;
           }

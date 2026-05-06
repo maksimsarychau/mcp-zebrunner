@@ -1038,17 +1038,18 @@ Weekly stability report for project MCP using:
 
 ### `about_mcp_tools`
 
-**Description:** Discover and understand Zebrunner MCP capabilities. Supports an all-tools summary and deep details for a single tool, with example prompts, role-based value, and approximate token usage.
+**Description:** Discover and understand Zebrunner MCP capabilities — tools, prompts, resources, and session metrics.
 
 **Key Features:**
-- Summary mode for all registered tools
+- Summary mode for all registered tools (with prompt/resource counts)
 - Detail mode for a single tool by name
-- Example prompts collected from existing catalog content
-- Role-based value summary (QA, automation, development, management, leadership)
-- Static approximate token usage ranges per tool
+- Prompts catalog: all `/` workflow commands grouped by category
+- Resources catalog: all `@` reference data (static and template)
+- Metrics mode: per-tool session stats (call count, durations, response size, errors)
+- MCP version displayed in all mode outputs
 
 **Parameters:**
-- `mode`: `summary` | `tool` (default: `summary`)
+- `mode`: `summary` | `tool` | `prompts` | `resources` | `metrics` (default: `summary`)
 - `tool_name`: required when `mode = tool`
 - `include_examples`: boolean (default: true)
 - `include_token_estimates`: boolean (default: true)
@@ -1058,6 +1059,9 @@ Weekly stability report for project MCP using:
 - "Using Zebrunner MCP make a summary of all tools with examples"
 - "Using Zebrunner MCP give info for tool analyze_test_execution_video with examples"
 - "Show detailed info for get_bug_review including token usage estimation"
+- "What prompts are available in Zebrunner MCP?"
+- "What MCP resources are available?"
+- "Show me tool usage metrics for this session"
 
 ---
 

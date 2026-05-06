@@ -46,7 +46,7 @@ export class VideoAnalyzer {
     
     try {
       if (this.debug) {
-        console.log('[VideoAnalyzer] Starting video analysis for test:', params.testId);
+        console.error('[VideoAnalyzer] Starting video analysis for test:', params.testId);
       }
 
       // Step 1: Fetch test details and determine project
@@ -58,7 +58,7 @@ export class VideoAnalyzer {
       );
 
       if (this.debug) {
-        console.log(`[VideoAnalyzer] Test: ${test.name}, Project: ${projectKey} (${projectId})`);
+        console.error(`[VideoAnalyzer] Test: ${test.name}, Project: ${projectKey} (${projectId})`);
       }
 
       // Step 2: Get video URL and download video
@@ -85,7 +85,7 @@ export class VideoAnalyzer {
       videoPath = downloadResult.localPath;
 
       if (this.debug) {
-        console.log(`[VideoAnalyzer] Video downloaded: ${downloadResult.duration}s, ${downloadResult.resolution}`);
+        console.error(`[VideoAnalyzer] Video downloaded: ${downloadResult.duration}s, ${downloadResult.resolution}`);
       }
 
       // Step 3: Determine frame extraction strategy based on video duration
@@ -167,7 +167,7 @@ export class VideoAnalyzer {
       }
 
       if (this.debug) {
-        console.log(`[VideoAnalyzer] Parsed ${logSteps.length} log steps`);
+        console.error(`[VideoAnalyzer] Parsed ${logSteps.length} log steps`);
       }
 
       // Step 5: Analyze failure
@@ -199,13 +199,13 @@ export class VideoAnalyzer {
         
         if (testCaseKeys.length > 0) {
           if (this.debug) {
-            console.log(`[VideoAnalyzer] Found ${testCaseKeys.length} test case(s): ${testCaseKeys.join(', ')}`);
+            console.error(`[VideoAnalyzer] Found ${testCaseKeys.length} test case(s): ${testCaseKeys.join(', ')}`);
           }
           
           if (testCaseKeys.length === 1) {
             // Single test case - use legacy comparison
             if (this.debug) {
-              console.log(`[VideoAnalyzer] Starting single test case comparison with visual verification (${frames.length} frames)`);
+              console.error(`[VideoAnalyzer] Starting single test case comparison with visual verification (${frames.length} frames)`);
             }
             
             testCaseComparison = await this.comparator.compareWithTestCase(
@@ -217,7 +217,7 @@ export class VideoAnalyzer {
           } else {
             // Multiple test cases - use NEW multi-TC comparison
             if (this.debug) {
-              console.log(`[VideoAnalyzer] Starting MULTI test case comparison with visual verification (${frames.length} frames)`);
+              console.error(`[VideoAnalyzer] Starting MULTI test case comparison with visual verification (${frames.length} frames)`);
             }
             
             const baseUrl = this.reportingClient['config'].baseUrl;
@@ -300,7 +300,7 @@ export class VideoAnalyzer {
       this.extractor.cleanupFrames(frames);
 
       if (this.debug) {
-        console.log('[VideoAnalyzer] Analysis complete!');
+        console.error('[VideoAnalyzer] Analysis complete!');
       }
 
       return {

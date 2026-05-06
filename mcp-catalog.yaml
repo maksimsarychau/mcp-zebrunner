@@ -9,11 +9,12 @@
 # ══════════════════════════════════════════════════════════════════════════════
 
 name: zebrunner-mcp
-version: "7.1.1"
+version: "8.1.0"
 description: |
   Zebrunner MCP Server - Comprehensive test management integration for AI assistants.
   
   Features:
+  • 60 Tools with annotations (readOnly, destructive, idempotent hints)
   • Test Case Management (CRUD operations, search, bulk actions)
   • Test Suite Organization (hierarchy, coverage analysis)
   • Test Execution & Reporting (launches, results, dashboards)
@@ -21,6 +22,8 @@ description: |
   • Video & Screenshot Analysis (AI-powered)
   • Automation State Management
   • Dynamic Test Generation (with Rules Engine)
+  • 13 MCP Resources — read-only reference data via @ menu (projects, suites, statuses)
+  • 13 MCP Prompts — pre-built workflow instructions via / command (pass rate, coverage, triage)
 
 author: Maksim Sarychau
 license: AGPL-3.0
@@ -82,13 +85,6 @@ config:
     title: "Debug Mode"
     description: "Enable verbose debug logging"
 
-  EXPERIMENTAL_FEATURES:
-    type: boolean
-    required: false
-    default: false
-    title: "Experimental Features"
-    description: "Enable experimental API endpoints and features"
-
   MAX_PAGE_SIZE:
     type: number
     required: false
@@ -114,13 +110,33 @@ config:
     title: "Rules Engine"
     description: "Enable rules-based test generation and validation"
 
+  MCP_TRANSPORT:
+    type: string
+    required: false
+    default: "auto"
+    title: "Transport Mode"
+    description: "Transport protocol: stdio (default), http (StreamableHTTP), or auto"
+
+  PORT:
+    type: number
+    required: false
+    title: "HTTP Port"
+    description: "Port for StreamableHTTP mode (setting this enables HTTP transport)"
+
+  MCP_AUTH_MODE:
+    type: string
+    required: false
+    default: "headers"
+    title: "Auth Mode"
+    description: "Authentication mode for HTTP: headers, oauth, or both"
+
 # ──────────────────────────────────────────────────────────────────────────────
 # MCP Server Capabilities
 # ──────────────────────────────────────────────────────────────────────────────
 capabilities:
   tools: true
-  resources: false
-  prompts: false
+  resources: true
+  prompts: true
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Tool Categories (for UI grouping)
@@ -138,6 +154,10 @@ categories:
     description: "Video analysis, screenshot analysis, coverage reports"
   - name: "Automation"
     description: "Automation state management and test generation"
+  - name: "Resources"
+    description: "Read-only reference data (projects, suites, statuses, periods) via @ menu"
+  - name: "Prompts"
+    description: "Pre-built workflow instructions (pass rate, coverage, triage) via / command"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Health Check

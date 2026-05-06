@@ -548,15 +548,15 @@ export class TestCaseDuplicateAnalyzer {
     projectKey: string, 
     suiteId?: number
   ): DuplicateAnalysisResult {
-    console.log(`🔍 Analyzing ${testCases.length} test cases for duplicates...`);
+    console.error(`🔍 Analyzing ${testCases.length} test cases for duplicates...`);
     
     // Calculate similarity matrix
     const similarities = this.calculateSimilarityMatrix(testCases);
-    console.log(`📊 Found ${similarities.length} similar pairs above ${this.similarityThreshold}% threshold`);
+    console.error(`📊 Found ${similarities.length} similar pairs above ${this.similarityThreshold}% threshold`);
     
     // Create clusters
     const clusters = this.createClusters(testCases, similarities);
-    console.log(`🗂️ Created ${clusters.length} clusters of similar test cases`);
+    console.error(`🗂️ Created ${clusters.length} clusters of similar test cases`);
     
     // Calculate potential savings
     const duplicateTestCases = clusters.reduce((sum, cluster) => sum + cluster.testCases.length - 1, 0);

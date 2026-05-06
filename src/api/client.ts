@@ -102,7 +102,7 @@ export class ZebrunnerApiClient {
       this.rateLimiter = new SimpleRateLimiter(maxRps, burst);
 
       if (this.config.debug) {
-        console.log(`[ZebrunnerApiClient] Rate limiting enabled: ${maxRps} req/s, burst: ${burst}`);
+        console.error(`[ZebrunnerApiClient] Rate limiting enabled: ${maxRps} req/s, burst: ${burst}`);
       }
     }
 

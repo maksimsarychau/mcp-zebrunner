@@ -40,7 +40,7 @@ export class FrameExtractor {
   ): Promise<FrameAnalysis[]> {
     try {
       if (this.debug) {
-        console.log(`[FrameExtractor] Starting frame extraction (${extractionMode} mode)`);
+        console.error(`[FrameExtractor] Starting frame extraction (${extractionMode} mode)`);
       }
 
       // Determine timestamps to extract based on mode
@@ -53,7 +53,7 @@ export class FrameExtractor {
       );
 
       if (this.debug) {
-        console.log(`[FrameExtractor] Will extract ${timestamps.length} frames at:`, timestamps);
+        console.error(`[FrameExtractor] Will extract ${timestamps.length} frames at:`, timestamps);
       }
 
       // Extract frames at each timestamp
@@ -363,7 +363,7 @@ export class FrameExtractor {
         }
 
         if (this.debug) {
-          console.log(`[FrameExtractor] Cleaned up ${files.length} frame(s)`);
+          console.error(`[FrameExtractor] Cleaned up ${files.length} frame(s)`);
         }
       }
     } catch (error) {

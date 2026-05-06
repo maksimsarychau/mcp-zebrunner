@@ -3,6 +3,8 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { ConfigManager } from "./config/manager.js";
+import { resolveTransportMode } from "./config/transport.js";
+import { createClientProxy, initClientFactory, type PerUserClients } from "./http/client-factory.js";
 
 // Enhanced imports
 import { EnhancedZebrunnerClient } from "./api/enhanced-client.js";
@@ -35,11 +37,16 @@ import {
   createWidgetSqlCaller,
   type WidgetSqlCaller,
 } from "./utils/widget-sql.js";
+import { registerResources, getResourcesCatalog } from "./resources.js";
+import { registerPrompts, getPromptsCatalog } from "./prompts.js";
 import {
   loadToolIntelSnapshot,
   markdownForAllTools,
-  markdownForToolDetails
+  markdownForToolDetails,
+  markdownForPrompts,
+  markdownForResources,
 } from "./utils/tool-intel.js";
+import { ToolMetrics, wrapToolHandler } from "./utils/tool-metrics.js";
 
 // Mutation tools imports
 import { ZebrunnerMutationClient } from "./api/mutation-client.js";
@@ -96,8 +103,11 @@ import {
 const configManager = ConfigManager.getInstance();
 const appConfig = configManager.getConfig();
 
-// Extract configuration values with auto-detection and defaults
-const ZEBRUNNER_URL = appConfig.baseUrl?.replace(/\/+$/, "");
+// Extract configuration values with auto-detection and defaults.
+// In selfauth HTTP mode ZEBRUNNER_URL may be absent — each user provides their own.
+// A placeholder is used for singleton client creation; the proxy replaces it per-request.
+const ZEBRUNNER_URL_FROM_ENV = !!process.env.ZEBRUNNER_URL;
+const ZEBRUNNER_URL = appConfig.baseUrl?.replace(/\/+$/, "") ?? 'https://placeholder.zebrunner.com/api/public/v1';
 const ZEBRUNNER_LOGIN = appConfig.login;
 const ZEBRUNNER_TOKEN = appConfig.authToken;
 const DEBUG_MODE = appConfig.debug;
@@ -114,11 +124,12 @@ if (configWarnings.length > 0) {
 
 /** Enhanced API client configuration — timeout sourced from TIMEOUT env var (default: 60s) */
 const API_TIMEOUT = appConfig.timeout ?? 60_000;
+const TRANSPORT_MODE = resolveTransportMode();
 
 const config: ZebrunnerConfig = {
   baseUrl: ZEBRUNNER_URL,
-  username: ZEBRUNNER_LOGIN,
-  token: ZEBRUNNER_TOKEN,
+  username: ZEBRUNNER_LOGIN ?? '',
+  token: ZEBRUNNER_TOKEN ?? '',
   timeout: API_TIMEOUT,
   retryAttempts: 3,
   retryDelay: 1000,
@@ -127,35 +138,65 @@ const config: ZebrunnerConfig = {
   maxPageSize: MAX_PAGE_SIZE
 };
 
-const client = new EnhancedZebrunnerClient(config);
-const mutationClient = new ZebrunnerMutationClient(config);
+// Create singleton clients — in HTTP mode these are placeholders wrapped by Proxy
+const _singletonClient = new EnhancedZebrunnerClient(config);
+const _singletonMutationClient = new ZebrunnerMutationClient(config);
 
-// Initialize reporting client (new authentication method)
 const reportingConfig: ZebrunnerReportingConfig = {
   baseUrl: ZEBRUNNER_URL.replace('/api/public/v1', ''),
-  accessToken: ZEBRUNNER_TOKEN,
+  accessToken: ZEBRUNNER_TOKEN ?? '',
   timeout: API_TIMEOUT,
   debug: DEBUG_MODE
 };
 
-const reportingClient = new ZebrunnerReportingClient(reportingConfig);
-const reportingHandlers = new ZebrunnerReportingToolHandlers(reportingClient, client);
+const _singletonReportingClient = new ZebrunnerReportingClient(reportingConfig);
+const _singletonReportingHandlers = new ZebrunnerReportingToolHandlers(_singletonReportingClient, _singletonClient);
 
-// Wire up resolvers: automation states and priorities live on the TCM API (Bearer auth),
-// not the Public API (Basic auth), so the enhanced client delegates to the reporting client.
-client.setAutomationStatesResolver(async (projectKey: string) => {
+// In HTTP mode, wrap clients with Proxy that resolves to per-user instances via AsyncLocalStorage.
+// In STDIO mode, the proxy falls through to the singleton (zero overhead).
+const clientFactory = TRANSPORT_MODE === 'http'
+  ? initClientFactory({ timeout: API_TIMEOUT, debug: DEBUG_MODE, defaultPageSize: DEFAULT_PAGE_SIZE, maxPageSize: MAX_PAGE_SIZE })
+  : undefined;
+
+const client: EnhancedZebrunnerClient = clientFactory
+  ? createClientProxy(_singletonClient, clientFactory, ZEBRUNNER_URL, (c: PerUserClients) => c.client)
+  : _singletonClient;
+
+const mutationClient: ZebrunnerMutationClient = clientFactory
+  ? createClientProxy(_singletonMutationClient, clientFactory, ZEBRUNNER_URL, (c: PerUserClients) => c.mutationClient)
+  : _singletonMutationClient;
+
+const reportingClient: ZebrunnerReportingClient = clientFactory
+  ? createClientProxy(_singletonReportingClient, clientFactory, ZEBRUNNER_URL, (c: PerUserClients) => c.reportingClient)
+  : _singletonReportingClient;
+
+const reportingHandlers: ZebrunnerReportingToolHandlers = clientFactory
+  ? createClientProxy(_singletonReportingHandlers, clientFactory, ZEBRUNNER_URL, (c: PerUserClients) => c.reportingHandlers)
+  : _singletonReportingHandlers;
+
+// Wire up resolvers on the singleton (HTTP mode wiring happens inside ClientFactory)
+_singletonClient.setAutomationStatesResolver(async (projectKey: string) => {
   const { projectId } = await resolveProjectId(projectKey);
-  return reportingClient.getAutomationStates(projectId);
+  return _singletonReportingClient.getAutomationStates(projectId);
 });
-client.setPrioritiesResolver(async (projectKey: string) => {
+_singletonClient.setPrioritiesResolver(async (projectKey: string) => {
   const { projectId } = await resolveProjectId(projectKey);
-  return reportingClient.getPriorities(projectId);
+  return _singletonReportingClient.getPriorities(projectId);
 });
 
 // === Auto-detect test case review rules/checkpoints files ===
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as crypto from "node:crypto";
+import { fileURLToPath } from "node:url";
+
+const PKG_VERSION: string = (() => {
+  try {
+    const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+    const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf-8'));
+    return pkg.version ?? '0.0.0';
+  } catch { return '0.0.0'; }
+})();
 
 const REVIEW_RULES_FILE = (() => {
   const p = path.resolve(process.cwd(), "test_case_review_rules.md");
@@ -944,13 +985,16 @@ function generateCodeComments(analysis: any): string {
   return `/**\n * Coverage Analysis: ${analysis.testCase.key}\n * Score: ${analysis.coverage.overallScore}%\n */\n`;
 }
 
-async function main() {
-  await stealthIntegrityCheck();
-
+/**
+ * Create a fully configured McpServer with all tools, resources, and prompts registered.
+ * Called once for STDIO mode, and once per session in HTTP mode (MCP SDK requires
+ * a dedicated McpServer instance per transport).
+ */
+function createConfiguredServer(): McpServer {
   const server = new McpServer(
     {
       name: "mcp-zebrunner",
-      version: "7.1.1"
+      version: PKG_VERSION
     },
     {
       capabilities: {
@@ -960,6 +1004,14 @@ async function main() {
       }
     }
   );
+
+  const toolMetrics = new ToolMetrics();
+  _metricsRef = toolMetrics;
+
+  const origRegisterTool = server.registerTool.bind(server);
+  server.registerTool = ((name: string, config: any, handler: any) => {
+    return origRegisterTool(name, config, wrapToolHandler(name, handler, toolMetrics));
+  }) as typeof server.registerTool;
 
   debugLog("🚀 Starting Zebrunner Unified MCP Server with Reporting API", {
     url: ZEBRUNNER_URL,
@@ -986,7 +1038,13 @@ async function main() {
         "Useful for metrics and dashboards. Bypasses MCP response size limits."
       ),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI")
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       const { project_key, project_id, format, include_hierarchy, page, size, page_token, count_only, include_clickable_links } = args;
@@ -1106,7 +1164,13 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
       include_suite_hierarchy: z.boolean().default(false).describe("Include featureSuiteId and rootSuiteId with suite hierarchy path"),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI"),
       include_execution_history: z.boolean().default(false).describe("Include TCM execution history (manual + automated runs). Shows last 10 executions with status, environment, and configurations.")
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       const { case_key, format, include_debug, include_suite_hierarchy, include_clickable_links, include_execution_history } = args;
@@ -1221,7 +1285,13 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
         "When true, returns only the total count of subsuites without data. " +
         "Loads all suites internally to compute the count, but skips formatting and pagination."
       )
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       const { project_key, root_suite_id, include_root, format, page, size, count_only } = args;
@@ -1351,7 +1421,13 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
         "Efficient for metrics collection -- avoids 1MB response limit on large projects."
       ),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI")
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       const {
@@ -1566,7 +1642,13 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
       max_depth: z.number().int().positive().max(10).default(5).describe("Maximum tree depth"),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI")
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       const { project_key, root_suite_id, max_depth, format, include_clickable_links } = args;
@@ -1655,7 +1737,13 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
       ),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI")
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       const { project_key, automation_states, suite_id, created_after, exclude_deprecated, exclude_draft, exclude_deleted, max_page_size, page_token, get_all, count_only, format, include_clickable_links } = args;
@@ -1929,7 +2017,13 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
     inputSchema: {
       project: z.union([z.enum(["web","android","ios","api"]), z.string(), z.number()]).describe("Project alias (web/android/ios/api), project key, or project ID"),
       format: z.enum(['json', 'markdown']).default('json').describe("Output format")
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       try {
@@ -2033,7 +2127,13 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
       ),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI")
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       const { project_key, title, max_page_size, page_token, get_all, count_only, format, include_clickable_links } = args;
@@ -2204,7 +2304,13 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
       ),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI")
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       const {
@@ -2488,7 +2594,13 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
     inputSchema: {
       project: z.union([z.enum(["web","android","ios","api"]), z.string(), z.number()]).describe("Project alias (web/android/ios/api), project key, or project ID"),
       format: z.enum(['json', 'markdown']).default('json').describe("Output format")
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       try {
@@ -2587,7 +2699,13 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
       include_suite_hierarchy: z.boolean().default(false).describe("Include featureSuiteId and rootSuiteId in analysis"),
       file_path: z.string().optional().describe("File path for adding code comments or saving markdown (optional)"),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI")
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       try {
@@ -2650,7 +2768,13 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
       include_data_providers: z.boolean().default(false).describe("Include data provider templates"),
       include_suite_hierarchy: z.boolean().default(false).describe("Include featureSuiteId and rootSuiteId information"),
       file_path: z.string().optional().describe("File path for saving generated code (optional)")
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       try {
@@ -2833,7 +2957,13 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
       show_framework_detection: z.boolean().default(true).describe("Show detected framework and patterns"),
       include_suite_hierarchy: z.boolean().default(false).describe("Include featureSuiteId and rootSuiteId in analysis"),
       file_path: z.string().optional().describe("File path for adding code comments or saving markdown (optional)")
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       try {
@@ -3045,7 +3175,13 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
         "Useful for metrics and dashboards. Bypasses MCP response size limits."
       ),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format")
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       try {
@@ -3123,7 +3259,13 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
         "Paginates internally to count all suites, but skips hierarchy processing and formatting."
       ),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format")
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       try {
@@ -3198,7 +3340,13 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
     inputSchema: {
       project_key: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format")
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       try {
@@ -3251,7 +3399,13 @@ Supports two modes:
       only_root_suites: z.boolean().default(false).describe("(full mode only) Search only in root suites"),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
       include_clickable_links: z.boolean().default(false).describe("(full mode only) Include clickable links to Zebrunner web UI")
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       try {
@@ -4687,7 +4841,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
-        idempotentHint: false,
+        idempotentHint: true,
         openWorldHint: false,
       },
     },
@@ -4922,7 +5076,13 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         "When true, returns only the total count without test case data. " +
         "Efficient for metrics collection -- avoids 1MB response limit on large projects."
       )
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       try {
@@ -5071,7 +5231,13 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         "When true, returns only the total count without test case data. " +
         "Skips hierarchy enrichment for maximum efficiency."
       )
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       try {
@@ -5180,7 +5346,13 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       project_key: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
       suite_id: z.number().int().positive().describe("Suite ID to find root for"),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format")
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       try {
@@ -5245,7 +5417,13 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       ),
       page: z.number().int().nonnegative().default(0).describe("Page number (0-based, only used if get_all=false)"),
       size: z.number().int().positive().max(100).default(50).describe("Page size (only used if get_all=false)")
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       try {
@@ -5603,7 +5781,13 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       chart_type: z.enum(['auto', 'pie', 'bar', 'stacked_bar', 'horizontal_bar', 'line']).default('auto').describe(
         "Chart type override. 'auto' picks the best type for this tool's data. Explicit value forces that chart type."
       ),
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       try {
@@ -5668,7 +5852,13 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       chart_type: z.enum(['auto', 'pie', 'bar', 'stacked_bar', 'horizontal_bar', 'line']).default('auto').describe(
         "Chart type override. 'auto' picks the best type for this tool's data. Explicit value forces that chart type."
       ),
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       try {
@@ -5728,7 +5918,13 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       chart_type: z.enum(['auto', 'pie', 'bar', 'stacked_bar', 'horizontal_bar', 'line']).default('auto').describe(
         "Chart type override. 'auto' picks the best type for this tool's data. Explicit value forces that chart type."
       ),
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       try {
@@ -5784,7 +5980,13 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       chart_type: z.enum(['auto', 'pie', 'bar', 'stacked_bar', 'horizontal_bar', 'line']).default('auto').describe(
         "Chart type override. 'auto' picks the best type for this tool's data. Explicit value forces that chart type."
       ),
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       try {
@@ -5826,7 +6028,13 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       chart_type: z.enum(['auto', 'pie', 'bar', 'stacked_bar', 'horizontal_bar', 'line']).default('auto').describe(
         "Chart type override. 'auto' picks the best type for this tool's data. Explicit value forces that chart type."
       ),
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       try {
@@ -5894,7 +6102,13 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       chart_type: z.enum(['auto', 'pie', 'bar', 'stacked_bar', 'horizontal_bar', 'line']).default('auto').describe(
         "Chart type override. 'auto' picks the best type for this tool's data. Explicit value forces that chart type."
       )
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       try {
@@ -5971,7 +6185,13 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       previous_milestone: z.string().optional().describe(
         "Baseline milestone for delta comparison (runtime_efficiency, release_readiness)"
       ),
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       try {
@@ -6026,7 +6246,13 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         includeDuration: z.boolean().optional().describe("Compare execution duration (default: true)")
       }).optional().describe("Compare current failure with last passed execution to identify what changed"),
       jira_base_url: z.string().url().optional().describe("Override JIRA base URL (e.g., 'https://myproject.atlassian.net'). If not set, resolved from Zebrunner integrations or JIRA_BASE_URL env var")
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       try {
@@ -6065,7 +6291,13 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       chart_type: z.enum(['auto', 'pie', 'bar', 'stacked_bar', 'horizontal_bar', 'line']).default('auto').describe(
         "Chart type override. 'auto' picks the best type for this tool's data. Explicit value forces that chart type."
       ),
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       try {
@@ -6093,7 +6325,13 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       projectKey: z.string().min(1).optional().describe("Project key for context"),
       outputPath: z.string().optional().describe("Custom output path (default: temp directory)"),
       returnBase64: z.boolean().default(false).describe("Return base64 encoded image")
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       try {
@@ -6122,7 +6360,13 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       enableOCR: z.boolean().default(false).describe("Enable OCR text extraction (slower)"),
       analysisType: z.enum(['basic', 'detailed']).default('detailed').describe("basic=metadata+OCR only, detailed=includes image for Claude Vision"),
       expectedState: z.string().optional().describe("Expected UI state for comparison")
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       try {
@@ -6161,7 +6405,13 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       includeLogCorrelation: z.boolean().default(true).describe("Correlate frames with log timestamps"),
       format: z.enum(['detailed', 'summary', 'jira']).default('detailed').describe("Output format"),
       generateVideoReport: z.boolean().default(true).describe("Generate timestamped report")
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       try {
@@ -6210,7 +6460,13 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       chart_type: z.enum(['auto', 'pie', 'bar', 'stacked_bar', 'horizontal_bar', 'line']).default('auto').describe(
         "Chart type override. 'auto' picks the best type for this tool's data. Explicit value forces that chart type."
       ),
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       try {
@@ -6247,7 +6503,13 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       chart_type: z.enum(['auto', 'pie', 'bar', 'stacked_bar', 'horizontal_bar', 'line']).default('auto').describe(
         "Chart type override. 'auto' picks the best type for this tool's data. Explicit value forces that chart type."
       ),
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       try {
@@ -6388,7 +6650,13 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       chart_type: z.enum(['auto', 'pie', 'bar', 'stacked_bar', 'horizontal_bar', 'line']).default('auto').describe(
         "Chart type override. 'auto' picks the best type for this tool's data. Explicit value forces that chart type."
       ),
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       try {
@@ -6544,6 +6812,12 @@ if (args.format === 'raw') {
     "test_reporting_connection",
     {
       description: "🔌 Test connection to Zebrunner Reporting API with new authentication",
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async () => {
       try {
@@ -6571,23 +6845,29 @@ if (args.format === 'raw') {
     }
   );
 
-  // === Tool: About MCP Tools (discovery and guidance) ===
+  // === Tool: About MCP (discovery and guidance for tools, prompts, resources) ===
   server.registerTool(
     "about_mcp_tools",
     {
-      description: "📚 Summarize Zebrunner MCP tools or show detailed info for one tool with examples and approximate token usage",
+      description: "📚 Discover Zebrunner MCP capabilities: tools summary/detail, prompts catalog (/commands), resources catalog (@data). Use mode='summary' for a full overview including tool, prompt, and resource counts.",
       inputSchema: {
-        mode: z.enum(["summary", "tool"]).default("summary")
-          .describe("summary: all tools overview; tool: detailed view for one tool"),
+        mode: z.enum(["summary", "tool", "prompts", "resources", "metrics"]).default("summary")
+          .describe("summary: full overview (tools + prompts + resources counts); tool: detailed view for one tool; prompts: list all /prompts; resources: list all @resources; metrics: session tool usage stats"),
         tool_name: z.string().optional()
-          .describe("Tool name for detailed mode, e.g. analyze_test_execution_video"),
+          .describe("Tool name for mode='tool', e.g. analyze_test_execution_video"),
         include_examples: z.boolean().default(true)
-          .describe("Include example prompts"),
+          .describe("Include example prompts (applies to summary and tool modes)"),
         include_token_estimates: z.boolean().default(true)
-          .describe("Include approximate token usage ranges"),
+          .describe("Include approximate token usage ranges (applies to summary and tool modes)"),
         include_role_benefits: z.boolean().default(true)
-          .describe("Include role-based value summary")
-      }
+          .describe("Include role-based value summary (applies to summary and tool modes)")
+      },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       try {
@@ -6611,13 +6891,40 @@ if (args.format === 'raw') {
           return { content: [{ type: "text" as const, text: details }] };
         }
 
-        const summary = markdownForAllTools(snapshot, {
+        if (args.mode === "prompts") {
+          const prompts = getPromptsCatalog();
+          const text = markdownForPrompts(prompts, snapshot.mcpVersion);
+          return { content: [{ type: "text" as const, text }] };
+        }
+
+        if (args.mode === "resources") {
+          const resources = getResourcesCatalog();
+          const text = markdownForResources(resources, snapshot.mcpVersion);
+          return { content: [{ type: "text" as const, text }] };
+        }
+
+        if (args.mode === "metrics") {
+          const header = `MCP version: ${snapshot.mcpVersion}\n\n`;
+          return { content: [{ type: "text" as const, text: header + toolMetrics.getSummaryMarkdown() }] };
+        }
+
+        const toolsSummary = markdownForAllTools(snapshot, {
           includeExamples: args.include_examples,
           includeTokenEstimates: args.include_token_estimates,
           includeRoleBenefits: args.include_role_benefits
         });
 
-        return { content: [{ type: "text" as const, text: summary }] };
+        const promptCount = getPromptsCatalog().length;
+        const resourceCount = getResourcesCatalog().length;
+        const capsSection = [
+          "",
+          "## Additional MCP Capabilities",
+          "",
+          `- **Prompts:** ${promptCount} pre-built workflow instructions (use \`mode: "prompts"\` to list them, or \`/prompt-name\` in your client)`,
+          `- **Resources:** ${resourceCount} reference data endpoints (use \`mode: "resources"\` to list them, or the @ menu in your client)`,
+        ].join("\n");
+
+        return { content: [{ type: "text" as const, text: toolsSummary + capsSection }] };
       } catch (error: any) {
         debugLog("Error in about_mcp_tools", { error: error.message, args });
         return {
@@ -6665,7 +6972,13 @@ if (args.format === 'raw') {
       chart_type: z.enum(['auto', 'pie', 'bar', 'stacked_bar', 'horizontal_bar', 'line']).default('auto').describe(
         "Chart type override. 'auto' picks the best type for this tool's data. Explicit value forces that chart type."
       ),
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       try {
@@ -6799,7 +7112,13 @@ if (args.format === 'raw') {
       chart_type: z.enum(['auto', 'pie', 'bar', 'stacked_bar', 'horizontal_bar', 'line']).default('auto').describe(
         "Chart type override. 'auto' picks the best type for this tool's data. Explicit value forces that chart type."
       ),
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       try {
@@ -6982,7 +7301,13 @@ if (args.format === 'raw') {
       chart_type: z.enum(['auto', 'pie', 'bar', 'stacked_bar', 'horizontal_bar', 'line']).default('auto').describe(
         "Chart type override. 'auto' picks the best type for this tool's data. Explicit value forces that chart type."
       )
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       try {
@@ -7345,7 +7670,13 @@ ${priorityAnalysis.statistics.withoutDefects > 0 ? `- **Tracking Gap:** ${priori
         .describe("Time period for failure analysis (passed to widget as-is)"),
       format: z.enum(['detailed', 'summary', 'json']).default('detailed')
         .describe("Output format: detailed (full info), summary (concise), or json (raw data)")
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       try {
@@ -7527,7 +7858,13 @@ ${detailsInfo.map((detail, i) => {
       ),
       format: z.enum(['raw', 'formatted']).default('formatted')
         .describe("Output format: raw API response or formatted data")
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       try {
@@ -7694,7 +8031,13 @@ ${detailsInfo.map((detail, i) => {
         .describe("Output format: raw API response or formatted data"),
       includePaginationInfo: z.boolean().default(false)
         .describe("Include pagination metadata from projects-limit endpoint")
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       try {
@@ -7803,7 +8146,13 @@ ${detailsInfo.map((detail, i) => {
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('markdown').describe("Output format"),
       improveIfPossible: z.boolean().default(true).describe("Attempt to automatically improve the test case"),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI")
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       try {
@@ -7841,7 +8190,13 @@ ${detailsInfo.map((detail, i) => {
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('markdown').describe("Output format"),
       applyHighConfidenceChanges: z.boolean().default(true).describe("Automatically apply high-confidence improvements"),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI")
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       try {
@@ -7904,7 +8259,13 @@ ${detailsInfo.map((detail, i) => {
       chart_type: z.enum(['auto', 'pie', 'bar', 'stacked_bar', 'horizontal_bar', 'line']).default('auto').describe(
         "Chart type override. 'auto' picks the best type for this tool's data. Explicit value forces that chart type."
       ),
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       try {
@@ -8100,7 +8461,13 @@ ${detailsInfo.map((detail, i) => {
       chart_type: z.enum(['auto', 'pie', 'bar', 'stacked_bar', 'horizontal_bar', 'line']).default('auto').describe(
         "Chart type override. 'auto' picks the best type for this tool's data. Explicit value forces that chart type."
       ),
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       try {
@@ -8236,7 +8603,13 @@ ${detailsInfo.map((detail, i) => {
       chart_type: z.enum(['auto', 'pie', 'bar', 'stacked_bar', 'horizontal_bar', 'line']).default('auto').describe(
         "Chart type override. 'auto' picks the best type for this tool's data. Explicit value forces that chart type."
       ),
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       try {
@@ -8357,7 +8730,13 @@ ${detailsInfo.map((detail, i) => {
       project: z.union([z.enum(["web","android","ios","api"]), z.string()])
         .describe("Project alias ('web', 'android', 'ios', 'api') or project key"),
       format: z.enum(["raw", "formatted"]).default("formatted").describe("Output format")
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       debugLog("get_test_run_result_statuses called", args);
@@ -8375,8 +8754,7 @@ ${detailsInfo.map((detail, i) => {
           throw new Error(`Invalid project: ${args.project}. ${suggestions || 'Use web, android, ios, api, or a valid project key.'}`);
         }
 
-        const publicClient = new EnhancedZebrunnerClient(config);
-        const response = await publicClient.listResultStatuses({ projectKey });
+        const response = await client.listResultStatuses({ projectKey });
 
         if (args.format === "raw") {
           return {
@@ -8430,7 +8808,13 @@ ${detailsInfo.map((detail, i) => {
       project: z.union([z.enum(["web","android","ios","api"]), z.string()])
         .describe("Project alias ('web', 'android', 'ios', 'api') or project key"),
       format: z.enum(["raw", "formatted"]).default("formatted").describe("Output format")
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       debugLog("get_test_run_configuration_groups called", args);
@@ -8448,8 +8832,7 @@ ${detailsInfo.map((detail, i) => {
           throw new Error(`Invalid project: ${args.project}. ${suggestions || 'Use web, android, ios, api, or a valid project key.'}`);
         }
 
-        const publicClient = new EnhancedZebrunnerClient(config);
-        const response = await publicClient.listConfigurationGroups({ projectKey });
+        const response = await client.listConfigurationGroups({ projectKey });
 
         if (args.format === "raw") {
           return {
@@ -8509,7 +8892,13 @@ ${detailsInfo.map((detail, i) => {
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('markdown').describe("Output format"),
       include_similarity_matrix: z.boolean().default(false).describe("Include detailed similarity matrix in output"),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI (markdown format only)")
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       try {
@@ -8834,7 +9223,13 @@ ${detailsInfo.map((detail, i) => {
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('markdown').describe("Output format"),
       include_similarity_matrix: z.boolean().default(false).describe("Include detailed similarity matrix in output"),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI (markdown format only)")
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       try {
@@ -9267,7 +9662,13 @@ ${detailsInfo.map((detail, i) => {
       chart_type: z.enum(['auto', 'pie', 'bar', 'stacked_bar', 'horizontal_bar', 'line']).default('auto').describe(
         "Chart type override. 'auto' picks the best type for this tool's data. Explicit value forces that chart type."
       ),
-    }
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       const { project_key, feature_keyword, output_format, tags_format, max_results } = args;
@@ -9674,13 +10075,112 @@ ${detailsInfo.map((detail, i) => {
     }
   );
 
+  // ========== RESOURCES & PROMPTS ==========
+
+  registerResources(server, { client, reportingClient, resolveProjectId, PROJECT_ALIASES, DEBUG_MODE });
+  registerPrompts(server);
+
+  return server;
+}
+
+async function main() {
+  await stealthIntegrityCheck();
+
   // ========== SERVER STARTUP ==========
 
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
+  if (TRANSPORT_MODE === 'http') {
+    const port = parseInt(process.env.PORT || '3000', 10);
+    const { startHttpServer } = await import('./http/server.js');
+    const { resolveAuthMode, hasStrategy } = await import('./config/transport.js');
+    const authMode = resolveAuthMode();
+
+    let verifyBearer: ((token: string) => Promise<{ username: string; zebrunnerToken: string }>) | undefined;
+    let tokenStore: import('./http/token-store.js').TokenStore | undefined;
+    let oauthProvider: import('@modelcontextprotocol/sdk/server/auth/provider.js').OAuthServerProvider | undefined;
+
+    const { createTokenStore } = await import('./http/token-store.js');
+    tokenStore = createTokenStore() ?? undefined;
+
+    const mcpServerUrl = process.env.MCP_SERVER_URL ?? `http://localhost:${port}`;
+
+    // --- Mode 3: Self-service OAuth (no Okta) ---
+    if (hasStrategy(authMode, 'selfauth')) {
+      if (!tokenStore) {
+        throw new Error(
+          'MCP_AUTH_MODE=selfauth requires TOKEN_STORE_KEY and TOKEN_STORE_PATH. ' +
+          'These are needed to store per-user Zebrunner credentials.',
+        );
+      }
+      const { createSelfAuthProvider } = await import('./http/selfauth-provider.js');
+      const jwtSecret = process.env.TOKEN_STORE_KEY ?? 'mcp-zebrunner-selfauth';
+      const provider = createSelfAuthProvider({
+        tokenStore,
+        serverUrl: mcpServerUrl,
+        zebrunnerBaseUrl: ZEBRUNNER_URL,
+        jwtSecret,
+      });
+      oauthProvider = provider;
+      verifyBearer = async (token: string) => {
+        const authInfo = await provider.verifyAccessToken(token);
+        return {
+          username: authInfo.extra?.username as string,
+          zebrunnerToken: authInfo.extra?.zebrunnerToken as string,
+          baseUrl: authInfo.extra?.zebrunnerUrl as string | undefined,
+        };
+      };
+      const urlNote = ZEBRUNNER_URL_FROM_ENV ? '' : ' (per-user URL enabled)';
+      console.error(`🔑 Self-service OAuth configured (credentials stored per-user)${urlNote}`);
+    }
+
+    // --- Mode 4/5: Okta OAuth (with per-user credentials; Mode 5 adds token exchange) ---
+    if (hasStrategy(authMode, 'okta')) {
+      if (!tokenStore) {
+        throw new Error(
+          'MCP_AUTH_MODE=okta/okta-exchange requires TOKEN_STORE_KEY and TOKEN_STORE_PATH. ' +
+          'These are needed to store per-user Zebrunner credentials after Okta login.',
+        );
+      }
+      const { loadOktaConfigFromEnv } = await import('./http/oauth-provider.js');
+      const oktaConfig = loadOktaConfigFromEnv();
+
+      if (oktaConfig) {
+        const { createMcpOAuthProvider } = await import('./http/mcp-oauth-provider.js');
+        const provider = createMcpOAuthProvider(oktaConfig, tokenStore, ZEBRUNNER_URL);
+        oauthProvider = provider;
+
+        const { createOktaBearerVerifier } = await import('./http/oauth-provider.js');
+        verifyBearer = createOktaBearerVerifier({ config: oktaConfig, tokenStore });
+
+        const { hasTokenExchange } = await import('./config/transport.js');
+        const exchangeLabel = hasTokenExchange(authMode) ? ' + token exchange (Mode 5)' : '';
+        console.error(`🔐 Okta OAuth configured (domain: ${oktaConfig.domain})${exchangeLabel}`);
+      } else {
+        console.error(`⚠️  MCP_AUTH_MODE includes 'okta' but Okta config is missing.`);
+        console.error('   Missing: OKTA_DOMAIN, OKTA_CLIENT_ID, or OKTA_CLIENT_SECRET');
+      }
+    }
+
+    await startHttpServer(
+      async () => createConfiguredServer(),
+      {
+        port,
+        serverVersion: PKG_VERSION,
+        verifyBearer,
+        tokenStore,
+        zebrunnerBaseUrl: ZEBRUNNER_URL_FROM_ENV ? ZEBRUNNER_URL : undefined,
+        zebrunnerUrlFromEnv: ZEBRUNNER_URL_FROM_ENV,
+        oauthProvider,
+        mcpServerUrl,
+      },
+    );
+  } else {
+    const server = createConfiguredServer();
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
+  }
 
   // Always print startup message for tests and debugging
-  console.error("✅ Zebrunner Unified MCP Server started successfully");
+  console.error(`✅ Zebrunner MCP Server started (transport: ${TRANSPORT_MODE})`);
 
   if (DEBUG_MODE) {
     console.error(`🔍 Debug mode: ${DEBUG_MODE}`);
@@ -9702,12 +10202,20 @@ process.on('unhandledRejection', (reason, promise) => {
   process.exit(1);
 });
 
+let _metricsRef: ToolMetrics | undefined;
+
 process.on('SIGINT', () => {
+  if (_metricsRef && _metricsRef.getStats().size > 0) {
+    console.error('\n' + _metricsRef.getSummaryMarkdown());
+  }
   console.error('🛑 Received SIGINT, shutting down gracefully...');
   process.exit(0);
 });
 
 process.on('SIGTERM', () => {
+  if (_metricsRef && _metricsRef.getStats().size > 0) {
+    console.error('\n' + _metricsRef.getSummaryMarkdown());
+  }
   console.error('🛑 Received SIGTERM, shutting down gracefully...');
   process.exit(0);
 });

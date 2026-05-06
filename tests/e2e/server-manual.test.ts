@@ -54,7 +54,7 @@ describe('Manual E2E Tests - Zebrunner MCP Server', () => {
         const output = data.toString();
         console.log('Server output:', output.trim());
 
-        if (output.includes('Zebrunner Unified MCP Server started successfully')) {
+        if (output.includes('Zebrunner MCP Server started')) {
           serverReady = true;
           clearTimeout(timeout);
           console.log('✅ Server started successfully');

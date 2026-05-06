@@ -26,15 +26,27 @@ export async function generatePassRateReport(
 
   const projectContexts = await ctx.resolveProjects(projects);
 
-  const data = await Promise.all(
-    projectContexts.map(pCtx => ctx.fetchPassRate(pCtx, period, milestone).catch((): PassRateData => ({
-      project: pCtx.alias,
-      passed: 0, failed: 0, skipped: 0, knownIssue: 0, aborted: 0, total: 0,
-      passRate: 0, passRateExclKnown: 0,
-    }))),
+  const data: PassRateData[] = [];
+  const fetchWarnings: string[] = [];
+
+  const results = await Promise.allSettled(
+    projectContexts.map(pCtx => ctx.fetchPassRate(pCtx, period, milestone)),
   );
 
+  for (let i = 0; i < results.length; i++) {
+    const r = results[i];
+    if (r.status === 'fulfilled') {
+      data.push(r.value);
+    } else {
+      const reason = r.reason instanceof Error ? r.reason.message : String(r.reason);
+      fetchWarnings.push(`⚠️ [${projectContexts[i].alias}] Pass rate fetch failed: ${reason}`);
+    }
+  }
+
   const contentBlocks: any[] = [];
+  if (fetchWarnings.length > 0) {
+    contentBlocks.push({ type: "text" as const, text: fetchWarnings.join('\n') });
+  }
   contentBlocks.push({ type: "text" as const, text: buildPassRateMarkdown(data, mergedTargets, period, milestone) });
 
   try {

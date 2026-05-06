@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
-import { DEFAULT_CONFIG, REQUIRED_ENV_VARS, ZebrunnerDefaults } from './defaults.js';
+import { DEFAULT_CONFIG, REQUIRED_ENV_VARS_STDIO, REQUIRED_ENV_VARS_HTTP, REQUIRED_ENV_VARS_HTTP_SELFAUTH, ZebrunnerDefaults } from './defaults.js';
+import { resolveTransportMode, resolveAuthMode, hasStrategy, type TransportMode } from './transport.js';
 
 /**
  * Configuration Manager for Zebrunner MCP Server
@@ -15,6 +16,7 @@ export class ConfigManager {
   private static instance: ConfigManager;
   private config: any = {};
   private warnings: string[] = [];
+  private _transportMode: TransportMode = 'stdio';
 
   private constructor() {
     this.loadConfiguration();
@@ -160,14 +162,46 @@ export class ConfigManager {
   }
 
   /**
-   * Validate that required environment variables are set
+   * Check if running in HTTP transport mode
+   */
+  public isHttpMode(): boolean {
+    return this._transportMode === 'http';
+  }
+
+  /**
+   * Get the resolved transport mode
+   */
+  public getTransportMode(): TransportMode {
+    return this._transportMode;
+  }
+
+  /**
+   * Validate that required environment variables are set.
+   * In HTTP mode only ZEBRUNNER_URL is required — user credentials come per-request via headers.
    */
   private validateRequiredVariables(): void {
-    const missing = REQUIRED_ENV_VARS.filter(varName => !process.env[varName]);
-    
+    this._transportMode = resolveTransportMode();
+
+    let requiredVars: readonly string[];
+    if (this._transportMode === 'http') {
+      try {
+        const authMode = resolveAuthMode();
+        requiredVars = hasStrategy(authMode, 'selfauth')
+          ? REQUIRED_ENV_VARS_HTTP_SELFAUTH
+          : REQUIRED_ENV_VARS_HTTP;
+      } catch {
+        requiredVars = REQUIRED_ENV_VARS_HTTP;
+      }
+    } else {
+      requiredVars = REQUIRED_ENV_VARS_STDIO;
+    }
+
+    const missing = requiredVars.filter(varName => !process.env[varName]);
+
     if (missing.length > 0) {
       throw new Error(
-        `❌ Missing required environment variables: ${missing.join(', ')}\\n` +
+        `❌ Missing required environment variables: ${missing.join(', ')}\n` +
+        `Transport mode: ${this._transportMode}\n` +
         `Please set these variables in your .env file or environment.`
       );
     }
@@ -214,7 +248,7 @@ export class ConfigManager {
       }
 
       // File exists and has meaningful content
-      console.log(`✅ Auto-detected rules file '${DEFAULT_CONFIG.rulesFileName}' - Rules engine enabled`);
+      console.error(`✅ Auto-detected rules file '${DEFAULT_CONFIG.rulesFileName}' - Rules engine enabled`);
       return true;
 
     } catch (error: any) {
@@ -254,18 +288,18 @@ export class ConfigManager {
    */
   public printConfigSummary(): void {
     if (this.config.debug) {
-      console.log('🔧 Zebrunner MCP Configuration:');
-      console.log(`   - Base URL: ${this.config.baseUrl ? 'Set' : 'Not set'}`);
-      console.log(`   - Login: ${this.config.login ? 'Set' : 'Not set'}`);
-      console.log(`   - Token: ${this.config.authToken ? 'Set' : 'Not set'}`);
-      console.log(`   - Debug Mode: ${this.config.debug}`);
-      console.log(`   - Rules Engine: ${this.config.enableRulesEngine} ${process.env.ENABLE_RULES_ENGINE ? '(explicit)' : '(auto-detected)'}`);
-      console.log(`   - Max Page Size: ${this.config.maxPageSize}`);
-      console.log(`   - Default Page Size: ${this.config.defaultPageSize}`);
+      console.error('🔧 Zebrunner MCP Configuration:');
+      console.error(`   - Base URL: ${this.config.baseUrl ? 'Set' : 'Not set'}`);
+      console.error(`   - Login: ${this.config.login ? 'Set' : 'Not set'}`);
+      console.error(`   - Token: ${this.config.authToken ? 'Set' : 'Not set'}`);
+      console.error(`   - Debug Mode: ${this.config.debug}`);
+      console.error(`   - Rules Engine: ${this.config.enableRulesEngine} ${process.env.ENABLE_RULES_ENGINE ? '(explicit)' : '(auto-detected)'}`);
+      console.error(`   - Max Page Size: ${this.config.maxPageSize}`);
+      console.error(`   - Default Page Size: ${this.config.defaultPageSize}`);
       
       if (this.warnings.length > 0) {
-        console.log('⚠️  Configuration Warnings:');
-        this.warnings.forEach(warning => console.log(`   ${warning}`));
+        console.error('⚠️  Configuration Warnings:');
+        this.warnings.forEach(warning => console.error(`   ${warning}`));
       }
     }
   }

@@ -19,8 +19,8 @@ const SAMPLE_TC = {
   testSuite: { id: 453 },
   priority: { id: 16, name: "Medium" },
   automationState: { id: 12, name: "Automated" },
-  createdBy: { id: 604, username: "maksim.sarychau", email: "maksim.sarychau@ext.myfitnesspal.com" },
-  lastModifiedBy: { id: 676, username: "tatsiana.yemelyanchyk", email: "tatsiana.yemelyanchyk@ext.myfitnesspal.com" },
+  createdBy: { id: 604, username: "john.doe", email: "john.doe@example.com" },
+  lastModifiedBy: { id: 676, username: "jane.smith", email: "jane.smith@example.com" },
   customField: {
     manualOnly: "No",
     isAutomated: "Yes",
@@ -71,7 +71,7 @@ describe("Custom Field Filter Unit Tests", () => {
     });
 
     it("should resolve nested field (createdBy.username)", () => {
-      assert.strictEqual(resolveFieldPath(SAMPLE_TC, "createdBy.username"), "maksim.sarychau");
+      assert.strictEqual(resolveFieldPath(SAMPLE_TC, "createdBy.username"), "john.doe");
     });
 
     it("should resolve custom field (customField.manualOnly)", () => {
@@ -175,7 +175,7 @@ describe("Custom Field Filter Unit Tests", () => {
     });
 
     it("should match email domain", () => {
-      const filter: FieldFilter = { fieldPath: "createdBy.email", fieldValue: "@ext.myfitnesspal.com", matchMode: "contains" };
+      const filter: FieldFilter = { fieldPath: "createdBy.email", fieldValue: "@example.com", matchMode: "contains" };
       assert.strictEqual(matchesField(SAMPLE_TC, filter), true);
     });
   });

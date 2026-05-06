@@ -96,7 +96,7 @@ export const ZebrunnerTestCaseSchema = z.object({
   attachments: z.array(z.any()).optional(),
   preConditions: z.string().nullable().optional(),
   postConditions: z.string().nullable().optional(),
-  customField: z.record(z.any()).optional(),
+  customField: z.record(z.string(), z.any()).optional(),
   steps: z.array(ZebrunnerCaseStepSchema).optional(),
   requirements: z.array(z.any()).optional(),
   projKey: z.string().optional()
@@ -121,7 +121,7 @@ export const ZebrunnerShortTestCaseSchema = z.object({
   createdBy: ZebrunnerUserSchema.optional(),
   lastModifiedAt: z.string().optional(),
   lastModifiedBy: ZebrunnerUserSchema.optional(),
-  customField: z.record(z.any()).optional()
+  customField: z.record(z.string(), z.any()).optional()
 });
 
 // Test execution item
