@@ -6,6 +6,8 @@ mcp.config.json
 api-docs.json
 mcp-mutation-safety.md
 .claude
+.codex
+.cursor
 !.env.example
 
 .mcpregistry_registry_token
