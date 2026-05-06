@@ -168,10 +168,12 @@ class TestRunner {
         return;
       }
 
+      const nodeMajor = parseInt(process.version.slice(1), 10);
+
       const args = [
         '--test',
         '--test-reporter=spec',
-        '--experimental-test-isolation=none',
+        ...(nodeMajor >= 22 ? ['--experimental-test-isolation=none'] : []),
         '--import=tsx',
         ...testFiles
       ];
