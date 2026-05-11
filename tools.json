@@ -125,7 +125,7 @@
   },
   {
     "name": "get_platform_results_by_period",
-    "description": "Get aggregated test results, pass rate, and statistics for a project over a time period (last 7 days, last 30 days, etc.). Returns total passed/failed/skipped/aborted counts and pass rate percentage. Use this when asked for 'results', 'pass rate', 'test statistics', or 'results for last N days'. Accepts any Zebrunner project key (e.g. 'MFPAND', 'MCP') or aliases (web/android/ios/api)."
+    "description": "Get aggregated test results, pass rate, and statistics for a project over a time period (last 7 days, last 30 days, etc.). Returns total passed/failed/skipped/aborted counts and pass rate percentage. Use this when asked for 'results', 'pass rate', 'test statistics', or 'results for last N days'. Accepts any Zebrunner project key (e.g. 'DEF', 'MCP') or aliases (web/android/ios/api)."
   },
   {
     "name": "get_project_milestones",

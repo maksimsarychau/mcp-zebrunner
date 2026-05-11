@@ -7249,7 +7249,7 @@ if (args.format === 'raw') {
   server.registerTool(
     "get_platform_results_by_period",
     {
-      description: "📊 Get aggregated test results, pass rate, and statistics for a project over a time period (last 7 days, last 30 days, etc.). Returns total passed/failed/skipped/aborted counts and pass rate percentage. Use this when asked for 'results', 'pass rate', 'test statistics', 'how many passed/failed', or 'results for last N days'. Accepts any Zebrunner project key (e.g. 'MFPAND', 'MCP') or aliases (web/android/ios/api).",
+      description: "📊 Get aggregated test results, pass rate, and statistics for a project over a time period (last 7 days, last 30 days, etc.). Returns total passed/failed/skipped/aborted counts and pass rate percentage. Use this when asked for 'results', 'pass rate', 'test statistics', 'how many passed/failed', or 'results for last N days'. Accepts any Zebrunner project key (e.g. 'DEF', 'MCP') or aliases (web/android/ios/api).",
     inputSchema: {
       project: z.union([z.enum(["web","android","ios","api"]), z.string(), z.number()])
         .default("web")

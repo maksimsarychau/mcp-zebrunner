@@ -518,6 +518,25 @@ Once connected, you can use these tools through natural language in your AI assi
 | `get_all_tcm_test_cases_with_root_suite_id` | All test cases with hierarchy info | `"Get all test cases with their root suite information"` | Analysts |
 | `get_test_cases_by_suite_smart` | Smart suite test case retrieval with root/child auto-detection | `"Get test cases from suite 18824 in project MCP using smart mode"` | QA, Analysts |
 
+#### **Test Case Change History**
+
+Most test case tools support optional **change history enrichment** — fetching the audit log of modifications for each test case. This is useful for understanding when steps were changed, when automation state transitioned, or when a test case was deprecated.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `include_history` | boolean | `false` | Attach a `history` array of parsed change entries to each test case |
+| `history_filter` | `steps_only` \| `events_only` \| `all` | `steps_only` | Filter: step/precondition diffs only, lifecycle events only, or all changes |
+| `history_limit` | number (1–100) | `20` | Max history entries per test case |
+
+**Supported on:** `get_test_case_by_key`, `get_test_cases_advanced`, `get_test_cases_by_automation_state`, `get_test_case_by_title`, `get_test_case_by_filter`, `get_all_tcm_test_cases_by_project`, `get_test_cases_by_suite_smart`
+
+**Example prompts:**
+- `"Get test case MCP-29 with change history"` → sets `include_history=true`
+- `"Show me MCP-29 history, events only"` → sets `include_history=true`, `history_filter='events_only'`
+- `"Get all automated test cases with their last 5 changes"` → sets `include_history=true`, `history_limit=5`
+
+**Detected events:** `became_automated`, `became_manual`, `became_deprecated`, `became_undeprecated`, `steps_changed`, `preconditions_changed`, `postconditions_changed`, and dynamically generated `became_<state_name>` for any project-specific automation state.
+
 ### 🌳 Test Suite Hierarchy & Organization
 
 #### **Suite Management**

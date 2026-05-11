@@ -33,6 +33,58 @@ Introduced `zebrunner-config.json` — an instance-specific configuration file t
 | `platformMap` | Platform alias → widget SQL `PLATFORM` filter values |
 | `featureAreaKeywords` | Keyword → label mapping for regression stability feature bucketing |
 
+### New: Test Case Change History
+
+Added the ability to fetch and display the **change history** (audit log) for test cases directly through MCP tools. This feature parses the TCM audit-log endpoint (`GET /api/tcm/v1/test-cases/{id}/changes`) and transforms raw entries into structured history with named lifecycle events and field-level diffs.
+
+**New file:**
+- `src/utils/testCaseHistory.ts` — Full history pipeline: fetching, parsing, filtering, and bulk enrichment. Supports concurrency-limited parallel fetching (5 concurrent requests) for bulk operations.
+
+**New API method:**
+- `reportingClient.getTestCaseChanges(testCaseId, projectId, maxPageSize)` in `src/api/reporting-client.ts` — Fetches raw change entries from the TCM audit-log endpoint.
+
+**New parameters on 7 tools:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `include_history` | boolean | `false` | Attach a `history` array of parsed change log entries to each test case |
+| `history_filter` | `steps_only` \| `events_only` \| `all` | `steps_only` | What to include: step/precondition diffs, lifecycle events only, or everything |
+| `history_limit` | number (1–100) | `20` | Max history entries per test case |
+
+**Tools with history support:**
+- `get_test_case_by_key` — Single test case (also renders Change History section in markdown format)
+- `get_test_cases_advanced` — Advanced filtering with bulk history enrichment
+- `get_test_cases_by_automation_state` — State-based filtering with bulk history
+- `get_test_case_by_title` — Title search with bulk history
+- `get_test_case_by_filter` — Filter-based search with bulk history
+- `get_all_tcm_test_cases_by_project` — Full project export with bulk history
+- `get_test_cases_by_suite_smart` — Suite-based retrieval with bulk history
+
+**Detected lifecycle events:**
+- `became_automated`, `became_manual`, `became_not_automated`, etc. — Dynamically generated from project automation states via `became_<state_name>` pattern
+- `became_deprecated` / `became_undeprecated` — Deprecation flag changes
+- `steps_changed`, `preconditions_changed`, `postconditions_changed` — Test content modifications
+
+**Field-level diffs include:**
+- Step-by-step action and expected result changes (with step index)
+- Precondition and postcondition full-text diffs
+- Automation state transitions (old → new state name)
+- Custom field value changes (with system field name)
+- All other scalar field changes
+
+**Filtering modes:**
+- `steps_only` (default) — Only step/precondition/postcondition diffs and related events
+- `events_only` — Only entries with lifecycle events (automation state changes, deprecation)
+- `all` — All change entries including metadata changes
+
+**Markdown rendering** (on `get_test_case_by_key` with `format='markdown'`):
+- Appends a "Change History" section with timestamped entries grouped by author
+- Shows events and truncated before/after values for each field change
+
+**Bulk operation safety:**
+- Concurrency limited to 5 parallel API requests to avoid rate limiting
+- Warning emitted when history is fetched for more than 20 test cases at once
+
 ### Improved Tool Routing for LLM Clients
 
 Improved tool descriptions to fix LLM routing issues where prompts like "get results for MCP during last 7 days" would incorrectly route to `get_all_launches_for_project` instead of `get_platform_results_by_period`.

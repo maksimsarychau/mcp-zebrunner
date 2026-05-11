@@ -239,7 +239,7 @@ Weekly stability report for project MCP using:
 **Example Prompts:**
 - "List launches for project MCP from last month"
 - "Show me recent launches for project MCP"
-- "Browse launches for MFPAND"
+- "Browse launches for MCP"
 
 ### `get_all_launches_with_filter`
 
@@ -354,14 +354,26 @@ Weekly stability report for project MCP using:
 
 **Description:** Get detailed information for a specific test case by its key (e.g., MCP-123).
 
+**Change History Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `include_history` | boolean | `false` | Attach a `history` array of parsed change log entries |
+| `history_filter` | `steps_only` \| `events_only` \| `all` | `steps_only` | What to include in history |
+| `history_limit` | number (1–100) | `20` | Max history entries per test case |
+
 **Example Prompts:**
 - "Get test case MCP-2107 details"
 - "Show me test case MCP-1921"
 - "What does test case MCP-88 test?"
+- "Get test case MCP-29 with change history"
+- "Show MCP-29 history, events only"
 
 ### `get_test_case_by_title`
 
 **Description:** Search for test cases by title (partial match supported).
+
+**Change History Parameters:** Same as `get_test_case_by_key` (`include_history`, `history_filter`, `history_limit`).
 
 **Example Prompts:**
 - "Find test cases with 'login' in the title"
@@ -380,25 +392,33 @@ Weekly stability report for project MCP using:
 | `field_value` | string | Value to match against (not required for `exists` mode) |
 | `field_match` | `exact` \| `contains` \| `regex` \| `exists` | Match mode (default: `exact`) |
 
+**Change History Parameters:** Same as `get_test_case_by_key` (`include_history`, `history_filter`, `history_limit`). History is fetched in bulk with concurrency-limited parallel requests.
+
 **Example Prompts:**
 - "Get test cases created after 2025-01-01 with automation state 'Manual'"
 - "Show me high priority test cases from last month"
 - "Find test cases updated after 2025-11-01 that are not automated"
 - "Get all test cases in MCP where customField.manualOnly is 'Yes'"
 - "Find test cases whose priority.name contains 'High'"
+- "Get manual test cases from last month with their change history"
 
 ### `get_test_cases_by_automation_state`
 
 **Description:** Filter test cases by specific automation state (Manual, Automated, etc.).
 
+**Change History Parameters:** Same as `get_test_case_by_key` (`include_history`, `history_filter`, `history_limit`).
+
 **Example Prompts:**
 - "Show me all 'Not Automated' test cases in project MCP"
 - "Get all manual test cases"
 - "Find test cases with automation state 'Automated'"
+- "Get all automated test cases with their last 5 changes"
 
 ### `get_test_case_by_filter`
 
 **Description:** Advanced filtering by suite, dates, priority, automation state, and status. Also supports **generic field-path filtering** via `field_path`, `field_value`, and `field_match` (same parameters as `get_test_cases_advanced`).
+
+**Change History Parameters:** Same as `get_test_case_by_key` (`include_history`, `history_filter`, `history_limit`).
 
 **Example Prompts:**
 - "Get test cases from suite 491 created after 2025-01-01 with high priority"
@@ -428,6 +448,8 @@ Weekly stability report for project MCP using:
 
 **Description:** Get ALL test cases for a project with automatic pagination handling.
 
+**Change History Parameters:** Same as `get_test_case_by_key` (`include_history`, `history_filter`, `history_limit`).
+
 **Example Prompts:**
 - "Get all test cases for project MCP"
 - "Show me every test case in the MCP project"
@@ -445,6 +467,8 @@ Weekly stability report for project MCP using:
 ### `get_test_cases_by_suite_smart`
 
 **Description:** Smart suite-based test case retrieval. Automatically detects whether the suite is root or child and uses the right filtering strategy.
+
+**Change History Parameters:** Same as `get_test_case_by_key` (`include_history`, `history_filter`, `history_limit`).
 
 **Example Prompts:**
 - "Get test cases from suite 18824 in project MCP using smart mode"
@@ -883,7 +907,7 @@ Weekly stability report for project MCP using:
 
 ### `get_platform_results_by_period`
 
-**Description:** Get aggregated test results, pass rate, and statistics for a project over a time period (last 7 days, last 30 days, etc.). Returns total passed/failed/skipped/aborted counts and pass rate percentage. Use this when asked for "results", "pass rate", "test statistics", or "results for last N days". Accepts any Zebrunner project key (e.g. `MFPAND`, `MCP`) or aliases (`web`/`android`/`ios`/`api`).
+**Description:** Get aggregated test results, pass rate, and statistics for a project over a time period (last 7 days, last 30 days, etc.). Returns total passed/failed/skipped/aborted counts and pass rate percentage. Use this when asked for "results", "pass rate", "test statistics", or "results for last N days". Accepts any Zebrunner project key (e.g. `DEF`, `MCP`) or aliases (`web`/`android`/`ios`/`api`).
 
 **Supported Periods (Input):**
 - Today, Last 24 Hours, Week, Last 7 Days, Last 14 Days, Month, Last 30 Days, Quarter, Last 90 Days, Year, Last 365 Days, Total
@@ -891,7 +915,7 @@ Weekly stability report for project MCP using:
 **Note:** Periods are passed through as-is. If a widget does not support a period, the API will return an error.
 
 **Example Prompts:**
-- "Get results for MFPAND during last 7 days"
+- "Get results for MCP during last 7 days"
 - "Show pass rate for MCP"
 - "Show me Android test results from last week"
 - "Get platform results for last 30 days"

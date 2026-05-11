@@ -248,7 +248,7 @@ function LOGIN_HTML(opts: {
   const urlFieldHtml = showUrlField
     ? `<label for="zebrunner_url">Zebrunner URL</label>
       <input id="zebrunner_url" name="zebrunner_url" type="url" required placeholder="https://your-company.zebrunner.com" autocomplete="url" value="${urlValue}">
-      <div class="field-hint">Your Zebrunner instance URL, e.g. https://mfp.zebrunner.com</div>`
+      <div class="field-hint">Your Zebrunner instance URL, e.g. https://your-company.zebrunner.com</div>`
     : '';
 
   const profileLinkHtml = profileUrl
