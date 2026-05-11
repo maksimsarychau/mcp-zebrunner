@@ -95,13 +95,13 @@ export class EnhancedZebrunnerClient {
     this.externalPrioritiesResolver = resolver;
   }
 
-  /** Evict oldest entries when a cache exceeds MAX_CACHE_ENTRIES (LRU by timestamp). */
+  /** Evict oldest entries when a cache exceeds MAX_CACHE_ENTRIES (LRU by timestamp, then key for determinism). */
   private evictCache<V extends { timestamp: number }>(cache: Map<string, V>): void {
     while (cache.size > MAX_CACHE_ENTRIES) {
       let oldestKey: string | undefined;
       let oldestTs = Infinity;
       for (const [key, val] of cache) {
-        if (val.timestamp < oldestTs) {
+        if (val.timestamp < oldestTs || (val.timestamp === oldestTs && (!oldestKey || key < oldestKey))) {
           oldestTs = val.timestamp;
           oldestKey = key;
         }

@@ -93,6 +93,8 @@ function stateNameToEvent(stateName: string): NamedEvent {
 // Inline concurrency limiter (avoids adding p-limit dependency)
 // ---------------------------------------------------------------------------
 
+const REQUEST_DELAY_MS = 100;
+
 function pLimit(concurrency: number) {
   let active = 0;
   const queue: (() => void)[] = [];
@@ -107,7 +109,9 @@ function pLimit(concurrency: number) {
   return <T>(fn: () => Promise<T>): Promise<T> =>
     new Promise<T>((resolve, reject) => {
       queue.push(() => {
-        fn().then(resolve, reject).finally(() => {
+        const delayed = () =>
+          new Promise<void>(r => setTimeout(r, REQUEST_DELAY_MS)).then(fn);
+        delayed().then(resolve, reject).finally(() => {
           active--;
           next();
         });
@@ -131,8 +135,14 @@ function resolveAutomationStateName(
   }
 
   const id = typeof stateValue === 'number' ? stateValue : stateValue?.id;
-  if (typeof id === 'number' && statesMap[id]) {
-    return statesMap[id];
+  if (typeof id === 'number' && Number.isFinite(id) && id > 0) {
+    const name = statesMap[id];
+    if (name) return name;
+    console.error(
+      `[history] Automation state ID ${id} not found in states map ` +
+      `(known IDs: ${Object.keys(statesMap).join(', ') || 'none'}). ` +
+      `The state name will be omitted from this change entry.`
+    );
   }
 
   return undefined;
@@ -461,7 +471,11 @@ export async function enrichTestCasesWithHistory(
             automationStatesMap,
             userMap
           );
-        } catch {
+        } catch (err: any) {
+          console.error(
+            `[history] Failed to fetch history for test case ${tc.id} ` +
+            `(project ${projectId}): ${err?.message ?? err}`
+          );
           return [];
         }
       })

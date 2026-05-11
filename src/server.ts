@@ -1651,8 +1651,12 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
             casesToFetch.map(async (testCase) => {
               try {
                 return await client.getTestCaseByKey(project_key, testCase.key);
-              } catch (error) {
-                debugLog(`Failed to fetch detailed case ${testCase.key}`, { error });
+              } catch (error: any) {
+                debugLog(`Failed to fetch detailed case ${testCase.key}`, {
+                  error: error?.message,
+                  caseKey: testCase.key,
+                  project: project_key,
+                });
                 return testCase;
               }
             })
@@ -1660,11 +1664,15 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
 
           const detailedMap = new Map();
           detailedCases.forEach((result, index) => {
+            const originalCase = casesToFetch[index];
             if (result.status === 'fulfilled' && result.value) {
-              const originalCase = casesToFetch[index];
               if (originalCase?.key) {
                 detailedMap.set(originalCase.key, result.value);
               }
+            } else if (result.status === 'rejected') {
+              debugLog(`Unhandled rejection fetching case ${originalCase?.key}`, {
+                reason: result.reason?.message ?? result.reason,
+              });
             }
           });
 
@@ -5947,9 +5955,13 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
             casesToFetch.map(async (testCase) => {
               try {
                 return await client.getTestCaseByKey(project_key, testCase.key);
-              } catch (error) {
-                debugLog(`Failed to fetch detailed case ${testCase.key}`, { error });
-                return testCase; // Fallback to original data
+              } catch (error: any) {
+                debugLog(`Failed to fetch detailed case ${testCase.key}`, {
+                  error: error?.message,
+                  caseKey: testCase.key,
+                  project: project_key,
+                });
+                return testCase;
               }
             })
           );
@@ -5957,11 +5969,15 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           // Replace original cases with detailed versions where successful
           const detailedMap = new Map();
           detailedCases.forEach((result, index) => {
+            const originalCase = casesToFetch[index];
             if (result.status === 'fulfilled' && result.value) {
-              const originalCase = casesToFetch[index];
               if (originalCase?.key) {
                 detailedMap.set(originalCase.key, result.value);
               }
+            } else if (result.status === 'rejected') {
+              debugLog(`Unhandled rejection fetching case ${originalCase?.key}`, {
+                reason: result.reason?.message ?? result.reason,
+              });
             }
           });
 
@@ -10067,12 +10083,24 @@ ${detailsInfo.map((detail, i) => {
                   return { ...tc, _fullTC: fullTC, _matchedIn: 'body' };
                 }
                 return null;
-              } catch (error) {
-                // Skip test cases we can't fetch
+              } catch (error: any) {
+                debugLog(`Failed to fetch case ${tc.key} for body search`, {
+                  error: error?.message,
+                  caseKey: tc.key,
+                  project: project_key,
+                });
                 return null;
               }
             })
           );
+
+          for (const r of batchResults) {
+            if (r.status === 'rejected') {
+              debugLog('Unhandled rejection in body-search batch', {
+                reason: r.reason?.message ?? r.reason,
+              });
+            }
+          }
 
           const successfulMatches = batchResults
             .filter((r): r is PromiseFulfilledResult<any> => r.status === 'fulfilled' && r.value !== null)
