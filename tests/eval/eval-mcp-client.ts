@@ -37,7 +37,7 @@ export async function startMCPServer(): Promise<void> {
 
     const handleStdout = (data: Buffer) => {
       const output = data.toString();
-      if (output.includes("Zebrunner Unified MCP Server started successfully")) {
+      if (output.includes("Zebrunner MCP Server started")) {
         clearTimeout(timeout);
         console.error("[eval-mcp] Server started");
         resolve();
@@ -47,7 +47,7 @@ export async function startMCPServer(): Promise<void> {
     const handleStderr = (data: Buffer) => {
       const output = data.toString();
       stderrOutput += output;
-      if (output.includes("Zebrunner Unified MCP Server started successfully")) {
+      if (output.includes("Zebrunner MCP Server started")) {
         clearTimeout(timeout);
         console.error("[eval-mcp] Server started");
         resolve();

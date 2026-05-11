@@ -518,6 +518,25 @@ Once connected, you can use these tools through natural language in your AI assi
 | `get_all_tcm_test_cases_with_root_suite_id` | All test cases with hierarchy info | `"Get all test cases with their root suite information"` | Analysts |
 | `get_test_cases_by_suite_smart` | Smart suite test case retrieval with root/child auto-detection | `"Get test cases from suite 18824 in project MCP using smart mode"` | QA, Analysts |
 
+#### **Test Case Change History**
+
+Most test case tools support optional **change history enrichment** — fetching the audit log of modifications for each test case. This is useful for understanding when steps were changed, when automation state transitioned, or when a test case was deprecated.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `include_history` | boolean | `false` | Attach a `history` array of parsed change entries to each test case |
+| `history_filter` | `steps_only` \| `events_only` \| `all` | `steps_only` | Filter: step/precondition diffs only, lifecycle events only, or all changes |
+| `history_limit` | number (1–100) | `20` | Max history entries per test case |
+
+**Supported on:** `get_test_case_by_key`, `get_test_cases_advanced`, `get_test_cases_by_automation_state`, `get_test_case_by_title`, `get_test_case_by_filter`, `get_all_tcm_test_cases_by_project`, `get_test_cases_by_suite_smart`
+
+**Example prompts:**
+- `"Get test case MCP-29 with change history"` → sets `include_history=true`
+- `"Show me MCP-29 history, events only"` → sets `include_history=true`, `history_filter='events_only'`
+- `"Get all automated test cases with their last 5 changes"` → sets `include_history=true`, `history_limit=5`
+
+**Detected events:** `became_automated`, `became_manual`, `became_deprecated`, `became_undeprecated`, `steps_changed`, `preconditions_changed`, `postconditions_changed`, and dynamically generated `became_<state_name>` for any project-specific automation state.
+
 ### 🌳 Test Suite Hierarchy & Organization
 
 #### **Suite Management**
@@ -590,8 +609,8 @@ Once connected, you can use these tools through natural language in your AI assi
 |------|-------------|---------------|----------|
 | `get_launch_details` | Comprehensive launch information | `"Get launch details for launch 118685"` | **Managers, Leads** |
 | `get_launch_summary` | Quick launch overview | `"Show me summary for launch 118685"` | **Managers** |
-| `get_all_launches_for_project` | All launches with pagination | `"Get all launches for project MCP from last month"` | **Managers, Leads** |
-| `get_all_launches_with_filter` | Filter by milestone/build | `"Get launches for milestone 2.1.0 and build 'mcp-app-2.1.0'"` | **Managers, Leads** |
+| `get_all_launches_for_project` | List individual launch executions with pagination | `"List launches for project MCP from last month"` | **Managers, Leads** |
+| `get_all_launches_with_filter` | Search launches by milestone/build/name | `"Find launches for milestone 2.1.0 and build 'mcp-app-2.1.0'"` | **Managers, Leads** |
 | `generate_weekly_regression_stability_report` | Weekly regression stability report with WoW delta, linked issues, and strict Jira-ready output. Supports launch list or build-based auto-discovery (version-segment build lookup with `launch.build` validation when needed). | `"Weekly stability report for MCP: (120906 vs 120814), (120901 vs 120809)"` or `"Weekly stability report for builds 9117 vs 48886"` | **Managers, Leads** |
 | `analyze_regression_runtime` | Regression Runtime Efficiency — per-launch elapsed time, attempt/re-run breakdown, configurable duration classification (Short/Medium/Long), dual metrics for both Tests and Test Cases (Average Runtime, WRI), duration distribution with test case counts, and baseline comparison with delta tracking. | `"Analyze regression runtime for the iOS project on the latest milestone. Show WRI and WRI per test case."` or `"Compare runtime for latest vs previous milestone"` | **Managers, Leads, SDETs** |
 
@@ -661,7 +680,7 @@ Once connected, you can use these tools through natural language in your AI assi
 #### **Platform & Results Analysis** ⭐ *Critical for Management*
 | Tool | Description | Example Usage | Best For |
 |------|-------------|---------------|----------|
-| `get_platform_results_by_period` | Test results by platform/period | `"Get iOS test results for the last 7 days"` | **Managers, Leads** |
+| `get_platform_results_by_period` | Aggregated test results, pass rate, and statistics for a project over a time period | `"Get results for MCP during last 7 days"` or `"Show pass rate for MCP"` | **Managers, Leads** |
 | `get_top_bugs` | Most frequent defects | `"Show me top 10 bugs from last week"` | **Managers, Developers** |
 | `get_bug_review` | Detailed bug review with failure analysis, priority breakdown, and automatic detail fetching | `"Get bug review with full failure details for top 10 bugs"` | **Managers, QA, Developers** |
 | `get_bug_failure_info` | Comprehensive failure info by hashcode (alternative to auto-fetch) | `"Get failure info for hashcode 1051677506"` | **Developers, SDETs** |
@@ -1119,11 +1138,66 @@ REQUIRE_UI_VALIDATION=true        # Require UI validation in tests (optional)
 REQUIRE_API_VALIDATION=true       # Require API validation in tests (optional)
 ```
 
-### Per-User Zebrunner URL (v8.1.0)
+### Instance Configuration File (`zebrunner-config.json`)
+
+The MCP server ships with a `zebrunner-config.json` in the project root that contains instance-specific settings. Customize this file to adapt the server to your Zebrunner workspace. If the file is missing or contains invalid values, built-in defaults are used automatically.
+
+```json
+{
+  "projectAliases": {
+    "web": "WEB",
+    "android": "AND",
+    "ios": "IOS",
+    "api": "WEB"
+  },
+  "testConnectionProjectKey": "MCP",
+  "widgetTemplates": {
+    "RESULTS_BY_PLATFORM": 8,
+    "TOP_BUGS": 4,
+    "BUG_REVIEW": 9,
+    "FAILURE_INFO": 6,
+    "FAILURE_DETAILS": 10
+  },
+  "dashboardNames": {
+    "weeklyResults": "Weekly results",
+    "bugsReproRate": "Bugs repro rate"
+  },
+  "platformMap": {
+    "web": [],
+    "api": ["api"],
+    "android": [],
+    "ios": ["ios"]
+  },
+  "featureAreaKeywords": {
+    "quicklog": "Search & Quick Log",
+    "search": "Search & Quick Log",
+    "notification": "Notifications",
+    "meal": "Meal Management",
+    "message": "Messages",
+    "goal": "Goals",
+    "dashboard": "Dashboard",
+    "premium": "Premium Features",
+    "export": "Export"
+  }
+}
+```
+
+| Key | Description |
+|-----|-------------|
+| `projectAliases` | Maps short names (`web`, `android`, etc.) to actual Zebrunner project keys. Update these to match your projects. |
+| `testConnectionProjectKey` | Project key used by the `test_reporting_connection` tool when no env var is set. |
+| `widgetTemplates` | Numeric IDs for SQL widget templates used by reporting tools. These IDs are tenant-specific — check your Zebrunner instance if reports return empty data. |
+| `dashboardNames` | Dashboard display names used by widget SQL queries. Must match dashboard names in your Zebrunner workspace. |
+| `platformMap` | Maps platform aliases to widget SQL `PLATFORM` filter values. |
+| `featureAreaKeywords` | Keyword-to-label mapping used by regression stability reports to bucket test names into feature areas. Customize for your application's feature structure. |
+
+Individual keys can be omitted — only the keys you include will override the defaults.
+
+### Per-User Zebrunner URL (v8.1.0+)
 
 When running in HTTP mode with `MCP_AUTH_MODE=selfauth` and **without** setting `ZEBRUNNER_URL`, each user provides their own Zebrunner instance URL on the login form. This enables multi-tenant hosting where a single MCP server serves users across different Zebrunner organizations.
 
-- Login form shows a **Zebrunner URL** field (e.g., `https://mfp.zebrunner.com`)
+- Login form shows a **Zebrunner URL** field (e.g., `https://mcp.zebrunner.com`)
 - Users can update their URL, credentials, or disconnect at `/settings`
 - Per-user URLs are stored encrypted alongside credentials in the token store
 - When `ZEBRUNNER_URL` IS set as an environment variable, the URL field is hidden and the env value is used globally (existing behavior, no change)

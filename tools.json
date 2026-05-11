@@ -65,11 +65,11 @@
   },
   {
     "name": "get_all_launches_for_project",
-    "description": "Get all launches for a project with pagination and filtering"
+    "description": "List individual launch executions for a project with pagination. Use to browse launches, NOT for aggregated results/pass rates."
   },
   {
     "name": "get_all_launches_with_filter",
-    "description": "Filter launches by milestone, build, or other criteria"
+    "description": "Search and filter individual launch executions by milestone, build number, or name. NOT for aggregated results/pass rates."
   },
   {
     "name": "get_all_subsuites",
@@ -81,7 +81,7 @@
   },
   {
     "name": "get_all_tcm_test_cases_by_project",
-    "description": "Get all test cases for a project"
+    "description": "Get all test cases for a project. Supports optional include_history to enrich each case with change log entries (steps, preconditions, automation state, deprecation events)."
   },
   {
     "name": "get_all_tcm_test_cases_with_root_suite_id",
@@ -125,7 +125,7 @@
   },
   {
     "name": "get_platform_results_by_period",
-    "description": "Get test results grouped by platform over a time period"
+    "description": "Get aggregated test results, pass rate, and statistics for a project over a time period (last 7 days, last 30 days, etc.). Returns total passed/failed/skipped/aborted counts and pass rate percentage. Use this when asked for 'results', 'pass rate', 'test statistics', or 'results for last N days'. Accepts any Zebrunner project key (e.g. 'DEF', 'MCP') or aliases (web/android/ios/api)."
   },
   {
     "name": "get_project_milestones",
@@ -153,27 +153,27 @@
   },
   {
     "name": "get_test_case_by_filter",
-    "description": "Filter test cases by various criteria. Supports field_path/field_value/field_match for generic field-path filtering including custom fields."
+    "description": "Filter test cases by various criteria. Supports field_path/field_value/field_match for generic field-path filtering including custom fields. Supports optional include_history to enrich each case with change log entries."
   },
   {
     "name": "get_test_case_by_key",
-    "description": "Get detailed information for a specific test case by its key (e.g., MCP-123). Default format is 'json' \u2014 recommended when using as data source for create_test_case or update_test_case."
+    "description": "Get detailed information for a specific test case by its key (e.g., MCP-123). Default format is 'json' \u2014 recommended when using as data source for create_test_case or update_test_case. Supports optional include_history to enrich with change log entries (steps, preconditions, automation state, deprecation events)."
   },
   {
     "name": "get_test_case_by_title",
-    "description": "Search for test cases by title"
+    "description": "Search for test cases by title. Supports optional include_history to enrich each case with change log entries."
   },
   {
     "name": "get_test_cases_advanced",
-    "description": "Advanced test case search with multiple filters. Supports field_path/field_value/field_match for generic field-path filtering including custom fields."
+    "description": "Advanced test case search with multiple filters. Supports field_path/field_value/field_match for generic field-path filtering including custom fields. Supports optional include_history to enrich each case with change log entries."
   },
   {
     "name": "get_test_cases_by_automation_state",
-    "description": "Get test cases filtered by automation state"
+    "description": "Get test cases filtered by automation state. Supports optional include_history to enrich each case with change log entries."
   },
   {
     "name": "get_test_cases_by_suite_smart",
-    "description": "Smart test case retrieval by suite ID with automatic root/child suite detection"
+    "description": "Smart test case retrieval by suite ID with automatic root/child suite detection. Supports optional include_history to enrich each case with change log entries."
   },
   {
     "name": "get_test_coverage_by_test_case_steps_by_key",

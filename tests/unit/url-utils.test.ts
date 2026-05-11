@@ -5,29 +5,29 @@ import { normalizeZebrunnerUrl, toWebUrl } from '../../src/http/url-utils.js';
 describe('normalizeZebrunnerUrl', () => {
   it('appends /api/public/v1 to a bare HTTPS URL', () => {
     assert.equal(
-      normalizeZebrunnerUrl('https://mfp.zebrunner.com'),
-      'https://mfp.zebrunner.com/api/public/v1',
+      normalizeZebrunnerUrl('https://mcp.zebrunner.com'),
+      'https://mcp.zebrunner.com/api/public/v1',
     );
   });
 
   it('strips trailing slash before appending', () => {
     assert.equal(
-      normalizeZebrunnerUrl('https://mfp.zebrunner.com/'),
-      'https://mfp.zebrunner.com/api/public/v1',
+      normalizeZebrunnerUrl('https://mcp.zebrunner.com/'),
+      'https://mcp.zebrunner.com/api/public/v1',
     );
   });
 
   it('keeps URL unchanged if it already ends with /api/public/v1', () => {
     assert.equal(
-      normalizeZebrunnerUrl('https://mfp.zebrunner.com/api/public/v1'),
-      'https://mfp.zebrunner.com/api/public/v1',
+      normalizeZebrunnerUrl('https://mcp.zebrunner.com/api/public/v1'),
+      'https://mcp.zebrunner.com/api/public/v1',
     );
   });
 
   it('handles URL with trailing slash after /api/public/v1', () => {
     assert.equal(
-      normalizeZebrunnerUrl('https://mfp.zebrunner.com/api/public/v1/'),
-      'https://mfp.zebrunner.com/api/public/v1',
+      normalizeZebrunnerUrl('https://mcp.zebrunner.com/api/public/v1/'),
+      'https://mcp.zebrunner.com/api/public/v1',
     );
   });
 
@@ -40,8 +40,8 @@ describe('normalizeZebrunnerUrl', () => {
 
   it('trims whitespace', () => {
     assert.equal(
-      normalizeZebrunnerUrl('  https://mfp.zebrunner.com  '),
-      'https://mfp.zebrunner.com/api/public/v1',
+      normalizeZebrunnerUrl('  https://mcp.zebrunner.com  '),
+      'https://mcp.zebrunner.com/api/public/v1',
     );
   });
 
@@ -80,15 +80,15 @@ describe('normalizeZebrunnerUrl', () => {
 describe('toWebUrl', () => {
   it('strips /api/public/v1 suffix', () => {
     assert.equal(
-      toWebUrl('https://mfp.zebrunner.com/api/public/v1'),
-      'https://mfp.zebrunner.com',
+      toWebUrl('https://mcp.zebrunner.com/api/public/v1'),
+      'https://mcp.zebrunner.com',
     );
   });
 
   it('returns URL unchanged if no suffix present', () => {
     assert.equal(
-      toWebUrl('https://mfp.zebrunner.com'),
-      'https://mfp.zebrunner.com',
+      toWebUrl('https://mcp.zebrunner.com'),
+      'https://mcp.zebrunner.com',
     );
   });
 });

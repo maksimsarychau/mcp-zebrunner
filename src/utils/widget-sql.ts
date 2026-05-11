@@ -5,6 +5,8 @@
  * dashboard handler can call Zebrunner reporting widget SQL endpoints.
  */
 
+import { getConfig } from "./config-loader.js";
+
 export const ALL_PERIODS = [
   "Today",
   "Last 24 Hours",
@@ -22,6 +24,15 @@ export const ALL_PERIODS = [
 
 export type Period = (typeof ALL_PERIODS)[number];
 
+export function getPlatformMap(): Record<string, string[]> {
+  return getConfig().platformMap;
+}
+
+export function getTemplate() {
+  return getConfig().widgetTemplates;
+}
+
+/** @deprecated Use getPlatformMap() for dynamic config. Kept for backward compat. */
 export const PLATFORM_MAP: Record<string, string[]> = {
   web: [],
   api: ["api"],
@@ -29,6 +40,7 @@ export const PLATFORM_MAP: Record<string, string[]> = {
   ios: ["ios"]
 };
 
+/** @deprecated Use getTemplate() for dynamic config. Kept for backward compat. */
 export const TEMPLATE = {
   RESULTS_BY_PLATFORM: 8,
   TOP_BUGS: 4,
@@ -51,11 +63,13 @@ export function buildParamsConfig(opts: {
     throw new Error(`Invalid period: ${period}. Allowed: ${ALL_PERIODS.join(", ")}`);
   }
 
+  const cfg = getConfig();
+  const pMap = cfg.platformMap;
   const resolvedPlatform: string[] =
     Array.isArray(platform)
       ? platform
       : platform
-      ? (PLATFORM_MAP[platform] ?? [])
+      ? (pMap[platform] ?? [])
       : [];
 
   return {
@@ -65,7 +79,7 @@ export function buildParamsConfig(opts: {
     PLATFORM: resolvedPlatform,
     STATUS: [], LOCALE: [],
     PERIOD: normalized,
-    dashboardName: dashboardName ?? "Weekly results",
+    dashboardName: dashboardName ?? cfg.dashboardNames.weeklyResults,
     isReact: true,
     ...extra
   };
@@ -76,6 +90,28 @@ export type WidgetSqlCaller = (
   templateId: number,
   paramsConfig: any
 ) => Promise<any>;
+
+/**
+ * Unwrap common API response envelopes so callers always get the payload array.
+ * Handles `{ results: [...] }`, `{ data: [...] }`, `{ items: [...] }`, and
+ * `{ data: { results: [...] } }` shapes, returning the inner array.
+ * If the response is already an array, it is returned as-is.
+ */
+function unwrapResponseEnvelope(raw: any): any {
+  if (Array.isArray(raw)) return raw;
+
+  if (raw && typeof raw === 'object') {
+    if (Array.isArray(raw.results)) return raw.results;
+    if (Array.isArray(raw.data)) return raw.data;
+    if (Array.isArray(raw.items)) return raw.items;
+    if (raw.data && typeof raw.data === 'object') {
+      if (Array.isArray(raw.data.results)) return raw.data.results;
+      if (Array.isArray(raw.data.items)) return raw.data.items;
+    }
+  }
+
+  return raw;
+}
 
 /**
  * Create a callWidgetSql function bound to a specific base URL and auth provider.
@@ -102,6 +138,17 @@ export function createWidgetSqlCaller(
       const text = await res.text().catch(() => "");
       throw new Error(`Widget SQL failed: ${res.status} ${res.statusText} — ${text.slice(0, 500)}`);
     }
-    return res.json();
+
+    const json = await res.json();
+    const unwrapped = unwrapResponseEnvelope(json);
+
+    if (!Array.isArray(unwrapped)) {
+      console.error(
+        `⚠️ [WidgetSQL] Unexpected response shape from templateId=${templateId}, projectId=${projectId}:`,
+        `type=${typeof json}, keys=${json && typeof json === 'object' ? Object.keys(json).join(',') : 'N/A'}`
+      );
+    }
+
+    return unwrapped;
   };
 }

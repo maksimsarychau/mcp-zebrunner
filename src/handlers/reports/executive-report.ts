@@ -175,12 +175,16 @@ function buildExecutiveMarkdown(
   // Coverage
   const cvData = allData.map(d => d.coverage).filter(Boolean) as CoverageData[];
   if (cvData.length > 0) {
+    const stateNames = new Set<string>();
+    for (const cv of cvData) for (const n of Object.keys(cv.states)) stateNames.add(n);
+    const orderedStates = Array.from(stateNames);
     lines.push('## Automation Coverage');
-    lines.push('| Platform | Automated | Manual | Not Automated | Total | Coverage % |');
-    lines.push('| --- | ---: | ---: | ---: | ---: | ---: |');
+    lines.push(`| Platform | ${orderedStates.join(' | ')} | Total | Coverage % |`);
+    lines.push(`| --- | ${orderedStates.map(() => '---:').join(' | ')} | ---: | ---: |`);
     for (const cv of cvData) {
       const pct = cv.total > 0 ? ((cv.automated / cv.total) * 100).toFixed(1) : '0.0';
-      lines.push(`| ${cv.project} | ${cv.automated} | ${cv.manual} | ${cv.notAutomated} | ${cv.total} | ${pct}% |`);
+      const stateCols = orderedStates.map(s => String(cv.states[s] ?? 0)).join(' | ');
+      lines.push(`| ${cv.project} | ${stateCols} | ${cv.total} | ${pct}% |`);
     }
     lines.push('');
   }
@@ -236,15 +240,17 @@ function buildDashboardSections(
 
   const cvData = allData.map(d => d.coverage).filter(Boolean) as CoverageData[];
   if (cvData.length > 0) {
+    const cvStateNames = new Set<string>();
+    for (const cv of cvData) for (const n of Object.keys(cv.states)) cvStateNames.add(n);
     sections.push({
       id: 'coverage',
       title: 'Automation Coverage',
       chartType: 'bar',
       labels: cvData.map(d => d.project),
-      datasets: [
-        { label: 'Automated', data: cvData.map(d => d.automated), backgroundColor: COLORS.automated },
-        { label: 'Not Automated', data: cvData.map(d => d.notAutomated), backgroundColor: COLORS.notAutomated },
-      ],
+      datasets: Array.from(cvStateNames).map(s => ({
+        label: s,
+        data: cvData.map(d => d.states[s] ?? 0),
+      })),
       summary: cvData.map(d => `${d.project}: ${d.total > 0 ? ((d.automated / d.total) * 100).toFixed(1) : 0}%`).join(' | '),
     });
   }

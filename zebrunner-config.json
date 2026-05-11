@@ -1,0 +1,37 @@
+{
+  "projectAliases": {
+    "web": "MFPWEB",
+    "android": "MFPAND",
+    "ios": "MFPIOS",
+    "api": "MFPWEB"
+  },
+  "testConnectionProjectKey": "MCP",
+  "widgetTemplates": {
+    "RESULTS_BY_PLATFORM": 8,
+    "TOP_BUGS": 4,
+    "BUG_REVIEW": 9,
+    "FAILURE_INFO": 6,
+    "FAILURE_DETAILS": 10
+  },
+  "dashboardNames": {
+    "weeklyResults": "Weekly results",
+    "bugsReproRate": "Bugs repro rate"
+  },
+  "platformMap": {
+    "web": [],
+    "api": ["api"],
+    "android": [],
+    "ios": ["ios"]
+  },
+  "featureAreaKeywords": {
+    "quicklog": "Search & Quick Log",
+    "search": "Search & Quick Log",
+    "notification": "Notifications",
+    "meal": "Meal Management",
+    "message": "Messages",
+    "goal": "Goals",
+    "dashboard": "Dashboard",
+    "premium": "Premium Features",
+    "export": "Export"
+  }
+}

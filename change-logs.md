@@ -1,5 +1,101 @@
 # Change Logs
 
+## v8.2.0
+
+### Dynamic Configuration & Hardcoding Removal
+
+Introduced `zebrunner-config.json` — an instance-specific configuration file that externalizes values previously hardcoded for a single Zebrunner workspace. The MCP server now works out-of-the-box with any Zebrunner instance by customizing this file. Built-in defaults match the original values; if the file is missing or invalid, the server falls back to defaults automatically.
+
+**New files:**
+- `zebrunner-config.json` — project-root config file with all configurable values (project aliases, widget template IDs, dashboard names, platform map, feature area keywords, test connection project key).
+- `src/utils/config-loader.ts` — Zod-validated config loader with deep-merge defaults, disk caching, and warning logs for invalid fields.
+
+**Modified files:**
+- `src/utils/widget-sql.ts` — `TEMPLATE`, `PLATFORM_MAP`, and default `dashboardName` now read from `getConfig()` via new `getTemplate()` and `getPlatformMap()` accessors. Old constants kept as deprecated exports for backward compatibility.
+- `src/server.ts` — `PROJECT_ALIASES` replaced with `getProjectAliases()` reading from config. `resolveProjectId()` logs a warning when an alias is resolved, suggesting customization. All `TEMPLATE.*` references replaced with `getTemplate().*`. Import tool (`import_launch_results_to_test_run`) now dynamically fetches TCM result statuses via `client.listResultStatuses()` and builds a mapping by case-insensitive name matching, falling back to `DEFAULT_STATUS_MAP` on failure.
+- `src/api/enhanced-client.ts` — `testConnection()` uses `getConfig().testConnectionProjectKey` instead of hardcoded `'MCP'`.
+- `src/handlers/report-handler.ts` — `fetchBugs()` uses `getConfig().dashboardNames.bugsReproRate`. `fetchCoverage()` now fetches ALL automation states dynamically and counts test cases per state, instead of hardcoding three state names. Widget template IDs read from config.
+- `src/handlers/reports/types.ts` — `CoverageData` extended with `states: Record<string, number>` for dynamic per-state counts (backward-compat fields `automated/manual/notAutomated` kept).
+- `src/handlers/reports/quality-dashboard.ts` — Coverage chart sections render dynamic state names from `CoverageData.states` instead of fixed labels.
+- `src/handlers/reports/executive-report.ts` — Coverage table and chart sections render all states dynamically.
+- `src/handlers/reporting-tools.ts` — `extractFeatureArea()` reads keyword-to-label mapping from `getConfig().featureAreaKeywords` instead of hardcoded Project-specific substring checks.
+- `src/utils/testCaseHistory.ts` — Removed hardcoded `STATE_NAME_TO_EVENT` map. Event names are now generated dynamically as `became_<state_name>` from the `AutomationStatesMap`. `NamedEvent` type broadened to `` `became_${string}` ``. Added warning log when a custom field's `systemName` looks like a deprecation marker but doesn't match `'deprecated'` exactly.
+- `README.md` — Added "Instance Configuration File (`zebrunner-config.json`)" section under Configuration Options with full key descriptions.
+
+**What's configurable via `zebrunner-config.json`:**
+
+| Key | Description |
+|-----|-------------|
+| `projectAliases` | Maps short names (`web`, `android`, etc.) to Zebrunner project keys |
+| `testConnectionProjectKey` | Project key for connection testing |
+| `widgetTemplates` | Numeric IDs for SQL widget templates (tenant-specific) |
+| `dashboardNames` | Dashboard display names for widget SQL queries |
+| `platformMap` | Platform alias → widget SQL `PLATFORM` filter values |
+| `featureAreaKeywords` | Keyword → label mapping for regression stability feature bucketing |
+
+### New: Test Case Change History
+
+Added the ability to fetch and display the **change history** (audit log) for test cases directly through MCP tools. This feature parses the TCM audit-log endpoint (`GET /api/tcm/v1/test-cases/{id}/changes`) and transforms raw entries into structured history with named lifecycle events and field-level diffs.
+
+**New file:**
+- `src/utils/testCaseHistory.ts` — Full history pipeline: fetching, parsing, filtering, and bulk enrichment. Supports concurrency-limited parallel fetching (5 concurrent requests) for bulk operations.
+
+**New API method:**
+- `reportingClient.getTestCaseChanges(testCaseId, projectId, maxPageSize)` in `src/api/reporting-client.ts` — Fetches raw change entries from the TCM audit-log endpoint.
+
+**New parameters on 7 tools:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `include_history` | boolean | `false` | Attach a `history` array of parsed change log entries to each test case |
+| `history_filter` | `steps_only` \| `events_only` \| `all` | `steps_only` | What to include: step/precondition diffs, lifecycle events only, or everything |
+| `history_limit` | number (1–100) | `20` | Max history entries per test case |
+
+**Tools with history support:**
+- `get_test_case_by_key` — Single test case (also renders Change History section in markdown format)
+- `get_test_cases_advanced` — Advanced filtering with bulk history enrichment
+- `get_test_cases_by_automation_state` — State-based filtering with bulk history
+- `get_test_case_by_title` — Title search with bulk history
+- `get_test_case_by_filter` — Filter-based search with bulk history
+- `get_all_tcm_test_cases_by_project` — Full project export with bulk history
+- `get_test_cases_by_suite_smart` — Suite-based retrieval with bulk history
+
+**Detected lifecycle events:**
+- `became_automated`, `became_manual`, `became_not_automated`, etc. — Dynamically generated from project automation states via `became_<state_name>` pattern
+- `became_deprecated` / `became_undeprecated` — Deprecation flag changes
+- `steps_changed`, `preconditions_changed`, `postconditions_changed` — Test content modifications
+
+**Field-level diffs include:**
+- Step-by-step action and expected result changes (with step index)
+- Precondition and postcondition full-text diffs
+- Automation state transitions (old → new state name)
+- Custom field value changes (with system field name)
+- All other scalar field changes
+
+**Filtering modes:**
+- `steps_only` (default) — Only step/precondition/postcondition diffs and related events
+- `events_only` — Only entries with lifecycle events (automation state changes, deprecation)
+- `all` — All change entries including metadata changes
+
+**Markdown rendering** (on `get_test_case_by_key` with `format='markdown'`):
+- Appends a "Change History" section with timestamped entries grouped by author
+- Shows events and truncated before/after values for each field change
+
+**Bulk operation safety:**
+- Concurrency limited to 5 parallel API requests to avoid rate limiting
+- Warning emitted when history is fetched for more than 20 test cases at once
+
+### Improved Tool Routing for LLM Clients
+
+Improved tool descriptions to fix LLM routing issues where prompts like "get results for MCP during last 7 days" would incorrectly route to `get_all_launches_for_project` instead of `get_platform_results_by_period`.
+
+- `get_platform_results_by_period` — description now explicitly mentions trigger phrases: "results", "pass rate", "test statistics", "results for last N days", "how many passed/failed". Added concrete project key examples (`DEF`, `MCP`).
+- `get_all_launches_for_project` — description changed from "Get all launches" to "List individual launch executions" with explicit negative guidance: "NOT for aggregated results/pass rates".
+- `get_all_launches_with_filter` — same negative guidance added: "NOT for aggregated results/pass rates".
+- Updated descriptions in `tools.json`, `README.md`, and `TOOLS_CATALOG.md` to match.
+
+---
+
 ## v8.1.0
 
 ### Per-User Zebrunner URL (Multi-Tenant Hosting)
@@ -9,7 +105,7 @@ When `ZEBRUNNER_URL` is **not** set as an environment variable and `MCP_AUTH_MOD
 When `ZEBRUNNER_URL` IS set (env/Docker), everything works exactly as before — the URL field is hidden and the env value is used globally.
 
 **New files:**
-- `src/http/url-utils.ts` — `normalizeZebrunnerUrl()` and `toWebUrl()` utilities. Accepts user-friendly URLs like `https://mfp.zebrunner.com` and normalizes to `https://mfp.zebrunner.com/api/public/v1`.
+- `src/http/url-utils.ts` — `normalizeZebrunnerUrl()` and `toWebUrl()` utilities. Accepts user-friendly URLs like `https://mcp.zebrunner.com` and normalizes to `https://mcp.zebrunner.com/api/public/v1`.
 - `src/http/settings-routes.ts` — new `/settings` page where logged-in users can update their URL, username, or token, or disconnect entirely.
 - `tests/unit/url-utils.test.ts` — 14 unit tests for URL normalization edge cases.
 
