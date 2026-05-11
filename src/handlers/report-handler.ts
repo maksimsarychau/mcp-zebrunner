@@ -8,7 +8,8 @@
 import { ZebrunnerReportingClient } from "../api/reporting-client.js";
 import { EnhancedZebrunnerClient } from "../api/enhanced-client.js";
 import { ZebrunnerReportingToolHandlers } from "./reporting-tools.js";
-import { buildParamsConfig, TEMPLATE, type WidgetSqlCaller } from "../utils/widget-sql.js";
+import { buildParamsConfig, getTemplate, type WidgetSqlCaller } from "../utils/widget-sql.js";
+import { getConfig } from "../utils/config-loader.js";
 
 import {
   type ProjectContext,
@@ -133,50 +134,123 @@ export class ReportHandler implements ReportContext {
       period,
       milestone: milestone ? [milestone] : [],
     });
-    const widgetData = await this.callWidgetSql(ctx.projectId, TEMPLATE.RESULTS_BY_PLATFORM, params);
+    const widgetData = await this.callWidgetSql(ctx.projectId, getTemplate().RESULTS_BY_PLATFORM, params);
     if (!Array.isArray(widgetData)) {
-      console.error(`⚠️ [fetchPassRate] Widget SQL returned non-array for project ${ctx.alias} (got ${typeof widgetData}), falling back to launches API`);
+      console.error(
+        `⚠️ [fetchPassRate] Widget SQL returned non-array for project ${ctx.alias}` +
+        ` (type=${typeof widgetData}), falling back to launches API`
+      );
     }
     const rows: any[] = Array.isArray(widgetData) ? widgetData : [];
 
     let passed = 0, failed = 0, skipped = 0, knownIssue = 0, aborted = 0;
+    let dataSource: 'widget_sql' | 'launches_fallback' = 'widget_sql';
 
     if (rows.length > 0) {
-      const sampleKeys = Object.keys(rows[0]);
-      const numericKeys = sampleKeys.filter(k => {
-        const v = rows[0][k];
-        return typeof v === 'number' || (typeof v === 'string' && !isNaN(Number(v)) && v !== '');
-      });
+      const allKeys = Object.keys(rows[0]);
 
-      for (const row of rows) {
-        for (const k of numericKeys) {
-          const val = parseInt(row[k] || '0');
-          const kl = k.toLowerCase();
-          if (kl.includes('pass')) passed += val;
-          else if (kl.includes('fail')) failed += val;
-          else if (kl.includes('skip')) skipped += val;
-          else if (kl.includes('known') || kl.includes('issue')) knownIssue += val;
-          else if (kl.includes('abort')) aborted += val;
+      // Classify every column using explicit name table first, then substring fallback.
+      const classify = (key: string): 'passed' | 'failed' | 'skipped' | 'knownIssue' | 'aborted' | null => {
+        const kl = key.toLowerCase().replace(/[\s_-]+/g, '');
+
+        const exactMap: Record<string, 'passed' | 'failed' | 'skipped' | 'knownIssue' | 'aborted'> = {
+          passed: 'passed',
+          failed: 'failed',
+          skipped: 'skipped',
+          aborted: 'aborted',
+          knownissue: 'knownIssue',
+          known_issue: 'knownIssue',
+          inprogress: 'knownIssue',
+          queued: 'skipped',
+        };
+        if (exactMap[kl]) return exactMap[kl];
+
+        if (kl.includes('pass')) return 'passed';
+        if (kl.includes('fail')) return 'failed';
+        if (kl.includes('skip')) return 'skipped';
+        if (kl.includes('known') || kl.includes('issue')) return 'knownIssue';
+        if (kl.includes('abort')) return 'aborted';
+        return null;
+      };
+
+      const columnMap = new Map<string, 'passed' | 'failed' | 'skipped' | 'knownIssue' | 'aborted'>();
+      const unmappedColumns: string[] = [];
+
+      for (const k of allKeys) {
+        const cat = classify(k);
+        if (cat) {
+          columnMap.set(k, cat);
+        } else {
+          // Check if value is numeric — only flag numeric columns as unmapped
+          const v = rows[0][k];
+          const isNumeric = typeof v === 'number' || (typeof v === 'string' && !isNaN(Number(v)) && v !== '');
+          if (isNumeric) unmappedColumns.push(k);
         }
       }
+
+      if (unmappedColumns.length > 0) {
+        console.error(
+          `⚠️ [fetchPassRate] Unmapped numeric columns for project ${ctx.alias}: [${unmappedColumns.join(', ')}]. ` +
+          `Mapped: ${JSON.stringify(Object.fromEntries(columnMap))}`
+        );
+      }
+
+      for (const row of rows) {
+        for (const [k, cat] of columnMap) {
+          const val = parseInt(row[k] ?? '0', 10) || 0;
+          if (cat === 'passed') passed += val;
+          else if (cat === 'failed') failed += val;
+          else if (cat === 'skipped') skipped += val;
+          else if (cat === 'knownIssue') knownIssue += val;
+          else if (cat === 'aborted') aborted += val;
+        }
+      }
+
+      console.error(
+        `📊 [fetchPassRate] ${ctx.alias}: ${rows.length} row(s), ` +
+        `columns=[${[...columnMap.entries()].map(([k, v]) => `${k}->${v}`).join(', ')}], ` +
+        `passed=${passed} failed=${failed} skipped=${skipped} knownIssue=${knownIssue} aborted=${aborted}`
+      );
     } else {
+      dataSource = 'launches_fallback';
+      console.error(`⚠️ [fetchPassRate] No widget rows for ${ctx.alias}, falling back to launches API (pageSize=50)`);
+
       const launches = await this.reportingClient.getLaunches(ctx.projectId, {
-        pageSize: 10,
+        pageSize: 50,
         milestone,
       });
       const items = launches.items || [];
+
+      if (items.length === 0) {
+        console.error(`⚠️ [fetchPassRate] Launches API also returned 0 items for ${ctx.alias}`);
+      }
+
       for (const l of items) {
         passed += l.passed || 0;
         failed += l.failed || 0;
         skipped += l.skipped || 0;
         aborted += l.aborted || 0;
+        // knownIssue is not available on launch summary items
       }
+
+      console.error(
+        `📊 [fetchPassRate] ${ctx.alias} (launches fallback, ${items.length} launches): ` +
+        `passed=${passed} failed=${failed} skipped=${skipped} aborted=${aborted} ` +
+        `(knownIssue not available in launches API)`
+      );
     }
 
     const total = passed + failed + skipped + knownIssue + aborted;
     const passRate = total > 0 ? Math.round((passed / total) * 1000) / 10 : 0;
     const totalExclKnown = total - knownIssue;
     const passRateExclKnown = totalExclKnown > 0 ? Math.round((passed / totalExclKnown) * 1000) / 10 : 0;
+
+    if (total === 0) {
+      console.error(
+        `⚠️ [fetchPassRate] ${ctx.alias}: total=0 → passRate=0%. ` +
+        `Data source: ${dataSource}, period="${period}", milestone="${milestone ?? 'none'}"`
+      );
+    }
 
     return {
       project: ctx.alias,
@@ -222,12 +296,9 @@ export class ReportHandler implements ReportContext {
   }
 
   async fetchCoverage(ctx: ProjectContext): Promise<CoverageData> {
-    const states = await this.reportingClient.getAutomationStates(ctx.projectId);
-    const stateMap = new Map(states.map(s => [s.name.toLowerCase(), s.id]));
+    const automationStates = await this.reportingClient.getAutomationStates(ctx.projectId);
 
-    const countByState = async (stateName: string): Promise<number> => {
-      const stateId = stateMap.get(stateName.toLowerCase());
-      if (!stateId) return 0;
+    const countByStateId = async (stateId: number): Promise<number> => {
       const result = await this.publicClient.getTestCases(ctx.projectKey, {
         filter: `automationState.id = ${stateId}`,
         size: 1,
@@ -235,18 +306,32 @@ export class ReportHandler implements ReportContext {
       return (result._meta as any)?.total ?? result._meta?.totalElements ?? result.items?.length ?? 0;
     };
 
-    const [automated, manual, notAutomated] = await Promise.all([
-      countByState('Automated'),
-      countByState('Manual'),
-      countByState('Not Automated'),
-    ]);
+    const counts = await Promise.all(
+      automationStates.map(async (s) => ({
+        name: s.name,
+        count: await countByStateId(s.id),
+      })),
+    );
+
+    const statesRecord: Record<string, number> = {};
+    let total = 0;
+    for (const { name, count } of counts) {
+      statesRecord[name] = count;
+      total += count;
+    }
+
+    const findByLower = (needle: string): number => {
+      const entry = counts.find(c => c.name.toLowerCase() === needle);
+      return entry?.count ?? 0;
+    };
 
     return {
       project: ctx.alias,
-      automated,
-      manual,
-      notAutomated,
-      total: automated + manual + notAutomated,
+      states: statesRecord,
+      total,
+      automated: findByLower('automated'),
+      manual: findByLower('manual'),
+      notAutomated: findByLower('not automated'),
     };
   }
 
@@ -254,9 +339,9 @@ export class ReportHandler implements ReportContext {
     const params = buildParamsConfig({
       period,
       milestone: milestone ? [milestone] : [],
-      dashboardName: 'Bugs repro rate',
+      dashboardName: getConfig().dashboardNames.bugsReproRate,
     });
-    const bugsWidgetData = await this.callWidgetSql(ctx.projectId, TEMPLATE.TOP_BUGS, params);
+    const bugsWidgetData = await this.callWidgetSql(ctx.projectId, getTemplate().TOP_BUGS, params);
     if (!Array.isArray(bugsWidgetData)) {
       console.error(`⚠️ [fetchBugs] Widget SQL returned non-array for project ${ctx.alias} (got ${typeof bugsWidgetData})`);
     }

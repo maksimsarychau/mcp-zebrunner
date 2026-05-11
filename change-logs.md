@@ -1,5 +1,49 @@
 # Change Logs
 
+## v8.2.0
+
+### Dynamic Configuration & Hardcoding Removal
+
+Introduced `zebrunner-config.json` — an instance-specific configuration file that externalizes values previously hardcoded for a single Zebrunner workspace. The MCP server now works out-of-the-box with any Zebrunner instance by customizing this file. Built-in defaults match the original values; if the file is missing or invalid, the server falls back to defaults automatically.
+
+**New files:**
+- `zebrunner-config.json` — project-root config file with all configurable values (project aliases, widget template IDs, dashboard names, platform map, feature area keywords, test connection project key).
+- `src/utils/config-loader.ts` — Zod-validated config loader with deep-merge defaults, disk caching, and warning logs for invalid fields.
+
+**Modified files:**
+- `src/utils/widget-sql.ts` — `TEMPLATE`, `PLATFORM_MAP`, and default `dashboardName` now read from `getConfig()` via new `getTemplate()` and `getPlatformMap()` accessors. Old constants kept as deprecated exports for backward compatibility.
+- `src/server.ts` — `PROJECT_ALIASES` replaced with `getProjectAliases()` reading from config. `resolveProjectId()` logs a warning when an alias is resolved, suggesting customization. All `TEMPLATE.*` references replaced with `getTemplate().*`. Import tool (`import_launch_results_to_test_run`) now dynamically fetches TCM result statuses via `client.listResultStatuses()` and builds a mapping by case-insensitive name matching, falling back to `DEFAULT_STATUS_MAP` on failure.
+- `src/api/enhanced-client.ts` — `testConnection()` uses `getConfig().testConnectionProjectKey` instead of hardcoded `'MCP'`.
+- `src/handlers/report-handler.ts` — `fetchBugs()` uses `getConfig().dashboardNames.bugsReproRate`. `fetchCoverage()` now fetches ALL automation states dynamically and counts test cases per state, instead of hardcoding three state names. Widget template IDs read from config.
+- `src/handlers/reports/types.ts` — `CoverageData` extended with `states: Record<string, number>` for dynamic per-state counts (backward-compat fields `automated/manual/notAutomated` kept).
+- `src/handlers/reports/quality-dashboard.ts` — Coverage chart sections render dynamic state names from `CoverageData.states` instead of fixed labels.
+- `src/handlers/reports/executive-report.ts` — Coverage table and chart sections render all states dynamically.
+- `src/handlers/reporting-tools.ts` — `extractFeatureArea()` reads keyword-to-label mapping from `getConfig().featureAreaKeywords` instead of hardcoded Project-specific substring checks.
+- `src/utils/testCaseHistory.ts` — Removed hardcoded `STATE_NAME_TO_EVENT` map. Event names are now generated dynamically as `became_<state_name>` from the `AutomationStatesMap`. `NamedEvent` type broadened to `` `became_${string}` ``. Added warning log when a custom field's `systemName` looks like a deprecation marker but doesn't match `'deprecated'` exactly.
+- `README.md` — Added "Instance Configuration File (`zebrunner-config.json`)" section under Configuration Options with full key descriptions.
+
+**What's configurable via `zebrunner-config.json`:**
+
+| Key | Description |
+|-----|-------------|
+| `projectAliases` | Maps short names (`web`, `android`, etc.) to Zebrunner project keys |
+| `testConnectionProjectKey` | Project key for connection testing |
+| `widgetTemplates` | Numeric IDs for SQL widget templates (tenant-specific) |
+| `dashboardNames` | Dashboard display names for widget SQL queries |
+| `platformMap` | Platform alias → widget SQL `PLATFORM` filter values |
+| `featureAreaKeywords` | Keyword → label mapping for regression stability feature bucketing |
+
+### Improved Tool Routing for LLM Clients
+
+Improved tool descriptions to fix LLM routing issues where prompts like "get results for MCP during last 7 days" would incorrectly route to `get_all_launches_for_project` instead of `get_platform_results_by_period`.
+
+- `get_platform_results_by_period` — description now explicitly mentions trigger phrases: "results", "pass rate", "test statistics", "results for last N days", "how many passed/failed". Added concrete project key examples (`DEF`, `MCP`).
+- `get_all_launches_for_project` — description changed from "Get all launches" to "List individual launch executions" with explicit negative guidance: "NOT for aggregated results/pass rates".
+- `get_all_launches_with_filter` — same negative guidance added: "NOT for aggregated results/pass rates".
+- Updated descriptions in `tools.json`, `README.md`, and `TOOLS_CATALOG.md` to match.
+
+---
+
 ## v8.1.0
 
 ### Per-User Zebrunner URL (Multi-Tenant Hosting)
@@ -9,7 +53,7 @@ When `ZEBRUNNER_URL` is **not** set as an environment variable and `MCP_AUTH_MOD
 When `ZEBRUNNER_URL` IS set (env/Docker), everything works exactly as before — the URL field is hidden and the env value is used globally.
 
 **New files:**
-- `src/http/url-utils.ts` — `normalizeZebrunnerUrl()` and `toWebUrl()` utilities. Accepts user-friendly URLs like `https://mfp.zebrunner.com` and normalizes to `https://mfp.zebrunner.com/api/public/v1`.
+- `src/http/url-utils.ts` — `normalizeZebrunnerUrl()` and `toWebUrl()` utilities. Accepts user-friendly URLs like `https://mcp.zebrunner.com` and normalizes to `https://mcp.zebrunner.com/api/public/v1`.
 - `src/http/settings-routes.ts` — new `/settings` page where logged-in users can update their URL, username, or token, or disconnect entirely.
 - `tests/unit/url-utils.test.ts` — 14 unit tests for URL normalization edge cases.
 

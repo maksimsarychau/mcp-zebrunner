@@ -253,17 +253,18 @@ function buildRuntimeSection(data: RuntimeData[], ctx: ReportContext): Dashboard
 }
 
 function buildCoverageSection(data: CoverageData[]): DashboardSection {
+  const stateNames = collectStateNames(data);
+
   if (data.length === 1) {
     const d = data[0];
     return {
       id: 'coverage',
       title: `Automation Coverage — ${d.project}`,
       chartType: 'pie',
-      labels: ['Automated', 'Manual', 'Not Automated'],
+      labels: stateNames,
       datasets: [{
         label: 'Test Cases',
-        data: [d.automated, d.manual, d.notAutomated],
-        backgroundColor: [COLORS.automated, COLORS.manual, COLORS.notAutomated],
+        data: stateNames.map(s => d.states[s] ?? 0),
       }],
       summary: `${d.total} total test cases — ${d.total > 0 ? ((d.automated / d.total) * 100).toFixed(1) : 0}% automated`,
     };
@@ -274,15 +275,22 @@ function buildCoverageSection(data: CoverageData[]): DashboardSection {
     title: 'Automation Coverage Sustainability',
     chartType: 'bar',
     labels: data.map(d => d.project),
-    datasets: [
-      { label: 'Automated', data: data.map(d => d.automated), backgroundColor: COLORS.automated },
-      { label: 'Manual', data: data.map(d => d.manual), backgroundColor: COLORS.manual },
-      { label: 'Not Automated', data: data.map(d => d.notAutomated), backgroundColor: COLORS.notAutomated },
-    ],
+    datasets: stateNames.map(s => ({
+      label: s,
+      data: data.map(d => d.states[s] ?? 0),
+    })),
     summary: data.map(d =>
       `${d.project}: ${d.total > 0 ? ((d.automated / d.total) * 100).toFixed(1) : 0}% automated (${d.automated}/${d.total})`,
     ).join(' | '),
   };
+}
+
+function collectStateNames(data: CoverageData[]): string[] {
+  const nameSet = new Set<string>();
+  for (const d of data) {
+    for (const name of Object.keys(d.states)) nameSet.add(name);
+  }
+  return Array.from(nameSet);
 }
 
 function buildBugsSection(data: BugsData[], limit: number): DashboardSection {

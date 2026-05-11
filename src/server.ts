@@ -31,12 +31,13 @@ import { buildChartResponse, type ChartConfig } from "./utils/chart-generator.js
 import { matchesField, filterByField, type FieldFilter, type FieldMatchMode } from "./utils/custom-field-filter.js";
 import {
   ALL_PERIODS as SHARED_ALL_PERIODS,
-  TEMPLATE as SHARED_TEMPLATE,
-  PLATFORM_MAP as SHARED_PLATFORM_MAP,
+  getTemplate,
+  getPlatformMap,
   buildParamsConfig as sharedBuildParamsConfig,
   createWidgetSqlCaller,
   type WidgetSqlCaller,
 } from "./utils/widget-sql.js";
+import { getConfig } from "./utils/config-loader.js";
 import { registerResources, getResourcesCatalog } from "./resources.js";
 import { registerPrompts, getPromptsCatalog } from "./prompts.js";
 import {
@@ -47,6 +48,7 @@ import {
   markdownForResources,
 } from "./utils/tool-intel.js";
 import { ToolMetrics, wrapToolHandler } from "./utils/tool-metrics.js";
+import { enrichTestCasesWithHistory, getHistoryBulkWarning, type HistoryFilter, type AutomationStatesMap } from "./utils/testCaseHistory.js";
 
 // Mutation tools imports
 import { ZebrunnerMutationClient } from "./api/mutation-client.js";
@@ -213,15 +215,12 @@ const REVIEW_FILES_AVAILABLE = !!(REVIEW_RULES_FILE && REVIEW_CHECKPOINTS_FILE);
 // === Widget mini-config ===
 const WIDGET_BASE_URL = ZEBRUNNER_URL.replace('/api/public/v1', '');
 
-// Project aliases mapping to project keys (dynamically resolved to IDs)
-const PROJECT_ALIASES: Record<string, string> = {
-  web: "MFPWEB", android: "MFPAND", ios: "MFPIOS", api: "MFPAPI"
-};
+function getProjectAliases(): Record<string, string> {
+  return getConfig().projectAliases;
+}
 
 const ALL_PERIODS = SHARED_ALL_PERIODS;
 type Period = (typeof ALL_PERIODS)[number];
-const PLATFORM_MAP = SHARED_PLATFORM_MAP;
-const TEMPLATE = SHARED_TEMPLATE;
 
 /** Debug logging utility with safe serialization - uses stderr to avoid MCP protocol interference */
 function debugLog(message: string, data?: unknown) {
@@ -267,8 +266,15 @@ async function resolveProjectId(project: string | number): Promise<{ projectId: 
     return { projectId: project };
   }
 
-  // First try hardcoded aliases for backward compatibility
-  const projectKey = PROJECT_ALIASES[project] || project;
+  const aliases = getProjectAliases();
+  const isAlias = project in aliases;
+  if (isAlias) {
+    console.error(
+      `[config] Resolved project alias '${project}' → '${aliases[project]}'. ` +
+      `Customize aliases in zebrunner-config.json if this mapping is incorrect for your Zebrunner instance.`
+    );
+  }
+  const projectKey = aliases[project] || project;
 
   try {
     const projectId = await reportingClient.getProjectId(projectKey);
@@ -314,6 +320,16 @@ async function resolveProjectId(project: string | number): Promise<{ projectId: 
   }
 }
 
+/** Build an automation-state ID→name map for a project (used by history enrichment). */
+async function buildAutomationStatesMap(projectId: number): Promise<AutomationStatesMap> {
+  try {
+    const states = await reportingClient.getAutomationStates(projectId);
+    return Object.fromEntries(states.map((s: { id: number; name: string }) => [s.id, s.name]));
+  } catch {
+    return {};
+  }
+}
+
 /** Improved API response validation */
 function validateApiResponse(data: unknown, expectedType: string): boolean {
   if (!data) {
@@ -342,7 +358,7 @@ const reportHandler = new ReportHandler(
   reportingHandlers,
   callWidgetSql,
   resolveProjectId,
-  PROJECT_ALIASES,
+  getProjectAliases(),
 );
 
 // === Build paramsConfig for widget requests (delegates to shared utility) ===
@@ -1163,7 +1179,10 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
       include_debug: z.boolean().default(false).describe("Include debug information in markdown"),
       include_suite_hierarchy: z.boolean().default(false).describe("Include featureSuiteId and rootSuiteId with suite hierarchy path"),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI"),
-      include_execution_history: z.boolean().default(false).describe("Include TCM execution history (manual + automated runs). Shows last 10 executions with status, environment, and configurations.")
+      include_execution_history: z.boolean().default(false).describe("Include TCM execution history (manual + automated runs). Shows last 10 executions with status, environment, and configurations."),
+      include_history: z.boolean().default(false).describe("When true, each test case includes a 'history' array of change log entries. Filtered to steps, preconditions, expected results, and lifecycle events (automation state changes, deprecation) by default."),
+      history_filter: z.enum(['steps_only', 'events_only', 'all']).default('steps_only').describe("What to include in history. 'steps_only': step/precondition/expectedResult diffs only. 'events_only': lifecycle events only (automated, deprecated, etc.). 'all': everything. Only used when include_history=true."),
+      history_limit: z.number().int().min(1).max(100).default(20).describe("Max history entries per test case. Default 20."),
     },
       annotations: {
         readOnlyHint: true,
@@ -1173,7 +1192,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
       },
     },
     async (args) => {
-      const { case_key, format, include_debug, include_suite_hierarchy, include_clickable_links, include_execution_history } = args;
+      const { case_key, format, include_debug, include_suite_hierarchy, include_clickable_links, include_execution_history, include_history, history_filter, history_limit } = args;
 
       const isNumericId = /^\d+$/.test(case_key.trim());
 
@@ -1228,12 +1247,48 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
           }
         }
 
+        // Fetch change history if requested
+        if (include_history && testCase.id) {
+          try {
+            const { projectId } = await resolveProjectId(project_key);
+            const statesMap = await buildAutomationStatesMap(projectId);
+            const historyResults = await enrichTestCasesWithHistory(
+              [testCase], reportingClient, projectId, statesMap,
+              { filter: history_filter as HistoryFilter, maxResults: history_limit }
+            );
+            (testCase as any).history = historyResults[0] ?? [];
+          } catch (err: any) {
+            debugLog("Failed to fetch change history", { error: err.message });
+          }
+        }
+
         if (format === 'markdown') {
           let markdown = await renderTestCaseMarkdown(testCase, include_debug, include_suite_hierarchy, project_key, clickableLinkConfig);
           if (executionHistory && executionHistory.length > 0) {
             markdown += '\n' + FormatProcessor.formatExecutionHistoryMarkdown(executionHistory);
           } else if (include_execution_history) {
             markdown += '\n## Execution History\n\nNo executions found.\n';
+          }
+          if (include_history && (testCase as any).history) {
+            const historyEntries = (testCase as any).history;
+            if (historyEntries.length > 0) {
+              markdown += '\n## Change History\n\n';
+              for (const entry of historyEntries) {
+                markdown += `### ${new Date(entry.timestamp).toLocaleString()} (by ${entry.author})\n`;
+                if (entry.events.length > 0) {
+                  markdown += `**Events:** ${entry.events.join(', ')}\n`;
+                }
+                for (const change of entry.changes) {
+                  const label = change.stepIndex !== undefined
+                    ? `${change.field}[${change.stepIndex}].${change.subField || 'value'}`
+                    : change.subField ? `${change.field}.${change.subField}` : change.field;
+                  markdown += `- **${label}:** \`${change.oldValue.substring(0, 80)}\` → \`${change.newValue.substring(0, 80)}\`\n`;
+                }
+                markdown += '\n';
+              }
+            } else {
+              markdown += '\n## Change History\n\nNo relevant changes found.\n';
+            }
           }
           return {
             content: [{
@@ -1420,7 +1475,10 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
         "When true, paginates through all pages and returns only the total count without test case data. " +
         "Efficient for metrics collection -- avoids 1MB response limit on large projects."
       ),
-      include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI")
+      include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI"),
+      include_history: z.boolean().default(false).describe("When true, each test case includes a 'history' array of change log entries. Filtered to steps, preconditions, expected results, and lifecycle events (automation state changes, deprecation) by default."),
+      history_filter: z.enum(['steps_only', 'events_only', 'all']).default('steps_only').describe("What to include in history. 'steps_only': step/precondition/expectedResult diffs only. 'events_only': lifecycle events only (automated, deprecated, etc.). 'all': everything. Only used when include_history=true."),
+      history_limit: z.number().int().min(1).max(100).default(20).describe("Max history entries per test case. Default 20. For bulk tools fetching many cases, keep this low to avoid rate limits."),
     },
       annotations: {
         readOnlyHint: true,
@@ -1450,7 +1508,10 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
         page,
         size,
         count_only,
-        include_clickable_links
+        include_clickable_links,
+        include_history,
+        history_filter,
+        history_limit
       } = args;
 
       // Runtime validation for configured MAX_PAGE_SIZE
@@ -1519,6 +1580,22 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
           }
 
           const limited = matched.slice(0, size);
+
+          // Enrich with change history if requested
+          if (include_history && limited.length > 0) {
+            try {
+              const { projectId } = await resolveProjectId(project_key);
+              const statesMap = await buildAutomationStatesMap(projectId);
+              const historyResults = await enrichTestCasesWithHistory(
+                limited, reportingClient, projectId, statesMap,
+                { filter: history_filter as HistoryFilter, maxResults: history_limit }
+              );
+              limited.forEach((tc: any, i: number) => { tc.history = historyResults[i] ?? []; });
+            } catch (err: any) {
+              debugLog("Failed to fetch change history for advanced field-filter cases", { error: err.message });
+            }
+          }
+
           const formattedData = FormatProcessor.format({
             items: limited,
             page_count: limited.length,
@@ -1598,8 +1675,23 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
           );
         }
 
+        // Enrich with change history if requested
+        if (include_history && processedCases.length > 0) {
+          try {
+            const { projectId } = await resolveProjectId(project_key);
+            const statesMap = await buildAutomationStatesMap(projectId);
+            const historyResults = await enrichTestCasesWithHistory(
+              processedCases, reportingClient, projectId, statesMap,
+              { filter: history_filter as HistoryFilter, maxResults: history_limit }
+            );
+            processedCases.forEach((tc: any, i: number) => { tc.history = historyResults[i] ?? []; });
+          } catch (err: any) {
+            debugLog("Failed to fetch change history for advanced cases", { error: err.message });
+          }
+        }
+
         const hasMorePages = !!response._meta?.nextPageToken;
-        const responseData = {
+        const responseData: any = {
           items: processedCases,
           page_count: processedCases.length,
           has_more_pages: hasMorePages,
@@ -1611,6 +1703,11 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
             ? "More pages available. Pass the nextPageToken value to the page_token parameter to fetch the next page. Note: the Zebrunner Public API does not provide a total count."
             : undefined
         };
+
+        if (include_history) {
+          const warning = getHistoryBulkWarning(processedCases.length);
+          if (warning) responseData.history_warning = warning;
+        }
 
         const formattedData = FormatProcessor.format(responseData, format);
 
@@ -1736,7 +1833,10 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
         "Efficient for metrics collection -- avoids 1MB response limit on large projects."
       ),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
-      include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI")
+      include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI"),
+      include_history: z.boolean().default(false).describe("When true, each test case includes a 'history' array of change log entries. Filtered to steps, preconditions, expected results, and lifecycle events (automation state changes, deprecation) by default."),
+      history_filter: z.enum(['steps_only', 'events_only', 'all']).default('steps_only').describe("What to include in history. 'steps_only': step/precondition/expectedResult diffs only. 'events_only': lifecycle events only (automated, deprecated, etc.). 'all': everything. Only used when include_history=true."),
+      history_limit: z.number().int().min(1).max(100).default(20).describe("Max history entries per test case. Default 20. For bulk tools fetching many cases, keep this low to avoid rate limits."),
     },
       annotations: {
         readOnlyHint: true,
@@ -1746,7 +1846,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
       },
     },
     async (args) => {
-      const { project_key, automation_states, suite_id, created_after, exclude_deprecated, exclude_draft, exclude_deleted, max_page_size, page_token, get_all, count_only, format, include_clickable_links } = args;
+      const { project_key, automation_states, suite_id, created_after, exclude_deprecated, exclude_draft, exclude_deleted, max_page_size, page_token, get_all, count_only, format, include_clickable_links, include_history, history_filter, history_limit } = args;
 
       try {
         debugLog("Getting test cases by automation state", args);
@@ -1819,6 +1919,21 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
             );
           }
 
+          // Enrich with change history if requested
+          if (include_history && processedCases.length > 0) {
+            try {
+              const { projectId } = await resolveProjectId(project_key);
+              const statesMap = await buildAutomationStatesMap(projectId);
+              const historyResults = await enrichTestCasesWithHistory(
+                processedCases, reportingClient, projectId, statesMap,
+                { filter: history_filter as HistoryFilter, maxResults: history_limit }
+              );
+              processedCases.forEach((tc: any, i: number) => { tc.history = historyResults[i] ?? []; });
+            } catch (err: any) {
+              debugLog("Failed to fetch change history for automation state cases", { error: err.message });
+            }
+          }
+
           const formattedData = FormatProcessor.format(processedCases, format);
           const resultText = typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2);
 
@@ -1835,7 +1950,11 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
             }] };
           }
 
-          const summary = `Found ${processedCases.length} test case(s) total for automation state(s): ${automationStateInfo}`;
+          let summary = `Found ${processedCases.length} test case(s) total for automation state(s): ${automationStateInfo}`;
+          if (include_history) {
+            const warning = getHistoryBulkWarning(processedCases.length);
+            if (warning) summary += `\n⚠️ ${warning}`;
+          }
 
           return {
             content: [{
@@ -1865,7 +1984,20 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
         const hasMorePages = !!response._meta?.nextPageToken;
         const nextPageToken = response._meta?.nextPageToken || undefined;
 
-        
+        // Enrich with change history if requested
+        if (include_history && processedCases.length > 0) {
+          try {
+            const { projectId } = await resolveProjectId(project_key);
+            const statesMap = await buildAutomationStatesMap(projectId);
+            const historyResults = await enrichTestCasesWithHistory(
+              processedCases, reportingClient, projectId, statesMap,
+              { filter: history_filter as HistoryFilter, maxResults: history_limit }
+            );
+            processedCases.forEach((tc: any, i: number) => { tc.history = historyResults[i] ?? []; });
+          } catch (err: any) {
+            debugLog("Failed to fetch change history for automation state cases", { error: err.message });
+          }
+        }
 
         if (format === 'markdown') {
           let markdown = `# Test Cases by Automation State\n\n`;
@@ -2126,7 +2258,10 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
         "Efficient for metrics collection -- avoids 1MB response limit on large projects."
       ),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
-      include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI")
+      include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI"),
+      include_history: z.boolean().default(false).describe("When true, each test case includes a 'history' array of change log entries. Filtered to steps, preconditions, expected results, and lifecycle events (automation state changes, deprecation) by default."),
+      history_filter: z.enum(['steps_only', 'events_only', 'all']).default('steps_only').describe("What to include in history. 'steps_only': step/precondition/expectedResult diffs only. 'events_only': lifecycle events only (automated, deprecated, etc.). 'all': everything. Only used when include_history=true."),
+      history_limit: z.number().int().min(1).max(100).default(20).describe("Max history entries per test case. Default 20. For bulk tools fetching many cases, keep this low to avoid rate limits."),
     },
       annotations: {
         readOnlyHint: true,
@@ -2136,7 +2271,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
       },
     },
     async (args) => {
-      const { project_key, title, max_page_size, page_token, get_all, count_only, format, include_clickable_links } = args;
+      const { project_key, title, max_page_size, page_token, get_all, count_only, format, include_clickable_links, include_history, history_filter, history_limit } = args;
 
       try {
         debugLog("Getting test case by title", args);
@@ -2198,6 +2333,21 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
             );
           }
 
+          // Enrich with change history if requested
+          if (include_history && processedCases.length > 0) {
+            try {
+              const { projectId } = await resolveProjectId(project_key);
+              const statesMap = await buildAutomationStatesMap(projectId);
+              const historyResults = await enrichTestCasesWithHistory(
+                processedCases, reportingClient, projectId, statesMap,
+                { filter: history_filter as HistoryFilter, maxResults: history_limit }
+              );
+              processedCases.forEach((tc: any, i: number) => { tc.history = historyResults[i] ?? []; });
+            } catch (err: any) {
+              debugLog("Failed to fetch change history for title search cases", { error: err.message });
+            }
+          }
+
           const formattedData = FormatProcessor.format(processedCases, format);
           const resultText = typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2);
 
@@ -2214,7 +2364,11 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
             }] };
           }
 
-          const summary = `Found ${processedCases.length} test case(s) total matching title "${title}"`;
+          let summary = `Found ${processedCases.length} test case(s) total matching title "${title}"`;
+          if (include_history) {
+            const warning = getHistoryBulkWarning(processedCases.length);
+            if (warning) summary += `\n⚠️ ${warning}`;
+          }
 
           return {
             content: [{
@@ -2245,6 +2399,21 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
           processedCases = processedCases.map(testCase =>
             addTestCaseWebUrl(testCase, project_key, clickableLinkConfig.baseWebUrl, clickableLinkConfig)
           );
+        }
+
+        // Enrich with change history if requested
+        if (include_history && processedCases.length > 0) {
+          try {
+            const { projectId } = await resolveProjectId(project_key);
+            const statesMap = await buildAutomationStatesMap(projectId);
+            const historyResults = await enrichTestCasesWithHistory(
+              processedCases, reportingClient, projectId, statesMap,
+              { filter: history_filter as HistoryFilter, maxResults: history_limit }
+            );
+            processedCases.forEach((tc: any, i: number) => { tc.history = historyResults[i] ?? []; });
+          } catch (err: any) {
+            debugLog("Failed to fetch change history for title search cases", { error: err.message });
+          }
         }
 
         const formattedData = FormatProcessor.format(processedCases, format);
@@ -2303,7 +2472,10 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
         "Efficient for metrics collection -- avoids 1MB response limit on large projects."
       ),
       format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
-      include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI")
+      include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI"),
+      include_history: z.boolean().default(false).describe("When true, each test case includes a 'history' array of change log entries. Filtered to steps, preconditions, expected results, and lifecycle events (automation state changes, deprecation) by default."),
+      history_filter: z.enum(['steps_only', 'events_only', 'all']).default('steps_only').describe("What to include in history. 'steps_only': step/precondition/expectedResult diffs only. 'events_only': lifecycle events only (automated, deprecated, etc.). 'all': everything. Only used when include_history=true."),
+      history_limit: z.number().int().min(1).max(100).default(20).describe("Max history entries per test case. Default 20. For bulk tools fetching many cases, keep this low to avoid rate limits."),
     },
       annotations: {
         readOnlyHint: true,
@@ -2333,7 +2505,10 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
         get_all,
         count_only,
         format,
-        include_clickable_links
+        include_clickable_links,
+        include_history,
+        history_filter,
+        history_limit
       } = args;
 
       try {
@@ -2353,6 +2528,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
         }
 
         const filters: string[] = [];
+        const needsClientSideFilter = !!(last_modified_after || last_modified_before || exclude_deleted);
 
         if (test_suite_id) {
           filters.push(`testSuite.id = ${test_suite_id}`);
@@ -2362,12 +2538,6 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
         }
         if (created_before) {
           filters.push(`createdAt <= '${created_before}'`);
-        }
-        if (last_modified_after) {
-          filters.push(`lastModifiedAt >= '${last_modified_after}'`);
-        }
-        if (last_modified_before) {
-          filters.push(`lastModifiedAt <= '${last_modified_before}'`);
         }
         if (priority_id) {
           filters.push(`priority.id = ${priority_id}`);
@@ -2381,15 +2551,28 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
         if (exclude_draft) {
           filters.push(`draft = false`);
         }
-        if (exclude_deleted) {
-          filters.push(`deleted = false`);
-        }
 
-        if (filters.length === 0 && !hasFieldFilter) {
+        if (filters.length === 0 && !hasFieldFilter && !needsClientSideFilter) {
           throw new Error('At least one filter parameter must be provided (including field_path)');
         }
 
         const filter = filters.length > 0 ? filters.join(' AND ') : undefined;
+
+        const applyClientSideFilters = (items: any[]): any[] => {
+          let result = items;
+          if (last_modified_after) {
+            const afterDate = new Date(last_modified_after);
+            result = result.filter((tc: any) => tc.lastModifiedAt && new Date(tc.lastModifiedAt) >= afterDate);
+          }
+          if (last_modified_before) {
+            const beforeDate = new Date(last_modified_before);
+            result = result.filter((tc: any) => tc.lastModifiedAt && new Date(tc.lastModifiedAt) <= beforeDate);
+          }
+          if (exclude_deleted) {
+            result = result.filter((tc: any) => !tc.deleted);
+          }
+          return result;
+        };
 
         // Field-path filter requires full pagination + client-side filter
         if (hasFieldFilter) {
@@ -2407,7 +2590,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
             currentPageToken = response._meta?.nextPageToken;
           } while (currentPageToken);
 
-          const matched = filterByField(allCases, fFilter!);
+          const matched = filterByField(applyClientSideFilters(allCases), fFilter!);
 
           if (count_only) {
             return { content: [{ type: "text" as const, text: JSON.stringify({
@@ -2428,6 +2611,22 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
           }
 
           const limited = processedCases.slice(0, max_page_size);
+
+          // Enrich with change history if requested
+          if (include_history && limited.length > 0) {
+            try {
+              const { projectId } = await resolveProjectId(project_key);
+              const statesMap = await buildAutomationStatesMap(projectId);
+              const historyResults = await enrichTestCasesWithHistory(
+                limited, reportingClient, projectId, statesMap,
+                { filter: history_filter as HistoryFilter, maxResults: history_limit }
+              );
+              limited.forEach((tc: any, i: number) => { tc.history = historyResults[i] ?? []; });
+            } catch (err: any) {
+              debugLog("Failed to fetch change history for filtered cases", { error: err.message });
+            }
+          }
+
           const formattedData = FormatProcessor.format(limited, format);
           const resultText = typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2);
 
@@ -2465,7 +2664,8 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
               filter,
               pageToken: currentPageToken
             });
-            totalCount += (response.items || []).length;
+            const pageItems = applyClientSideFilters(response.items || []);
+            totalCount += pageItems.length;
             pageCount++;
             currentPageToken = response._meta?.nextPageToken;
           } while (currentPageToken);
@@ -2474,6 +2674,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
             total_count: totalCount,
             pages_traversed: pageCount,
             filters_applied: filter,
+            client_side_filters: needsClientSideFilter ? { last_modified_after, last_modified_before, exclude_deleted } : undefined,
             project_key
           }, null, 2) }] };
         }
@@ -2499,11 +2700,26 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
             currentPageToken = response._meta?.nextPageToken;
           } while (currentPageToken);
 
-          let processedCases = allTestCases;
+          let processedCases = applyClientSideFilters(allTestCases);
           if (include_clickable_links && clickableLinkConfig.includeClickableLinks) {
             processedCases = processedCases.map(testCase =>
               addTestCaseWebUrl(testCase, project_key, clickableLinkConfig.baseWebUrl, clickableLinkConfig)
             );
+          }
+
+          // Enrich with change history if requested
+          if (include_history && processedCases.length > 0) {
+            try {
+              const { projectId } = await resolveProjectId(project_key);
+              const statesMap = await buildAutomationStatesMap(projectId);
+              const historyResults = await enrichTestCasesWithHistory(
+                processedCases, reportingClient, projectId, statesMap,
+                { filter: history_filter as HistoryFilter, maxResults: history_limit }
+              );
+              processedCases.forEach((tc: any, i: number) => { tc.history = historyResults[i] ?? []; });
+            } catch (err: any) {
+              debugLog("Failed to fetch change history for filtered cases", { error: err.message });
+            }
           }
 
           const formattedData = FormatProcessor.format(processedCases, format);
@@ -2523,7 +2739,11 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
             }] };
           }
 
-          const summary = `Found ${processedCases.length} test case(s) total matching the specified filters`;
+          let summary = `Found ${processedCases.length} test case(s) total matching the specified filters`;
+          if (include_history) {
+            const warning = getHistoryBulkWarning(processedCases.length);
+            if (warning) summary += `\n⚠️ ${warning}`;
+          }
           const filterSummary = `Applied filters: ${filter}`;
 
           return {
@@ -2547,7 +2767,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
           throw new Error('Invalid API response format');
         }
 
-        let processedCases = response.items || response;
+        let processedCases = applyClientSideFilters(response.items || response);
         const hasMorePages = !!response._meta?.nextPageToken;
         const nextPageToken = response._meta?.nextPageToken || undefined;
 
@@ -2557,11 +2777,26 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
           );
         }
 
+        // Enrich with change history if requested
+        if (include_history && processedCases.length > 0) {
+          try {
+            const { projectId } = await resolveProjectId(project_key);
+            const statesMap = await buildAutomationStatesMap(projectId);
+            const historyResults = await enrichTestCasesWithHistory(
+              processedCases, reportingClient, projectId, statesMap,
+              { filter: history_filter as HistoryFilter, maxResults: history_limit }
+            );
+            processedCases.forEach((tc: any, i: number) => { tc.history = historyResults[i] ?? []; });
+          } catch (err: any) {
+            debugLog("Failed to fetch change history for filtered cases", { error: err.message });
+          }
+        }
+
         const formattedData = FormatProcessor.format(processedCases, format);
         const resultText = typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2);
 
         const summary = `Found ${processedCases.length} test case(s) on this page matching the specified filters`;
-        const filterSummary = `Applied filters: ${filter}`;
+        const filterSummary = filter ? `Applied filters: ${filter}` : 'Applied filters: (client-side only)';
         let paginationInfo = '';
 
         if (hasMorePages) {
@@ -4227,8 +4462,28 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         // Fetch all tests from the launch
         const launchTests = await reportingClient.getAllTestRuns(args.launch_id, numericProjectId);
 
-        // Build test-case-key → result map from launch data
-        const statusMap = { ...DEFAULT_STATUS_MAP, ...(args.status_mapping || {}) };
+        // Build status map: try dynamic resolution, fall back to defaults
+        let dynamicStatusMap: Record<string, string> = { ...DEFAULT_STATUS_MAP };
+        try {
+          const resultStatuses = await client.listResultStatuses({ projectKey });
+          const tcmNames = (resultStatuses.items ?? []).map((s: any) => s.name as string);
+          const reportingStatuses = ['PASSED', 'FAILED', 'SKIPPED', 'ABORTED'];
+          for (const rs of reportingStatuses) {
+            const match = tcmNames.find((n: string) => n.toLowerCase() === rs.toLowerCase());
+            if (match) {
+              dynamicStatusMap[rs] = match;
+            }
+          }
+          if (JSON.stringify(dynamicStatusMap) !== JSON.stringify(DEFAULT_STATUS_MAP)) {
+            console.error(
+              `[import] Dynamic status mapping for ${projectKey}: ${JSON.stringify(dynamicStatusMap)} ` +
+              `(differs from default: ${JSON.stringify(DEFAULT_STATUS_MAP)})`
+            );
+          }
+        } catch {
+          console.error(`[import] Could not fetch result statuses for ${projectKey}, using defaults`);
+        }
+        const statusMap = { ...dynamicStatusMap, ...(args.status_mapping || {}) };
         const tcResultMap = new Map<string, {
           status: string; mappedStatus: string; durationMs: number | null;
           details: string | null; testName: string;
@@ -5075,7 +5330,10 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       count_only: z.boolean().default(false).describe(
         "When true, returns only the total count without test case data. " +
         "Efficient for metrics collection -- avoids 1MB response limit on large projects."
-      )
+      ),
+      include_history: z.boolean().default(false).describe("When true, each test case includes a 'history' array of change log entries. Filtered to steps, preconditions, expected results, and lifecycle events (automation state changes, deprecation) by default."),
+      history_filter: z.enum(['steps_only', 'events_only', 'all']).default('steps_only').describe("What to include in history. 'steps_only': step/precondition/expectedResult diffs only. 'events_only': lifecycle events only (automated, deprecated, etc.). 'all': everything. Only used when include_history=true."),
+      history_limit: z.number().int().min(1).max(100).default(20).describe("Max history entries per test case. Default 20. For bulk tools fetching many cases, keep this low to avoid rate limits."),
     },
       annotations: {
         readOnlyHint: true,
@@ -5086,16 +5344,19 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
     },
     async (args) => {
       try {
-        const { project_key, format, include_clickable_links, exclude_deprecated, exclude_draft, exclude_deleted, max_results, count_only } = args;
+        const { project_key, format, include_clickable_links, exclude_deprecated, exclude_draft, exclude_deleted, max_results, count_only, include_history, history_filter, history_limit } = args;
 
         debugLog("Getting all TCM test cases", { project_key, include_clickable_links, max_results, count_only });
 
         // Build RQL filter for status exclusions
+        // Note: `deleted` is NOT supported in RQL — must be filtered client-side
         const filterParts: string[] = [];
         if (exclude_deprecated) filterParts.push('deprecated = false');
         if (exclude_draft) filterParts.push('draft = false');
-        if (exclude_deleted) filterParts.push('deleted = false');
         const rqlFilter = filterParts.length > 0 ? filterParts.join(' AND ') : undefined;
+
+        const applyDeletedFilter = (items: any[]): any[] =>
+          exclude_deleted ? items.filter((tc: any) => !tc.deleted) : items;
 
         if (count_only) {
           let totalCount = 0;
@@ -5107,7 +5368,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
               pageToken,
               ...(rqlFilter && !pageToken ? { filter: rqlFilter } : {})
             });
-            totalCount += (result.items || []).length;
+            totalCount += applyDeletedFilter(result.items || []).length;
             pageCount++;
             pageToken = result._meta?.nextPageToken;
           } while (pageToken && pageCount < 100);
@@ -5165,6 +5426,8 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           hasMorePages = true;
         }
 
+        allTestCases = applyDeletedFilter(allTestCases) as ZebrunnerTestCase[];
+
         console.error(`Found ${allTestCases.length} testcases.`);
 
         // Add clickable links to test cases if enabled
@@ -5172,7 +5435,22 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           addTestCaseWebUrl(tc, project_key, clickableLinkConfig.baseWebUrl, clickableLinkConfig)
         );
 
-        const resultPayload = {
+        // Enrich with change history if requested
+        if (include_history && enhancedTestCases.length > 0) {
+          try {
+            const { projectId } = await resolveProjectId(project_key);
+            const statesMap = await buildAutomationStatesMap(projectId);
+            const historyResults = await enrichTestCasesWithHistory(
+              enhancedTestCases, reportingClient, projectId, statesMap,
+              { filter: history_filter as HistoryFilter, maxResults: history_limit }
+            );
+            enhancedTestCases.forEach((tc: any, i: number) => { tc.history = historyResults[i] ?? []; });
+          } catch (err: any) {
+            debugLog("Failed to fetch change history for project cases", { error: err.message });
+          }
+        }
+
+        const resultPayload: any = {
           project_key,
           total_fetched: allTestCases.length,
           was_truncated: wasTruncated,
@@ -5184,6 +5462,11 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           },
           test_cases: enhancedTestCases
         };
+
+        if (include_history) {
+          const warning = getHistoryBulkWarning(enhancedTestCases.length);
+          if (warning) resultPayload.history_warning = warning;
+        }
 
         const formattedResult = FormatProcessor.format(resultPayload, format as any);
         const resultText = typeof formattedResult === 'string' ? formattedResult : JSON.stringify(formattedResult, null, 2);
@@ -5416,7 +5699,10 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         "Efficient for metrics collection -- avoids 1MB response limit on large projects."
       ),
       page: z.number().int().nonnegative().default(0).describe("Page number (0-based, only used if get_all=false)"),
-      size: z.number().int().positive().max(100).default(50).describe("Page size (only used if get_all=false)")
+      size: z.number().int().positive().max(100).default(50).describe("Page size (only used if get_all=false)"),
+      include_history: z.boolean().default(false).describe("When true, each test case includes a 'history' array of change log entries. Filtered to steps, preconditions, expected results, and lifecycle events (automation state changes, deprecation) by default."),
+      history_filter: z.enum(['steps_only', 'events_only', 'all']).default('steps_only').describe("What to include in history. 'steps_only': step/precondition/expectedResult diffs only. 'events_only': lifecycle events only (automated, deprecated, etc.). 'all': everything. Only used when include_history=true."),
+      history_limit: z.number().int().min(1).max(100).default(20).describe("Max history entries per test case. Default 20. For bulk tools fetching many cases, keep this low to avoid rate limits."),
     },
       annotations: {
         readOnlyHint: true,
@@ -5427,7 +5713,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
     },
     async (args) => {
       try {
-        const { project_key, suite_id, include_steps, format, get_all, include_sub_suites, count_only, page, size } = args;
+        const { project_key, suite_id, include_steps, format, get_all, include_sub_suites, count_only, page, size, include_history, history_filter, history_limit } = args;
 
         debugLog("Smart test case retrieval by suite", { project_key, suite_id, include_steps, format, get_all, include_sub_suites, page, size });
 
@@ -5687,8 +5973,23 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           });
         }
 
+        // Enrich with change history if requested
+        if (include_history && testCases.length > 0) {
+          try {
+            const { projectId } = await resolveProjectId(project_key);
+            const statesMap = await buildAutomationStatesMap(projectId);
+            const historyResults = await enrichTestCasesWithHistory(
+              testCases, reportingClient, projectId, statesMap,
+              { filter: history_filter as HistoryFilter, maxResults: history_limit }
+            );
+            testCases.forEach((tc: any, i: number) => { tc.history = historyResults[i] ?? []; });
+          } catch (err: any) {
+            debugLog("Failed to fetch change history for suite smart cases", { error: err.message });
+          }
+        }
+
         // Step 6: Build response with metadata
-        const metadata = {
+        const metadata: any = {
           suite: {
             id: suite_id,
             name: targetSuite.name || targetSuite.title,
@@ -5708,6 +6009,11 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
             includesSteps: include_steps
           }
         };
+
+        if (include_history) {
+          const warning = getHistoryBulkWarning(testCases.length);
+          if (warning) metadata.history_warning = warning;
+        }
 
         const result = {
           metadata,
@@ -6042,7 +6348,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
 
         const { projectId } = await resolveProjectId(args.project);
         const resolvedKey = typeof args.project === 'string'
-          ? (PROJECT_ALIASES[args.project] || args.project)
+          ? (getProjectAliases()[args.project] || args.project)
           : undefined;
 
         return await reportingHandlers.analyzeRegressionRuntime({
@@ -6115,7 +6421,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         debugLog("find_flaky_tests called", args);
         const { projectId } = await resolveProjectId(args.project);
         const projectKey = typeof args.project === 'string'
-          ? (PROJECT_ALIASES[args.project] || args.project)
+          ? (getProjectAliases()[args.project] || args.project)
           : undefined;
         return await reportingHandlers.findFlakyTests({
           projectKey: projectKey,
@@ -6162,7 +6468,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         "Report type(s) to generate. Can request multiple in one call."
       ),
       projects: z.array(z.string()).min(1).describe(
-        "Project aliases or keys (e.g., ['android', 'ios'] or ['MFPAND', 'MFPIOS'])"
+        "Project aliases or keys (e.g., ['android', 'ios'] or ['MCP', 'DEF'])"
       ),
       period: z.enum(ALL_PERIODS).default("Last 30 Days").describe(
         "Time period for the report data"
@@ -6487,7 +6793,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
   server.registerTool(
     "get_all_launches_for_project",
     {
-      description: "📋 Get all launches for a project with pagination (uses new reporting API)",
+      description: "📋 List individual launch executions for a project with pagination. Returns launch names, statuses, and timestamps. Use this to browse or list launches, NOT for aggregated results/pass rates (use get_platform_results_by_period for that).",
     inputSchema: {
       project: z.union([z.enum(["web","android","ios","api"]), z.string(), z.number()]).describe("Project alias (web/android/ios/api), project key, or project ID"),
       page: z.number().int().positive().default(1).describe("Page number (starts from 1)"),
@@ -6632,7 +6938,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
   server.registerTool(
     "get_all_launches_with_filter",
     {
-      description: "🔍 Get launches with filtering by milestone, build number, or launch name (uses new reporting API)",
+      description: "🔍 Search and filter individual launch executions by milestone, build number, or launch name. Returns matching launches with statuses. Use this to find specific launches, NOT for aggregated results/pass rates (use get_platform_results_by_period for that).",
     inputSchema: {
       project: z.union([z.enum(["web","android","ios","api"]), z.string(), z.number()]).describe("Project alias (web/android/ios/api), project key, or project ID"),
       milestone: z.string().optional().describe("Filter by milestone name (e.g., '25.39.0')"),
@@ -6943,7 +7249,7 @@ if (args.format === 'raw') {
   server.registerTool(
     "get_platform_results_by_period",
     {
-      description: "📊 Get test results by platform for a given period (SQL widget, templateId: 8)",
+      description: "📊 Get aggregated test results, pass rate, and statistics for a project over a time period (last 7 days, last 30 days, etc.). Returns total passed/failed/skipped/aborted counts and pass rate percentage. Use this when asked for 'results', 'pass rate', 'test statistics', 'how many passed/failed', or 'results for last N days'. Accepts any Zebrunner project key (e.g. 'MFPAND', 'MCP') or aliases (web/android/ios/api).",
     inputSchema: {
       project: z.union([z.enum(["web","android","ios","api"]), z.string(), z.number()])
         .default("web")
@@ -6961,7 +7267,7 @@ if (args.format === 'raw') {
         .default([])
         .describe("Optional MILESTONE filter, e.g., ['25.39.0'] for milestone filtering"),
       templateId: z.number()
-        .default(TEMPLATE.RESULTS_BY_PLATFORM)
+        .default(getTemplate().RESULTS_BY_PLATFORM)
         .describe("Override templateId if needed"),
       dashboardName: z.string().optional()
         .describe("Override dashboard title"),
@@ -7095,7 +7401,7 @@ if (args.format === 'raw') {
         .default(10)
         .describe("How many bugs to return"),
       templateId: z.number()
-        .default(TEMPLATE.TOP_BUGS)
+        .default(getTemplate().TOP_BUGS)
         .describe("Override templateId if needed"),
       issueUrlPattern: z.string().optional()
         .describe("e.g., 'https://yourcompany.atlassian.net/browse/{key}'"),
@@ -7291,7 +7597,7 @@ if (args.format === 'raw') {
         .default(30)
         .describe("Maximum bugs to fetch detailed failure info for (default: 30, max: 50). Prevents excessive API calls."),
       templateId: z.number()
-        .default(TEMPLATE.BUG_REVIEW)
+        .default(getTemplate().BUG_REVIEW)
         .describe("Override templateId if needed (default: 9 for Bug Review)"),
       format: z.enum(['detailed', 'summary', 'json']).default('detailed')
         .describe("Output format: detailed (full info with markdown links), summary (concise), or json (raw data)"),
@@ -7402,9 +7708,9 @@ if (args.format === 'raw') {
 
               // Fetch both widgets in parallel
               const [failureInfoRaw, failureDetailsRaw] = await Promise.all([
-                callWidgetSql(projectId, TEMPLATE.FAILURE_INFO, failureInfoParams),
+                callWidgetSql(projectId, getTemplate().FAILURE_INFO, failureInfoParams),
                 args.failure_detail_level === 'full' 
-                  ? callWidgetSql(projectId, TEMPLATE.FAILURE_DETAILS, failureDetailsParams)
+                  ? callWidgetSql(projectId, getTemplate().FAILURE_DETAILS, failureDetailsParams)
                   : Promise.resolve([])
               ]);
 
@@ -7702,8 +8008,8 @@ ${priorityAnalysis.statistics.withoutDefects > 0 ? `- **Tracking Gap:** ${priori
 
         // Call both widgets in parallel
         const [failureInfoRaw, failureDetailsRaw] = await Promise.all([
-          callWidgetSql(projectId, TEMPLATE.FAILURE_INFO, failureInfoParams),
-          callWidgetSql(projectId, TEMPLATE.FAILURE_DETAILS, failureDetailsParams)
+          callWidgetSql(projectId, getTemplate().FAILURE_INFO, failureInfoParams),
+          callWidgetSql(projectId, getTemplate().FAILURE_DETAILS, failureDetailsParams)
         ]);
 
         // Normalize returned rows
@@ -8276,7 +8582,7 @@ ${detailsInfo.map((detail, i) => {
 
         // For Public API, we need the project key, not the project ID
         const projectKey = typeof args.project === 'string'
-          ? (PROJECT_ALIASES[args.project] || args.project)
+          ? (getProjectAliases()[args.project] || args.project)
           : undefined;
 
         if (!projectKey || projectKey.length === 0) {
@@ -8479,7 +8785,7 @@ ${detailsInfo.map((detail, i) => {
         // For Public API, we need the project key, not the project ID
         // First check if it's a known alias, otherwise treat as direct project key
         const projectKey = typeof args.project === 'string'
-          ? (PROJECT_ALIASES[args.project] || args.project)
+          ? (getProjectAliases()[args.project] || args.project)
           : undefined;
 
         if (!projectKey || projectKey.length === 0) {
@@ -8621,7 +8927,7 @@ ${detailsInfo.map((detail, i) => {
         // For Public API, we need the project key, not the project ID
         // First check if it's a known alias, otherwise treat as direct project key
         const projectKey = typeof args.project === 'string'
-          ? (PROJECT_ALIASES[args.project] || args.project)
+          ? (getProjectAliases()[args.project] || args.project)
           : undefined;
 
         if (!projectKey || projectKey.length === 0) {
@@ -8748,7 +9054,7 @@ ${detailsInfo.map((detail, i) => {
         // For Public API, we need the project key, not the project ID
         const projectKey = typeof args.project === 'string' && args.project.length > 3
           ? args.project
-          : PROJECT_ALIASES[args.project as keyof typeof PROJECT_ALIASES];
+          : getProjectAliases()[args.project as string];
 
         if (!projectKey) {
           throw new Error(`Invalid project: ${args.project}. ${suggestions || 'Use web, android, ios, api, or a valid project key.'}`);
@@ -8826,7 +9132,7 @@ ${detailsInfo.map((detail, i) => {
         // For Public API, we need the project key, not the project ID
         const projectKey = typeof args.project === 'string' && args.project.length > 3
           ? args.project
-          : PROJECT_ALIASES[args.project as keyof typeof PROJECT_ALIASES];
+          : getProjectAliases()[args.project as string];
 
         if (!projectKey) {
           throw new Error(`Invalid project: ${args.project}. ${suggestions || 'Use web, android, ios, api, or a valid project key.'}`);
@@ -10077,7 +10383,7 @@ ${detailsInfo.map((detail, i) => {
 
   // ========== RESOURCES & PROMPTS ==========
 
-  registerResources(server, { client, reportingClient, resolveProjectId, PROJECT_ALIASES, DEBUG_MODE });
+  registerResources(server, { client, reportingClient, resolveProjectId, PROJECT_ALIASES: getProjectAliases(), DEBUG_MODE });
   registerPrompts(server);
 
   return server;

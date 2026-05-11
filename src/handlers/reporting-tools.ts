@@ -6,6 +6,7 @@ import { GetLauncherDetailsInputSchema, AnalyzeTestExecutionVideoInput } from ".
 import { VideoAnalyzer } from "../utils/video-analysis/analyzer.js";
 import type { TestEffectiveDuration, TestSessionBreakdown, SessionResolutionStrategy, TestSessionResponse } from "../types/reporting.js";
 import { buildChartResponse, type ChartConfig } from "../utils/chart-generator.js";
+import { getConfig } from "../utils/config-loader.js";
 
 /**
  * MCP Tool handlers for Zebrunner Reporting API
@@ -4698,40 +4699,18 @@ export class ZebrunnerReportingToolHandlers {
       const mediumTests = Array.from(testDetails.values()).filter((t: any) => t.stability > 30 && t.stability <= 70);
       const lowTests = Array.from(testDetails.values()).filter((t: any) => t.stability > 70);
 
-      // Helper function to extract feature area from test name
       const extractFeatureArea = (testName: string): string => {
-        // Look for patterns like "[ Feature Name ]:" at the start
         const bracketMatch = testName.match(/^\[\s*([^\]]+)\s*\]/);
         if (bracketMatch) {
           return bracketMatch[1].trim();
         }
-        
-        // Extract from camelCase or common patterns
-        if (testName.toLowerCase().includes('search') || testName.toLowerCase().includes('quicklog')) {
-          return 'Search & Quick Log';
+
+        const keywords = getConfig().featureAreaKeywords;
+        const lower = testName.toLowerCase();
+        for (const [keyword, label] of Object.entries(keywords)) {
+          if (lower.includes(keyword)) return label;
         }
-        if (testName.toLowerCase().includes('notification')) {
-          return 'Notifications';
-        }
-        if (testName.toLowerCase().includes('meal')) {
-          return 'Meal Management';
-        }
-        if (testName.toLowerCase().includes('message')) {
-          return 'Messages';
-        }
-        if (testName.toLowerCase().includes('goal')) {
-          return 'Goals';
-        }
-        if (testName.toLowerCase().includes('dashboard')) {
-          return 'Dashboard';
-        }
-        if (testName.toLowerCase().includes('premium')) {
-          return 'Premium Features';
-        }
-        if (testName.toLowerCase().includes('export')) {
-          return 'Export';
-        }
-        
+
         return 'Other';
       };
 

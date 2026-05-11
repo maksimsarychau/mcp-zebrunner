@@ -346,7 +346,11 @@ export class EnhancedZebrunnerClient {
   /**
    * Test connection to Zebrunner API
    */
-  async testConnection(projectKey: string = process.env.ZEBRUNNER_PROJECT_KEY || 'MCP'): Promise<{ success: boolean; message: string; details?: any }> {
+  async testConnection(projectKey?: string): Promise<{ success: boolean; message: string; details?: any }> {
+    if (!projectKey) {
+      const { getConfig } = await import("../utils/config-loader.js");
+      projectKey = process.env.ZEBRUNNER_PROJECT_KEY || getConfig().testConnectionProjectKey;
+    }
     try {
       // Try a minimal request to test-suites endpoint which should work with valid auth
       const response = await this.http.get('/test-suites', {
@@ -1007,23 +1011,17 @@ export class EnhancedZebrunnerClient {
       }
     }
 
-    // Date filtering
+    // Date filtering — only createdAt is supported in RQL;
+    // lastModifiedAt is NOT a supported RQL selector and must be filtered client-side.
     if (options.createdAfter) {
       filters.push(`createdAt >= '${sanitizeRqlString(options.createdAfter)}'`);
     }
     if (options.createdBefore) {
       filters.push(`createdAt <= '${sanitizeRqlString(options.createdBefore)}'`);
     }
-    if (options.modifiedAfter) {
-      filters.push(`lastModifiedAt >= '${sanitizeRqlString(options.modifiedAfter)}'`);
-    }
-    if (options.modifiedBefore) {
-      filters.push(`lastModifiedAt <= '${sanitizeRqlString(options.modifiedBefore)}'`);
-    }
 
-    // Suite filtering - try different field names for compatibility
+    // Suite filtering
     if (options.suiteId) {
-      // Try both possible field names
       filters.push(`testSuite.id = ${options.suiteId}`);
     }
 
@@ -1039,15 +1037,13 @@ export class EnhancedZebrunnerClient {
       }
     }
 
-    // Status exclusion filters
+    // Status exclusion filters — only `deprecated` and `draft` are supported in RQL;
+    // `deleted` is NOT a supported RQL selector and must be filtered client-side.
     if (options.excludeDeprecated) {
       filters.push(`deprecated = false`);
     }
     if (options.excludeDraft) {
       filters.push(`draft = false`);
-    }
-    if (options.excludeDeleted) {
-      filters.push(`deleted = false`);
     }
 
     // Custom filter (if provided, it takes precedence)
@@ -1181,12 +1177,18 @@ export class EnhancedZebrunnerClient {
         throw new ZebrunnerApiError('Unexpected response format from test-cases endpoint');
       }
 
-      // Note: Root suite filtering would require hierarchy traversal
-      // For now, we rely on RQL filters to handle suite filtering
-      // TODO: Implement proper root suite hierarchy filtering if needed
+      let parsed = items.map((item: any) => ZebrunnerShortTestCaseSchema.parse(item));
+
+      // Client-side filters for fields not supported in RQL
+      if (options.modifiedAfter || options.modifiedBefore) {
+        parsed = this.filterByModificationDate(parsed, options.modifiedAfter, options.modifiedBefore);
+      }
+      if (options.excludeDeleted) {
+        parsed = parsed.filter((item: any) => !item.deleted);
+      }
 
       return {
-        items: items.map((item: any) => ZebrunnerShortTestCaseSchema.parse(item)),
+        items: parsed,
         _meta: meta
       };
     });

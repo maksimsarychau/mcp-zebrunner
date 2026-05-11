@@ -234,21 +234,21 @@ Weekly stability report for project MCP using:
 
 ### `get_all_launches_for_project`
 
-**Description:** Get all launches for a project with pagination and filtering.
+**Description:** List individual launch executions for a project with pagination. Use to browse launches, NOT for aggregated results/pass rates (use `get_platform_results_by_period` for that).
 
 **Example Prompts:**
-- "Get all launches for project MCP from last month"
+- "List launches for project MCP from last month"
 - "Show me recent launches for project MCP"
-- "List all launches for project MCP from last 7 days"
+- "Browse launches for MFPAND"
 
 ### `get_all_launches_with_filter`
 
-**Description:** Filter launches by milestone, build, or other criteria.
+**Description:** Search and filter individual launch executions by milestone, build number, or name. NOT for aggregated results/pass rates (use `get_platform_results_by_period` for that).
 
 **Example Prompts:**
-- "Get launches for milestone 2.1.0"
+- "Find launches for milestone 2.1.0"
 - "Show me launches for build 'mcp-app-2.1.0'"
-- "Find launches for milestone 2.1.0 and build 'release-46975'"
+- "Search launches for milestone 2.1.0 and build 'release-46975'"
 
 ### `analyze_regression_runtime`
 
@@ -883,7 +883,7 @@ Weekly stability report for project MCP using:
 
 ### `get_platform_results_by_period`
 
-**Description:** Get test results grouped by platform for a specific time period.
+**Description:** Get aggregated test results, pass rate, and statistics for a project over a time period (last 7 days, last 30 days, etc.). Returns total passed/failed/skipped/aborted counts and pass rate percentage. Use this when asked for "results", "pass rate", "test statistics", or "results for last N days". Accepts any Zebrunner project key (e.g. `MFPAND`, `MCP`) or aliases (`web`/`android`/`ios`/`api`).
 
 **Supported Periods (Input):**
 - Today, Last 24 Hours, Week, Last 7 Days, Last 14 Days, Month, Last 30 Days, Quarter, Last 90 Days, Year, Last 365 Days, Total
@@ -891,7 +891,8 @@ Weekly stability report for project MCP using:
 **Note:** Periods are passed through as-is. If a widget does not support a period, the API will return an error.
 
 **Example Prompts:**
-- "Get iOS test results for the last 7 days"
+- "Get results for MFPAND during last 7 days"
+- "Show pass rate for MCP"
 - "Show me Android test results from last week"
 - "Get platform results for last 30 days"
 

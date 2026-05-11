@@ -49,10 +49,13 @@ export interface RuntimeData {
 
 export interface CoverageData {
   project: string;
+  /** Dynamic per-state counts keyed by state name (e.g. "Automated", "Manual Only"). */
+  states: Record<string, number>;
+  total: number;
+  // Backward-compat convenience fields (populated from states when available)
   automated: number;
   manual: number;
   notAutomated: number;
-  total: number;
 }
 
 export interface BugEntry {

@@ -3,9 +3,9 @@ const API_SUFFIX = '/api/public/v1';
 /**
  * Normalise a user-friendly Zebrunner URL into the internal API base URL.
  *
- *   "https://mfp.zebrunner.com"              → "https://mfp.zebrunner.com/api/public/v1"
- *   "https://mfp.zebrunner.com/"             → "https://mfp.zebrunner.com/api/public/v1"
- *   "https://mfp.zebrunner.com/api/public/v1" → kept as-is
+ *   "https://mcp.zebrunner.com"              → "https://mcp.zebrunner.com/api/public/v1"
+ *   "https://mcp.zebrunner.com/"             → "https://mcp.zebrunner.com/api/public/v1"
+ *   "https://mcp.zebrunner.com/api/public/v1" → kept as-is
  *
  * Rejects empty, non-HTTPS (in production), and obviously malformed URLs.
  */
@@ -43,7 +43,7 @@ export function normalizeZebrunnerUrl(input: string): string {
 
 /**
  * Derive the human-readable Zebrunner web URL from the internal API URL.
- *   "https://mfp.zebrunner.com/api/public/v1" → "https://mfp.zebrunner.com"
+ *   "https://mcp.zebrunner.com/api/public/v1" → "https://mcp.zebrunner.com"
  */
 export function toWebUrl(apiUrl: string): string {
   return apiUrl.replace(/\/api\/public\/v1\/?$/, '');

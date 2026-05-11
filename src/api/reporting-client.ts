@@ -797,6 +797,17 @@ export class ZebrunnerReportingClient {
   }
 
   /**
+   * Get TCM test case change history (audit log).
+   * Endpoint: GET /api/tcm/v1/test-cases/{testCaseId}/changes?projectId={projectId}&maxPageSize={maxPageSize}
+   */
+  async getTestCaseChanges(testCaseId: number, projectId: number, maxPageSize: number = 20): Promise<any> {
+    const url = `/api/tcm/v1/test-cases/${testCaseId}/changes?projectId=${projectId}&maxPageSize=${maxPageSize}`;
+    const response = await this.makeAuthenticatedRequest<any>('GET', url);
+    const data = response.data?.data || response.data || response;
+    return data;
+  }
+
+  /**
    * Clear project cache
    */
   clearProjectCache(): void {

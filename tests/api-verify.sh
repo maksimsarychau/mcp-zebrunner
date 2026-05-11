@@ -11,7 +11,7 @@
 #
 # Auto-discovers projects via Reporting API and runs tests against all starred projects.
 #
-# Coverage: 27 unique endpoint patterns across Public API, Reporting API, and Widget SQL.
+# Coverage: 28 unique endpoint patterns across Public API, Reporting API, and Widget SQL.
 #
 # Usage: ./tests/api-verify.sh [--verbose]
 #
@@ -455,6 +455,91 @@ except: print('')
     fi
   else
     log_skip "R18: GET test-case executions (no TC_ID or PROJECT_ID)"
+  fi
+
+  # --- TCM Change History (audit log) ---
+
+  log_section "$TEST_PROJECT — Test Case Change History"
+
+  if [[ -n "$TC_ID" && -n "$PROJECT_ID" ]]; then
+    do_reporting_get "/api/tcm/v1/test-cases/$TC_ID/changes?projectId=$PROJECT_ID&maxPageSize=5"
+    check_status "R19: GET /api/tcm/v1/test-cases/$TC_ID/changes"
+
+    local CHANGE_COUNT
+    CHANGE_COUNT=$(echo "$_BODY" | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    items = d.get('data',d).get('items', d.get('items',[]))
+    print(len(items))
+except: print(0)
+" 2>/dev/null || echo "0")
+    log_pass "Test case $TC_ID has $CHANGE_COUNT change history entry(ies)"
+
+    if [[ "$CHANGE_COUNT" -gt 0 ]]; then
+      local CHANGE_DETAIL
+      CHANGE_DETAIL=$(echo "$_BODY" | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    items = d.get('data',d).get('items', d.get('items',[]))
+    entry = items[0]
+    entry_type = entry.get('type','')
+    user_id = entry.get('userId','')
+    item_count = len(entry.get('items',[]))
+    has_instant = 'instant' in entry
+    print(f'type={entry_type}|userId={user_id}|changeItems={item_count}|hasInstant={has_instant}')
+except: print('PARSE_ERROR')
+" 2>/dev/null || echo "PARSE_ERROR")
+
+      if [[ "$CHANGE_DETAIL" == "PARSE_ERROR" ]]; then
+        log_fail "Could not parse first change entry" "$(echo "$_BODY" | head -c 200)"
+      else
+        log_pass "First change entry: $CHANGE_DETAIL"
+      fi
+
+      # Verify entry types are valid
+      local ENTRY_TYPES
+      ENTRY_TYPES=$(echo "$_BODY" | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    items = d.get('data',d).get('items', d.get('items',[]))
+    types = set(e.get('type','') for e in items)
+    print(','.join(sorted(types)))
+except: print('')
+" 2>/dev/null || echo "")
+      if [[ -n "$ENTRY_TYPES" ]]; then
+        log_pass "Entry types found: $ENTRY_TYPES"
+      fi
+
+      # Verify change item field shapes (array vs scalar)
+      local FIELD_SHAPES
+      FIELD_SHAPES=$(echo "$_BODY" | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    items = d.get('data',d).get('items', d.get('items',[]))
+    shapes = {}
+    for entry in items:
+        for item in entry.get('items', []):
+            field = item.get('field','')
+            if 'oldValues' in item or 'newValues' in item:
+                shapes[field] = 'array'
+            elif 'oldValue' in item or 'newValue' in item:
+                shapes[field] = 'scalar'
+    parts = [f'{f}={s}' for f,s in sorted(shapes.items())]
+    print('|'.join(parts) if parts else 'NO_ITEMS')
+except: print('PARSE_ERROR')
+" 2>/dev/null || echo "PARSE_ERROR")
+      if [[ "$FIELD_SHAPES" != "PARSE_ERROR" && "$FIELD_SHAPES" != "NO_ITEMS" ]]; then
+        log_pass "Change item field shapes: $FIELD_SHAPES"
+      elif [[ "$FIELD_SHAPES" == "NO_ITEMS" ]]; then
+        log_pass "Change entries have no change items (e.g. CREATE entries)"
+      fi
+    fi
+  else
+    log_skip "R19: GET test-case changes (no TC_ID or PROJECT_ID)"
   fi
 
   # --- RQL Filters ---
