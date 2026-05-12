@@ -28,17 +28,17 @@ function extractServerTools(serverSource: string): string[] {
   return tools;
 }
 
-describe("Tool Registry Coverage (60 tools)", () => {
+describe("Tool Registry Coverage (61 tools)", () => {
   it("ensures every registered server tool has smoke coverage metadata", () => {
     const root = getProjectRoot();
     const serverSource = fs.readFileSync(path.join(root, "src", "server.ts"), "utf-8");
     const serverTools = extractServerTools(serverSource);
 
-    assert.equal(serverTools.length, 60, "server.ts should register exactly 60 tools");
-    assert.equal(new Set(serverTools).size, 60, "all registered tools should be unique");
+    assert.equal(serverTools.length, 61, "server.ts should register exactly 61 tools");
+    assert.equal(new Set(serverTools).size, 61, "all registered tools should be unique");
 
     const coverageKeys = Object.keys(TOOL_SMOKE_INPUTS);
-    assert.equal(coverageKeys.length, 60, "smoke coverage map should include 60 tools");
+    assert.equal(coverageKeys.length, 61, "smoke coverage map should include 61 tools");
 
     const missingCoverage = serverTools.filter(tool => !(tool in TOOL_SMOKE_INPUTS));
     assert.deepEqual(missingCoverage, [], `missing smoke coverage for: ${missingCoverage.join(", ")}`);
@@ -154,7 +154,7 @@ describe("Tool Annotations Coverage (60 tools)", () => {
     while ((match = toolsRegex.exec(serverSource)) !== null) {
       allTools.push(match[1]);
     }
-    assert.equal(allTools.length, 60, "should have 60 registered tools");
+    assert.equal(allTools.length, 61, "should have 61 registered tools");
 
     const missing: string[] = [];
     for (const tool of allTools) {

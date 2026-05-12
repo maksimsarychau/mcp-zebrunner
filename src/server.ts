@@ -49,6 +49,7 @@ import {
 } from "./utils/tool-intel.js";
 import { ToolMetrics, wrapToolHandler } from "./utils/tool-metrics.js";
 import { enrichTestCasesWithHistory, getHistoryBulkWarning, type HistoryFilter, type AutomationStatesMap } from "./utils/testCaseHistory.js";
+import { analyzeRegressionResults, type RegressionAnalyzerInput } from "./handlers/regression-results-analyzer.js";
 
 // Mutation tools imports
 import { ZebrunnerMutationClient } from "./api/mutation-client.js";
@@ -6192,6 +6193,125 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           content: [{
             type: "text" as const,
             text: `❌ Error getting launch test summary: ${error.message}`
+          }]
+        };
+      }
+    }
+  );
+
+  server.registerTool(
+    "regression_results_analyzer",
+    {
+      description: "📊 Analyze regression test results for a milestone or build: test run overview, new/top bugs, bugs per suite, and slowest tests. Accepts milestone name and/or build number to find all TCM test runs.",
+    inputSchema: {
+      project: z.union([z.enum(["web","android","ios","api"]), z.string(), z.number()])
+        .default("web")
+        .describe("Project alias (web/android/ios/api), project key, or project ID"),
+      milestone: z.string().optional()
+        .describe("Milestone name (e.g., '26.19.0'). At least one of milestone or build required"),
+      build: z.string().optional()
+        .describe("Build number (e.g., '73614'). Searched in configurations, title, description"),
+      previous_milestone: z.string().optional()
+        .describe("Previous milestone for new-bugs detection (e.g., '26.18.0')"),
+      previous_build: z.string().optional()
+        .describe("Previous build identifier for new-bugs detection"),
+      sections: z.array(z.enum(["overview","new_bugs","top_bugs","bugs_per_suite","slowest_tests"]))
+        .default(["overview","new_bugs","top_bugs","bugs_per_suite","slowest_tests"])
+        .describe("Report sections to include"),
+      top_bugs_limit: z.number().int().positive().max(20).default(5)
+        .describe("Number of top bugs to show"),
+      slowest_tests_limit: z.number().int().positive().max(20).default(5)
+        .describe("Number of slowest tests to show"),
+      jira_base_url: z.string().url().optional()
+        .describe("Override JIRA base URL (e.g., 'https://myproject.atlassian.net'). If not set, resolved from Zebrunner integrations or JIRA_BASE_URL env var"),
+      output_format: z.enum(["jira","json","markdown","detailed"]).default("markdown")
+        .describe("Output format: jira (wiki markup), json (raw data), markdown (default), or detailed"),
+      count_only: z.boolean().default(false).describe(
+        "When true, returns only the count of matched test runs and total test cases without generating the full report. " +
+        "Useful for pre-checking scope before running the full analysis."
+      ),
+      max_test_duration_ms: z.number().int().positive().optional()
+        .describe("Optional cap for slowest-tests section: exclude test cases with duration exceeding this value (in ms). Useful to filter anomalies."),
+      include_empty_suites: z.boolean().default(true)
+        .describe("When true, includes test runs with 0 linked bugs in the bugs_per_suite section. Default: true"),
+      chart: z.enum(["none","png","html","text"]).default("none").describe(
+        "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
+      ),
+      chart_type: z.enum(["auto","pie","bar","stacked_bar","horizontal_bar","line"]).default("auto").describe(
+        "Chart type override. 'auto' picks the best type for this tool's data. Explicit value forces that chart type."
+      ),
+    },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async (args) => {
+      try {
+        debugLog("regression_results_analyzer called", args);
+
+        const { projectId } = await resolveProjectId(args.project);
+        const projectKey = typeof args.project === 'string'
+          ? (getProjectAliases()[args.project] || args.project)
+          : undefined;
+
+        if (!projectKey || projectKey.length === 0) {
+          throw new Error(`Invalid project: ${args.project}. Use aliases like 'android', 'ios', 'web', 'api' or direct project keys.`);
+        }
+
+        const zebrunnerBaseUrl = WIDGET_BASE_URL;
+
+        const input: RegressionAnalyzerInput = {
+          project: args.project,
+          projectKey,
+          projectId,
+          milestone: args.milestone,
+          build: args.build,
+          previous_milestone: args.previous_milestone,
+          previous_build: args.previous_build,
+          sections: args.sections,
+          top_bugs_limit: args.top_bugs_limit,
+          slowest_tests_limit: args.slowest_tests_limit,
+          jira_base_url: args.jira_base_url,
+          output_format: args.output_format,
+          count_only: args.count_only,
+          zebrunnerBaseUrl,
+          max_test_duration_ms: args.max_test_duration_ms,
+          include_empty_suites: args.include_empty_suites,
+        };
+
+        if (args.chart && args.chart !== 'none') {
+          const result = await analyzeRegressionResults({ client, reportingClient }, input);
+          const text = result.content[0]?.text || "";
+          try {
+            const parsed = JSON.parse(text);
+            const overview: any[] = parsed.overview || [];
+            if (overview.length > 0) {
+              const chartConfig: ChartConfig = {
+                type: args.chart_type !== 'auto' ? args.chart_type : 'stacked_bar',
+                title: `Regression Results — ${projectKey}`,
+                labels: overview.map((r: any) => (r.title || '').slice(0, 25)),
+                datasets: [
+                  { label: 'Passed', values: overview.map((r: any) => r.passed || 0) },
+                  { label: 'Failed', values: overview.map((r: any) => r.failed || 0) },
+                  { label: 'Skipped', values: overview.map((r: any) => r.skipped || 0) },
+                ],
+              };
+              return buildChartResponse(chartConfig, args.chart as 'png' | 'html' | 'text', `Regression results for ${projectKey}`);
+            }
+          } catch { /* not JSON, fall through */ }
+          return result;
+        }
+
+        return await analyzeRegressionResults({ client, reportingClient }, input);
+      } catch (error: any) {
+        debugLog("Error in regression_results_analyzer", { error: error.message, args });
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error analyzing regression results: ${error?.message || error}`
           }]
         };
       }

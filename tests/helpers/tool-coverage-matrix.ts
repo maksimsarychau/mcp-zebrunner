@@ -23,6 +23,7 @@ export const TOOL_SMOKE_INPUTS: Record<string, Record<string, unknown>> = {
   get_launch_details: { project_key: "MCP", launch_id: 1 },
   get_launch_test_summary: { project_key: "MCP", launch_id: 1 },
   generate_weekly_regression_stability_report: { project_key: "MCP", suites: [] },
+  regression_results_analyzer: { project: "android", milestone: "26.19.0" },
   get_launch_summary: { project_key: "MCP", launch_id: 1 },
   analyze_test_failure: { projectKey: "MCP", testRunId: 1, testId: 1 },
   get_test_execution_history: { projectKey: "MCP", testId: 1 },

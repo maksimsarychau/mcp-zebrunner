@@ -25,10 +25,12 @@ Complete reference of all available tools with natural language usage examples.
 
 All tools marked with chart support accept these two parameters:
 
-| Parameter | Values | Description |
-|-----------|--------|-------------|
-| `chart` | `none`, `png`, `html`, `text` | Output format. `png` = base64 image, `html` = interactive Chart.js, `text` = ASCII chart |
+
+| Parameter    | Values                                                        | Description                                                                                      |
+| ------------ | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `chart`      | `none`, `png`, `html`, `text`                                 | Output format. `png` = base64 image, `html` = interactive Chart.js, `text` = ASCII chart         |
 | `chart_type` | `auto`, `pie`, `bar`, `stacked_bar`, `horizontal_bar`, `line` | Chart shape. `auto` (default) picks the best type for the tool's data. Explicit value overrides. |
+
 
 ---
 
@@ -39,6 +41,7 @@ All tools marked with chart support accept these two parameters:
 **Description:** Deep forensic analysis of failed tests including logs, screenshots, error classification, similar failures, and optionally comparison with last passed execution.
 
 **Example Prompts:**
+
 - "Analyze test failure 5451420 from launch 120806"
 - "Analyze test 5478492 and compare with the last time it passed"
 - "Deep dive into why test 5455325 failed in launch 120906, include video and compare with last successful run"
@@ -48,6 +51,7 @@ All tools marked with chart support accept these two parameters:
 **Description:** Analyze ALL failures in a launch with intelligent grouping, executive summary, timeline analysis, and pattern detection. Automatically filters tests without linked issues by default.
 
 **Example Prompts:**
+
 - "Analyze all failures in launch 120806"
 - "Show me what failed in launch 120906 with executive summary and patterns"
 - "Generate Jira tickets for all failures in launch 120814 in jira format"
@@ -61,6 +65,7 @@ All tools marked with chart support accept these two parameters:
 **Description:** Track test execution trends across multiple launches. Shows pass/fail history, last passed execution, pass rate, and highlights if test failed in all recent runs.
 
 **Example Prompts:**
+
 - "Show me execution history for test 5478492"
 - "Has test 5455325 been failing consistently?"
 - "When was the last time test 5478492 passed?"
@@ -70,6 +75,7 @@ All tools marked with chart support accept these two parameters:
 **Description:** Compare current failure with last successful execution. Shows differences in logs, duration, environment, and screenshots.
 
 **Example Prompts:**
+
 - "Analyze test 5478492 failure and compare logs with last passed run"
 - "Compare test 5455325 with last passed execution - check if duration or environment changed"
 - "Analyze test failure and show me what changed since it last passed"
@@ -83,6 +89,7 @@ All tools marked with chart support accept these two parameters:
 **Description:** Get comprehensive information about a specific launch including test results, environment, build, and execution metadata.
 
 **Example Prompts:**
+
 - "Get launch details for launch 120906"
 - "Show me information about launch 121482"
 - "What happened in launch 120814?"
@@ -92,6 +99,7 @@ All tools marked with chart support accept these two parameters:
 **Description:** Quick launch overview with key metrics and status.
 
 **Example Prompts:**
+
 - "Give me a quick summary of launch 120906"
 - "Summarize launch 121482 results"
 - "What's the overall status of launch 120814?"
@@ -101,20 +109,82 @@ All tools marked with chart support accept these two parameters:
 **Description:** Lightweight aggregated test results with statistics, most unstable tests, and tests with issues. Optimized for large launches.
 
 **Example Prompts:**
+
 - "Get test summary for launch 119783 with top 10 most unstable tests"
 - "Show me summary of launch 120906 - just failed tests"
 - "Get lightweight summary for launch 121482"
+
+### `regression_results_analyzer`
+
+**Description:** Analyze regression test results for a milestone or build number. Produces a comprehensive report with summary table, test run overview with coverage status, new bugs with affected test case context, top bugs ranked by frequency, bugs per suite, and slowest tests. All data sourced from TCM Public API test runs.
+
+**Example Prompts:**
+
+- "Analyze regression results for iOS milestone 26.19.0"
+- "Show regression results for build 73614 on MCPIOS"
+- "Analyze regression for iOS 26.19.0 and compare bugs with previous milestone 26.18.0"
+- "How many test runs are in milestone 26.19.0 for iOS? (use count_only)"
+- "Get top 10 bugs for Android milestone 25.40.0 in JSON format"
+
+**Sections (all included by default):**
+
+- `overview` — Summary table (total passed/failed/skipped/untested, pass rate, bugs count) + per-run breakdown with coverage status indicators (✅ = run closed & all failures covered by bugs, ⚠️ = uncovered failures)
+- `new_bugs` — Bugs detected via test-case-level status-change comparison with the previous milestone. Shows affected test case title for context. Auto-detects previous milestone if not provided.
+- `top_bugs` — Top N most frequent bugs across all runs with percentage
+- `bugs_per_suite` — Known issues grouped by test run with affected test counts (includes empty suites by default)
+- `slowest_tests` — Top N slowest tests across the milestone with duration (includes note about manual run timing)
+
+**Output Formats:**
+
+- `markdown` — Human-readable markdown report (default)
+- `json` — Raw structured JSON data
+- `jira` — Jira wiki markup
+- `detailed` — Extended markdown with all details
+
+**Key Parameters:**
+
+- `milestone` — Milestone name (e.g., "26.19.0"). At least one of milestone/build required.
+- `build` — Build number searched in configurations, title, and description.
+- `previous_milestone` — Previous milestone for new-bugs detection. Auto-detected from sorted milestone list if omitted.
+- `top_bugs_limit` — Number of top bugs (default: 5, max: 20).
+- `slowest_tests_limit` — Number of slowest tests (default: 5, max: 20).
+- `max_test_duration_ms` — Optional cap for slowest-tests: exclude tests exceeding this duration (ms). Filters anomalies.
+- `include_empty_suites` — Include runs with 0 linked bugs in bugs_per_suite (default: true).
+- `count_only` — Returns only run/test-case counts without full analysis.
+
+**Coverage Status (per-run):**
+
+- ✅ = Run is closed AND all failed test cases have a linked bug (fully covered)
+- ⚠️ (N uncovered) = Run has failures without linked bugs
+
+**New Bugs Detection:**
+
+A bug is considered "new" if:
+1. The issue ID did not exist in the previous milestone at all, OR
+2. The issue existed but is now linked to test cases that were passing/untested in the previous milestone
+
+**Clickable Milestone Link:**
+
+- When a milestone is resolved, the report header includes a clickable link to the Zebrunner automation launches page filtered by that milestone.
+
+**Live Data Note:**
+
+- Report footer includes a timestamp noting that data reflects live TCM state at generation time.
+
+---
 
 ### `generate_weekly_regression_stability_report`
 
 **Description:** Generate a Jira-ready weekly regression stability report across multiple suites with pass rate, week-over-week delta, and stability classification.
 
 **Example Prompts:**
+
 - "Weekly stability report for MCP: Manage My Day (120906 vs 120814), Diary AA (120901 vs 120809)"
 - "Generate Jira-ready weekly regression stability report for MCP with thresholds stable 92, watch 88"
 - "Give me a JSON stability snapshot for MCP: Premium Hub (121001 vs 120901)"
 
 **Output Formats:**
+
 - `jira` - Full Jira-ready report (default)
 - `summary` - Table + status only (no linked issues/notes)
 - `detailed` - Full report with linked issues and notes
@@ -122,15 +192,18 @@ All tools marked with chart support accept these two parameters:
 - `dto` - Structured JSON response (alias of json)
 
 **Output Style:**
+
 - `strict` - Fixed template, no narrative text (default)
 - `default` - Fixed template + small footer
 
 **Launch Comparison Validation:**
+
 - Launch name similarity and test overlap are validated before comparison.
 - If similarity is below 70%, the suite is marked as `ERROR` and comparison is skipped.
 - The warning appears in the Notes section.
 
 **Build-Based Mode:**
+
 - Provide `builds.current` and `builds.previous` to auto-discover launches by build number.
 - The tool maps the latest launch per suite for each build and compares them one-by-one.
 - A build mapping section is included in detailed output.
@@ -237,6 +310,7 @@ Weekly stability report for project MCP using:
 **Description:** List individual launch executions for a project with pagination. Use to browse launches, NOT for aggregated results/pass rates (use `get_platform_results_by_period` for that).
 
 **Example Prompts:**
+
 - "List launches for project MCP from last month"
 - "Show me recent launches for project MCP"
 - "Browse launches for MCP"
@@ -246,6 +320,7 @@ Weekly stability report for project MCP using:
 **Description:** Search and filter individual launch executions by milestone, build number, or name. NOT for aggregated results/pass rates (use `get_platform_results_by_period` for that).
 
 **Example Prompts:**
+
 - "Find launches for milestone 2.1.0"
 - "Show me launches for build 'mcp-app-2.1.0'"
 - "Search launches for milestone 2.1.0 and build 'release-46975'"
@@ -257,6 +332,7 @@ Weekly stability report for project MCP using:
 > **Terminology Note:** A "Test" is an atomic item in a launch (pass/fail). A "Test Case" is an atomic item from the Test Case Management (TCM) system. One Test may cover 0, 1, or many Test Cases. See [docs/TERMINOLOGY.md](docs/TERMINOLOGY.md) for full glossary.
 
 **Parameters:**
+
 - `project` (required) — Project key or alias (e.g., `"android"`, `"MCPAND"`)
 - `milestone` — Filter launches by milestone name (e.g., `"develop-49771"`)
 - `build` — Filter launches by build number
@@ -272,6 +348,7 @@ Weekly stability report for project MCP using:
 - `long_threshold_seconds` — Duration threshold above which a test is classified as Long (default: `600` = 10 min)
 
 **Key Metrics (per test AND per test case):**
+
 - **Average Runtime per Test** = Total Elapsed / Number of Executed Tests
 - **Average Runtime per Test Case** = Total Elapsed / Number of Test Cases Covered
 - **WRI (per Test)** = Weighted average across Short (×1), Medium (×2), Long (×3) using test counts
@@ -281,6 +358,7 @@ Weekly stability report for project MCP using:
 - **Test Case Coverage Breakdown** — tests with 0, 1, or 2+ linked test cases
 
 **Example Prompts:**
+
 - "Analyze regression runtime for the iOS project on the latest milestone. Show both average runtime per test and per test case, plus WRI and WRI per test case."
 - "Analyze regression runtime for the Android project with include_test_details: true. For each duration class, show number of tests, test cases covered, and avgDuration per test vs per test case."
 - "Run regression runtime analysis for all three projects on their latest milestones. Compare how many test cases fall into Short vs Medium vs Long buckets per team."
@@ -293,6 +371,7 @@ Weekly stability report for project MCP using:
 **Description:** Find flaky tests across launches using a 3-phase approach: cross-launch flip-flop analysis for automated tests, manual test case scan via TCM execution history, and optional dual-perspective enrichment correlating both data sources.
 
 **Parameters:**
+
 - `project` (required) — Project key or alias (e.g., `"android"`, `"MCPAND"`)
 - `period_days` — Number of days to look back (default: `14`)
 - `min_flip_count` — Minimum status flips to be considered flaky (default: `2`)
@@ -310,6 +389,7 @@ Weekly stability report for project MCP using:
 - `chart_type` — Chart type override: `"auto"`, `"pie"`, `"bar"`, `"stacked_bar"`, `"horizontal_bar"`, `"line"` (default: `"auto"`)
 
 **Example Prompts:**
+
 - "Find flaky tests in the Android project over the last 14 days"
 - "How many flaky tests are in the iOS project? Use count_only"
 - "Find the top 10 most flaky tests in the Web project with full history details"
@@ -324,6 +404,7 @@ Weekly stability report for project MCP using:
 **Description:** Download and analyze test execution video with Claude Vision. Extracts frames, compares with test case steps, and predicts if failure is bug or test issue.
 
 **Example Prompts:**
+
 - "Analyze video for test 5455325 from launch 120906"
 - "Download and analyze test execution video for test 5478492 with smart frame extraction"
 - "Analyze video for failed test 5451420 and compare with test case steps"
@@ -333,16 +414,18 @@ Weekly stability report for project MCP using:
 **Description:** Download protected screenshots from Zebrunner with authentication.
 
 **Example Prompts:**
-- "Download screenshot from https://your-workspace.zebrunner.com/files/abc123"
+
+- "Download screenshot from [https://your-workspace.zebrunner.com/files/abc123](https://your-workspace.zebrunner.com/files/abc123)"
 - "Download screenshot /files/xyz789 for test 5451420"
-- "Get screenshot from URL https://your-workspace.zebrunner.com/files/screenshot123"
+- "Get screenshot from URL [https://your-workspace.zebrunner.com/files/screenshot123](https://your-workspace.zebrunner.com/files/screenshot123)"
 
 ### `analyze_screenshot`
 
 **Description:** Visual analysis of screenshots with OCR, UI element detection, and Claude Vision analysis.
 
 **Example Prompts:**
-- "Analyze screenshot https://your-workspace.zebrunner.com/files/abc123 with OCR"
+
+- "Analyze screenshot [https://your-workspace.zebrunner.com/files/abc123](https://your-workspace.zebrunner.com/files/abc123) with OCR"
 - "Analyze this screenshot and tell me what UI elements are visible"
 - "Analyze screenshot /files/xyz789 and extract text with OCR"
 
@@ -356,13 +439,16 @@ Weekly stability report for project MCP using:
 
 **Change History Parameters:**
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `include_history` | boolean | `false` | Attach a `history` array of parsed change log entries |
-| `history_filter` | `steps_only` \| `events_only` \| `all` | `steps_only` | What to include in history |
-| `history_limit` | number (1–100) | `20` | Max history entries per test case |
+
+| Parameter         | Type                                 | Default      | Description                                           |
+| ----------------- | ------------------------------------ | ------------ | ----------------------------------------------------- |
+| `include_history` | boolean                              | `false`      | Attach a `history` array of parsed change log entries |
+| `history_filter`  | `steps_only` | `events_only` | `all` | `steps_only` | What to include in history                            |
+| `history_limit`   | number (1–100)                       | `20`         | Max history entries per test case                     |
+
 
 **Example Prompts:**
+
 - "Get test case MCP-2107 details"
 - "Show me test case MCP-1921"
 - "What does test case MCP-88 test?"
@@ -376,6 +462,7 @@ Weekly stability report for project MCP using:
 **Change History Parameters:** Same as `get_test_case_by_key` (`include_history`, `history_filter`, `history_limit`).
 
 **Example Prompts:**
+
 - "Find test cases with 'login' in the title"
 - "Search for test cases containing 'diary'"
 - "Find test cases about 'food search'"
@@ -386,15 +473,18 @@ Weekly stability report for project MCP using:
 
 **Field-Path Filtering Parameters:**
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `field_path` | string | Dot-notation path to any field (e.g., `customField.manualOnly`, `priority.name`, `title`) |
-| `field_value` | string | Value to match against (not required for `exists` mode) |
-| `field_match` | `exact` \| `contains` \| `regex` \| `exists` | Match mode (default: `exact`) |
+
+| Parameter     | Type                                      | Description                                                                               |
+| ------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `field_path`  | string                                    | Dot-notation path to any field (e.g., `customField.manualOnly`, `priority.name`, `title`) |
+| `field_value` | string                                    | Value to match against (not required for `exists` mode)                                   |
+| `field_match` | `exact` | `contains` | `regex` | `exists` | Match mode (default: `exact`)                                                             |
+
 
 **Change History Parameters:** Same as `get_test_case_by_key` (`include_history`, `history_filter`, `history_limit`). History is fetched in bulk with concurrency-limited parallel requests.
 
 **Example Prompts:**
+
 - "Get test cases created after 2025-01-01 with automation state 'Manual'"
 - "Show me high priority test cases from last month"
 - "Find test cases updated after 2025-11-01 that are not automated"
@@ -409,6 +499,7 @@ Weekly stability report for project MCP using:
 **Change History Parameters:** Same as `get_test_case_by_key` (`include_history`, `history_filter`, `history_limit`).
 
 **Example Prompts:**
+
 - "Show me all 'Not Automated' test cases in project MCP"
 - "Get all manual test cases"
 - "Find test cases with automation state 'Automated'"
@@ -421,6 +512,7 @@ Weekly stability report for project MCP using:
 **Change History Parameters:** Same as `get_test_case_by_key` (`include_history`, `history_filter`, `history_limit`).
 
 **Example Prompts:**
+
 - "Get test cases from suite 491 created after 2025-01-01 with high priority"
 - "Show me test cases from suite 17470 with status 'Approved'"
 - "Find test cases in suite 18697 that were updated last week"
@@ -431,6 +523,7 @@ Weekly stability report for project MCP using:
 **Description:** List all available automation states for a project.
 
 **Example Prompts:**
+
 - "What automation states are available for project MCP?"
 - "Show me all automation states"
 - "List automation states for MCP"
@@ -440,6 +533,7 @@ Weekly stability report for project MCP using:
 **Description:** List all available priority levels with their IDs.
 
 **Example Prompts:**
+
 - "Show me all priority levels for project MCP"
 - "What priorities are available?"
 - "List all test case priorities"
@@ -451,6 +545,7 @@ Weekly stability report for project MCP using:
 **Change History Parameters:** Same as `get_test_case_by_key` (`include_history`, `history_filter`, `history_limit`).
 
 **Example Prompts:**
+
 - "Get all test cases for project MCP"
 - "Show me every test case in the MCP project"
 - "Export all test cases from project MCP"
@@ -460,6 +555,7 @@ Weekly stability report for project MCP using:
 **Description:** Get all test cases with their root suite hierarchy information.
 
 **Example Prompts:**
+
 - "Get all test cases with their root suite information for project MCP"
 - "Show me test cases with hierarchy info"
 - "List all test cases with their parent suites"
@@ -471,6 +567,7 @@ Weekly stability report for project MCP using:
 **Change History Parameters:** Same as `get_test_case_by_key` (`include_history`, `history_filter`, `history_limit`).
 
 **Example Prompts:**
+
 - "Get test cases from suite 18824 in project MCP using smart mode"
 - "Show all test cases for suite 17470 including sub-suites"
 - "Retrieve test cases for suite 491 in markdown format"
@@ -484,6 +581,7 @@ Weekly stability report for project MCP using:
 **Description:** List test suites with pagination.
 
 **Example Prompts:**
+
 - "List test suites for project MCP"
 - "Show me all test suites"
 - "Get first 50 test suites for project MCP"
@@ -493,6 +591,7 @@ Weekly stability report for project MCP using:
 **Description:** Get hierarchical tree view of test suites with configurable depth.
 
 **Example Prompts:**
+
 - "Show me the hierarchy of test suites with depth 3"
 - "Get suite hierarchy for project MCP"
 - "Display test suite tree structure"
@@ -502,6 +601,7 @@ Weekly stability report for project MCP using:
 **Description:** Get all top-level (root) test suites.
 
 **Example Prompts:**
+
 - "Show me all root suites for project MCP"
 - "Get top-level test suites"
 - "List root suites"
@@ -511,6 +611,7 @@ Weekly stability report for project MCP using:
 **Description:** Get all child suites recursively from a parent suite.
 
 **Example Prompts:**
+
 - "Get all subsuites from root suite 18697"
 - "Show me all child suites under suite 17470"
 - "List all subsuites for suite 491"
@@ -520,10 +621,12 @@ Weekly stability report for project MCP using:
 **Description:** Get test suite by its numeric ID. This is the primary tool for any "show me suite", "get suite by ID", or "find suite" request.
 
 **Modes:**
+
 - `simple` (default) — Fast direct API call. Returns id, title, description, parentSuiteId, relativePosition.
 - `full` — Fetches all project suites and enriches with hierarchy (rootSuiteId, parent chain, clickable links). Use when hierarchy context is needed.
 
 **Example Prompts:**
+
 - "Show me suite in project MCP by id 20421"
 - "Get details for suite 17470"
 - "Show me suite 18697 with full hierarchy"
@@ -534,6 +637,7 @@ Weekly stability report for project MCP using:
 **Description:** Get comprehensive list of all suites for a project with hierarchy information.
 
 **Example Prompts:**
+
 - "Get all suites for project MCP with hierarchy"
 - "Show me all test suites in project MCP"
 - "List all suites for MCP"
@@ -543,6 +647,7 @@ Weekly stability report for project MCP using:
 **Description:** Retrieve all TCM test case suites in a project using comprehensive pagination, with optional hierarchy enrichment.
 
 **Example Prompts:**
+
 - "Get all TCM test case suites for project MCP"
 - "Export all suites for MCP in markdown format"
 - "List all suites for android with hierarchy enabled"
@@ -552,6 +657,7 @@ Weekly stability report for project MCP using:
 **Description:** Find the root suite for any given suite ID.
 
 **Example Prompts:**
+
 - "What's the root suite for suite 12345?"
 - "Find root suite for suite 491"
 - "Get parent root for suite 17470"
@@ -569,17 +675,21 @@ Weekly stability report for project MCP using:
 **Description:** (Beta) Create a new Test Suite in a Zebrunner project. Requires Engineer role or higher.
 
 **Parameters:**
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `project_key` | string | * | Project key (e.g., 'ANDROID'). Provide this or `project_id`. |
-| `project_id` | number | * | Numeric project ID. Provide this or `project_key`. |
-| `title` | string | ✅ | Suite name (1–255 chars). |
-| `description` | string | | Optional description (max 5000 chars). |
-| `parent_suite_id` | number | | Parent suite ID. Omit to create a root-level suite. |
-| `dry_run` | boolean | | If true, returns raw payload without validation. |
-| `confirm` | boolean | | Must be true to execute. Without it, returns a preview. |
+
+
+| Parameter         | Type    | Required | Description                                                  |
+| ----------------- | ------- | -------- | ------------------------------------------------------------ |
+| `project_key`     | string  | *        | Project key (e.g., 'ANDROID'). Provide this or `project_id`. |
+| `project_id`      | number  | *        | Numeric project ID. Provide this or `project_key`.           |
+| `title`           | string  | ✅        | Suite name (1–255 chars).                                    |
+| `description`     | string  |          | Optional description (max 5000 chars).                       |
+| `parent_suite_id` | number  |          | Parent suite ID. Omit to create a root-level suite.          |
+| `dry_run`         | boolean |          | If true, returns raw payload without validation.             |
+| `confirm`         | boolean |          | Must be true to execute. Without it, returns a preview.      |
+
 
 **Example Prompts:**
+
 - "Create a new root test suite called 'Payments' in project MCP"
 - "Create a child suite 'Edge Cases' under suite 18697 in project android"
 
@@ -588,18 +698,22 @@ Weekly stability report for project MCP using:
 **Description:** (Beta) Update an existing Test Suite by numeric ID (full PUT replacement). Requires Engineer role or higher.
 
 **Parameters:**
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `project_key` | string | * | Project key. Provide this or `project_id`. |
-| `project_id` | number | * | Numeric project ID. |
-| `suite_id` | number | ✅ | ID of the suite to update. |
-| `title` | string | ✅ | Suite name (always required — full replacement). |
-| `description` | string | | New description. Omit to clear. |
-| `parent_suite_id` | number/null | | Set to null or omit to promote to root. |
-| `dry_run` | boolean | | Raw payload inspection. |
-| `confirm` | boolean | | Must be true to execute. |
+
+
+| Parameter         | Type        | Required | Description                                      |
+| ----------------- | ----------- | -------- | ------------------------------------------------ |
+| `project_key`     | string      | *        | Project key. Provide this or `project_id`.       |
+| `project_id`      | number      | *        | Numeric project ID.                              |
+| `suite_id`        | number      | ✅        | ID of the suite to update.                       |
+| `title`           | string      | ✅        | Suite name (always required — full replacement). |
+| `description`     | string      |          | New description. Omit to clear.                  |
+| `parent_suite_id` | number/null |          | Set to null or omit to promote to root.          |
+| `dry_run`         | boolean     |          | Raw payload inspection.                          |
+| `confirm`         | boolean     |          | Must be true to execute.                         |
+
 
 **Example Prompts:**
+
 - "Rename suite 18697 to 'Login & Registration' in project MCP"
 - "Move suite 491 under parent suite 18697 in project android"
 
@@ -608,33 +722,38 @@ Weekly stability report for project MCP using:
 **Description:** (Beta) Create a new Test Case in a Zebrunner project. Validates priority, automation state, and custom fields against project settings at runtime. Optionally accepts `source_case_key` to pre-populate fields from an existing test case.
 
 **Parameters:**
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `project_key` | string | * | Project key. Provide this or `project_id`. |
-| `project_id` | number | * | Numeric project ID. |
-| `test_suite_id` | number | yes | Suite to place the test case in. |
-| `title` | string | ** | Test case title (1-255 chars). Required unless `source_case_key` is provided. |
-| `source_case_key` | string | | Source test case key (e.g., 'MCP-6528'). Fetches the source and uses its fields as defaults. Explicitly passed fields override source values. Cross-project file attachments are automatically re-uploaded. |
-| `description` | string | | Rich text description (max 5000 chars, supports markdown). |
-| `priority` | `{id}` or `{name}` | | Priority reference validated at runtime. |
-| `automation_state` | `{id}` or `{name}` | | Automation state reference validated at runtime. |
-| `draft` | boolean | | Mark as draft. |
-| `deprecated` | boolean | | Mark as deprecated. |
-| `pre_conditions` | string | | Setup instructions (max 2000 chars). |
-| `post_conditions` | string | | Cleanup instructions (max 2000 chars). |
-| `steps` | array | | Test steps with action/expectedResult or sharedStepsId. Step attachments support `{file_path}`. |
-| `requirements` | array | | Linked JIRA or AZURE_DEVOPS requirements. |
-| `custom_field` | object | | Custom fields keyed by systemName. |
-| `attachments` | array | | File references: `{fileUuid}` for pre-uploaded files or `{file_path}` for local files (uploaded automatically). |
-| `dry_run` | boolean | | Raw payload inspection. |
-| `confirm` | boolean | | Must be true to execute. |
+
+
+| Parameter          | Type               | Required | Description                                                                                                                                                                                                 |
+| ------------------ | ------------------ | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `project_key`      | string             | *        | Project key. Provide this or `project_id`.                                                                                                                                                                  |
+| `project_id`       | number             | *        | Numeric project ID.                                                                                                                                                                                         |
+| `test_suite_id`    | number             | yes      | Suite to place the test case in.                                                                                                                                                                            |
+| `title`            | string             | **       | Test case title (1-255 chars). Required unless `source_case_key` is provided.                                                                                                                               |
+| `source_case_key`  | string             |          | Source test case key (e.g., 'MCP-6528'). Fetches the source and uses its fields as defaults. Explicitly passed fields override source values. Cross-project file attachments are automatically re-uploaded. |
+| `description`      | string             |          | Rich text description (max 5000 chars, supports markdown).                                                                                                                                                  |
+| `priority`         | `{id}` or `{name}` |          | Priority reference validated at runtime.                                                                                                                                                                    |
+| `automation_state` | `{id}` or `{name}` |          | Automation state reference validated at runtime.                                                                                                                                                            |
+| `draft`            | boolean            |          | Mark as draft.                                                                                                                                                                                              |
+| `deprecated`       | boolean            |          | Mark as deprecated.                                                                                                                                                                                         |
+| `pre_conditions`   | string             |          | Setup instructions (max 2000 chars).                                                                                                                                                                        |
+| `post_conditions`  | string             |          | Cleanup instructions (max 2000 chars).                                                                                                                                                                      |
+| `steps`            | array              |          | Test steps with action/expectedResult or sharedStepsId. Step attachments support `{file_path}`.                                                                                                             |
+| `requirements`     | array              |          | Linked JIRA or AZURE_DEVOPS requirements.                                                                                                                                                                   |
+| `custom_field`     | object             |          | Custom fields keyed by systemName.                                                                                                                                                                          |
+| `attachments`      | array              |          | File references: `{fileUuid}` for pre-uploaded files or `{file_path}` for local files (uploaded automatically).                                                                                             |
+| `dry_run`          | boolean            |          | Raw payload inspection.                                                                                                                                                                                     |
+| `confirm`          | boolean            |          | Must be true to execute.                                                                                                                                                                                    |
+
 
 **Preview enhancements:**
+
 - Shows both "Fields to be set" and "Fields that will be null/default (not provided)" for full visibility.
 - When `source_case_key` is used, shows source attribution and any cross-project file transfer results.
 - Local `file_path` attachments show file size and pending upload status.
 
 **Example Prompts:**
+
 - "Create a test case 'Verify login with valid credentials' in suite 17470 for project MCP"
 - "Create a test case with priority High and 3 steps in suite 491"
 - "Create a test case in MCP suite 20421 using source_case_key MCP-123 but override priority to Low"
@@ -644,24 +763,28 @@ Weekly stability report for project MCP using:
 **Description:** (Beta) Partially update an existing Test Case by numeric ID or string key (PATCH). Only provided fields are updated. Accepts `{file_path}` in attachments for local file upload.
 
 **Parameters:**
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `project_key` | string | * | Project key. Provide this or `project_id`. |
-| `project_id` | number | * | Numeric project ID. |
-| `identifier` | number or string | yes | Numeric ID or string key (e.g., 'MCP-42'). |
-| `title` | string | | New title. |
-| `test_suite_id` | number | | Move to a different suite. |
-| `description` | string | | New description. |
-| `priority` | `{id}` or `{name}` | | New priority. |
-| `automation_state` | `{id}` or `{name}` | | New automation state. |
-| `steps` | array | | ATOMIC: replaces ALL existing steps. Step attachments support `{file_path}`. |
-| `requirements` | array | | ATOMIC: replaces ALL existing requirements. |
-| `custom_field` | object | | Only specified keys are updated. |
-| `attachments` | array | | File references: `{fileUuid}` or `{file_path}` for local files. |
-| `dry_run` | boolean | | Raw payload inspection. |
-| `confirm` | boolean | | Must be true to execute. |
+
+
+| Parameter          | Type               | Required | Description                                                                  |
+| ------------------ | ------------------ | -------- | ---------------------------------------------------------------------------- |
+| `project_key`      | string             | *        | Project key. Provide this or `project_id`.                                   |
+| `project_id`       | number             | *        | Numeric project ID.                                                          |
+| `identifier`       | number or string   | yes      | Numeric ID or string key (e.g., 'MCP-42').                                   |
+| `title`            | string             |          | New title.                                                                   |
+| `test_suite_id`    | number             |          | Move to a different suite.                                                   |
+| `description`      | string             |          | New description.                                                             |
+| `priority`         | `{id}` or `{name}` |          | New priority.                                                                |
+| `automation_state` | `{id}` or `{name}` |          | New automation state.                                                        |
+| `steps`            | array              |          | ATOMIC: replaces ALL existing steps. Step attachments support `{file_path}`. |
+| `requirements`     | array              |          | ATOMIC: replaces ALL existing requirements.                                  |
+| `custom_field`     | object             |          | Only specified keys are updated.                                             |
+| `attachments`      | array              |          | File references: `{fileUuid}` or `{file_path}` for local files.              |
+| `dry_run`          | boolean            |          | Raw payload inspection.                                                      |
+| `confirm`          | boolean            |          | Must be true to execute.                                                     |
+
 
 **Example Prompts:**
+
 - "Update test case MCP-42 title to 'Verify login with SSO'"
 - "Change automation state to 'Automated' for test case 12345 in project android"
 - "Move test case MCP-100 to suite 18824"
@@ -673,35 +796,40 @@ Weekly stability report for project MCP using:
 
 **Actions:**
 
-| Action | Description |
-|--------|-------------|
-| `create` | Create a new (empty) test run. Requires `title`. Returns 201 with created run. |
-| `update` | Partial update (PATCH) of an existing test run. Only provided fields change. WARNING: `configurations` is atomic — replaces all existing. Returns 200. |
-| `add_cases` | Add test cases to an existing run by keys, suite IDs, or all project cases. Returns 204 No Content. |
+
+| Action      | Description                                                                                                                                            |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `create`    | Create a new (empty) test run. Requires `title`. Returns 201 with created run.                                                                         |
+| `update`    | Partial update (PATCH) of an existing test run. Only provided fields change. WARNING: `configurations` is atomic — replaces all existing. Returns 200. |
+| `add_cases` | Add test cases to an existing run by keys, suite IDs, or all project cases. Returns 204 No Content.                                                    |
+
 
 **Parameters:**
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `action` | `"create"` / `"update"` / `"add_cases"` | yes | Action to perform. |
-| `project_key` | string | * | Project key (e.g., 'MCP'). Provide this or `project_id`. |
-| `project_id` | number | * | Numeric project ID. |
-| `test_run_id` | number | update/add_cases | Test Run ID. Required for update and add_cases. |
-| `title` | string | create | Test run title (1-255 chars). Required for create. |
-| `description` | string | | Test run description (max 10,000 chars). |
-| `milestone` | `{id}` or `{name}` | | Milestone reference. Use `get_test_run_configuration_groups` to discover values. |
-| `environment` | `{key}` | | Environment reference (e.g., `{ key: "pre-prod" }`). |
-| `configurations` | array | | Configuration group/option pairs. ATOMIC on update — replaces all. Max 100. |
-| `requirements` | array | | JIRA or AZURE_DEVOPS requirement references. |
-| `test_case_keys` | string[] | add_cases | Test case keys to add (e.g., `["MCP-82"]`). |
-| `test_suite_ids` | array | add_cases | Suites to add with `{id, selectionMode}`. |
-| `all_project_test_cases` | boolean | add_cases | If true, adds ALL project test cases. |
-| `skip_errors` | boolean | | Tolerate non-fatal errors. Default: true. |
-| `create_missing_configurations` | boolean | | Auto-create missing config groups/options. API default: true. |
-| `dry_run` | boolean | | Raw payload inspection. |
-| `confirm` | boolean | | Must be true to execute. |
+
+| Parameter                       | Type                                    | Required         | Description                                                                      |
+| ------------------------------- | --------------------------------------- | ---------------- | -------------------------------------------------------------------------------- |
+| `action`                        | `"create"` / `"update"` / `"add_cases"` | yes              | Action to perform.                                                               |
+| `project_key`                   | string                                  | *                | Project key (e.g., 'MCP'). Provide this or `project_id`.                         |
+| `project_id`                    | number                                  | *                | Numeric project ID.                                                              |
+| `test_run_id`                   | number                                  | update/add_cases | Test Run ID. Required for update and add_cases.                                  |
+| `title`                         | string                                  | create           | Test run title (1-255 chars). Required for create.                               |
+| `description`                   | string                                  |                  | Test run description (max 10,000 chars).                                         |
+| `milestone`                     | `{id}` or `{name}`                      |                  | Milestone reference. Use `get_test_run_configuration_groups` to discover values. |
+| `environment`                   | `{key}`                                 |                  | Environment reference (e.g., `{ key: "pre-prod" }`).                             |
+| `configurations`                | array                                   |                  | Configuration group/option pairs. ATOMIC on update — replaces all. Max 100.      |
+| `requirements`                  | array                                   |                  | JIRA or AZURE_DEVOPS requirement references.                                     |
+| `test_case_keys`                | string[]                                | add_cases        | Test case keys to add (e.g., `["MCP-82"]`).                                      |
+| `test_suite_ids`                | array                                   | add_cases        | Suites to add with `{id, selectionMode}`.                                        |
+| `all_project_test_cases`        | boolean                                 | add_cases        | If true, adds ALL project test cases.                                            |
+| `skip_errors`                   | boolean                                 |                  | Tolerate non-fatal errors. Default: true.                                        |
+| `create_missing_configurations` | boolean                                 |                  | Auto-create missing config groups/options. API default: true.                    |
+| `dry_run`                       | boolean                                 |                  | Raw payload inspection.                                                          |
+| `confirm`                       | boolean                                 |                  | Must be true to execute.                                                         |
+
 
 **Example Prompts:**
+
 - "Create a test run called 'Sprint 42 Regression' in project MCP"
 - "Create a test run 'Browser Matrix' with configurations Browser:Chrome and Browser:Firefox in project MCP"
 - "Update test run 123 in project MCP to set the milestone to 'Release 3.0'"
@@ -714,24 +842,27 @@ Weekly stability report for project MCP using:
 
 **Parameters:**
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `project_key` | string | * | Project key. Provide this or `project_id`. |
-| `project_id` | number | * | Numeric project ID. |
-| `test_run_id` | number | yes | TCM Test Run ID to import results into. |
-| `launch_id` | number | yes | Reporting API Launch ID to pull results from. |
-| `test_case_keys` | string[] | | Filter: only import these test case keys. Omit for all. |
-| `status_mapping` | object | | Custom status overrides (e.g., `{ "ABORTED": "Skipped" }`). |
-| `execution_type` | `"MANUAL"` / `"AUTOMATED"` | | Execution type for results. Default: AUTOMATED. |
-| `add_missing_test_cases` | boolean | | Auto-add test cases not in the run. Default: false (safety). |
-| `skip_errors` | boolean | | Tolerate non-fatal errors. Default: true. |
-| `include_details` | boolean | | Carry over test error messages. Default: true. |
-| `dry_run` | boolean | | Raw payload inspection. |
-| `confirm` | boolean | | Must be true to execute. |
+
+| Parameter                | Type                       | Required | Description                                                  |
+| ------------------------ | -------------------------- | -------- | ------------------------------------------------------------ |
+| `project_key`            | string                     | *        | Project key. Provide this or `project_id`.                   |
+| `project_id`             | number                     | *        | Numeric project ID.                                          |
+| `test_run_id`            | number                     | yes      | TCM Test Run ID to import results into.                      |
+| `launch_id`              | number                     | yes      | Reporting API Launch ID to pull results from.                |
+| `test_case_keys`         | string[]                   |          | Filter: only import these test case keys. Omit for all.      |
+| `status_mapping`         | object                     |          | Custom status overrides (e.g., `{ "ABORTED": "Skipped" }`).  |
+| `execution_type`         | `"MANUAL"` / `"AUTOMATED"` |          | Execution type for results. Default: AUTOMATED.              |
+| `add_missing_test_cases` | boolean                    |          | Auto-add test cases not in the run. Default: false (safety). |
+| `skip_errors`            | boolean                    |          | Tolerate non-fatal errors. Default: true.                    |
+| `include_details`        | boolean                    |          | Carry over test error messages. Default: true.               |
+| `dry_run`                | boolean                    |          | Raw payload inspection.                                      |
+| `confirm`                | boolean                    |          | Must be true to execute.                                     |
+
 
 **Default Status Mapping:** PASSED→Passed, FAILED→Failed, SKIPPED→Skipped, ABORTED→Blocked. Tests with IN_PROGRESS status are skipped.
 
 **Example Prompts:**
+
 - "Import results from launch 98765 into test run 123 for project MCP"
 - "Import only MCP-82 and MCP-83 results from launch 98765 to test run 123"
 - "Sync launch 45000 results to test run 789 in project MCP, map ABORTED to Skipped"
@@ -745,6 +876,7 @@ Weekly stability report for project MCP using:
 **Description:** Analyze how well automation code implements test case steps.
 
 **Example Prompts:**
+
 - "Analyze coverage for MCP-2107 against this implementation code: [paste code]"
 - "Check if test case MCP-1921 is implemented correctly in this code"
 - "Validate coverage for MCP-88 with this automation code"
@@ -754,6 +886,7 @@ Weekly stability report for project MCP using:
 **Description:** Rules-based coverage analysis with framework detection and intelligent validation.
 
 **Example Prompts:**
+
 - "Enhanced coverage analysis for MCP-2107 with framework detection"
 - "Analyze MCP-1921 coverage with rules validation"
 - "Check test case MCP-88 implementation with enhanced rules"
@@ -763,6 +896,7 @@ Weekly stability report for project MCP using:
 **Description:** Quality validation with automated improvement suggestions using intelligent rules.
 
 **Example Prompts:**
+
 - "Validate test case MCP-2107 and suggest improvements"
 - "Check quality of test case MCP-1921"
 - "Validate MCP-88 and tell me what needs to be improved"
@@ -772,6 +906,7 @@ Weekly stability report for project MCP using:
 **Description:** Dedicated tool for improving test case quality with specific suggestions.
 
 **Example Prompts:**
+
 - "Improve test case MCP-2107 with specific suggestions"
 - "Help me improve test case MCP-1921"
 - "Suggest improvements for MCP-88"
@@ -785,6 +920,7 @@ Weekly stability report for project MCP using:
 **Description:** Generate test automation code with framework detection (Java/Carina, Python/Pytest, etc.).
 
 **Example Prompts:**
+
 - "Generate Java/Carina test for MCP-2107 based on this implementation"
 - "Create Python pytest for test case MCP-1921"
 - "Generate automation code for MCP-88 using Java and Carina framework"
@@ -798,6 +934,7 @@ Weekly stability report for project MCP using:
 **Description:** Find and group similar test cases by step similarity with configurable threshold.
 
 **Example Prompts:**
+
 - "Analyze suite 17470 for duplicates with 80% similarity threshold"
 - "Find duplicate test cases in suite 18697"
 - "Check suite 491 for similar test cases"
@@ -807,6 +944,7 @@ Weekly stability report for project MCP using:
 **Description:** Advanced semantic analysis with LLM-powered step clustering and medoid selection.
 
 **Example Prompts:**
+
 - "Semantic analysis of suite 17470 with step clustering"
 - "Find semantically similar test cases in suite 18697 using AI"
 - "Analyze suite 491 for duplicates with semantic clustering"
@@ -820,6 +958,7 @@ Weekly stability report for project MCP using:
 **Description:** Find ALL test cases related to a specific feature keyword across the entire project. Searches in title, description, preconditions, post-conditions, and test steps (case-insensitive, partial match). Groups results by Root Suite and Feature Suite hierarchy.
 
 **Key Features:**
+
 - Comprehensive search across all test case fields
 - Smart grouping by suite hierarchy
 - Automatic deduplication
@@ -827,6 +966,7 @@ Weekly stability report for project MCP using:
 - Multiple output formats
 
 **Parameters:**
+
 - `project_key` (required) - Project key (e.g., 'MCPAND', 'MCP')
 - `feature_keyword` (required) - Feature keyword to search for
 - `output_format` - Output format: `detailed`, `short` (default), `dto`, `test_run_rules`
@@ -834,6 +974,7 @@ Weekly stability report for project MCP using:
 - `max_results` - Maximum test cases to process (default: 500, max: 2000)
 
 **Example Prompts:**
+
 - "Find all test cases related to 'login' feature in project MCP"
 - "Aggregate test cases for 'payment' in project MCPAND with detailed output"
 - "Get automation tags for all test cases mentioning 'diary' feature"
@@ -841,12 +982,14 @@ Weekly stability report for project MCP using:
 - "Generate test run rules for 'onboarding' feature"
 
 **Output Formats:**
+
 - `short` - Summary view with test case keys and titles (recommended for quick review)
 - `detailed` - Full hierarchy with tables and complete information
 - `dto` - JSON format for programmatic use
 - `test_run_rules` - Ready-to-use TAGS for automation test runs
 
 **Use Cases:**
+
 1. **Feature Testing:** Find all test cases for a feature before release
 2. **Test Planning:** Generate automation tags for feature-specific test runs
 3. **Gap Analysis:** Identify features with comprehensive test coverage
@@ -861,6 +1004,7 @@ Weekly stability report for project MCP using:
 **Description:** Advanced filtering of test runs by date range, status, platform, and more.
 
 **Example Prompts:**
+
 - "Get test runs from last 30 days with status 'FAILED'"
 - "Show me test runs from last week for iOS platform"
 - "Find test runs from November 2025 that failed"
@@ -870,6 +1014,7 @@ Weekly stability report for project MCP using:
 **Description:** Get detailed information for a specific test run.
 
 **Example Prompts:**
+
 - "Get details for test run 12345"
 - "Show me test run 67890"
 - "What happened in test run 54321?"
@@ -879,6 +1024,7 @@ Weekly stability report for project MCP using:
 **Description:** Get all test cases associated with a specific test run.
 
 **Example Prompts:**
+
 - "Show me all test cases in test run 12345"
 - "List test cases for test run 67890"
 - "What test cases were in test run 54321?"
@@ -888,6 +1034,7 @@ Weekly stability report for project MCP using:
 **Description:** Get available result statuses configured for a project.
 
 **Example Prompts:**
+
 - "What result statuses are configured for project MCP?"
 - "Show me available test run statuses"
 - "List result statuses for MCP"
@@ -897,6 +1044,7 @@ Weekly stability report for project MCP using:
 **Description:** Get configuration options and groups for test runs.
 
 **Example Prompts:**
+
 - "Show me configuration groups for project MCP"
 - "What test run configurations are available?"
 - "List configuration groups"
@@ -910,11 +1058,13 @@ Weekly stability report for project MCP using:
 **Description:** Get aggregated test results, pass rate, and statistics for a project over a time period (last 7 days, last 30 days, etc.). Returns total passed/failed/skipped/aborted counts and pass rate percentage. Use this when asked for "results", "pass rate", "test statistics", or "results for last N days". Accepts any Zebrunner project key (e.g. `DEF`, `MCP`) or aliases (`web`/`android`/`ios`/`api`).
 
 **Supported Periods (Input):**
+
 - Today, Last 24 Hours, Week, Last 7 Days, Last 14 Days, Month, Last 30 Days, Quarter, Last 90 Days, Year, Last 365 Days, Total
 
 **Note:** Periods are passed through as-is. If a widget does not support a period, the API will return an error.
 
 **Example Prompts:**
+
 - "Get results for MCP during last 7 days"
 - "Show pass rate for MCP"
 - "Show me Android test results from last week"
@@ -925,11 +1075,13 @@ Weekly stability report for project MCP using:
 **Description:** Get most frequent defects/bugs from test executions.
 
 **Supported Periods (Input):**
+
 - Today, Last 24 Hours, Week, Last 7 Days, Last 14 Days, Month, Last 30 Days, Quarter, Last 90 Days, Year, Last 365 Days, Total
 
 **Note:** Periods are passed through as-is. If a widget does not support a period, the API will return an error.
 
 **Example Prompts:**
+
 - "Show me top 10 bugs from last week"
 - "What are the most common bugs?"
 - "Get top bugs from last 30 days"
@@ -939,6 +1091,7 @@ Weekly stability report for project MCP using:
 **Description:** Get comprehensive bug review with detailed failure information, defect tracking, reproduction dates, and **automatic failure detail fetching** for single-call analysis.
 
 **Key Features:**
+
 - Detailed bug review with failure analysis
 - Defect tracking with Jira/issue tracker links
 - Historical data (first seen and last reproduction dates)
@@ -952,11 +1105,13 @@ Weekly stability report for project MCP using:
 **Note:** Periods are passed through as-is. If a widget does not support a period, the API will return an error.
 
 **New Parameters:**
+
 - `include_failure_details` (boolean, default: false) - When true, automatically fetches detailed failure info for each bug
 - `failure_detail_level` ('none' | 'summary' | 'full', default: 'summary') - Level of detail to fetch
 - `max_details_limit` (number, default: 30, max: 50) - Max bugs to fetch details for
 
 **Example Prompts:**
+
 - "Show me detailed bug review for last 7 days"
 - "Get bug review for Android project from last 14 days with failure details"
 - "Show me top 10 bugs with full failure analysis for iOS"
@@ -968,6 +1123,7 @@ Weekly stability report for project MCP using:
 **Description:** Get comprehensive failure information for a specific bug/hashcode, including high-level failure summary and detailed list of affected test runs. This tool combines data from multiple SQL widgets to provide complete failure analysis.
 
 **Key Features:**
+
 - Combines failure info (templateId: 6) and failure details (templateId: 10)
 - Shows error/stability information
 - Lists all affected test runs with links
@@ -978,6 +1134,7 @@ Weekly stability report for project MCP using:
 **Note:** Periods are passed through as-is. If a widget does not support a period, the API will return an error.
 
 **Example Prompts:**
+
 - "Get failure info for hashcode 1051677506 on dashboard 99"
 - "Show me detailed failures for this bug hashcode"
 - "Analyze failure information for hashcode X from last 14 days"
@@ -990,6 +1147,7 @@ Weekly stability report for project MCP using:
 **Description:** Get all milestones configured for a project.
 
 **Example Prompts:**
+
 - "Get all milestones for project MCP"
 - "Show me available milestones"
 - "List milestones for MCP"
@@ -1004,33 +1162,31 @@ Weekly stability report for project MCP using:
 
 **Parameters:**
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `report_types` | `string[]` | Report type(s) to generate (required). See report types below. |
-| `projects` | `string[]` | Project aliases or keys (e.g., `["android", "ios"]`) |
-| `period` | `string` | Time period (e.g., `"Last 30 Days"`) |
-| `milestone` | `string?` | Optional milestone filter |
-| `top_bugs_limit` | `number?` | Top bugs count for `quality_dashboard` / `executive_dashboard` (default: 10) |
-| `sections` | `string[]?` | Sections for `quality_dashboard`: `pass_rate`, `runtime`, `coverage`, `bugs`, `milestones`, `flaky` |
-| `targets` | `Record<string, number>?` | Pass rate targets per project (e.g., `{"android": 90, "web": 65}`). Defaults: android=90, ios=90, web=65 |
-| `exclude_suite_patterns` | `string[]?` | Suite patterns to exclude from TOTAL REGRESSION in `coverage` report (e.g., `["MA", "Critical", "Performance"]`) |
-| `previous_milestone` | `string?` | Baseline milestone for delta comparison in `runtime_efficiency` / `release_readiness` |
+
+| Parameter                | Type                      | Description                                                                                                      |
+| ------------------------ | ------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `report_types`           | `string[]`                | Report type(s) to generate (required). See report types below.                                                   |
+| `projects`               | `string[]`                | Project aliases or keys (e.g., `["android", "ios"]`)                                                             |
+| `period`                 | `string`                  | Time period (e.g., `"Last 30 Days"`)                                                                             |
+| `milestone`              | `string?`                 | Optional milestone filter                                                                                        |
+| `top_bugs_limit`         | `number?`                 | Top bugs count for `quality_dashboard` / `executive_dashboard` (default: 10)                                     |
+| `sections`               | `string[]?`               | Sections for `quality_dashboard`: `pass_rate`, `runtime`, `coverage`, `bugs`, `milestones`, `flaky`              |
+| `targets`                | `Record<string, number>?` | Pass rate targets per project (e.g., `{"android": 90, "web": 65}`). Defaults: android=90, ios=90, web=65         |
+| `exclude_suite_patterns` | `string[]?`               | Suite patterns to exclude from TOTAL REGRESSION in `coverage` report (e.g., `["MA", "Critical", "Performance"]`) |
+| `previous_milestone`     | `string?`                 | Baseline milestone for delta comparison in `runtime_efficiency` / `release_readiness`                            |
+
 
 **Report Types:**
 
-1. **`quality_dashboard`** — Full HTML dashboard + Markdown with 6 panels: pass rate (target comparison + known-issue exclusion), runtime (WRI, Short/Medium/Long), coverage, top bugs, milestones, flaky tests. Returns HTML + PNG charts.
-
-2. **`coverage`** — Per-suite test coverage table for each platform. Shows Implemented, Manual Only, Deprecated, Total, Coverage %. Includes TOTAL and TOTAL REGRESSION summary rows (regression excludes suites matching `exclude_suite_patterns`). Handles "Manual Only" as both automation state and custom field.
-
-3. **`pass_rate`** — Per-platform pass rate metrics with total executed, passed, failed, known issues, pass rate, pass rate excluding known issues, and target comparison with status indicators. Returns Markdown + PNG chart.
-
-4. **`runtime_efficiency`** — Regression runtime metrics per platform with WRI, duration distribution, avg runtime per test/test case. When `previous_milestone` is provided, calculates deltas and flags suites with >20% degradation. Returns Markdown + PNG chart.
-
-5. **`executive_dashboard`** — Standup-ready combined report: pass rate + runtime + top 5 bugs + coverage + flaky tests. Returns Markdown + PNG charts + HTML dashboard.
-
-6. **`release_readiness`** — Go/No-Go assessment per platform. Evaluates: pass rate vs target, unresolved failures, runtime efficiency delta, automation coverage, top defects. Each check gets PASS/FAIL/WARN status. Returns structured Markdown with overall recommendation.
+1. `**quality_dashboard`** — Full HTML dashboard + Markdown with 6 panels: pass rate (target comparison + known-issue exclusion), runtime (WRI, Short/Medium/Long), coverage, top bugs, milestones, flaky tests. Returns HTML + PNG charts.
+2. `**coverage**` — Per-suite test coverage table for each platform. Shows Implemented, Manual Only, Deprecated, Total, Coverage %. Includes TOTAL and TOTAL REGRESSION summary rows (regression excludes suites matching `exclude_suite_patterns`). Handles "Manual Only" as both automation state and custom field.
+3. `**pass_rate**` — Per-platform pass rate metrics with total executed, passed, failed, known issues, pass rate, pass rate excluding known issues, and target comparison with status indicators. Returns Markdown + PNG chart.
+4. `**runtime_efficiency**` — Regression runtime metrics per platform with WRI, duration distribution, avg runtime per test/test case. When `previous_milestone` is provided, calculates deltas and flags suites with >20% degradation. Returns Markdown + PNG chart.
+5. `**executive_dashboard**` — Standup-ready combined report: pass rate + runtime + top 5 bugs + coverage + flaky tests. Returns Markdown + PNG charts + HTML dashboard.
+6. `**release_readiness**` — Go/No-Go assessment per platform. Evaluates: pass rate vs target, unresolved failures, runtime efficiency delta, automation coverage, top defects. Each check gets PASS/FAIL/WARN status. Returns structured Markdown with overall recommendation.
 
 **Example Prompts:**
+
 - "Generate a quality dashboard for Android and iOS for the last 30 days"
 - "Build a test coverage report for all three platforms"
 - "Show pass rate for Android, iOS, and Web for milestone 25.40.0"
@@ -1048,6 +1204,7 @@ Weekly stability report for project MCP using:
 **Description:** Discover all projects you have access to in Zebrunner.
 
 **Example Prompts:**
+
 - "What projects can I access?"
 - "Show me all available projects"
 - "List all projects I have access to"
@@ -1057,6 +1214,7 @@ Weekly stability report for project MCP using:
 **Description:** Test API connectivity and authentication with Zebrunner Reporting API.
 
 **Example Prompts:**
+
 - "Test my connection to Zebrunner"
 - "Check if I can connect to Zebrunner reporting"
 - "Verify my Zebrunner API access"
@@ -1066,6 +1224,7 @@ Weekly stability report for project MCP using:
 **Description:** Discover and understand Zebrunner MCP capabilities — tools, prompts, resources, and session metrics.
 
 **Key Features:**
+
 - Summary mode for all registered tools (with prompt/resource counts)
 - Detail mode for a single tool by name
 - Prompts catalog: all `/` workflow commands grouped by category
@@ -1074,6 +1233,7 @@ Weekly stability report for project MCP using:
 - MCP version displayed in all mode outputs
 
 **Parameters:**
+
 - `mode`: `summary` | `tool` | `prompts` | `resources` | `metrics` (default: `summary`)
 - `tool_name`: required when `mode = tool`
 - `include_examples`: boolean (default: true)
@@ -1081,6 +1241,7 @@ Weekly stability report for project MCP using:
 - `include_role_benefits`: boolean (default: true)
 
 **Example Prompts:**
+
 - "Using Zebrunner MCP make a summary of all tools with examples"
 - "Using Zebrunner MCP give info for tool analyze_test_execution_video with examples"
 - "Show detailed info for get_bug_review including token usage estimation"
@@ -1095,6 +1256,7 @@ Weekly stability report for project MCP using:
 ### Natural Language Flexibility
 
 All tools support natural language queries. Claude will automatically:
+
 - Extract parameters from your question
 - Choose the right tool
 - Format the output appropriately
@@ -1108,6 +1270,7 @@ You can chain multiple tools in conversation:
 ```
 
 Claude will:
+
 1. Call `get_test_execution_history`
 2. Call `analyze_test_failure` with comparison enabled
 3. Combine results into comprehensive analysis
@@ -1121,6 +1284,7 @@ Many tools support direct URL input from Zebrunner UI:
 ```
 
 Claude automatically extracts:
+
 - Project key: MCP
 - Launch ID: 120906
 - Test ID: 5455325
@@ -1128,12 +1292,14 @@ Claude automatically extracts:
 ### Output Formats
 
 Most tools support multiple output formats:
+
 - `string` (markdown) - Human-readable, default
 - `json` - Structured data
 - `dto` - Detailed structured object
 - `jira` - Ready-to-paste Jira tickets
 
 Specify format in your request:
+
 ```
 "Analyze test failure 5451420 in jira format"
 ```
@@ -1217,4 +1383,3 @@ For large datasets, you can specify filters and limits:
 **Last Updated:** v7.0.0 - April 2026
 
 For the latest features and updates, see [change-logs.md](change-logs.md).
-
