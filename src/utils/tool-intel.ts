@@ -25,6 +25,7 @@ const TOKEN_RANGE_BY_TOOL: Record<string, string> = {
   analyze_test_execution_video: "Very High (12k+ tokens)",
   analyze_screenshot: "High (6k-12k tokens)",
   generate_weekly_regression_stability_report: "High (6k-12k tokens)",
+  regression_results_analyzer: "High (6k-12k tokens)",
   get_bug_review: "High (6k-12k tokens)",
   get_bug_failure_info: "Medium (3k-6k tokens)",
   analyze_test_cases_duplicates: "Medium (3k-6k tokens)",
