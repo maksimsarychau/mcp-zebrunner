@@ -8729,7 +8729,7 @@ ${detailsInfo.map((detail, i) => {
         const filters: string[] = [];
 
         if (args.nameFilter) {
-          filters.push(`title ~= '${args.nameFilter.replace(/'/g, "\\'")}'`);
+          filters.push(`title ~= '${sanitizeRqlString(args.nameFilter)}'`);
         }
 
         // Handle milestone filtering - need to convert name to ID if necessary
@@ -8760,7 +8760,8 @@ ${detailsInfo.map((detail, i) => {
         }
 
         if (args.buildNumberFilter) {
-          filters.push(`(configurations.optionName ~= '${args.buildNumberFilter.replace(/'/g, "\\'")}' OR title ~= '${args.buildNumberFilter.replace(/'/g, "\\'")}' OR description ~= '${args.buildNumberFilter.replace(/'/g, "\\'")}')`);
+          const sanitizedBuild = sanitizeRqlString(args.buildNumberFilter);
+          filters.push(`(configurations.optionName ~= '${sanitizedBuild}' OR title ~= '${sanitizedBuild}' OR description ~= '${sanitizedBuild}')`);
         }
 
         if (args.closedFilter !== undefined) {

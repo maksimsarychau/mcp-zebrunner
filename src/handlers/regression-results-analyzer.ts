@@ -8,6 +8,7 @@
 
 import type { EnhancedZebrunnerClient } from "../api/enhanced-client.js";
 import type { ZebrunnerReportingClient } from "../api/reporting-client.js";
+import { sanitizeRqlString } from "../utils/security.js";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -105,13 +106,18 @@ interface AnalysisResult {
 
 // ── Dependencies ─────────────────────────────────────────────────────────────
 
+interface MilestoneRecord {
+  id: number;
+  name: string;
+  startDate?: string;
+}
+
 export interface RegressionAnalyzerDeps {
   client: EnhancedZebrunnerClient;
   reportingClient: ZebrunnerReportingClient;
 }
 
-// Per-invocation milestone cache to avoid redundant API calls
-let _milestoneCache: Map<number, any[]> | null = null;
+type MilestoneCache = Map<number, MilestoneRecord[]>;
 
 // ── Main Entry ───────────────────────────────────────────────────────────────
 
@@ -120,19 +126,15 @@ export async function analyzeRegressionResults(
   input: RegressionAnalyzerInput,
 ): Promise<{ content: Array<{ type: "text"; text: string }> }> {
   const timestamp = new Date().toISOString();
-  _milestoneCache = new Map();
-
-  try {
-    return await executeAnalysis(deps, input, timestamp);
-  } finally {
-    _milestoneCache = null;
-  }
+  const milestoneCache: MilestoneCache = new Map();
+  return executeAnalysis(deps, input, timestamp, milestoneCache);
 }
 
 async function executeAnalysis(
   deps: RegressionAnalyzerDeps,
   input: RegressionAnalyzerInput,
   timestamp: string,
+  cache: MilestoneCache,
 ): Promise<{ content: Array<{ type: "text"; text: string }> }> {
   const { client, reportingClient } = deps;
   const {
@@ -151,7 +153,7 @@ async function executeAnalysis(
   let resolvedMilestoneName: string | null = null;
 
   if (milestone) {
-    const resolved = await resolveMilestoneByName(reportingClient, projectId, milestone);
+    const resolved = await resolveMilestoneByName(reportingClient, projectId, milestone, cache);
     if (!resolved) {
       return errorResponse(`Milestone '${milestone}' not found. Use get_project_milestones to see available milestones.`);
     }
@@ -222,14 +224,14 @@ async function executeAnalysis(
   // Auto-detect previous milestone if not provided
   let effectivePrevMilestone = previous_milestone;
   if (sections.includes("new_bugs") && !effectivePrevMilestone && !previous_build && resolvedMilestoneName) {
-    effectivePrevMilestone = await autoDetectPreviousMilestone(reportingClient, projectId, resolvedMilestoneName);
+    effectivePrevMilestone = await autoDetectPreviousMilestone(reportingClient, projectId, resolvedMilestoneName, cache);
   }
 
   let newBugs: NewBugInfo[] = [];
   if (sections.includes("new_bugs") && (effectivePrevMilestone || previous_build)) {
     newBugs = await detectNewBugs(
       deps, projectKey, projectId, allTestCases,
-      effectivePrevMilestone, previous_build,
+      effectivePrevMilestone, previous_build, cache,
     );
   }
 
@@ -285,10 +287,11 @@ async function resolveMilestoneByName(
   reportingClient: ZebrunnerReportingClient,
   projectId: number,
   milestoneName: string,
+  cache: MilestoneCache,
 ): Promise<{ id: number; name: string } | null> {
-  const allMilestones = await fetchAllMilestones(reportingClient, projectId);
+  const allMilestones = await fetchAllMilestones(reportingClient, projectId, cache);
   const match = allMilestones.find(
-    (m: any) => m.name === milestoneName || m.name.startsWith(milestoneName),
+    (m) => m.name === milestoneName || m.name.startsWith(milestoneName),
   );
   return match ? { id: match.id, name: match.name } : null;
 }
@@ -296,12 +299,13 @@ async function resolveMilestoneByName(
 async function fetchAllMilestones(
   reportingClient: ZebrunnerReportingClient,
   projectId: number,
-): Promise<any[]> {
-  if (_milestoneCache?.has(projectId)) {
-    return _milestoneCache.get(projectId)!;
+  cache: MilestoneCache,
+): Promise<MilestoneRecord[]> {
+  if (cache.has(projectId)) {
+    return cache.get(projectId)!;
   }
 
-  const allItems: any[] = [];
+  const allItems: MilestoneRecord[] = [];
   let page = 1;
   let totalPages = 1;
 
@@ -311,12 +315,12 @@ async function fetchAllMilestones(
       pageSize: 100,
       completed: "all",
     });
-    allItems.push(...resp.items);
+    allItems.push(...(resp.items as MilestoneRecord[]));
     totalPages = resp._meta?.totalPages || 1;
     page++;
   } while (page <= totalPages);
 
-  _milestoneCache?.set(projectId, allItems);
+  cache.set(projectId, allItems);
   return allItems;
 }
 
@@ -324,8 +328,9 @@ async function autoDetectPreviousMilestone(
   reportingClient: ZebrunnerReportingClient,
   projectId: number,
   currentMilestoneName: string,
+  cache: MilestoneCache,
 ): Promise<string | undefined> {
-  const allMilestones = await fetchAllMilestones(reportingClient, projectId);
+  const allMilestones = await fetchAllMilestones(reportingClient, projectId, cache);
   if (allMilestones.length < 2) return undefined;
 
   // Sort by startDate (descending), then by name (descending) as fallback
@@ -359,8 +364,8 @@ async function fetchAllTestRuns(
     filters.push(`milestone.id = ${milestoneId}`);
   }
   if (build) {
-    const escaped = build.replace(/'/g, "\\'");
-    filters.push(`(configurations.optionName ~= '${escaped}' OR title ~= '${escaped}' OR description ~= '${escaped}')`);
+    const sanitized = sanitizeRqlString(build);
+    filters.push(`(configurations.optionName ~= '${sanitized}' OR title ~= '${sanitized}' OR description ~= '${sanitized}')`);
   }
 
   const filter = filters.length > 0 ? filters.join(" AND ") : undefined;
@@ -440,7 +445,7 @@ const PARALLEL_BATCH_SIZE_FAST = 10;
 async function fetchAllTestCasesForRuns(
   client: EnhancedZebrunnerClient,
   projectKey: string,
-  runs: any[],
+  runs: Array<{ id: number }>,
   batchSize: number = PARALLEL_BATCH_SIZE,
 ): Promise<Map<number, any[]>> {
   const result = new Map<number, any[]>();
@@ -455,7 +460,8 @@ async function fetchAllTestCasesForRuns(
             projectKey,
           });
           return { runId: run.id, items: resp.items || [] };
-        } catch {
+        } catch (err: any) {
+          console.warn(`[regression-analyzer] Failed to fetch test cases for run ${run.id}: ${err?.message || err}`);
           return { runId: run.id, items: [] };
         }
       }),
@@ -595,12 +601,13 @@ async function detectNewBugs(
   currentTestCases: TestCaseResult[],
   previousMilestone?: string,
   previousBuild?: string,
+  cache?: MilestoneCache,
 ): Promise<NewBugInfo[]> {
   if (!previousMilestone && !previousBuild) return [];
 
   let prevMilestoneId: number | undefined;
   if (previousMilestone) {
-    const resolved = await resolveMilestoneByName(deps.reportingClient, projectId, previousMilestone);
+    const resolved = await resolveMilestoneByName(deps.reportingClient, projectId, previousMilestone, cache || new Map());
     if (resolved) prevMilestoneId = resolved.id;
   }
 

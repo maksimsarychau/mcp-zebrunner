@@ -98,6 +98,9 @@ COPY --chown=mcpuser:mcpuser mcp-zebrunner-rules.md* ./
 # Create directories for optional config mounts and token store
 RUN mkdir -p /config /data && chown mcpuser:mcpuser /config /data
 
+# Copy default instance config (can be overridden via volume mount or env var)
+COPY --chown=mcpuser:mcpuser zebrunner-config.json /config/zebrunner-config.json
+
 # Switch to non-root user
 USER mcpuser
 

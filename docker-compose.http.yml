@@ -46,6 +46,8 @@ services:
 
     volumes:
       - token-data:/data
+      # Optional: Mount custom instance config (overrides built-in defaults)
+      # - ./zebrunner-config.json:/config/zebrunner-config.json:ro
 
     # HTTP mode does not need stdin
     stdin_open: false
