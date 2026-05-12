@@ -50,9 +50,11 @@ services:
     tty: true
 
     # ──────────────────────────────────────────────────────────────────────────
-    # Optional: Mount custom rules file
+    # Optional: Mount custom config and/or rules file
+    # Override zebrunner-config.json for project-specific aliases, widgets, etc.
     # ──────────────────────────────────────────────────────────────────────────
     # volumes:
+    #   - ./zebrunner-config.json:/config/zebrunner-config.json:ro
     #   - ./mcp-zebrunner-rules.md:/app/mcp-zebrunner-rules.md:ro
 
     # ──────────────────────────────────────────────────────────────────────────

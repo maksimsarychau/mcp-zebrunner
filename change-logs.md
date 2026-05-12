@@ -1,7 +1,42 @@
 # Change Logs
 
-## v8.2.0
+## v8.3.0
 
+### New: Regression Results Analyzer
+
+Added `regression_results_analyzer` — a comprehensive tool that generates a complete regression testing summary for a milestone and/or build number, with all data sourced from TCM Public API.
+
+**New file:**
+- `src/handlers/regression-results-analyzer.ts` — Full analysis pipeline: milestone resolution, test run fetching, test case aggregation, new-bug detection, and formatted output generation.
+
+**New tool registered in `src/server.ts`:**
+- `regression_results_analyzer` — Accepts milestone name, build number, project alias, and optional previous milestone. Produces a multi-section report.
+
+**Report sections:**
+
+| Section | Description |
+|---------|-------------|
+| `overview` | Summary table (total passed/failed/skipped/untested, pass rate) + per-run breakdown with coverage status (✅ = all failures covered by bugs) |
+| `new_bugs` | Bugs detected via test-case-level status-change comparison with previous milestone. Shows affected test case title for context. |
+| `top_bugs` | Top N most frequent bugs across all runs ranked by failure count with percentage |
+| `bugs_per_suite` | Known issues grouped by test run with affected test counts (includes empty suites by default) |
+| `slowest_tests` | Top N slowest tests across the milestone with duration |
+
+**Key features:**
+- **Aggregated summary table** — Total passed/failed/skipped/untested, pass rate (executed only), total bugs, new bugs count.
+- **Per-run coverage indicator** — ✅ when run is closed AND all failures have linked bugs; ⚠️ with uncovered count otherwise.
+- **Auto-detect previous milestone** — If `previous_milestone` not provided, automatically picks the preceding milestone from sorted milestone list by date.
+- **Enhanced new-bugs detection** — A bug is "new" if: (1) it didn't exist in the previous milestone, OR (2) it existed but now affects test cases that were previously passing/untested. Includes sample test case title for context.
+- **Clickable milestone link** — Report header links to Zebrunner automation launches page filtered by milestone.
+- **Optional `max_test_duration_ms`** — Filter anomalous durations in slowest-tests section.
+- **Optional `include_empty_suites`** (default: true) — Show/hide runs with 0 linked bugs in bugs_per_suite.
+- **Live data timestamp** — Footer notes data reflects live TCM state at generation time.
+- **Performance optimizations** — Milestone list caching, higher parallelism (batch size 10) for previous milestone fetch, early-exit in new-bug detection loop.
+
+**New MCP prompt (`src/prompts.ts`):**
+- `regression-summary` — Guides the LLM to call `regression_results_analyzer` with correct parameters. Instructs to always determine `previous_milestone` for new-bugs detection.
+
+## v8.2.0
 ### Dynamic Configuration & Hardcoding Removal
 
 Introduced `zebrunner-config.json` — an instance-specific configuration file that externalizes values previously hardcoded for a single Zebrunner workspace. The MCP server now works out-of-the-box with any Zebrunner instance by customizing this file. Built-in defaults match the original values; if the file is missing or invalid, the server falls back to defaults automatically.
@@ -84,6 +119,15 @@ Added the ability to fetch and display the **change history** (audit log) for te
 **Bulk operation safety:**
 - Concurrency limited to 5 parallel API requests to avoid rate limiting
 - Warning emitted when history is fetched for more than 20 test cases at once
+
+**Updated files:**
+- `src/server.ts` — Tool registration with Zod input schema (14 parameters including `max_test_duration_ms`, `include_empty_suites`).
+- `src/prompts.ts` — `buildRegressionSummaryPrompt()` function and prompt registration.
+- `TOOLS_CATALOG.md` — Full tool documentation with sections, parameters, and usage examples.
+- `tools.json` — Tool entry added.
+- `tests/unit/prompt-registry.test.ts` — Expected count updated (14 → 15).
+- `tests/unit/tool-registry-coverage.test.ts` — Expected counts updated (60 → 61).
+- `tests/helpers/tool-coverage-matrix.ts` — Smoke test input added.
 
 ### Improved Tool Routing for LLM Clients
 

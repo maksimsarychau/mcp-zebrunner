@@ -224,6 +224,10 @@
     "description": "Create, update, or add test cases to a Zebrunner Test Run (Beta)"
   },
   {
+    "name": "regression_results_analyzer",
+    "description": "Analyze regression test results for a milestone or build: test run overview, new/top bugs, bugs per suite, and slowest tests"
+  },
+  {
     "name": "test_reporting_connection",
     "description": "Test the connection to Zebrunner reporting API"
   },

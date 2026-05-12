@@ -293,6 +293,38 @@ Steps:
 This is useful for understanding which tools were used, how they performed, and whether any errors occurred during the current MCP session.`;
 }
 
+export function buildRegressionSummaryPrompt(project: string, milestone?: string, build?: string, previous_milestone?: string): string {
+  const filterParts: string[] = [];
+  if (milestone) filterParts.push(`milestone: "${milestone}"`);
+  if (build) filterParts.push(`build: "${build}"`);
+  const filterDesc = filterParts.join(", ") || "the latest available";
+
+  const prevClause = previous_milestone
+    ? `\n- previous_milestone: "${previous_milestone}"`
+    : "";
+
+  const prevMilestoneInstruction = !previous_milestone
+    ? `\n\nIMPORTANT: You must determine the previous milestone for new-bugs detection. If the milestone looks like a version (e.g. "26.19.0"), use the immediately preceding version (e.g. "26.18.0"). The tool will auto-detect it if omitted, but providing it explicitly improves accuracy. Always pass previous_milestone to detect new bugs.`
+    : "";
+
+  return `Analyze regression test results for the ${project} platform (${filterDesc}).
+
+Use the regression_results_analyzer tool with:
+- project: "${project}"${milestone ? `\n- milestone: "${milestone}"` : ""}${build ? `\n- build: "${build}"` : ""}${prevClause}
+- sections: ["overview", "new_bugs", "top_bugs", "bugs_per_suite", "slowest_tests"]
+- output_format: "markdown"${prevMilestoneInstruction}
+
+The tool will produce a comprehensive report including:
+1. Summary table with aggregated pass/fail/skip/untested counts and pass rate
+2. Per-run overview with coverage status (✅ when all failures have linked bugs)
+3. New bugs (issues not seen in the previous milestone, with affected test case context)
+4. Top 5 most frequent bugs across all runs with percentages
+5. Known issues per suite (bugs grouped by test run with affected test counts)
+6. Top 5 slowest tests across the milestone
+
+Present the output as-is — it is already formatted as a structured regression summary report.`;
+}
+
 // ── Prompt catalog (used by about_mcp_tools) ────────────────────────────────
 
 export type PromptMeta = {
@@ -318,6 +350,7 @@ export function getPromptsCatalog(): PromptMeta[] {
     { name: "daily-qa-standup", title: "Daily QA Standup", description: "Prepare a concise daily QA standup summary with pass rates, blockers, flaky tests, and action items", category: "Role-Specific", args: ["projects"] },
     { name: "automation-gaps", title: "Automation Gaps Analysis", description: "Identify suites and test cases with lowest automation coverage and prioritize automation work", category: "Role-Specific", args: ["projects"] },
     { name: "project-overview", title: "Project Overview", description: "Comprehensive project health card: suites, coverage, recent launches, milestones, flaky tests", category: "Role-Specific", args: ["project"] },
+    { name: "regression-summary", title: "Regression Results Summary", description: "Analyze regression test results for a milestone or build: overview, new bugs, top bugs, bugs per suite, slowest tests", category: "E2E Metrics", args: ["project", "milestone?", "build?", "previous_milestone?"] },
     { name: "session-metrics", title: "Session Metrics", description: "Show tool usage metrics for the current MCP session: call counts, durations, errors", category: "Utility", args: [] },
   ];
 }
@@ -410,6 +443,26 @@ export function registerPrompts(server: McpServer): void {
       messages: [{
         role: "user" as const,
         content: { type: "text" as const, text: buildReleaseReadinessPrompt(project, milestone) },
+      }],
+    }),
+  );
+
+  server.registerPrompt(
+    "regression-summary",
+    {
+      title: "Regression Results Summary",
+      description: "Analyze regression test results for a milestone or build: test run overview, new bugs, top bugs, bugs per suite, and slowest tests",
+      argsSchema: {
+        project: z.string().describe("Platform/project key, e.g. 'ios'"),
+        milestone: z.string().optional().describe("Milestone name, e.g. '26.19.0'"),
+        build: z.string().optional().describe("Build number, e.g. '73614'"),
+        previous_milestone: z.string().optional().describe("Previous milestone for new-bugs detection"),
+      },
+    },
+    async ({ project, milestone, build, previous_milestone }) => ({
+      messages: [{
+        role: "user" as const,
+        content: { type: "text" as const, text: buildRegressionSummaryPrompt(project, milestone, build, previous_milestone) },
       }],
     }),
   );

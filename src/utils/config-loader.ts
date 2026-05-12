@@ -1,12 +1,18 @@
 /**
  * Configuration loader for instance-specific Zebrunner settings.
  *
- * Reads zebrunner-config.json from the project root (or CWD) at startup.
- * Falls back to built-in defaults when the file is missing or invalid.
+ * Resolution priority (highest wins):
+ *   1. ZEBRUNNER_CONFIG_JSON env var  (inline JSON string)
+ *   2. /config/zebrunner-config.json  (Docker volume mount)
+ *   3. ZEBRUNNER_CONFIG_PATH env var  (custom absolute path)
+ *   4. CWD/zebrunner-config.json      (local dev / repo root)
+ *   5. Built-in DEFAULTS              (fallback)
+ *
+ * Falls back to built-in defaults when all sources are missing or invalid.
  * Individual keys that are missing or malformed fall back independently.
  */
 
-import { readFileSync } from "fs";
+import { readFileSync, existsSync } from "fs";
 import { resolve } from "path";
 import { z } from "zod";
 
@@ -111,35 +117,65 @@ export interface ResolvedConfig {
 
 let _cached: ResolvedConfig | null = null;
 
+const DOCKER_CONFIG_PATH = "/config/zebrunner-config.json";
+
+function parseAndValidate(json: unknown, source: string): ZebrunnerConfig | null {
+  const parsed = ZebrunnerConfigSchema.safeParse(json);
+  if (parsed.success) {
+    console.error(`[config] Loaded zebrunner-config.json from ${source}`);
+    return parsed.data;
+  }
+  console.error(
+    `[config] zebrunner-config.json from ${source} has validation errors — using defaults for invalid fields:`,
+    parsed.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join('; '),
+  );
+  const partial: Record<string, unknown> = {};
+  for (const key of Object.keys(DEFAULTS)) {
+    if (typeof json === 'object' && json !== null && key in json && (json as any)[key] !== undefined) {
+      partial[key] = (json as any)[key];
+    }
+  }
+  return partial as ZebrunnerConfig;
+}
+
 function loadFromDisk(): ZebrunnerConfig | null {
-  const candidates = [
+  // Priority 1: ZEBRUNNER_CONFIG_JSON env var (inline JSON, no file I/O)
+  const envJson = process.env.ZEBRUNNER_CONFIG_JSON;
+  if (envJson) {
+    try {
+      const json = JSON.parse(envJson);
+      return parseAndValidate(json, "ZEBRUNNER_CONFIG_JSON env var");
+    } catch (err: any) {
+      console.error(`[config] ZEBRUNNER_CONFIG_JSON env var contains invalid JSON: ${err?.message}`);
+    }
+  }
+
+  // Priority 2+: File-based resolution
+  const candidates: string[] = [];
+
+  // Priority 2: Docker volume mount path
+  candidates.push(DOCKER_CONFIG_PATH);
+
+  // Priority 3: ZEBRUNNER_CONFIG_PATH env var (custom absolute path)
+  const envPath = process.env.ZEBRUNNER_CONFIG_PATH;
+  if (envPath) {
+    candidates.unshift(resolve(envPath));
+  }
+
+  // Priority 4: CWD-based paths (existing behavior)
+  candidates.push(
     resolve(process.cwd(), "zebrunner-config.json"),
     resolve(import.meta.dirname ?? process.cwd(), "../../zebrunner-config.json"),
-  ];
+  );
 
   for (const filePath of candidates) {
     try {
+      if (!existsSync(filePath)) continue;
       const raw = readFileSync(filePath, "utf-8");
       const json = JSON.parse(raw);
-      const parsed = ZebrunnerConfigSchema.safeParse(json);
-      if (parsed.success) {
-        console.error(`[config] Loaded zebrunner-config.json from ${filePath}`);
-        return parsed.data;
-      }
-      console.error(
-        `[config] zebrunner-config.json at ${filePath} has validation errors — using defaults for invalid fields:`,
-        parsed.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join('; '),
-      );
-      // Even if validation fails, try to use the raw JSON for valid fields
-      const partial: Record<string, unknown> = {};
-      for (const key of Object.keys(DEFAULTS)) {
-        if (key in json && json[key] !== undefined) {
-          partial[key] = json[key];
-        }
-      }
-      return partial as ZebrunnerConfig;
+      return parseAndValidate(json, filePath);
     } catch {
-      // File doesn't exist or isn't valid JSON at this path — try next
+      // File isn't valid JSON or unreadable — try next
     }
   }
 

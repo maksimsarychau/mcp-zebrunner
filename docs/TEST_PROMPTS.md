@@ -396,6 +396,25 @@
 
 ---
 
+### `regression_results_analyzer`
+
+**Prompt 1 — Full milestone analysis**
+> Analyze regression results for iOS milestone 26.19.0 and compare with the previous milestone.
+
+**Expected:** Calls `regression_results_analyzer` with `project: "ios"`, `milestone: "26.19.0"`, auto-detects or passes `previous_milestone`. Returns a multi-section report: summary table, per-run overview with coverage indicators, new bugs, top bugs, bugs per suite, and slowest tests.
+
+**Prompt 2 — Detailed format with explicit previous milestone**
+> Show regression analysis in detailed format for milestone "26.19.0 RC - 73614" in the iOS project, comparing bugs with previous milestone "26.18.0 RC - 73213". Include top 10 bugs and top 10 slowest tests.
+
+**Expected:** Uses `output_format: "detailed"`, `top_bugs_limit: 10`, `slowest_tests_limit: 10`, `previous_milestone: "26.18.0 RC - 73213"`. Returns comprehensive report with clickable Jira links for all bugs.
+
+**Prompt 3 — Count only (scope pre-check)**
+> How many test runs are in milestone 26.19.0 for iOS? Just give me the count.
+
+**Expected:** Uses `count_only: true`. Returns `{total_runs: N, total_test_cases: M}` without generating the full analysis.
+
+---
+
 ### `get_launch_summary`
 
 **Prompt 1 — Quick overview**
