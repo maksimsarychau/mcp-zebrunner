@@ -7,8 +7,12 @@ api-docs.json
 mcp-mutation-safety.md
 .claude
 .codex
-.cursor
+.cursor/**
 !.env.example
+# Allow committing shared Cursor rules so the implementation-notes convention
+# survives across machines and PRs; everything else under .cursor stays ignored.
+!.cursor/rules/
+!.cursor/rules/**
 
 .mcpregistry_registry_token
 .mcpregistry_github_token
@@ -21,6 +25,11 @@ docs/OKTA_ACCESS_INVESTIGATION.md
 docs/ZEBRUNNER_TOKEN_EXCHANGE_REQUEST.md
 docs/HOSTING_GUIDE.md
 docs/PRIVATE_CREDENTIALS.md
+docs/IMPLEMENTATION_NOTES.md
+docs/API_COVERAGE.md
+docs/OFFICIAL_MCP_DIFF.json
+docs/OFFICIAL_MCP_PARITY.md
+
 
 # LLM eval results (contain real Zebrunner project data)
 tests/eval/results/
