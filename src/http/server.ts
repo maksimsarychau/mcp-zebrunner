@@ -47,7 +47,7 @@ export async function startHttpServer(
       provider: oauthProvider,
       issuerUrl,
       resourceServerUrl,
-      resourceName: 'Zebrunner MCP Server',
+      resourceName: 'Advanced Zebrunner MCP Server',
       scopesSupported: ['zebrunner:read', 'zebrunner:write'],
     }));
 

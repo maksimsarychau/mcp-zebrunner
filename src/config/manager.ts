@@ -288,7 +288,7 @@ export class ConfigManager {
    */
   public printConfigSummary(): void {
     if (this.config.debug) {
-      console.error('🔧 Zebrunner MCP Configuration:');
+      console.error('🔧 Advanced Zebrunner MCP Server Configuration:');
       console.error(`   - Base URL: ${this.config.baseUrl ? 'Set' : 'Not set'}`);
       console.error(`   - Login: ${this.config.login ? 'Set' : 'Not set'}`);
       console.error(`   - Token: ${this.config.authToken ? 'Set' : 'Not set'}`);

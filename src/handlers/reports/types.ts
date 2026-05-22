@@ -29,6 +29,10 @@ export interface PassRateData {
   total: number;
   passRate: number;
   passRateExclKnown: number;
+  /** True when a milestone was requested but Reporting has no launches (or null widget counts) for it. */
+  noMilestoneLaunches?: boolean;
+  /** Human-readable explanation when {@link noMilestoneLaunches} is set. */
+  milestoneNote?: string;
 }
 
 export interface RuntimeData {

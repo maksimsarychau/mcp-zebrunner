@@ -22,6 +22,11 @@ import {
   DEFAULT_TARGETS,
   COLORS,
 } from "./types.js";
+import {
+  formatPassRateSummaryLine,
+  formatPassRateTableRow,
+  hasPassRateMetrics,
+} from "./pass-rate-display.js";
 import { generatePngChart, type ChartConfig } from "../../utils/chart-generator.js";
 import {
   generateDashboardHtml,
@@ -204,19 +209,19 @@ async function fetchProjectData(
 // ── Section Builders ────────────────────────────────────────────────────
 
 function buildPassRateSection(data: PassRateData[], targets: PassRateTargets): DashboardSection {
-  const labels = data.map(d => d.project);
+  const chartData = data.filter(hasPassRateMetrics);
+  const labels = chartData.map(d => d.project);
   const datasets = [
-    { label: 'Passed', data: data.map(d => d.passed), backgroundColor: COLORS.passed },
-    { label: 'Failed', data: data.map(d => d.failed), backgroundColor: COLORS.failed },
-    { label: 'Skipped', data: data.map(d => d.skipped), backgroundColor: COLORS.skipped },
-    { label: 'Known Issue', data: data.map(d => d.knownIssue), backgroundColor: COLORS.knownIssue },
-    { label: 'Aborted', data: data.map(d => d.aborted), backgroundColor: COLORS.aborted },
+    { label: 'Passed', data: chartData.map(d => d.passed), backgroundColor: COLORS.passed },
+    { label: 'Failed', data: chartData.map(d => d.failed), backgroundColor: COLORS.failed },
+    { label: 'Skipped', data: chartData.map(d => d.skipped), backgroundColor: COLORS.skipped },
+    { label: 'Known Issue', data: chartData.map(d => d.knownIssue), backgroundColor: COLORS.knownIssue },
+    { label: 'Aborted', data: chartData.map(d => d.aborted), backgroundColor: COLORS.aborted },
   ].filter(ds => ds.data.some(v => v > 0));
 
   const summaryParts = data.map(d => {
     const target = targets[d.project.toLowerCase()] ?? targets[d.project] ?? 90;
-    const icon = d.passRate >= target ? '✅' : '⚠️';
-    return `${d.project}: ${d.passRate}% ${icon} (target: ${target}%) | excl. known: ${d.passRateExclKnown}%`;
+    return formatPassRateSummaryLine(d, target);
   });
 
   return {
@@ -411,12 +416,19 @@ function buildMarkdownSummary(
   const prData = allData.map(d => d.passRate).filter(Boolean) as PassRateData[];
   if (prData.length > 0) {
     lines.push('## Pass Rate Overview');
+    for (const pr of prData) {
+      if (pr.milestoneNote) {
+        lines.push(`> ⚠️ **${pr.project}:** ${pr.milestoneNote}`);
+      }
+    }
+    if (prData.some(pr => pr.milestoneNote)) {
+      lines.push('');
+    }
     lines.push('| Project | Total | Passed | Failed | Known Issue | Skipped | Pass Rate | excl. Known | Target | Status |');
     lines.push('| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |');
     for (const pr of prData) {
       const target = targets[pr.project.toLowerCase()] ?? targets[pr.project] ?? 90;
-      const icon = pr.passRate >= target ? '✅' : '⚠️';
-      lines.push(`| ${pr.project} | ${pr.total} | ${pr.passed} | ${pr.failed} | ${pr.knownIssue} | ${pr.skipped} | ${pr.passRate}% | ${pr.passRateExclKnown}% | ${target}% | ${icon} |`);
+      lines.push(formatPassRateTableRow(pr, target));
     }
     lines.push('');
   }

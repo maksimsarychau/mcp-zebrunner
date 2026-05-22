@@ -1,5 +1,56 @@
 # Change Logs
 
+## v9.0.0 — Advanced Zebrunner MCP Server (rebrand + coexistence with official MCP)
+
+### ⚠️ Breaking changes
+
+- **Every tool is now exposed only under its `adv_<name>` form** (e.g. `adv_create_test_case`, `adv_list_test_runs`, `adv_get_test_execution_history`). Calls to the legacy short names (`create_test_case`, `list_test_runs`, etc.) will fail unless the rollback escape hatch below is enabled.
+- **Server rebranded to "Advanced Zebrunner MCP Server"**. The npm package name (`mcp-zebrunner`), MCP registry id (`io.github.maksimsarychau/mcp-zebrunner`), MCP protocol `name` and `.cursor/mcp.json` config key remain unchanged.
+- This release is **safe to run side-by-side with Zebrunner's official hosted MCP** (beta) at `https://{workspace}.zebrunner.com/api/mcp`. The 8 historical tool-name collisions (e.g. `create_test_case`, `list_test_runs`, `get_test_execution_history`) are eliminated because all of our tools are now `adv_*`.
+
+### 🛟 Rollback escape hatch
+
+If you cannot migrate prompts / agent rules / scripts immediately, set:
+
+```bash
+ZEBRUNNER_REGISTER_LEGACY_ALIASES=true
+```
+
+Every legacy short name will be re-registered as a deprecated alias that routes to the same handler as its `adv_<name>` counterpart. Description starts with `[deprecated alias — use adv_<name>] ...`. Metrics still record under the canonical `adv_` name. The escape hatch will be removed in a future major release; treat it as a migration window, not a long-term option.
+
+### ✨ New
+
+- New static MCP resource `zebrunner://mcp-routing` and new `about_mcp_tools` mode `routing` — both surface the dual-MCP decision table (when to use official `zebrunner` vs this server).
+- New docs:
+  - [`docs/OFFICIAL_MCP_PARITY.md`](docs/OFFICIAL_MCP_PARITY.md) — human-readable diff between our tools and the official MCP.
+  - [`docs/OFFICIAL_MCP_DIFF.json`](docs/OFFICIAL_MCP_DIFF.json) — machine-readable diff for tooling.
+  - [`docs/API_COVERAGE.md`](docs/API_COVERAGE.md) — `api-docs.json` path → tool mapping (official vs advanced).
+  - [`docs/IMPLEMENTATION_NOTES.md`](docs/IMPLEMENTATION_NOTES.md) — running log of decisions during this work.
+
+### 🔧 Changed
+
+- Every tool description now starts with the `[Advanced Zebrunner MCP]` prefix to help LLMs disambiguate when both MCPs are connected.
+- Fixed pre-existing description bugs in `create_test_case` / `update_test_case` / `get_test_case_by_key` that referenced non-existent tools (`list_automation_states`, `list_priorities`, `list_custom_fields`). They now point to the actual `adv_get_automation_states` / `adv_get_automation_priorities` / `project_fields_layout` resource (and recommend the official MCP's `list_custom_fields` in dual-MCP setups).
+- Steering hints emitted by mutation tools ([src/helpers/steering.ts](src/helpers/steering.ts)) updated to the `adv_*` form.
+- Rebrand sweep across [README.md](README.md) (with new "Dual-MCP setup" section), [INSTALL-GUIDE.md](INSTALL-GUIDE.md), [MCP_NPM_INSTALLATION_GUIDE.md](MCP_NPM_INSTALLATION_GUIDE.md), [docs/EXECUTIVE_SUMMARY.md](docs/EXECUTIVE_SUMMARY.md), [TOOLS_CATALOG.md](TOOLS_CATALOG.md), [server.json](server.json), [server.yaml](server.yaml), [package.json](package.json) description, OAuth resource name in [src/http/server.ts](src/http/server.ts), HTTP UI titles in `src/http/{login,settings,reset}-routes.ts`, and the startup log in [src/config/manager.ts](src/config/manager.ts).
+
+### 🤝 Coexistence with the official Zebrunner MCP
+
+- The two servers expose disjoint tool namespaces (our prefix vs. their unprefixed names).
+- Prompts are also disjoint (our 15 reporting/role-specific prompts vs. the official 6 triage/CRUD recipes).
+- The README's "Dual-MCP setup" section shows the canonical `.cursor/mcp.json` for running both at once and includes a rule-of-thumb table.
+
+### 📦 Files / versions bumped
+
+- `package.json` 8.3.0 → 9.0.0
+- `package-lock.json` 8.3.0 → 9.0.0
+- `server.json` (registry + 2 transports) 8.3.0 → 9.0.0
+
+### 🔮 Compatibility notes
+
+- Single-server users (no official MCP loaded) who relied on legacy tool names must either (a) migrate their prompts/scripts to `adv_<name>`, or (b) set `ZEBRUNNER_REGISTER_LEGACY_ALIASES=true` until they have migrated.
+- Dual-MCP users gain disambiguation automatically: every advanced tool starts with `adv_`, every description starts with `[Advanced Zebrunner MCP]`, and `@zebrunner://mcp-routing` / `about_mcp_tools mode='routing'` provide the decision table.
+
 ## v8.3.0
 
 ### New: Regression Results Analyzer

@@ -278,7 +278,7 @@ document.querySelector('form').addEventListener('submit', function(e) {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Zebrunner MCP — Sign In</title>
+  <title>Advanced Zebrunner MCP Server — Sign In</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: system-ui, -apple-system, sans-serif; background: #f5f5f7; display: flex; justify-content: center; align-items: center; min-height: 100vh; color: #1d1d1f; }

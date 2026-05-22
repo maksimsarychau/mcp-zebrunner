@@ -1,5 +1,5 @@
 # ══════════════════════════════════════════════════════════════════════════════
-# Zebrunner MCP Server - Docker MCP Registry Entry
+# Advanced Zebrunner MCP Server - Docker MCP Registry Entry
 # ══════════════════════════════════════════════════════════════════════════════
 # This file follows Docker's official MCP Registry format.
 # To submit: Fork https://github.com/docker/mcp-registry and add this to servers/
@@ -22,11 +22,14 @@ meta:
     - tcm
 
 about:
-  title: Zebrunner MCP
+  title: Advanced Zebrunner MCP Server
   description: |
-    Comprehensive test management integration for AI assistants. 
-    Manage test cases, suites, launches, analyze test results, 
-    video recordings, and screenshots with AI-powered insights.
+    Advanced analytics, reporting, and safe mutations for Zebrunner —
+    complements the official Zebrunner MCP (beta).
+    Tools are registered under the adv_<name> form (e.g. adv_create_test_case)
+    with legacy names kept as deprecated aliases for backward compatibility.
+    Manage test cases / suites / launches, analyze failures and runtime,
+    work with video and screenshots, and generate dashboards from chat.
   icon: https://avatars.githubusercontent.com/u/52832169?s=200&v=4
 
 source:

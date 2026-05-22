@@ -20,6 +20,11 @@ import {
   DEFAULT_TARGETS,
   COLORS,
 } from "./types.js";
+import {
+  formatPassRateExecutiveRow,
+  formatPassRateSummaryLine,
+  hasPassRateMetrics,
+} from "./pass-rate-display.js";
 import { generatePngChart, type ChartConfig } from "../../utils/chart-generator.js";
 import {
   generateDashboardHtml,
@@ -140,8 +145,7 @@ function buildExecutiveMarkdown(
     lines.push('| --- | ---: | ---: | ---: | :---: |');
     for (const pr of prData) {
       const target = targets[pr.project.toLowerCase()] ?? targets[pr.project] ?? 90;
-      const icon = pr.passRate >= target ? '✅' : '⚠️';
-      lines.push(`| ${pr.project} | ${pr.passRate}% | ${pr.passRateExclKnown}% | ${target}% | ${icon} |`);
+      lines.push(formatPassRateExecutiveRow(pr, target));
     }
     lines.push('');
   }
@@ -220,20 +224,21 @@ function buildDashboardSections(
   const sections: DashboardSection[] = [];
 
   const prData = allData.map(d => d.passRate).filter(Boolean) as PassRateData[];
+  const prChartData = prData.filter(hasPassRateMetrics);
   if (prData.length > 0) {
     sections.push({
       id: 'pass_rate',
       title: 'Pass Rate',
       chartType: 'stacked_bar',
-      labels: prData.map(d => d.project),
+      labels: prChartData.map(d => d.project),
       datasets: [
-        { label: 'Passed', data: prData.map(d => d.passed), backgroundColor: COLORS.passed },
-        { label: 'Failed', data: prData.map(d => d.failed), backgroundColor: COLORS.failed },
-        { label: 'Known Issue', data: prData.map(d => d.knownIssue), backgroundColor: COLORS.knownIssue },
+        { label: 'Passed', data: prChartData.map(d => d.passed), backgroundColor: COLORS.passed },
+        { label: 'Failed', data: prChartData.map(d => d.failed), backgroundColor: COLORS.failed },
+        { label: 'Known Issue', data: prChartData.map(d => d.knownIssue), backgroundColor: COLORS.knownIssue },
       ].filter(ds => ds.data.some(v => v > 0)),
       summary: prData.map(d => {
-        const t = targets[d.project.toLowerCase()] ?? 90;
-        return `${d.project}: ${d.passRate}% ${d.passRate >= t ? '✅' : '⚠️'}`;
+        const t = targets[d.project.toLowerCase()] ?? targets[d.project] ?? 90;
+        return formatPassRateSummaryLine(d, t);
       }).join(' | '),
     });
   }
