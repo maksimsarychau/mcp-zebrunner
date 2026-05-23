@@ -1,4 +1,4 @@
-# MCP Zebrunner: Executive Summary
+# Advanced Zebrunner MCP Server — Executive Summary
 
 **Author:** Maksim Sarychau
 
@@ -6,7 +6,7 @@
 
 ## Overview
 
-MCP Zebrunner is a bridge between Zebrunner and AI assistants (Claude, Cursor, ChatGPT, IntelliJ IDEA) that enables natural‑language access to test data, analysis, and reporting. It reduces manual navigation, standardizes output, and accelerates decision‑making across QA, engineering, and leadership.
+The Advanced Zebrunner MCP Server (npm package `mcp-zebrunner`) is a bridge between Zebrunner and AI assistants (Claude, Cursor, ChatGPT, IntelliJ IDEA) that enables natural‑language access to test data, analysis, and reporting. It reduces manual navigation, standardizes output, and accelerates decision‑making across QA, engineering, and leadership. It complements Zebrunner's official hosted MCP (beta) and can be installed side-by-side with it; the two servers expose disjoint tool namespaces thanks to the `adv_` prefix used by this server.
 
 ---
 

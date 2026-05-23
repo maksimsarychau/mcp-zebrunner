@@ -98,7 +98,7 @@ export function createAuthCallbackRouter(opts?: { zebrunnerBaseUrl?: string; ena
       return;
     }
 
-    const pending = provider.getPendingAuth(state);
+    const pending = await provider.getPendingAuth(state);
     if (!pending) {
       res.status(400).json({ error: 'Invalid or expired state parameter. Please restart the login flow.' });
       return;
@@ -176,7 +176,7 @@ export function createAuthCallbackRouter(opts?: { zebrunnerBaseUrl?: string; ena
       // User has stored creds — issue auth code and redirect to MCP client
       const ourCode = randomBytes(32).toString('hex');
 
-      provider.storeIssuedCode(ourCode, {
+      await provider.storeIssuedCode(ourCode, {
         oktaAccessToken: oktaTokens.access_token,
         oktaIdToken: oktaTokens.id_token,
         mcpClientId: pending.mcpClientId,
@@ -185,7 +185,7 @@ export function createAuthCallbackRouter(opts?: { zebrunnerBaseUrl?: string; ena
         createdAt: Date.now(),
       });
 
-      provider.deletePendingAuth(state);
+      await provider.deletePendingAuth(state);
 
       const clientRedirect = new URL(pending.redirectUri);
       clientRedirect.searchParams.set('code', ourCode);

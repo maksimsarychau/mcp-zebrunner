@@ -1,6 +1,10 @@
-# Republish Instructions for Version 8.3.0
+# Republish Instructions for Version 9.0.0
 
-This document contains step-by-step instructions for republishing the MCP Zebrunner package to npm and the MCP Registry.
+> ⚠️ **9.0.0 is a major / breaking release.** Tools are now registered only under their `adv_<name>` form (e.g. `adv_create_test_case`). Legacy short names are off by default. Users who need a rollback window can set `ZEBRUNNER_REGISTER_LEGACY_ALIASES=true` to re-enable the old names as deprecated aliases. See [`change-logs.md`](../change-logs.md#v900--advanced-zebrunner-mcp-server-rebrand--coexistence-with-official-mcp) for the full migration notes.
+
+> The server is also rebranded to **Advanced Zebrunner MCP Server**. Package name (`mcp-zebrunner`), npm slug, MCP registry id, MCP protocol `name`, and `.cursor/mcp.json` config key are unchanged.
+
+This document contains step-by-step instructions for republishing the Advanced Zebrunner MCP Server package (`mcp-zebrunner` on npm) to npm and the MCP Registry.
 
 ---
 
@@ -8,7 +12,7 @@ This document contains step-by-step instructions for republishing the MCP Zebrun
 
 Before republishing, verify:
 
-- ✅ Version updated to **8.3.0** in:
+- ✅ Version updated to **9.0.0** in:
   - `package.json`
   - `server.json` (both root and packages array)
   - `MCP_NPM_INSTALLATION_GUIDE.md`
@@ -17,6 +21,8 @@ Before republishing, verify:
 - ✅ README.md updated with link to MCP NPM Installation Guide
 - ✅ All changes committed to git
 - ✅ Build succeeds without errors
+- ✅ Verified `tools/list` only contains `adv_*` tools by default; `ZEBRUNNER_REGISTER_LEGACY_ALIASES=true` re-introduces the legacy aliases when set
+- ✅ Description prefix `[Advanced Zebrunner MCP]` present on every tool
 
 **Note:** MCP Registry currently returns a "deprecated schema" error even with schema 2025-12-11. This appears to be a registry-side issue. Track updates and re-try publish when resolved:
 - https://github.com/modelcontextprotocol/registry/issues/875
@@ -67,12 +73,12 @@ npm publish --access public
 
 **Expected output:**
 ```
-npm notice 📦  mcp-zebrunner@8.3.0
+npm notice 📦  mcp-zebrunner@9.0.0
 npm notice === Tarball Details ===
 npm notice name:          mcp-zebrunner
-npm notice version:       8.3.0
+npm notice version:       9.0.0
 ...
-+ mcp-zebrunner@8.3.0
++ mcp-zebrunner@9.0.0
 ```
 
 ### 2.3 Verify npm Publication
@@ -120,7 +126,7 @@ mcp-publisher publish
 ```
 Publishing to https://registry.modelcontextprotocol.io...
 ✓ Successfully published
-✓ Server io.github.maksimsarychau/mcp-zebrunner version 8.3.0
+✓ Server io.github.maksimsarychau/mcp-zebrunner version 9.0.0
 ```
 
 ### 3.3 Verify MCP Registry Publication
@@ -133,7 +139,7 @@ curl "https://registry.modelcontextprotocol.io/v0/servers?search=zebrunner" | jq
 
 **Expected output:**
 - Server status: `"active"`
-- Version: `"8.3.0"`
+- Version: `"9.0.0"`
 - Published timestamp updated
 
 ---
@@ -185,7 +191,7 @@ Check that all web pages are updated:
 
 1. **npm Package Page**
    - https://www.npmjs.com/package/mcp-zebrunner
-- Verify version shows 8.3.0
+- Verify version shows 9.0.0
 
 2. **GitHub Repository**
    - https://github.com/maksimsarychau/mcp-zebrunner
@@ -193,7 +199,7 @@ Check that all web pages are updated:
 
 3. **MCP Registry**
    - Search: `curl "https://registry.modelcontextprotocol.io/v0/servers?search=zebrunner"`
-- Verify version is 8.3.0
+- Verify version is 9.0.0
 
 ---
 
@@ -203,10 +209,10 @@ Create a git tag for this version:
 
 ```bash
 # Tag the current commit
-git tag -a v8.3.0 -m "Release v8.3.0: MCP Registry publication and comprehensive installation guide"
+git tag -a v9.0.0 -m "Release v9.0.0: MCP Registry publication and comprehensive installation guide"
 
 # Push the tag to GitHub
-git push origin v8.3.0
+git push origin v9.0.0
 
 # Push all changes
 git push origin feature/mcp-publisher-setup
@@ -216,8 +222,8 @@ git push origin feature/mcp-publisher-setup
 
 1. Go to https://github.com/maksimsarychau/mcp-zebrunner/releases
 2. Click "Draft a new release"
-3. Select tag: `v8.3.0`
-4. Release title: `v8.3.0 - MCP Registry Publication`
+3. Select tag: `v9.0.0`
+4. Release title: `v9.0.0 - MCP Registry Publication`
 5. Description:
    ```markdown
    ## 🎉 What's New
@@ -327,8 +333,8 @@ mcp-publisher publish
 
 You know the publication was successful when:
 
-- ✅ npm shows the new version: `npm view mcp-zebrunner version` returns `8.3.0`
-- ✅ MCP registry search returns status `"active"` with version `8.3.0`
+- ✅ npm shows the new version: `npm view mcp-zebrunner version` returns `9.0.0`
+- ✅ MCP registry search returns status `"active"` with version `9.0.0`
 - ✅ Users can install: `npm install -g mcp-zebrunner` succeeds
 - ✅ Server runs without errors
 - ✅ GitHub tag and release created
@@ -336,4 +342,4 @@ You know the publication was successful when:
 ---
 
 **Last Updated:** April 9, 2026
-**Version:** 8.3.0
+**Version:** 9.0.0

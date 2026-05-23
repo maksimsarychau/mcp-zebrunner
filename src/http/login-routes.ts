@@ -70,7 +70,7 @@ export function createLoginRouter(opts: LoginRouterOptions): Router {
       return;
     }
 
-    const pending = provider.getPendingAuth(state);
+    const pending = await provider.getPendingAuth(state);
     if (!pending) {
       res.status(400).send('Invalid or expired state. Please restart the login flow from your MCP client.');
       return;
@@ -183,7 +183,7 @@ export function createLoginRouter(opts: LoginRouterOptions): Router {
       });
 
       const ourCode = randomBytes(32).toString('hex');
-      provider.storeIssuedCode(ourCode, {
+      await provider.storeIssuedCode(ourCode, {
         ...(selfAuth
           ? { email: userKey }
           : { oktaAccessToken: okta_access_token ?? '', oktaIdToken: okta_id_token }),
@@ -193,7 +193,7 @@ export function createLoginRouter(opts: LoginRouterOptions): Router {
         createdAt: Date.now(),
       } as any);
 
-      provider.deletePendingAuth(state);
+      await provider.deletePendingAuth(state);
 
       const clientRedirect = new URL(pending.redirectUri);
       clientRedirect.searchParams.set('code', ourCode);
@@ -278,7 +278,7 @@ document.querySelector('form').addEventListener('submit', function(e) {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Zebrunner MCP — Sign In</title>
+  <title>Advanced Zebrunner MCP Server — Sign In</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: system-ui, -apple-system, sans-serif; background: #f5f5f7; display: flex; justify-content: center; align-items: center; min-height: 100vh; color: #1d1d1f; }

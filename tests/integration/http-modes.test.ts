@@ -164,7 +164,7 @@ describe('Mode 3: Self-Service OAuth — JWT lifecycle', () => {
     );
 
     const state = new URL(redirectUrl).searchParams.get('state')!;
-    const pending = provider.getPendingAuth(state);
+    const pending = await provider.getPendingAuth(state);
     assert.ok(pending);
     assert.equal(pending.mcpClientId, 'mcp_abc');
     assert.equal(pending.redirectUri, 'http://localhost/cb');
@@ -175,7 +175,7 @@ describe('Mode 3: Self-Service OAuth — JWT lifecycle', () => {
     await tokenStore.set('user@test.com', { username: 'testuser', token: 'zeb-token-123' });
 
     // Simulate issuing a code (normally done by login-routes after credential validation)
-    provider.storeIssuedCode('test-code-abc', {
+    await provider.storeIssuedCode('test-code-abc', {
       email: 'user@test.com',
       mcpClientId: 'mcp_client1',
       redirectUri: 'http://localhost/cb',
@@ -200,7 +200,7 @@ describe('Mode 3: Self-Service OAuth — JWT lifecycle', () => {
   });
 
   it('rejects expired authorization codes', async () => {
-    provider.storeIssuedCode('expired-code', {
+    await provider.storeIssuedCode('expired-code', {
       email: 'user@test.com',
       mcpClientId: 'mcp_x',
       redirectUri: 'http://localhost/cb',
@@ -208,17 +208,14 @@ describe('Mode 3: Self-Service OAuth — JWT lifecycle', () => {
       createdAt: Date.now() - 10 * 60 * 1000, // 10 min ago
     });
 
-    // Code exists but exchange should still work within TTL
-    // (codes expire via sweep, not via exchange)
-    const result = await provider.exchangeAuthorizationCode(
-      { client_id: 'mcp_x' },
-      'expired-code',
+    await assert.rejects(
+      () => provider.exchangeAuthorizationCode({ client_id: 'mcp_x' }, 'expired-code'),
+      /Invalid or expired/,
     );
-    assert.ok(result.access_token);
   });
 
   it('rejects code issued to different client', async () => {
-    provider.storeIssuedCode('code-for-client-a', {
+    await provider.storeIssuedCode('code-for-client-a', {
       email: 'user@test.com',
       mcpClientId: 'mcp_clientA',
       redirectUri: 'http://localhost/cb',
@@ -233,7 +230,7 @@ describe('Mode 3: Self-Service OAuth — JWT lifecycle', () => {
   });
 
   it('rejects verification when no Zebrunner credentials stored', async () => {
-    provider.storeIssuedCode('code-no-creds', {
+    await provider.storeIssuedCode('code-no-creds', {
       email: 'unknown@test.com',
       mcpClientId: 'mcp_c',
       redirectUri: 'http://localhost/cb',
@@ -255,7 +252,7 @@ describe('Mode 3: Self-Service OAuth — JWT lifecycle', () => {
   it('rejects tampered JWT', async () => {
     await tokenStore.set('user@test.com', { username: 'u', token: 't' });
 
-    provider.storeIssuedCode('code-tamper', {
+    await provider.storeIssuedCode('code-tamper', {
       email: 'user@test.com',
       mcpClientId: 'mcp_c',
       redirectUri: 'http://localhost/cb',
@@ -277,7 +274,7 @@ describe('Mode 3: Self-Service OAuth — JWT lifecycle', () => {
   });
 
   it('codes are single-use', async () => {
-    provider.storeIssuedCode('single-use-code', {
+    await provider.storeIssuedCode('single-use-code', {
       email: 'user@test.com',
       mcpClientId: 'mcp_c',
       redirectUri: 'http://localhost/cb',

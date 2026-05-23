@@ -1,6 +1,8 @@
-# 📚 MCP Zebrunner Tools Catalog
+# 📚 Advanced Zebrunner MCP Server — Tools Catalog
 
 Complete reference of all available tools with natural language usage examples.
+
+> **Naming:** Every tool below is registered under two names — the canonical `adv_<name>` form (e.g. `adv_create_test_case`) and a deprecated legacy alias (`<name>`) kept for backward compatibility. Examples often use the legacy short form for readability; both forms behave identically. Prefer the `adv_` form when both this server and the official Zebrunner MCP are connected.
 
 ## 📑 Table of Contents
 

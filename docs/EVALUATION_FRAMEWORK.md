@@ -1,4 +1,4 @@
-# MCP Zebrunner — LLM Evaluation Framework
+# Advanced Zebrunner MCP Server — LLM Evaluation Framework
 
 **Author:** Maksim Sarychau  
 **Version:** 1.1  
@@ -27,7 +27,7 @@
 
 ## 1. Executive Summary
 
-MCP Zebrunner exposes **58 tools** to AI assistants (Claude, Cursor, ChatGPT). When a user asks "Show me the latest test failures," the AI must:
+The Advanced Zebrunner MCP Server exposes **61 tools** (under `adv_<name>` names) to AI assistants (Claude, Cursor, ChatGPT). When a user asks "Show me the latest test failures," the AI must:
 
 1. **Pick the right tool** from 52 options (e.g., `detailed_analyze_launch_failures`)
 2. **Provide the right arguments** (e.g., `project: "MY_PROJECT"`, `launch_id: 12345`)
@@ -54,7 +54,7 @@ The Evaluation Framework automatically tests all three of these steps using a re
 
 ### The Problem
 
-MCP Zebrunner has 58 tools with overlapping capabilities. For example:
+The Advanced Zebrunner MCP Server has 61 tools with overlapping capabilities. For example:
 
 - `list_test_suites` vs `get_tcm_test_suites_by_project` — both list suites
 - `get_test_cases_advanced` vs `get_test_cases_by_suite_smart` — both retrieve test cases by suite

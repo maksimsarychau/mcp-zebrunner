@@ -1,6 +1,6 @@
-# MCP Zebrunner - NPM Installation & Configuration Guide
+# Advanced Zebrunner MCP Server — NPM Installation & Configuration Guide
 
-This guide walks you through installing and configuring the **Zebrunner MCP Server** for various AI clients including Claude Desktop, Cursor, and IntelliJ IDEA.
+This guide walks you through installing and configuring the **Advanced Zebrunner MCP Server** (npm package `mcp-zebrunner`) for various AI clients including Claude Desktop, Cursor, and IntelliJ IDEA. It is safe to run side-by-side with Zebrunner's official hosted MCP (beta); see the README's "Dual-MCP setup" section.
 
 ---
 

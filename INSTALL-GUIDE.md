@@ -1,8 +1,8 @@
-# 🟢 MCP-Zebrunner — Step-by-Step Install & Update Guide
+# 🟢 Advanced Zebrunner MCP Server — Step-by-Step Install & Update Guide
 
 > 📚 **Looking for more features and documentation?** Return to the main [**README**](README.md) for complete tool overview and usage examples.
 
-This guide explains in **very simple steps** how to install and update the **MCP-Zebrunner** server and connect it to **Claude Desktop** or **Claude Code**.
+This guide explains in **very simple steps** how to install and update the **Advanced Zebrunner MCP Server** (npm package `mcp-zebrunner`) and connect it to **Claude Desktop** or **Claude Code**. It can be run alongside the official Zebrunner MCP (beta) — see the README's "Dual-MCP setup" section.
 
 ---
 

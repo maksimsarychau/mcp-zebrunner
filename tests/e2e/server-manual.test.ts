@@ -109,18 +109,18 @@ describe('Manual E2E Tests - Zebrunner MCP Server', () => {
       const toolNames = response.result.tools.map((tool: any) => tool.name);
       console.log('Available tools:', toolNames);
 
-      // Verify key tools are present
-      assert.ok(toolNames.includes('list_test_suites'));
-      assert.ok(toolNames.includes('get_test_case_by_key'));
+      // Verify key tools are present (v9.0.0+ adv_ prefix)
+      assert.ok(toolNames.includes('adv_list_test_suites'));
+      assert.ok(toolNames.includes('adv_get_test_case_by_key'));
     });
 
-    it('should call list_test_suites tool', async () => {
+    it('should call adv_list_test_suites tool', async () => {
       const request = {
         jsonrpc: '2.0',
         id: 2,
         method: 'tools/call',
         params: {
-          name: 'list_test_suites',
+          name: 'adv_list_test_suites',
           arguments: {
             project_key: TEST_PROJECT_KEY,
             format: 'json'
@@ -145,7 +145,7 @@ describe('Manual E2E Tests - Zebrunner MCP Server', () => {
         id: 3,
         method: 'tools/call',
         params: {
-          name: 'get_test_case_by_key',
+          name: 'adv_get_test_case_by_key',
           arguments: {
             project_key: 'INVALID',
             case_key: 'INVALID-999'
@@ -168,7 +168,7 @@ describe('Manual E2E Tests - Zebrunner MCP Server', () => {
         id: 10 + i,
         method: 'tools/call',
         params: {
-          name: 'list_test_suites',
+          name: 'adv_list_test_suites',
           arguments: {
             project_key: TEST_PROJECT_KEY,
             format: 'json'

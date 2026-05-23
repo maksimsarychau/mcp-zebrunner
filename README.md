@@ -1,7 +1,9 @@
-# Zebrunner MCP Server
-![version](https://img.shields.io/github/package-json/v/maksimsarychau/mcp-zebrunner) 
+# Advanced Zebrunner MCP Server
+![version](https://img.shields.io/github/package-json/v/maksimsarychau/mcp-zebrunner)
 
-A **Model Context Protocol (MCP)** server that integrates with **Zebrunner Test Case Management** to help QA teams manage test cases, test suites, and test execution data through AI assistants like Claude.
+A **Model Context Protocol (MCP)** server that brings advanced analytics, reporting, failure forensics, and safe TCM mutations to **Zebrunner**. Designed to coexist with the official Zebrunner MCP (beta) — see the "Dual-MCP setup" section below.
+
+> Tool naming: every tool on this server is registered under the canonical `adv_<name>` form (e.g. `adv_create_test_case`, `adv_list_test_runs`) so it never collides with the official Zebrunner MCP. The legacy names are kept as **deprecated aliases** so prompts/scripts that called the old names continue to work for now; aliases will be removed in the next major release. See [`docs/OFFICIAL_MCP_PARITY.md`](docs/OFFICIAL_MCP_PARITY.md) and the `zebrunner://mcp-routing` resource for the dual-MCP routing guide.
 
 > 📖 **Need help with installation?** Check out our [**Step-by-Step Install Guide**](INSTALL-GUIDE.md) for detailed setup instructions.
 > 
@@ -11,7 +13,7 @@ A **Model Context Protocol (MCP)** server that integrates with **Zebrunner Test 
 
 ## 🔥 Why This Server
 
-This is the **extended Zebrunner MCP solution** — built to go well beyond basic test case management and help QA teams work smarter and faster with AI. Compared to the Solvd Zebrunner MCP (~30 tools, CRUD-focused), this server provides **60+ tools** with deep analytics, reporting, and automation capabilities:
+This is the **Advanced Zebrunner MCP Server** — built to go well beyond basic test case management and help QA teams work smarter and faster with AI. Compared to the official Zebrunner MCP (beta, ~47 CRUD-focused tools), this server provides **60+ tools** with deep analytics, reporting, and automation capabilities, and is safe to run side-by-side with the official server:
 
 - **[Reporting & Analytics](#-reporting--analytics)** — dashboards, pass-rate trends, regression stability reports, runtime efficiency analysis, bug reviews, and weekly delta tracking
 - **[Test Coverage & Analysis](#-test-coverage--analysis)** — coverage gaps, automation readiness scoring, and cross-suite analysis
@@ -494,9 +496,56 @@ User: "Analyze https://other-workspace.zebrunner.com/..."
 
 [⬆️ Back to top](#-table-of-contents)
 
+## 🤝 Dual-MCP setup (official `zebrunner` + Advanced)
+
+Zebrunner now offers an **official hosted MCP** (beta) at
+`https://{workspace}.zebrunner.com/api/mcp`. It is safe to run **both** servers
+in the same Cursor / Claude session: every tool on this server is exposed under
+the `adv_<name>` prefix, so it never collides with the official tools.
+
+Example `.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "zebrunner": {
+      "url": "https://your-workspace.zebrunner.com/api/mcp",
+      "headers": {
+        "X-Zebrunner-Username": "your.name@company.com",
+        "X-Zebrunner-Api-Token": "<your-zebrunner-api-token>"
+      }
+    },
+    "mcp-zebrunner": {
+      "command": "npx",
+      "args": ["-y", "mcp-zebrunner"],
+      "env": {
+        "ZEBRUNNER_URL": "https://your-workspace.zebrunner.com/api/public/v1",
+        "ZEBRUNNER_LOGIN": "your.name@company.com",
+        "ZEBRUNNER_TOKEN": "<your-zebrunner-api-token>"
+      }
+    }
+  }
+}
+```
+
+Rule of thumb when both are connected:
+
+| Use **`zebrunner`** (official) for | Use **`mcp-zebrunner`** (Advanced) for |
+|------------------------------------|----------------------------------------|
+| Standard CRUD (test cases, suites, runs, shared steps) | Failure forensics, runtime + flakiness analytics |
+| Server-side `filter` DSL on `list_test_cases` / `list_test_runs` | Reporting, dashboards, regression analyzers |
+| File upload / download, bulk launch ops, milestone create | Preview/confirm safe mutations (`adv_create_test_case`, …) |
+
+Inside chat, ask `about_mcp_tools` with `mode: "routing"` or open the
+`zebrunner://mcp-routing` resource to get the same guidance.
+See [`docs/OFFICIAL_MCP_PARITY.md`](docs/OFFICIAL_MCP_PARITY.md) for the
+full live-generated diff.
+
 ## 🛠️ Available Tools
 
-Once connected, you can use these tools through natural language in your AI assistant. Here's a comprehensive reference of all 40+ available tools organized by category:
+Once connected, you can use these tools through natural language in your AI assistant. Here's a comprehensive reference of all 40+ available tools organized by category.
+
+> All tools are registered under two names: the **canonical `adv_<name>` form** (e.g. `adv_create_test_case`, recommended in new prompts and required when both MCPs are connected to avoid collisions with the official Zebrunner MCP) and a **deprecated legacy alias** (`<name>`, kept temporarily so existing prompts keep working). Examples below use the legacy form for brevity; both forms behave identically.
 
 ### 📋 Test Case Management
 

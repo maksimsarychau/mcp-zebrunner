@@ -1,4 +1,4 @@
-import { randomUUID, randomBytes, createHash } from 'node:crypto';
+import { randomUUID, randomBytes } from 'node:crypto';
 import type { Response } from 'express';
 import type { OAuthServerProvider } from '@modelcontextprotocol/sdk/server/auth/provider.js';
 import type { OAuthRegisteredClientsStore } from '@modelcontextprotocol/sdk/server/auth/clients.js';
@@ -8,20 +8,17 @@ import type { TokenStore } from './token-store.js';
 import { TokenValidator } from './token-validator.js';
 import { RECOVERED_MCP_CLIENT_REDIRECT_URIS } from './mcp-client-fallback-redirects.js';
 import type { OktaConfig } from './oauth-provider.js';
+import {
+  InMemoryOAuthFlowStore,
+  type OAuthFlowStore,
+  type OAuthPendingAuth,
+  type OAuthRegisteredClientRecord,
+} from './oauth-flow-store.js';
 
 // Re-export for convenience
 export type { OktaConfig } from './oauth-provider.js';
 
-interface PendingAuth {
-  mcpClientId: string;
-  redirectUri: string;
-  codeChallenge: string;
-  state?: string;
-  scopes?: string[];
-  createdAt: number;
-}
-
-interface IssuedCode {
+interface IssuedCode extends Record<string, unknown> {
   oktaAccessToken: string;
   oktaIdToken?: string;
   mcpClientId: string;
@@ -30,52 +27,26 @@ interface IssuedCode {
   createdAt: number;
 }
 
-interface RegisteredClient {
-  client_id: string;
-  client_secret?: string;
-  redirect_uris: string[];
-  client_name?: string;
-  grant_types: string[];
-  response_types: string[];
-  token_endpoint_auth_method: string;
-  client_id_issued_at: number;
-}
-
-const PENDING_AUTH_TTL_MS = 10 * 60 * 1000; // 10 minutes
-const ISSUED_CODE_TTL_MS = 5 * 60 * 1000;   // 5 minutes
-
 /**
  * Custom OAuthServerProvider that delegates authentication to Okta
  * while acting as a full OAuth Authorization Server for MCP clients.
- *
- * Flow:
- * 1. MCP client registers via POST /register (dynamic client registration)
- * 2. MCP client redirects user to GET /authorize (our endpoint)
- * 3. We redirect to Okta's /authorize using OUR OIDC app credentials
- * 4. Okta authenticates user (including Duo MFA if configured)
- * 5. Okta redirects to /auth/callback on our server
- * 6. We exchange code for Okta tokens, generate our own auth code
- * 7. We redirect to MCP client's redirect_uri with our code
- * 8. MCP client exchanges our code at POST /token
- * 9. We return the Okta access token
- * 10. MCP client uses Bearer token for /mcp requests
- * 11. We verify JWT via JWKS and look up per-user Zebrunner token from store
- *
- * No shared credentials: every user must have their own Zebrunner
- * token stored in TokenStore (entered via /login after Okta SSO).
  */
 export class McpOAuthServerProvider implements OAuthServerProvider {
   skipLocalPkceValidation = true;
 
-  private clients = new Map<string, RegisteredClient>();
-  private pendingAuths = new Map<string, PendingAuth>();
-  private issuedCodes = new Map<string, IssuedCode>();
+  private flowStore: OAuthFlowStore;
   private oktaConfig: OktaConfig;
   tokenStore: TokenStore;
   private jwks: ReturnType<typeof createRemoteJWKSet>;
   private validator: TokenValidator;
 
-  constructor(config: OktaConfig, tokenStore: TokenStore, zebrunnerBaseUrl: string) {
+  constructor(
+    config: OktaConfig,
+    tokenStore: TokenStore,
+    zebrunnerBaseUrl: string,
+    oauthFlowStore?: OAuthFlowStore,
+  ) {
+    this.flowStore = oauthFlowStore ?? new InMemoryOAuthFlowStore();
     this.oktaConfig = config;
     this.tokenStore = tokenStore;
     this.jwks = createRemoteJWKSet(
@@ -83,21 +54,18 @@ export class McpOAuthServerProvider implements OAuthServerProvider {
     );
     this.validator = new TokenValidator(zebrunnerBaseUrl, tokenStore);
 
-    const sweep = setInterval(() => this.sweep(), 60_000);
+    const sweep = setInterval(() => { void this.sweep(); }, 60_000);
     sweep.unref();
   }
 
   get clientsStore(): OAuthRegisteredClientsStore {
     return {
       getClient: async (clientId: string) => {
-        const existing = this.clients.get(clientId);
+        const existing = await this.flowStore.getClient(clientId);
         if (existing) return existing as any;
 
-        // Auto-accept previously registered mcp_* clients whose registration
-        // was lost on server restart (in-memory store). Real security comes
-        // from Okta authentication + PKCE, not from DCR client validation.
         if (clientId.startsWith('mcp_')) {
-          const fallback: RegisteredClient = {
+          const fallback: OAuthRegisteredClientRecord = {
             client_id: clientId,
             redirect_uris: [...RECOVERED_MCP_CLIENT_REDIRECT_URIS],
             token_endpoint_auth_method: 'none',
@@ -106,7 +74,7 @@ export class McpOAuthServerProvider implements OAuthServerProvider {
             response_types: ['code'],
             client_id_issued_at: Math.floor(Date.now() / 1000),
           };
-          this.clients.set(clientId, fallback);
+          await this.flowStore.setClient(clientId, fallback);
           return fallback as any;
         }
 
@@ -117,7 +85,7 @@ export class McpOAuthServerProvider implements OAuthServerProvider {
         const authMethod = clientInfo.token_endpoint_auth_method || 'none';
         const needsSecret = authMethod !== 'none';
 
-        const registered: RegisteredClient = {
+        const registered: OAuthRegisteredClientRecord = {
           client_id: clientId,
           ...(needsSecret && { client_secret: randomBytes(32).toString('hex') }),
           redirect_uris: clientInfo.redirect_uris || [],
@@ -128,7 +96,7 @@ export class McpOAuthServerProvider implements OAuthServerProvider {
           client_id_issued_at: Math.floor(Date.now() / 1000),
         };
 
-        this.clients.set(clientId, registered);
+        await this.flowStore.setClient(clientId, registered);
 
         return {
           ...registered,
@@ -138,9 +106,6 @@ export class McpOAuthServerProvider implements OAuthServerProvider {
     };
   }
 
-  /**
-   * Step 2: MCP client hits /authorize. We store pending state and redirect to Okta.
-   */
   async authorize(
     client: any,
     params: { redirectUri: string; codeChallenge: string; state?: string; scopes?: string[]; resource?: URL },
@@ -148,7 +113,7 @@ export class McpOAuthServerProvider implements OAuthServerProvider {
   ): Promise<void> {
     const stateKey = randomBytes(32).toString('hex');
 
-    this.pendingAuths.set(stateKey, {
+    await this.flowStore.setPending(stateKey, {
       mcpClientId: client.client_id,
       redirectUri: params.redirectUri,
       codeChallenge: params.codeChallenge,
@@ -169,28 +134,15 @@ export class McpOAuthServerProvider implements OAuthServerProvider {
     res.redirect(oktaAuthUrl.toString());
   }
 
-  /**
-   * Called by the SDK after MCP client sends our code to POST /token.
-   * In proxy mode we skip local PKCE since we validated it during code generation.
-   */
-  async challengeForAuthorizationCode(
-    _client: any,
-    _authorizationCode: string,
-  ): Promise<string> {
+  async challengeForAuthorizationCode(): Promise<string> {
     return '';
   }
 
-  /**
-   * Step 8: MCP client exchanges our auth code for tokens.
-   */
   async exchangeAuthorizationCode(
     client: any,
     authorizationCode: string,
-    _codeVerifier?: string,
-    _redirectUri?: string,
-    _resource?: URL,
   ): Promise<any> {
-    const issued = this.issuedCodes.get(authorizationCode);
+    const issued = await this.flowStore.takeIssuedCode<IssuedCode>(authorizationCode);
     if (!issued) {
       throw new Error('Invalid or expired authorization code');
     }
@@ -199,8 +151,6 @@ export class McpOAuthServerProvider implements OAuthServerProvider {
       throw new Error('Authorization code was issued to a different client');
     }
 
-    this.issuedCodes.delete(authorizationCode);
-
     return {
       access_token: issued.oktaAccessToken,
       token_type: 'bearer',
@@ -208,20 +158,10 @@ export class McpOAuthServerProvider implements OAuthServerProvider {
     };
   }
 
-  async exchangeRefreshToken(
-    _client: any,
-    _refreshToken: string,
-    _scopes?: string[],
-    _resource?: URL,
-  ): Promise<any> {
+  async exchangeRefreshToken(): Promise<any> {
     throw new Error('Refresh tokens are not supported. Re-authenticate via OAuth flow.');
   }
 
-  /**
-   * Step 11: Verify the Okta access token on each /mcp request.
-   * Extracts user email, looks up per-user Zebrunner credentials from TokenStore.
-   * Throws if no credentials are found (user must complete /login first).
-   */
   async verifyAccessToken(token: string): Promise<AuthInfo> {
     const { payload } = await jwtVerify(token, this.jwks, {
       issuer: `https://${this.oktaConfig.domain}/oauth2/${this.oktaConfig.authServerId}`,
@@ -255,49 +195,38 @@ export class McpOAuthServerProvider implements OAuthServerProvider {
     };
   }
 
-  // --- Methods used by auth-callback.ts ---
-
-  getPendingAuth(stateKey: string): PendingAuth | undefined {
-    return this.pendingAuths.get(stateKey);
+  async getPendingAuth(stateKey: string): Promise<OAuthPendingAuth | null> {
+    return this.flowStore.getPending(stateKey);
   }
 
-  deletePendingAuth(stateKey: string): void {
-    this.pendingAuths.delete(stateKey);
+  async deletePendingAuth(stateKey: string): Promise<void> {
+    await this.flowStore.deletePending(stateKey);
   }
 
-  storeIssuedCode(code: string, data: IssuedCode): void {
-    this.issuedCodes.set(code, data);
+  async storeIssuedCode(code: string, data: IssuedCode): Promise<void> {
+    await this.flowStore.setIssuedCode(code, data);
   }
 
   getOktaConfig(): OktaConfig {
     return this.oktaConfig;
   }
 
-  private sweep(): void {
-    const now = Date.now();
-    for (const [key, val] of this.pendingAuths) {
-      if (now - val.createdAt > PENDING_AUTH_TTL_MS) this.pendingAuths.delete(key);
-    }
-    for (const [key, val] of this.issuedCodes) {
-      if (now - val.createdAt > ISSUED_CODE_TTL_MS) this.issuedCodes.delete(key);
-    }
+  private async sweep(): Promise<void> {
+    await this.flowStore.sweepExpired();
     this.validator.sweep();
   }
 }
 
 let _providerInstance: McpOAuthServerProvider | null = null;
 
-/**
- * Create and cache the OAuth provider singleton.
- * TokenStore is required — per-user credentials are mandatory (no shared credentials).
- */
 export function createMcpOAuthProvider(
   config: OktaConfig,
   tokenStore: TokenStore,
   zebrunnerBaseUrl: string,
+  oauthFlowStore?: OAuthFlowStore,
 ): McpOAuthServerProvider {
   if (!_providerInstance) {
-    _providerInstance = new McpOAuthServerProvider(config, tokenStore, zebrunnerBaseUrl);
+    _providerInstance = new McpOAuthServerProvider(config, tokenStore, zebrunnerBaseUrl, oauthFlowStore);
   }
   return _providerInstance;
 }

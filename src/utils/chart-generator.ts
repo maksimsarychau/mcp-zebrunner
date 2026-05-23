@@ -1,4 +1,5 @@
 import sharp from 'sharp';
+import type { WidgetStatusCounts } from './widget-sql.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -18,6 +19,33 @@ export interface ChartConfig {
 }
 
 type McpContent = { type: "text"; text: string } | { type: "image"; data: string; mimeType: string };
+
+const WIDGET_STATUS_CHART_COLORS: Record<keyof WidgetStatusCounts, string> = {
+  passed: '#59a14f',
+  failed: '#e15759',
+  skipped: '#f28e2b',
+  knownIssue: '#edc948',
+  aborted: '#bab0ac',
+};
+
+const WIDGET_STATUS_CHART_LABELS: Record<keyof WidgetStatusCounts, string> = {
+  passed: 'Passed',
+  failed: 'Failed',
+  skipped: 'Skipped',
+  knownIssue: 'Known Issue',
+  aborted: 'Aborted',
+};
+
+/** Stacked status bar datasets from RESULTS_BY_PLATFORM widget counts (label/value or column rows). */
+export function buildStackedStatusChartDatasets(counts: WidgetStatusCounts): ChartDataset[] {
+  return (Object.keys(WIDGET_STATUS_CHART_LABELS) as (keyof WidgetStatusCounts)[])
+    .filter(k => counts[k] > 0)
+    .map(k => ({
+      label: WIDGET_STATUS_CHART_LABELS[k],
+      values: [counts[k]],
+      color: WIDGET_STATUS_CHART_COLORS[k],
+    }));
+}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 

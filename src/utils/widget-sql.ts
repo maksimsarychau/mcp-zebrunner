@@ -91,6 +91,107 @@ export type WidgetSqlCaller = (
   paramsConfig: any
 ) => Promise<any>;
 
+export interface WidgetStatusCounts {
+  passed: number;
+  failed: number;
+  skipped: number;
+  knownIssue: number;
+  aborted: number;
+}
+
+const EMPTY_STATUS_COUNTS: WidgetStatusCounts = {
+  passed: 0,
+  failed: 0,
+  skipped: 0,
+  knownIssue: 0,
+  aborted: 0,
+};
+
+function findRowKey(row: Record<string, unknown>, candidates: string[]): string | undefined {
+  const keys = Object.keys(row);
+  for (const c of candidates) {
+    const hit = keys.find(k => k.toLowerCase() === c.toLowerCase());
+    if (hit) return hit;
+  }
+  return undefined;
+}
+
+function classifyWidgetStatusLabel(label: string): keyof WidgetStatusCounts | null {
+  const norm = label.trim().toLowerCase().replace(/[\s_-]+/g, ' ');
+  if (!norm || /^\d{4}-\d{2}-\d{2}/.test(norm)) return null;
+
+  const exact: Record<string, keyof WidgetStatusCounts> = {
+    passed: 'passed',
+    failed: 'failed',
+    skipped: 'skipped',
+    aborted: 'aborted',
+    'known issue': 'knownIssue',
+    blocked: 'skipped',
+    'in progress': 'knownIssue',
+    queued: 'skipped',
+  };
+  if (exact[norm]) return exact[norm];
+
+  if (norm.includes('known') || norm.includes('issue')) return 'knownIssue';
+  if (norm.includes('pass')) return 'passed';
+  if (norm.includes('fail')) return 'failed';
+  if (norm.includes('skip')) return 'skipped';
+  if (norm.includes('abort')) return 'aborted';
+  if (norm.includes('block')) return 'skipped';
+  return null;
+}
+
+/**
+ * Parse RESULTS_BY_PLATFORM widget rows.
+ * Zebrunner returns either:
+ * - label/value pairs: [{ label: "PASSED", value: 1087 }, ...] (common with milestone filter)
+ * - column-oriented rows: [{ PLATFORM: "Android", PASSED: 80, FAILED: 10 }, ...]
+ */
+export function parseWidgetStatusCounts(rows: any[]): WidgetStatusCounts | null {
+  if (!Array.isArray(rows) || rows.length === 0) return null;
+
+  const first = rows[0];
+  if (!first || typeof first !== 'object') return null;
+
+  const labelKey = findRowKey(first as Record<string, unknown>, ['label']);
+  const valueKey = findRowKey(first as Record<string, unknown>, ['value']);
+
+  if (labelKey && valueKey) {
+    const counts = { ...EMPTY_STATUS_COUNTS };
+    for (const row of rows) {
+      if (!row || typeof row !== 'object') continue;
+      const label = String((row as Record<string, unknown>)[labelKey] ?? '').trim();
+      const cat = classifyWidgetStatusLabel(label);
+      if (!cat) continue;
+      const raw = (row as Record<string, unknown>)[valueKey];
+      const val = typeof raw === 'number' ? raw : parseInt(String(raw ?? '0'), 10) || 0;
+      counts[cat] += val;
+    }
+    return counts;
+  }
+
+  const counts = { ...EMPTY_STATUS_COUNTS };
+  const allKeys = Object.keys(first);
+  const columnMap = new Map<string, keyof WidgetStatusCounts>();
+
+  for (const k of allKeys) {
+    const cat = classifyWidgetStatusLabel(k);
+    if (cat) columnMap.set(k, cat);
+  }
+
+  if (columnMap.size === 0) return null;
+
+  for (const row of rows) {
+    for (const [k, cat] of columnMap) {
+      const raw = row[k];
+      const val = typeof raw === 'number' ? raw : parseInt(String(raw ?? '0'), 10) || 0;
+      counts[cat] += val;
+    }
+  }
+
+  return counts;
+}
+
 /**
  * Unwrap common API response envelopes so callers always get the payload array.
  * Handles `{ results: [...] }`, `{ data: [...] }`, `{ items: [...] }`, and
