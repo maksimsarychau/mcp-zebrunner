@@ -1,5 +1,5 @@
 import { mkdir, readFile, writeFile, unlink, readdir } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { deriveKey, encrypt, decrypt } from './crypto.js';
 
 export const PENDING_AUTH_TTL_MS = 10 * 60 * 1000;
@@ -130,7 +130,12 @@ export class FileOAuthFlowStore implements OAuthFlowStore {
 
   private pathFor(subdir: 'pending' | 'codes' | 'clients', id: string): string {
     sanitizeOAuthStoreKey(id);
-    return join(this.baseDir, subdir, `${id}.enc`);
+    const resolved = resolve(this.baseDir, subdir, `${id}.enc`);
+    const base = resolve(this.baseDir);
+    if (!resolved.startsWith(base + '/')) {
+      throw new Error('Invalid store path');
+    }
+    return resolved;
   }
 
   private async writeEncrypted(filePath: string, payload: unknown): Promise<void> {
