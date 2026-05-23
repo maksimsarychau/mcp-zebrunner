@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import type { TokenStore } from './token-store.js';
 import { normalizeZebrunnerUrl, toWebUrl } from './url-utils.js';
+import { queryParamString } from './query-params.js';
 
 export interface SettingsRouterOptions {
   tokenStore: TokenStore;
@@ -21,9 +22,10 @@ export function createSettingsRouter(opts: SettingsRouterOptions): Router {
   const { tokenStore, zebrunnerBaseUrl, zebrunnerUrlFromEnv } = opts;
 
   router.get('/', async (req: Request, res: Response) => {
-    const email = req.query.email as string | undefined;
-    const success = req.query.success as string | undefined;
-    const error = req.query.error as string | undefined;
+    const query = req.query as Record<string, unknown>;
+    const email = queryParamString(query, 'email');
+    const success = queryParamString(query, 'success');
+    const error = queryParamString(query, 'error');
 
     if (!email) {
       res.status(400).send('Missing email parameter.');

@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { randomBytes } from 'node:crypto';
 import { getMcpOAuthProvider } from './mcp-oauth-provider.js';
+import { queryParamString } from './query-params.js';
 
 function decodeJwtPayload(token: string): Record<string, any> {
   const parts = token.split('.');
@@ -77,12 +78,16 @@ export function createAuthCallbackRouter(opts?: { zebrunnerBaseUrl?: string; ena
   const router = Router();
 
   router.get('/auth/callback', async (req: Request, res: Response) => {
-    const { code, state, error, error_description } = req.query as Record<string, string>;
+    const query = req.query as Record<string, unknown>;
+    const code = queryParamString(query, 'code');
+    const state = queryParamString(query, 'state');
+    const error = queryParamString(query, 'error');
+    const errorDescription = queryParamString(query, 'error_description');
 
     if (error) {
       res.status(400).json({
         error: 'oauth_error',
-        message: error_description || error,
+        message: errorDescription || error,
       });
       return;
     }

@@ -43,7 +43,10 @@ export interface OAuthFlowStore {
   sweepExpired(): Promise<void>;
 }
 
-export function sanitizeOAuthStoreKey(key: string): void {
+export function sanitizeOAuthStoreKey(key: unknown): void {
+  if (typeof key !== 'string') {
+    throw new Error('Invalid OAuth flow store key');
+  }
   if (key.length === 0 || key.length > MAX_OAUTH_STORE_KEY_LENGTH) {
     throw new Error('Invalid OAuth flow store key');
   }

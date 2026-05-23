@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from 'express';
 import { randomBytes } from 'node:crypto';
 import type { TokenStore } from './token-store.js';
 import { normalizeZebrunnerUrl, toWebUrl } from './url-utils.js';
+import { queryParamString } from './query-params.js';
 
 export interface ResetRouterOptions {
   tokenStore: TokenStore;
@@ -33,8 +34,9 @@ export function createResetRouter(opts: ResetRouterOptions): Router {
   const { tokenStore, zebrunnerBaseUrl, zebrunnerUrlFromEnv } = opts;
 
   router.get('/', (req: Request, res: Response) => {
-    const success = req.query.success as string | undefined;
-    const error = req.query.error as string | undefined;
+    const query = req.query as Record<string, unknown>;
+    const success = queryParamString(query, 'success');
+    const error = queryParamString(query, 'error');
 
     res.type('html').send(RESET_FORM_HTML({ zebrunnerUrlFromEnv, success, error }));
   });
