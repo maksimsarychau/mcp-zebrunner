@@ -208,13 +208,10 @@ describe('Mode 3: Self-Service OAuth — JWT lifecycle', () => {
       createdAt: Date.now() - 10 * 60 * 1000, // 10 min ago
     });
 
-    // Code exists but exchange should still work within TTL
-    // (codes expire via sweep, not via exchange)
-    const result = await provider.exchangeAuthorizationCode(
-      { client_id: 'mcp_x' },
-      'expired-code',
+    await assert.rejects(
+      () => provider.exchangeAuthorizationCode({ client_id: 'mcp_x' }, 'expired-code'),
+      /Invalid or expired/,
     );
-    assert.ok(result.access_token);
   });
 
   it('rejects code issued to different client', async () => {
