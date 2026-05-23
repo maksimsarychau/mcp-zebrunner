@@ -56,9 +56,9 @@ The Evaluation Framework automatically tests all three of these steps using a re
 
 The Advanced Zebrunner MCP Server has 61 tools with overlapping capabilities. For example:
 
-- `list_test_suites` vs `get_tcm_test_suites_by_project` — both list suites
-- `get_test_cases_advanced` vs `get_test_cases_by_suite_smart` — both retrieve test cases by suite
-- `get_test_case_by_filter` vs `get_test_cases_advanced` — both support date filtering
+- `adv_list_test_suites` vs `adv_get_tcm_test_suites_by_project` — both list suites
+- `adv_get_test_cases_advanced` vs `adv_get_test_cases_by_suite_smart` — both retrieve test cases by suite
+- `adv_get_test_case_by_filter` vs `adv_get_test_cases_advanced` — both support date filtering
 
 When a user asks a natural-language question, the LLM must navigate this ambiguity and pick the best tool with correct arguments. Without automated evaluation, we can only test this manually — which doesn't scale.
 
@@ -114,8 +114,8 @@ The framework uses a **layered evaluation** approach. Each layer tests a differe
 **Example:**
 ```
 Prompt: "List all test suites in the MY_PROJECT project"
-Expected: list_test_suites
-LLM selected: list_test_suites ✅
+Expected: adv_list_test_suites
+LLM selected: adv_list_test_suites ✅
 ```
 
 **What it catches:**
@@ -201,9 +201,9 @@ Prompt: "Assess release readiness for the MY_PROJECT project on the latest miles
          Provide a Go/No-Go recommendation."
 
 Expected tools (any of these as first step):
-  get_available_projects, get_all_launches_for_project, get_all_launches_with_filter,
-  get_launch_test_summary, detailed_analyze_launch_failures, analyze_regression_runtime,
-  get_project_milestones, get_top_bugs
+  adv_get_available_projects, adv_get_all_launches_for_project, adv_get_all_launches_with_filter,
+  adv_get_launch_test_summary, adv_detailed_analyze_launch_failures, adv_analyze_regression_runtime,
+  adv_get_project_milestones, adv_get_top_bugs
 ```
 
 These tests verify the LLM's ability to **decompose complex questions** into the right sequence of tool calls.
@@ -278,8 +278,8 @@ MCP output: "Error: Test case not found" ✅
 
 ```
 Prompt: "List all test suites for MY_PROJECT. Do NOT use launch tools."
-Expected: list_test_suites ✅
-Forbidden: get_launch_details, get_launch_summary ✅ (not selected)
+Expected: adv_list_test_suites ✅
+Forbidden: adv_get_launch_details, adv_get_launch_summary ✅ (not selected)
 ```
 
 **Examples:** Suite listing (should not use launch tools), milestone retrieval (should not use TCM tools), bug reporting (should not use coverage tools).
@@ -461,7 +461,7 @@ expectedTools: ["get_test_case_by_filter", "get_test_cases_advanced"]
 
 | Metric | Formula | Threshold | Description |
 |--------|---------|-----------|-------------|
-| **Tool Selection Accuracy** | correct / executed | ≥ 90% | % of prompts where LLM picked an acceptable tool |
+| **Tool Selection Accuracy** | correct / executed | ≥ 90% (cloud) / ≥ 80% (local Ollama) | % of prompts where LLM picked an acceptable tool |
 | **Argument Correctness** | args_correct / args_checked | ≥ 85% | % of prompts where LLM provided all required args |
 | **Judge Average Score** | avg(relevance + completeness + format) / 3 | ≥ 3.5/5.0 | Average output quality as rated by the LLM judge |
 
@@ -483,7 +483,15 @@ Results are also broken down by tool category (TCM, Launch, Analysis, etc.) to i
 
 ### Pass/Fail Criteria
 
-A test run **passes** when all three primary metrics meet their thresholds. Individual test failures are logged but don't necessarily fail the entire run — only the aggregate thresholds matter.
+**Cloud providers** (`anthropic`, `openai`, `gemini`): each prompt is a hard test — any wrong tool, missing args, or low judge score fails that test case. Aggregate metrics are reported but per-prompt asserts are strict unless you set `EVAL_STRICT=false`.
+
+**Local provider** (`EVAL_PROVIDER=local`, or legacy `openai` + localhost `EVAL_BASE_URL`):
+
+- **Relaxed mode (default):** per-prompt misses log as `⚠️ [eval soft]` warnings; the npm process **passes** when aggregate metrics meet thresholds. The scorecard lists **Soft misses** for tuning, not suite failures.
+- **Strict mode:** set `EVAL_STRICT=true` for per-prompt hard failures (same as cloud).
+- Tool-selection threshold defaults to **80%** (override: `EVAL_MIN_PASS_RATE`).
+- Argument-correctness threshold defaults to **85%** (override: `EVAL_MIN_ARG_PASS_RATE`).
+- Judge threshold defaults to **1.0/5** (override: `EVAL_MIN_JUDGE_SCORE`) — small local models cannot reliably judge output quality.
 
 ---
 
@@ -564,10 +572,11 @@ cost = (84 × 14,000 × $0.000003) + (8 × 17,000 × $0.000003)
    ZEBRUNNER_LOGIN=your-login
    ZEBRUNNER_TOKEN=your-api-token
    ```
-3. **Anthropic API key** in `.env`:
-   ```
-   ANTHROPIC_API_KEY=sk-ant-api03-...
-   ```
+3. **LLM provider** in `.env` (any one of):
+   - **Claude:** `EVAL_PROVIDER=anthropic` + `ANTHROPIC_API_KEY=sk-ant-...`
+   - **OpenAI cloud:** `EVAL_PROVIDER=openai` + `OPENAI_API_KEY=sk-...`
+   - **Local Ollama / LM Studio:** `EVAL_PROVIDER=local` + `EVAL_MODEL=qwen3.5:2b` (no cloud key; uses OpenAI-compatible API under the hood)
+   - **Gemini:** `EVAL_PROVIDER=gemini` + `GEMINI_API_KEY=...`
 4. **MCP build** (required for the MCP server to start):
    ```bash
    npm run build
@@ -577,22 +586,50 @@ cost = (84 × 14,000 × $0.000003) + (8 × 17,000 × $0.000003)
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `ANTHROPIC_API_KEY` | Yes | — | Anthropic API key for Claude |
+| `EVAL_PROVIDER` | No | auto-detect | `anthropic`, `openai`, `gemini`, or `local` (Ollama/LM Studio) |
+| `EVAL_MODEL` | No | provider default | Model name (e.g. `claude-sonnet-4-6`, `qwen3.5:2b`, `gpt-4o-mini`) |
+| `EVAL_JUDGE_MODEL` | No | Same as `EVAL_MODEL` | Model for Layer 3 LLM judge |
+| `EVAL_BASE_URL` | For `local` override | `http://localhost:11434/v1` when `local` | OpenAI-compatible base URL |
+| `EVAL_API_KEY` | Provider-dependent | provider keys / `ollama` | Unified API key override |
+| `EVAL_MIN_PASS_RATE` | No | 80% local / 90% cloud | Aggregate tool-selection threshold (`80` or `0.80`) |
+| `EVAL_MIN_ARG_PASS_RATE` | No | `85%` | Aggregate argument-correctness threshold |
+| `EVAL_MIN_JUDGE_SCORE` | No | 1.0 local / 3.0 cloud | Layer 3 judge average (1–5 scale) |
+| `EVAL_STRICT` | No | `false` local / implicit strict cloud | Per-prompt hard asserts when `true` |
+| `ANTHROPIC_API_KEY` | For Claude | — | Auto-selects `anthropic` when unset |
+| `OPENAI_API_KEY` | For OpenAI cloud | — | Auto-selects `openai` when unset |
+| `GEMINI_API_KEY` | For Gemini | — | Auto-selects `gemini` when unset |
 | `ZEBRUNNER_URL` | Yes | — | Zebrunner instance URL |
 | `ZEBRUNNER_LOGIN` | Yes | — | Zebrunner login |
 | `ZEBRUNNER_TOKEN` | Yes | — | Zebrunner API token |
-| `EVAL_MODEL` | No | `claude-sonnet-4-6` | Claude model for evaluation |
-| `EVAL_JUDGE_MODEL` | No | Same as `EVAL_MODEL` | Model for the LLM Judge (can be different) |
 | `EVAL_LAYER` | No | `3` | Maximum eval layer (1, 2, or 3) |
+| `EVAL_FILTER` | No | — | Comma-separated prompt IDs to run |
 
 ### .env.example
 
 ```env
-# Evaluation Framework
-ANTHROPIC_API_KEY=sk-ant-api03-YOUR_KEY_HERE
+# Local Ollama (recommended for dev smoke tests)
+EVAL_PROVIDER=local
+EVAL_MODEL=qwen3.5:2b
+# EVAL_BASE_URL=http://localhost:11434/v1  # optional; default for local
+EVAL_LAYER=1
+# EVAL_FILTER=field_filter.custom_field_exact,get_top_bugs.top10
+
+# Claude (release gating / targeted re-runs)
+# EVAL_PROVIDER=anthropic
+# ANTHROPIC_API_KEY=sk-ant-api03-YOUR_KEY_HERE
 # EVAL_MODEL=claude-sonnet-4-6
-# EVAL_LAYER=3
+# EVAL_STRICT=true
+# EVAL_FILTER=field_filter.custom_field_exact,report.pass_rate
 ```
+
+### Known limits (local LLMs)
+
+- Use `EVAL_PROVIDER=local` (not `openai`) for Ollama — clearer intent and correct relaxed-mode defaults.
+- Legacy `EVAL_PROVIDER=openai` + `EVAL_BASE_URL=http://localhost:11434/v1` still works.
+- Tool-calling quality depends on the model; prefer models with native tool support (`llama3.1`, `qwen2.5`, etc.).
+- Large tool catalog (~100 tools) may exceed context on small models — use `EVAL_FILTER` for targeted runs.
+- Layer 3 judge uses the same model as selection; small local models may score inconsistently vs Claude.
+- Cost report shows **$0** for `local` / localhost endpoints.
 
 ---
 
@@ -772,7 +809,7 @@ The eval suite is **excluded from `npm run test:all`** to prevent accidental LLM
 | Term | Definition |
 |------|------------|
 | **MCP** | Model Context Protocol — a standard for connecting AI assistants to external tools |
-| **Tool** | A single function exposed by the MCP server (e.g., `list_test_suites`) |
+| **Tool** | A single function exposed by the MCP server (e.g., `adv_list_test_suites`) |
 | **Tool Selection** | The LLM's decision about which tool to call for a given user prompt |
 | **Argument Keys** | The parameter names a tool expects (e.g., `project_key`, `suite_id`) |
 | **Zod Schema** | TypeScript schema library used to define tool input parameters |

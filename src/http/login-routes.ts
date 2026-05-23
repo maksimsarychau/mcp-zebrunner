@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { getSelfAuthProvider } from './selfauth-provider.js';
 import { getMcpOAuthProvider } from './mcp-oauth-provider.js';
 import { normalizeZebrunnerUrl, toWebUrl } from './url-utils.js';
+import { queryParamString } from './query-params.js';
 
 export interface LoginRouterOptions {
   zebrunnerBaseUrl?: string;
@@ -24,12 +25,13 @@ export function createLoginRouter(opts: LoginRouterOptions): Router {
   const { zebrunnerBaseUrl, zebrunnerUrlFromEnv } = opts;
 
   router.get('/', (req: Request, res: Response) => {
-    const state = req.query.state as string | undefined;
-    const error = req.query.error as string | undefined;
-    const email = req.query.email as string | undefined;
-    const zebrunnerUrl = req.query.zebrunner_url as string | undefined;
-    const oktaAccessToken = req.query.okta_access_token as string | undefined;
-    const oktaIdToken = req.query.okta_id_token as string | undefined;
+    const query = req.query as Record<string, unknown>;
+    const state = queryParamString(query, 'state');
+    const error = queryParamString(query, 'error');
+    const email = queryParamString(query, 'email');
+    const zebrunnerUrl = queryParamString(query, 'zebrunner_url');
+    const oktaAccessToken = queryParamString(query, 'okta_access_token');
+    const oktaIdToken = queryParamString(query, 'okta_id_token');
     if (!state) {
       res.status(400).send('Missing state parameter. Please restart the login flow from your MCP client.');
       return;

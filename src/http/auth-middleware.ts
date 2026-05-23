@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import type { AuthMode } from '../config/transport.js';
 import { hasStrategy } from '../config/transport.js';
+import { validateVerifiedBearerCredentials } from './bearer-auth-validation.js';
 
 export interface AuthResult {
   method: 'headers' | 'bearer';
@@ -77,8 +78,15 @@ export function createAuthMiddleware(options: AuthMiddlewareOptions = {}) {
       const bearerToken = extractBearerToken(req);
       if (bearerToken) {
         try {
-          const { username, zebrunnerToken, baseUrl } = await options.verifyBearer(bearerToken);
-          req.auth = { method: 'bearer', username, token: zebrunnerToken, baseUrl };
+          const verified = validateVerifiedBearerCredentials(
+            await options.verifyBearer(bearerToken),
+          );
+          req.auth = {
+            method: 'bearer',
+            username: verified.username,
+            token: verified.zebrunnerToken,
+            baseUrl: verified.baseUrl,
+          };
           next();
           return;
         } catch {

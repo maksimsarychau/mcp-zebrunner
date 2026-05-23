@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile, unlink, readdir } from 'node:fs/promises';
+import { mkdir, readFile, unlink, readdir, open } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { deriveKey, encrypt, decrypt } from './crypto.js';
 
@@ -7,6 +7,7 @@ export const ISSUED_CODE_TTL_MS = 5 * 60 * 1000;
 
 const OAUTH_FLOW_KEY_SALT = 'mcp-zebrunner-oauth-flow';
 const STORE_KEY_PATTERN = /^[a-zA-Z0-9_-]+$/;
+export const MAX_OAUTH_STORE_KEY_LENGTH = 128;
 
 export interface OAuthPendingAuth {
   mcpClientId: string;
@@ -42,7 +43,13 @@ export interface OAuthFlowStore {
   sweepExpired(): Promise<void>;
 }
 
-export function sanitizeOAuthStoreKey(key: string): void {
+export function sanitizeOAuthStoreKey(key: unknown): void {
+  if (typeof key !== 'string') {
+    throw new Error('Invalid OAuth flow store key');
+  }
+  if (key.length === 0 || key.length > MAX_OAUTH_STORE_KEY_LENGTH) {
+    throw new Error('Invalid OAuth flow store key');
+  }
   if (!STORE_KEY_PATTERN.test(key)) {
     throw new Error('Invalid OAuth flow store key');
   }
@@ -141,7 +148,12 @@ export class FileOAuthFlowStore implements OAuthFlowStore {
   private async writeEncrypted(filePath: string, payload: unknown): Promise<void> {
     await mkdir(dirname(filePath), { recursive: true });
     const encrypted = encrypt(JSON.stringify(payload), this.key);
-    await writeFile(filePath, encrypted, { encoding: 'utf8', mode: 0o600 });
+    const fh = await open(filePath, 'w', 0o600);
+    try {
+      await fh.writeFile(encrypted, 'utf8');
+    } finally {
+      await fh.close();
+    }
   }
 
   private async readEncrypted<T>(filePath: string): Promise<T | null> {

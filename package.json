@@ -76,10 +76,12 @@
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "^0.88.0",
+    "@google/generative-ai": "^0.24.1",
     "@types/express": "^5.0.6",
     "@types/fluent-ffmpeg": "^2.1.24",
     "@types/node": "^25.6.0",
     "node-gyp": "^11.2.0",
+    "openai": "^6.39.0",
     "tsx": "^4.21.0",
     "typescript": "^6.0.2"
   }
