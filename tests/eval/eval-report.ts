@@ -1,5 +1,6 @@
 import { writeFileSync, mkdirSync, existsSync } from "fs";
 import type { EvalConfig } from "./eval-config.js";
+import { isLocalEvalEndpoint } from "./eval-config.js";
 import type { PromptCategory, NegativeCategory } from "./eval-prompts.js";
 import type { JudgeScore } from "./eval-judges.js";
 
@@ -53,6 +54,8 @@ export interface NegativeSummary {
 
 export interface EvalSummary {
   timestamp: string;
+  provider?: string;
+  baseUrl?: string;
   model: string;
   layer: number;
   total: number;
@@ -68,25 +71,68 @@ export interface EvalSummary {
   tokens?: TokenSummary;
 }
 
+const OPENAI_PRICING: Record<string, { inputPer1M: number; outputPer1M: number }> = {
+  "gpt-4o": { inputPer1M: 2.5, outputPer1M: 10 },
+  "gpt-4o-mini": { inputPer1M: 0.15, outputPer1M: 0.6 },
+};
+
+const GEMINI_PRICING: Record<string, { inputPer1M: number; outputPer1M: number }> = {
+  "gemini-2.0-flash": { inputPer1M: 0.10, outputPer1M: 0.40 },
+  "gemini-1.5-pro": { inputPer1M: 1.25, outputPer1M: 5.0 },
+};
+
 const ANTHROPIC_PRICING: Record<string, { inputPer1M: number; outputPer1M: number }> = {
   "claude-sonnet-4-6":  { inputPer1M: 3,    outputPer1M: 15 },
   "claude-sonnet-4-5":  { inputPer1M: 3,    outputPer1M: 15 },
   "claude-haiku-3-5":   { inputPer1M: 0.80, outputPer1M: 4 },
   "claude-opus-4":      { inputPer1M: 15,   outputPer1M: 75 },
 };
-const DEFAULT_PRICING = { inputPer1M: 3, outputPer1M: 15 };
+const DEFAULT_PRICING = { inputPer1M: 0, outputPer1M: 0 };
+
+function lookupPricing(model: string, provider?: string): { inputPer1M: number; outputPer1M: number } {
+  const tables = [
+    ANTHROPIC_PRICING,
+    OPENAI_PRICING,
+    GEMINI_PRICING,
+  ];
+
+  for (const table of tables) {
+    const match = Object.entries(table).find(([key]) => model.includes(key));
+    if (match) return match[1];
+  }
+
+  if (provider === "anthropic") {
+    return { inputPer1M: 3, outputPer1M: 15 };
+  }
+
+  return DEFAULT_PRICING;
+}
+
+const LEGACY_STRING_DEFAULT = { inputPer1M: 3, outputPer1M: 15 };
 
 export function estimateCost(
-  model: string,
+  modelOrConfig: string | EvalConfig,
   inputTokens: number,
-  outputTokens: number
+  outputTokens: number,
 ): { input: number; output: number; total: number } {
-  const pricing = Object.entries(ANTHROPIC_PRICING).find(
-    ([key]) => model.includes(key)
-  )?.[1] ?? DEFAULT_PRICING;
+  if (typeof modelOrConfig !== "string") {
+    if (isLocalEvalEndpoint(modelOrConfig)) {
+      return { input: 0, output: 0, total: 0 };
+    }
+    const pricing = lookupPricing(modelOrConfig.model, modelOrConfig.provider);
+    const input = (inputTokens / 1_000_000) * pricing.inputPer1M;
+    const output = (outputTokens / 1_000_000) * pricing.outputPer1M;
+    return { input, output, total: input + output };
+  }
 
-  const input = (inputTokens / 1_000_000) * pricing.inputPer1M;
-  const output = (outputTokens / 1_000_000) * pricing.outputPer1M;
+  const model = modelOrConfig;
+  const pricing = lookupPricing(model);
+  const effective =
+    pricing.inputPer1M === 0 && pricing.outputPer1M === 0
+      ? LEGACY_STRING_DEFAULT
+      : pricing;
+  const input = (inputTokens / 1_000_000) * effective.inputPer1M;
+  const output = (outputTokens / 1_000_000) * effective.outputPer1M;
   return { input, output, total: input + output };
 }
 
@@ -148,25 +194,8 @@ export class EvalReporter {
     }
 
     const failures = executed
-      .filter((r) => {
-        if (!r.toolSelectionCorrect || r.error) return true;
-        if (r.judgeScore) {
-          const avg = (r.judgeScore.relevance + r.judgeScore.completeness + r.judgeScore.format) / 3;
-          if (avg < config.thresholds.judgeAvgScore) return true;
-        }
-        return false;
-      })
-      .map((r) => {
-        if (r.error) return { id: r.id, reason: r.error };
-        if (!r.toolSelectionCorrect) {
-          return { id: r.id, reason: `Expected ${r.expectedTools.join("|")}, got ${r.selectedTool || "none"}` };
-        }
-        if (r.judgeScore) {
-          const avg = (r.judgeScore.relevance + r.judgeScore.completeness + r.judgeScore.format) / 3;
-          return { id: r.id, reason: `Judge avg ${avg.toFixed(1)}/5 — ${r.judgeScore.reasoning.slice(0, 80)}` };
-        }
-        return { id: r.id, reason: "Unknown" };
-      });
+      .filter((r) => isPromptMiss(r, config))
+      .map((r) => ({ id: r.id, reason: promptMissReason(r, config) }));
 
     let negative: NegativeSummary | undefined;
     const negExecuted = negativeResults.filter((r) => !r.skipped);
@@ -216,12 +245,14 @@ export class EvalReporter {
             totalOutputTokens: grandOutput,
             judgeInputTokens: judgeInput,
             judgeOutputTokens: judgeOutput,
-            estimatedCost: estimateCost(config.model, grandInput, grandOutput),
+            estimatedCost: estimateCost(config, grandInput, grandOutput),
           }
         : undefined;
 
     return {
       timestamp: new Date().toISOString(),
+      provider: config.provider,
+      baseUrl: config.baseUrl,
       model: config.model,
       layer: config.layer,
       total: this.results.length,
@@ -256,7 +287,7 @@ export class EvalReporter {
     console.error(`[eval-report] JSON saved: ${jsonPath}`);
 
     const mdPath = `${config.resultsDir}/${ts}.md`;
-    writeFileSync(mdPath, generateMarkdown(summary, this.results));
+    writeFileSync(mdPath, generateMarkdown(summary, this.results, config));
     console.error(`[eval-report] Markdown saved: ${mdPath}`);
 
     return summary;
@@ -267,11 +298,49 @@ function pct(n: number): string {
   return `${(n * 100).toFixed(1)}%`;
 }
 
+function judgeAvg(r: EvalResult): number {
+  if (!r.judgeScore) return 0;
+  return (r.judgeScore.relevance + r.judgeScore.completeness + r.judgeScore.format) / 3;
+}
+
+function isPromptMiss(r: EvalResult, config: EvalConfig): boolean {
+  if (r.error) return true;
+  if (!r.toolSelectionCorrect) return true;
+  if (r.argsCorrect === false) return true;
+  if (r.judgeScore && judgeAvg(r) < config.thresholds.judgeAvgScore) return true;
+  return false;
+}
+
+function promptMissReason(r: EvalResult, config: EvalConfig): string {
+  if (r.error) return r.error;
+  if (!r.toolSelectionCorrect) {
+    return `Expected ${r.expectedTools.join("|")}, got ${r.selectedTool || "none"}`;
+  }
+  if (r.argsCorrect === false) {
+    return `Missing args: ${r.missingArgs?.join(", ") || "unknown"}`;
+  }
+  if (r.judgeScore) {
+    const avg = judgeAvg(r);
+    if (avg < config.thresholds.judgeAvgScore) {
+      return `Judge avg ${avg.toFixed(1)}/5 — ${r.judgeScore.reasoning.slice(0, 80)}`;
+    }
+  }
+  return "Unknown";
+}
+
+function aggregatePass(s: EvalSummary, config: EvalConfig): boolean {
+  if (s.executed === 0) return true;
+  const tsOk = s.toolSelectionAccuracy >= config.thresholds.toolSelectionAccuracy;
+  const argOk = s.argCorrectnessAccuracy >= config.thresholds.argCorrectness;
+  const judgeOk = s.judgeAvgScore === 0 || s.judgeAvgScore >= config.thresholds.judgeAvgScore;
+  return tsOk && argOk && judgeOk;
+}
+
 function printScorecard(s: EvalSummary, config: EvalConfig): void {
   const line = "═".repeat(52);
   const lines = [
     `╔${line}╗`,
-    `║  LLM Eval Report — ${s.timestamp.slice(0, 10)} — ${s.model.slice(0, 20).padEnd(20)}  ║`,
+    `║  LLM Eval Report — ${s.timestamp.slice(0, 10)} — ${(s.provider ?? "llm").slice(0, 8).padEnd(8)} ${s.model.slice(0, 12).padEnd(12)}  ║`,
     `╠${line}╣`,
     `║  Layer:                    ${String(s.layer).padEnd(24)}║`,
     `║  Tool Selection Accuracy:  ${formatAccuracy(s.toolSelectionAccuracy, s.executed, config.thresholds.toolSelectionAccuracy)}  ║`,
@@ -279,8 +348,14 @@ function printScorecard(s: EvalSummary, config: EvalConfig): void {
     `║  Judge Avg Score:          ${formatJudge(s.judgeAvgScore, config.thresholds.judgeAvgScore)}  ║`,
     `║  Executed / Skipped:       ${String(s.executed).padStart(3)} / ${String(s.skipped).padEnd(19)}║`,
     `╠${line}╣`,
-    `║  By Category:${" ".repeat(38)}║`,
   ];
+
+  if (config.relaxedMode) {
+    lines.push(`║  Mode: relaxed — per-prompt misses are diagnostic only${" ".repeat(4)}║`);
+    lines.push(`╠${line}╣`);
+  }
+
+  lines.push(`║  By Category:${" ".repeat(38)}║`);
 
   for (const [cat, data] of Object.entries(s.byCategory)) {
     const catLine = `    ${cat.padEnd(14)} ${String(data.correct).padStart(2)}/${String(data.total).padStart(2)} (${pct(data.accuracy)})`;
@@ -299,9 +374,13 @@ function printScorecard(s: EvalSummary, config: EvalConfig): void {
 
   if (s.failures.length > 0) {
     lines.push(`╠${line}╣`);
-    lines.push(`║  Failures (${s.failures.length}):${" ".repeat(36 - String(s.failures.length).length)}║`);
+    const missLabel = config.relaxedMode
+      ? `Soft misses (${s.failures.length}) — not suite failures`
+      : `Failures (${s.failures.length})`;
+    lines.push(`║  ${missLabel.padEnd(50)}║`);
+    const missIcon = config.relaxedMode ? "⚠" : "✗";
     for (const f of s.failures.slice(0, 10)) {
-      const fLine = `    ✗ ${f.id}: ${f.reason}`.slice(0, 50);
+      const fLine = `    ${missIcon} ${f.id}: ${f.reason}`.slice(0, 50);
       lines.push(`║  ${fLine.padEnd(50)}║`);
     }
     if (s.failures.length > 10) {
@@ -334,6 +413,11 @@ function printScorecard(s: EvalSummary, config: EvalConfig): void {
   }
 
   lines.push(`╠${line}╣`);
+  const suiteOk = aggregatePass(s, config);
+  const suiteLine = config.relaxedMode
+    ? `Suite: ${suiteOk ? "✅ PASSED" : "❌ FAILED"} (relaxed / aggregate gate)`
+    : `Suite: ${s.failures.length === 0 ? "✅ PASSED" : "❌ FAILED"} (strict)`;
+  lines.push(`║  ${suiteLine.padEnd(50)}║`);
   lines.push(`║  Duration: ${(s.durationMs / 1000).toFixed(1)}s${" ".repeat(37 - String((s.durationMs / 1000).toFixed(1)).length)}║`);
   lines.push(`╚${line}╝`);
 
@@ -351,13 +435,14 @@ function formatJudge(value: number, threshold: number): string {
   return `${icon} ${value.toFixed(2)}/5.0`.padEnd(22);
 }
 
-function generateMarkdown(s: EvalSummary, results: EvalResult[]): string {
+function generateMarkdown(s: EvalSummary, results: EvalResult[], config: EvalConfig): string {
   const lines: string[] = [
     `# LLM Eval Report`,
     "",
     `- **Date:** ${s.timestamp}`,
     `- **Model:** ${s.model}`,
     `- **Layer:** ${s.layer}`,
+    `- **Mode:** ${config.relaxedMode ? "relaxed (aggregate gate)" : "strict (per-prompt)"}`,
     `- **Duration:** ${(s.durationMs / 1000).toFixed(1)}s`,
     ...(s.tokens
       ? [
@@ -385,7 +470,10 @@ function generateMarkdown(s: EvalSummary, results: EvalResult[]): string {
   }
 
   if (s.failures.length > 0) {
-    lines.push("", "## Failures", "");
+    const heading = config.relaxedMode
+      ? "## Soft misses (diagnostic — suite may still pass)"
+      : "## Failures";
+    lines.push("", heading, "");
     for (const f of s.failures) {
       lines.push(`- **${f.id}**: ${f.reason}`);
     }

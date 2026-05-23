@@ -2,7 +2,12 @@ import "dotenv/config";
 import { describe, it, before, after } from "node:test";
 import { strict as assert } from "node:assert";
 
-import { getEvalConfig, getAnthropicClient, type EvalConfig } from "./eval-config.js";
+import {
+  getEvalConfig,
+  hasEvalLlmConfig,
+  isLocalEvalEndpoint,
+  type EvalConfig,
+} from "./eval-config.js";
 import { discoverEvalContext, type EvalDiscoveryContext } from "./eval-discovery.js";
 import {
   EVAL_PROMPTS,
@@ -16,24 +21,33 @@ import {
   stopMCPServer,
   getMCPToolSchemas,
   callMCPTool,
-  toAnthropicTools,
 } from "./eval-mcp-client.js";
+import { formatToolsForProvider } from "./eval-tool-format.js";
+import {
+  createEvalLlmClient,
+  firstToolCall,
+  type EvalLlmClient,
+  type EvalLlmResponse,
+} from "./eval-llm-client.js";
 import {
   checkToolSelection,
   checkArgKeys,
   checkOutputPatterns,
   judgeToolOutput,
-  checkRefusal,
+  checkRefusalResponse,
   checkForbiddenToolNotUsed,
   checkErrorOutput,
 } from "./eval-judges.js";
 import { EvalReporter, type EvalResult } from "./eval-report.js";
-import type Anthropic from "@anthropic-ai/sdk";
 
 // ── Preflight ──
 
-if (!process.env.ANTHROPIC_API_KEY) {
-  console.log("⚠️  Eval tests skipped — ANTHROPIC_API_KEY not set in .env");
+if (!hasEvalLlmConfig()) {
+  console.log("⚠️  Eval tests skipped — no LLM provider configured.");
+  console.log("   Local Ollama: EVAL_PROVIDER=local EVAL_MODEL=qwen3.5:2b");
+  console.log("   Claude:       ANTHROPIC_API_KEY=... (or EVAL_PROVIDER=anthropic)");
+  console.log("   OpenAI:       OPENAI_API_KEY=... (or EVAL_PROVIDER=openai)");
+  console.log("   Gemini:       GEMINI_API_KEY=... (or EVAL_PROVIDER=gemini)");
   process.exit(0);
 }
 
@@ -62,17 +76,43 @@ function shouldRun(id: string): boolean {
 
 describe("LLM Evaluation Tests", () => {
   let config: EvalConfig;
-  let client: Anthropic;
+  let llm: EvalLlmClient;
   let ctx: EvalDiscoveryContext;
-  let anthropicTools: any[];
+  let llmTools: unknown[];
   let reporter: EvalReporter;
+
+  /** Per-prompt hard assert in cloud/strict mode; soft log when relaxed (local Ollama default). */
+  function evalAssert(ok: boolean, message: string): void {
+    if (config.relaxedMode) {
+      if (!ok) console.error(`⚠️  [eval soft] ${message}`);
+      return;
+    }
+    assert.ok(ok, message);
+  }
 
   before(async () => {
     config = getEvalConfig();
-    client = getAnthropicClient(config);
+    llm = createEvalLlmClient(config);
     reporter = new EvalReporter();
 
-    console.error(`\n🧪 LLM Eval — Layer ${config.layer} — Model: ${config.model}`);
+    const providerLabel = config.baseUrl
+      ? `${config.provider} @ ${config.baseUrl}`
+      : config.provider;
+    console.error(`\n🧪 LLM Eval — Layer ${config.layer} — Provider: ${providerLabel} — Model: ${config.model}`);
+    console.error(
+      `📊 Tool selection threshold: ${(config.thresholds.toolSelectionAccuracy * 100).toFixed(0)}%` +
+        (process.env.EVAL_MIN_PASS_RATE
+          ? " (EVAL_MIN_PASS_RATE)"
+          : isLocalEvalEndpoint(config)
+            ? " (local Ollama default)"
+            : ""),
+    );
+    if (config.relaxedMode) {
+      console.error(
+        "🔓 Relaxed mode — per-prompt failures are warnings; suite exits on aggregate thresholds only " +
+          "(set EVAL_STRICT=true for per-prompt asserts)",
+      );
+    }
     if (EVAL_FILTER_PATTERNS.length > 0) {
       console.error(`🔍 Filter: ${EVAL_FILTER_PATTERNS.join(", ")}`);
     }
@@ -84,8 +124,8 @@ describe("LLM Evaluation Tests", () => {
     // Start the real MCP server and get tool schemas via tools/list
     await startMCPServer();
     const mcpSchemas = await getMCPToolSchemas();
-    anthropicTools = toAnthropicTools(mcpSchemas);
-    console.error(`[eval] Loaded ${anthropicTools.length} tools for Claude\n`);
+    llmTools = formatToolsForProvider(config.provider, mcpSchemas);
+    console.error(`[eval] Loaded ${llmTools.length} tools for ${config.provider}\n`);
   });
 
   after(() => {
@@ -93,14 +133,44 @@ describe("LLM Evaluation Tests", () => {
     if (reporter) {
       const summary = reporter.report(config);
 
-      // Assert thresholds
       const executed = summary.executed;
       if (executed > 0) {
         const tsOk = summary.toolSelectionAccuracy >= config.thresholds.toolSelectionAccuracy;
+        const argOk =
+          summary.argCorrectnessAccuracy >= config.thresholds.argCorrectness;
+        const judgeOk =
+          summary.judgeAvgScore === 0 ||
+          summary.judgeAvgScore >= config.thresholds.judgeAvgScore;
+
         if (!tsOk) {
           console.error(
             `⚠️  Tool selection accuracy ${(summary.toolSelectionAccuracy * 100).toFixed(1)}% ` +
-            `below threshold ${(config.thresholds.toolSelectionAccuracy * 100).toFixed(1)}%`
+              `below threshold ${(config.thresholds.toolSelectionAccuracy * 100).toFixed(1)}%`,
+          );
+        }
+        if (!argOk) {
+          console.error(
+            `⚠️  Argument correctness ${(summary.argCorrectnessAccuracy * 100).toFixed(1)}% ` +
+              `below threshold ${(config.thresholds.argCorrectness * 100).toFixed(1)}%`,
+          );
+        }
+        if (!judgeOk && summary.judgeAvgScore > 0) {
+          console.error(
+            `⚠️  Judge average ${summary.judgeAvgScore.toFixed(2)}/5 ` +
+              `below threshold ${config.thresholds.judgeAvgScore}/5`,
+          );
+        }
+
+        if (config.relaxedMode) {
+          assert.ok(tsOk, "Aggregate tool selection below threshold");
+          assert.ok(argOk, "Aggregate argument correctness below threshold");
+          if (summary.judgeAvgScore > 0) {
+            assert.ok(judgeOk, "Aggregate judge score below threshold");
+          }
+          console.error(
+            `\n✅ Relaxed eval passed — ${summary.failures.length} soft miss(es) logged; ` +
+              `aggregates: tool ${(summary.toolSelectionAccuracy * 100).toFixed(1)}%, ` +
+              `args ${(summary.argCorrectnessAccuracy * 100).toFixed(1)}%`,
           );
         }
       }
@@ -120,14 +190,14 @@ describe("LLM Evaluation Tests", () => {
         reporter.addResult(result);
 
         if (result.skipped) return;
-        assert.ok(
+        evalAssert(
           result.toolSelectionCorrect,
-          `Expected ${ep.expectedTools.join("|")}, got ${result.selectedTool || "none"}`
+          `Expected ${ep.expectedTools.join("|")}, got ${result.selectedTool || "none"}`,
         );
         if (ep.expectedArgKeys) {
-          assert.ok(
-            result.argsCorrect,
-            `Missing args: ${result.missingArgs?.join(", ")}`
+          evalAssert(
+            result.argsCorrect ?? false,
+            `Missing args: ${result.missingArgs?.join(", ")}`,
           );
         }
       });
@@ -152,18 +222,18 @@ describe("LLM Evaluation Tests", () => {
         reporter.addResult(result);
 
         if (result.skipped) return;
-        assert.ok(
+        evalAssert(
           result.toolSelectionCorrect,
-          `Wrong tool: expected ${ep.expectedTools.join("|")}, got ${result.selectedTool}`
+          `Wrong tool: expected ${ep.expectedTools.join("|")}, got ${result.selectedTool}`,
         );
         if (result.judgeScore) {
           const avg =
             (result.judgeScore.relevance +
               result.judgeScore.completeness +
               result.judgeScore.format) / 3;
-          assert.ok(
+          evalAssert(
             avg >= config.thresholds.judgeAvgScore,
-            `Judge avg ${avg.toFixed(1)} below threshold ${config.thresholds.judgeAvgScore}`
+            `Judge avg ${avg.toFixed(1)} below threshold ${config.thresholds.judgeAvgScore}`,
           );
         }
       });
@@ -186,9 +256,9 @@ describe("LLM Evaluation Tests", () => {
         reporter.addResult(result);
 
         if (result.skipped) return;
-        assert.ok(
+        evalAssert(
           result.toolSelectionCorrect,
-          `Expected one of ${ep.expectedTools.join("|")}, LLM picked ${result.selectedTool}`
+          `Expected one of ${ep.expectedTools.join("|")}, LLM picked ${result.selectedTool}`,
         );
       });
     }
@@ -249,6 +319,31 @@ describe("LLM Evaluation Tests", () => {
 
   // ── Helpers ──
 
+  async function callEvalLlm(userMessage: string): Promise<EvalLlmResponse> {
+    return llm.chatWithTools({
+      model: config.model,
+      system: SYSTEM_PROMPT,
+      userMessage,
+      tools: llmTools,
+      toolChoice: "auto",
+      maxTokens: config.maxTokens,
+      temperature: config.temperature,
+    });
+  }
+
+  function extractToolSelection(response: EvalLlmResponse): {
+    selectedTool: string | undefined;
+    args: Record<string, unknown>;
+    tokenUsage: { inputTokens: number; outputTokens: number };
+  } {
+    const call = firstToolCall(response);
+    return {
+      selectedTool: call?.name,
+      args: call?.input ?? {},
+      tokenUsage: response.usage,
+    };
+  }
+
   async function runRefusalTest(ep: EvalPrompt): Promise<EvalResult> {
     const populated = ep.requiredContext
       ? populatePrompt(ep.promptTemplate, ctx)
@@ -256,17 +351,8 @@ describe("LLM Evaluation Tests", () => {
     const start = Date.now();
 
     try {
-      const response = await client.messages.create({
-        model: config.model,
-        max_tokens: config.maxTokens,
-        temperature: config.temperature,
-        system: SYSTEM_PROMPT,
-        tools: anthropicTools,
-        tool_choice: { type: "auto" },
-        messages: [{ role: "user", content: populated }],
-      });
-
-      const refusal = checkRefusal(response);
+      const response = await callEvalLlm(populated);
+      const refusal = checkRefusalResponse(response);
 
       return {
         id: ep.id,
@@ -283,10 +369,7 @@ describe("LLM Evaluation Tests", () => {
         negativeReason: refusal.refused
           ? "Correctly refused (no tool called)"
           : `Should have refused but called ${refusal.selectedTool}`,
-        tokenUsage: {
-          inputTokens: response.usage?.input_tokens ?? 0,
-          outputTokens: response.usage?.output_tokens ?? 0,
-        },
+        tokenUsage: response.usage,
       };
     } catch (err: any) {
       return {
@@ -321,18 +404,8 @@ describe("LLM Evaluation Tests", () => {
     const start = Date.now();
 
     try {
-      const response = await client.messages.create({
-        model: config.model,
-        max_tokens: config.maxTokens,
-        temperature: config.temperature,
-        system: SYSTEM_PROMPT,
-        tools: anthropicTools,
-        tool_choice: { type: "auto" },
-        messages: [{ role: "user", content: populated }],
-      });
-
-      const toolUse = response.content.find((b) => b.type === "tool_use");
-      const selectedTool = toolUse?.type === "tool_use" ? toolUse.name : undefined;
+      const response = await callEvalLlm(populated);
+      const { selectedTool, tokenUsage } = extractToolSelection(response);
 
       const toolCorrect = checkToolSelection(selectedTool, ep.expectedTools);
       const forbiddenCheck = ep.forbiddenTools
@@ -363,10 +436,7 @@ describe("LLM Evaluation Tests", () => {
         negativeCategory: ep.negativeCategory,
         negativePass: pass,
         negativeReason: reason,
-        tokenUsage: {
-          inputTokens: response.usage?.input_tokens ?? 0,
-          outputTokens: response.usage?.output_tokens ?? 0,
-        },
+        tokenUsage,
       };
     } catch (err: any) {
       return {
@@ -392,19 +462,8 @@ describe("LLM Evaluation Tests", () => {
     const start = Date.now();
 
     try {
-      const response = await client.messages.create({
-        model: config.model,
-        max_tokens: config.maxTokens,
-        temperature: config.temperature,
-        system: SYSTEM_PROMPT,
-        tools: anthropicTools,
-        tool_choice: { type: "auto" },
-        messages: [{ role: "user", content: populated }],
-      });
-
-      const toolUse = response.content.find((b) => b.type === "tool_use");
-      const selectedTool = toolUse?.type === "tool_use" ? toolUse.name : undefined;
-      const args = (toolUse?.type === "tool_use" ? toolUse.input : {}) as Record<string, unknown>;
+      const response = await callEvalLlm(populated);
+      const { selectedTool, args, tokenUsage } = extractToolSelection(response);
 
       let mcpOutput = "";
       let errorCheck = { hasError: false, details: "" };
@@ -440,10 +499,7 @@ describe("LLM Evaluation Tests", () => {
         negativeCategory: ep.negativeCategory,
         negativePass: pass,
         negativeReason: reason,
-        tokenUsage: {
-          inputTokens: response.usage?.input_tokens ?? 0,
-          outputTokens: response.usage?.output_tokens ?? 0,
-        },
+        tokenUsage,
       };
     } catch (err: any) {
       return {
@@ -473,19 +529,8 @@ describe("LLM Evaluation Tests", () => {
     const start = Date.now();
 
     try {
-      const response = await client.messages.create({
-        model: config.model,
-        max_tokens: config.maxTokens,
-        temperature: config.temperature,
-        system: SYSTEM_PROMPT,
-        tools: anthropicTools,
-        tool_choice: { type: "auto" },
-        messages: [{ role: "user", content: populated }],
-      });
-
-      const toolUse = response.content.find((b) => b.type === "tool_use");
-      const selectedTool = toolUse?.type === "tool_use" ? toolUse.name : undefined;
-      const args = (toolUse?.type === "tool_use" ? toolUse.input : {}) as Record<string, unknown>;
+      const response = await callEvalLlm(populated);
+      const { selectedTool, args, tokenUsage } = extractToolSelection(response);
 
       const argCheck = ep.expectedArgKeys
         ? checkArgKeys(args, ep.expectedArgKeys)
@@ -502,10 +547,7 @@ describe("LLM Evaluation Tests", () => {
         argsCorrect: argCheck.pass,
         missingArgs: argCheck.missing,
         durationMs: Date.now() - start,
-        tokenUsage: {
-          inputTokens: response.usage?.input_tokens ?? 0,
-          outputTokens: response.usage?.output_tokens ?? 0,
-        },
+        tokenUsage,
       };
     } catch (err: any) {
       return errorResult(ep, populated, err, Date.now() - start);
@@ -525,24 +567,12 @@ describe("LLM Evaluation Tests", () => {
     let tokenUsage = { inputTokens: 0, outputTokens: 0 };
 
     try {
-      const response = await client.messages.create({
-        model: config.model,
-        max_tokens: config.maxTokens,
-        temperature: config.temperature,
-        system: SYSTEM_PROMPT,
-        tools: anthropicTools,
-        tool_choice: { type: "auto" },
-        messages: [{ role: "user", content: populated }],
-      });
+      const response = await callEvalLlm(populated);
+      tokenUsage = response.usage;
 
-      tokenUsage = {
-        inputTokens: response.usage?.input_tokens ?? 0,
-        outputTokens: response.usage?.output_tokens ?? 0,
-      };
-
-      const toolUse = response.content.find((b) => b.type === "tool_use");
-      selectedTool = toolUse?.type === "tool_use" ? toolUse.name : undefined;
-      args = (toolUse?.type === "tool_use" ? toolUse.input : {}) as Record<string, unknown>;
+      const extracted = extractToolSelection(response);
+      selectedTool = extracted.selectedTool;
+      args = extracted.args;
     } catch (err: any) {
       return errorResult(ep, populated, err, Date.now() - start);
     }
@@ -566,7 +596,7 @@ describe("LLM Evaluation Tests", () => {
           patternMatch = checkOutputPatterns(mcpOutput, ep.expectedOutputPatterns);
         }
 
-        const judgeResult = await judgeToolOutput(client, config, ep, populated, mcpOutput);
+        const judgeResult = await judgeToolOutput(llm, config, ep, populated, mcpOutput);
         judgeScore = judgeResult.score;
         judgeTokenUsage = judgeResult.tokenUsage;
       }
@@ -618,19 +648,8 @@ describe("LLM Evaluation Tests", () => {
     const start = Date.now();
 
     try {
-      const response = await client.messages.create({
-        model: config.model,
-        max_tokens: config.maxTokens,
-        temperature: config.temperature,
-        system: SYSTEM_PROMPT,
-        tools: anthropicTools,
-        tool_choice: { type: "auto" },
-        messages: [{ role: "user", content: populated }],
-      });
-
-      const toolUse = response.content.find((b) => b.type === "tool_use");
-      const selectedTool = toolUse?.type === "tool_use" ? toolUse.name : undefined;
-      const args = (toolUse?.type === "tool_use" ? toolUse.input : {}) as Record<string, unknown>;
+      const response = await callEvalLlm(populated);
+      const { selectedTool, args, tokenUsage } = extractToolSelection(response);
 
       const toolCorrect = checkToolSelection(selectedTool, ep.expectedTools);
 
@@ -644,10 +663,7 @@ describe("LLM Evaluation Tests", () => {
         selectedArgs: args,
         toolSelectionCorrect: toolCorrect,
         durationMs: Date.now() - start,
-        tokenUsage: {
-          inputTokens: response.usage?.input_tokens ?? 0,
-          outputTokens: response.usage?.output_tokens ?? 0,
-        },
+        tokenUsage,
       };
     } catch (err: any) {
       return errorResult(ep, populated, err, Date.now() - start);

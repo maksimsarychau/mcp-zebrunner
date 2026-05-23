@@ -50,7 +50,7 @@ const testConfigs: Record<string, TestConfig> = {
   eval: {
     name: 'LLM Evaluation Tests',
     pattern: 'tests/eval/**/*.test.ts',
-    description: 'LLM-based tool selection and execution evaluation (requires ANTHROPIC_API_KEY)',
+    description: 'LLM-based tool selection and execution evaluation (Anthropic, OpenAI, Gemini, or local Ollama/LM Studio)',
     requiresBuild: true,
     requiresEnv: true
   },

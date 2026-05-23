@@ -181,11 +181,6 @@ export async function callMCPTool(
 
 /**
  * Convert MCP tool schemas to Anthropic function calling format.
+ * @deprecated Use formatToolsForProvider from eval-tool-format.js
  */
-export function toAnthropicTools(mcpTools: any[]): any[] {
-  return mcpTools.map((tool) => ({
-    name: tool.name,
-    description: tool.description || "",
-    input_schema: tool.inputSchema || { type: "object", properties: {} },
-  }));
-}
+export { toAnthropicTools } from "./eval-tool-format.js";

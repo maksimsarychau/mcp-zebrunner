@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import { strict as assert } from "node:assert";
 
 import { estimateCost, type TokenUsage, type TokenSummary } from "../../tests/eval/eval-report.js";
+import type { EvalConfig } from "../../tests/eval/eval-config.js";
 
 describe("Eval Token Tracking", () => {
   describe("estimateCost()", () => {
@@ -38,6 +39,24 @@ describe("Eval Token Tracking", () => {
 
     it("should return zero for zero tokens", () => {
       const cost = estimateCost("claude-sonnet-4-6", 0, 0);
+      assert.equal(cost.total, 0);
+    });
+
+    it("should return zero cost for local Ollama endpoint", () => {
+      const config: EvalConfig = {
+        provider: "openai",
+        layer: 1,
+        model: "llama3.1:8b",
+        judgeModel: "llama3.1:8b",
+        temperature: 0,
+        maxTokens: 2048,
+        thresholds: { toolSelectionAccuracy: 0.9, argCorrectness: 0.85, judgeAvgScore: 3 },
+        baseUrl: "http://localhost:11434/v1",
+        resultsDir: "/tmp",
+        concurrency: 3,
+        filter: [],
+      };
+      const cost = estimateCost(config, 1_000_000, 1_000_000);
       assert.equal(cost.total, 0);
     });
   });

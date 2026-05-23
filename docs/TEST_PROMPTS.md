@@ -1468,6 +1468,8 @@ Server-side tool metrics are collected automatically for every tool call in a se
 
 ### Eval Token Tracking (CLI)
 
+Requires LLM provider config in `.env` — see `.env.example` (`EVAL_PROVIDER=local` for Ollama, `anthropic` for Claude, etc.) and `docs/EVALUATION_FRAMEWORK.md`.
+
 **Test 5 — Run eval tests and check token report**
 > ```bash
 > npm run test:eval
