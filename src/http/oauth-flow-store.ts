@@ -141,7 +141,7 @@ export class FileOAuthFlowStore implements OAuthFlowStore {
   private async writeEncrypted(filePath: string, payload: unknown): Promise<void> {
     await mkdir(dirname(filePath), { recursive: true });
     const encrypted = encrypt(JSON.stringify(payload), this.key);
-    await writeFile(filePath, encrypted, 'utf8');
+    await writeFile(filePath, encrypted, { encoding: 'utf8', mode: 0o600 });
   }
 
   private async readEncrypted<T>(filePath: string): Promise<T | null> {

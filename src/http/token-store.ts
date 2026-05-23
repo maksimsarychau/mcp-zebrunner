@@ -53,7 +53,7 @@ export class FileTokenStore implements TokenStore {
     const obj: Record<string, TokenEntry> = Object.fromEntries(this.data);
     const encrypted = encrypt(JSON.stringify(obj), this.key);
     await mkdir(dirname(this.filePath), { recursive: true });
-    await writeFile(this.filePath, encrypted, 'utf8');
+    await writeFile(this.filePath, encrypted, { encoding: 'utf8', mode: 0o600 });
   }
 
   async get(email: string): Promise<TokenEntry | null> {
