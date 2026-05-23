@@ -39,6 +39,7 @@ import {
   checkErrorOutput,
 } from "./eval-judges.js";
 import { EvalReporter, type EvalResult } from "./eval-report.js";
+import { evalSafeStderr, redactSecretsInString } from "./eval-secrets.js";
 
 // ── Preflight ──
 
@@ -84,10 +85,10 @@ describe("LLM Evaluation Tests", () => {
   /** Per-prompt hard assert in cloud/strict mode; soft log when relaxed (local Ollama default). */
   function evalAssert(ok: boolean, message: string): void {
     if (config.relaxedMode) {
-      if (!ok) console.error(`⚠️  [eval soft] ${message}`);
+      if (!ok) evalSafeStderr(`⚠️  [eval soft] ${message}`);
       return;
     }
-    assert.ok(ok, message);
+    assert.ok(ok, redactSecretsInString(message));
   }
 
   before(async () => {
@@ -380,12 +381,12 @@ describe("LLM Evaluation Tests", () => {
         expectedTools: [],
         selectedTool: undefined,
         toolSelectionCorrect: false,
-        error: err.message || String(err),
+        error: redactSecretsInString(err.message || String(err)),
         durationMs: Date.now() - start,
         isNegative: true,
         negativeCategory: ep.negativeCategory,
         negativePass: false,
-        negativeReason: `Error: ${err.message}`,
+        negativeReason: `Error: ${redactSecretsInString(err.message || String(err))}`,
       };
     }
   }
@@ -447,12 +448,12 @@ describe("LLM Evaluation Tests", () => {
         expectedTools: ep.expectedTools,
         selectedTool: undefined,
         toolSelectionCorrect: false,
-        error: err.message || String(err),
+        error: redactSecretsInString(err.message || String(err)),
         durationMs: Date.now() - start,
         isNegative: true,
         negativeCategory: ep.negativeCategory,
         negativePass: false,
-        negativeReason: `Error: ${err.message}`,
+        negativeReason: `Error: ${redactSecretsInString(err.message || String(err))}`,
       };
     }
   }
@@ -510,12 +511,12 @@ describe("LLM Evaluation Tests", () => {
         expectedTools: ep.expectedTools,
         selectedTool: undefined,
         toolSelectionCorrect: false,
-        error: err.message || String(err),
+        error: redactSecretsInString(err.message || String(err)),
         durationMs: Date.now() - start,
         isNegative: true,
         negativeCategory: ep.negativeCategory,
         negativePass: false,
-        negativeReason: `Error: ${err.message}`,
+        negativeReason: `Error: ${redactSecretsInString(err.message || String(err))}`,
       };
     }
   }
@@ -612,7 +613,7 @@ describe("LLM Evaluation Tests", () => {
         toolSelectionCorrect: toolCorrect,
         argsCorrect: argCheck.pass,
         missingArgs: argCheck.missing,
-        error: err.message || String(err),
+        error: redactSecretsInString(err.message || String(err)),
         durationMs: Date.now() - start,
         tokenUsage,
       };
@@ -692,6 +693,7 @@ describe("LLM Evaluation Tests", () => {
   }
 
   function errorResult(ep: EvalPrompt, prompt: string, err: any, durationMs: number): EvalResult {
+    const raw = err?.message || String(err);
     return {
       id: ep.id,
       category: ep.category,
@@ -700,7 +702,7 @@ describe("LLM Evaluation Tests", () => {
       expectedTools: ep.expectedTools,
       selectedTool: undefined,
       toolSelectionCorrect: false,
-      error: err.message || String(err),
+      error: redactSecretsInString(raw),
       durationMs,
     };
   }

@@ -3,6 +3,7 @@ import OpenAI from "openai";
 import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 import type { EvalConfig } from "./eval-config.js";
 import { judgeToolForProvider } from "./eval-tool-format.js";
+import { evalSafeStderr } from "./eval-secrets.js";
 
 export interface EvalLlmToolCall {
   name: string;
@@ -184,6 +185,10 @@ function normalizeOpenAiResponse(response: OpenAI.ChatCompletion): EvalLlmRespon
       try {
         input = JSON.parse(tc.function.arguments || "{}") as Record<string, unknown>;
       } catch {
+        evalSafeStderr(
+          `[eval-llm] Malformed tool arguments JSON for "${tc.function.name}" ` +
+            `(length=${tc.function.arguments?.length ?? 0})`,
+        );
         input = {};
       }
       toolCalls.push({ name: tc.function.name, input });

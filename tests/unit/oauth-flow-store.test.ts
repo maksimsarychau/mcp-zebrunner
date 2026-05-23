@@ -7,6 +7,7 @@ import {
   FileOAuthFlowStore,
   InMemoryOAuthFlowStore,
   sanitizeOAuthStoreKey,
+  MAX_OAUTH_STORE_KEY_LENGTH,
   PENDING_AUTH_TTL_MS,
   ISSUED_CODE_TTL_MS,
 } from '../../src/http/oauth-flow-store.js';
@@ -15,6 +16,16 @@ describe('OAuthFlowStore', () => {
   describe('sanitizeOAuthStoreKey', () => {
     it('rejects path traversal', () => {
       assert.throws(() => sanitizeOAuthStoreKey('../etc/passwd'), /Invalid OAuth flow store key/);
+    });
+
+    it('rejects keys longer than max length', () => {
+      const longKey = 'a'.repeat(MAX_OAUTH_STORE_KEY_LENGTH + 1);
+      assert.throws(() => sanitizeOAuthStoreKey(longKey), /Invalid OAuth flow store key/);
+    });
+
+    it('accepts keys at max length', () => {
+      const maxKey = 'a'.repeat(MAX_OAUTH_STORE_KEY_LENGTH);
+      assert.doesNotThrow(() => sanitizeOAuthStoreKey(maxKey));
     });
   });
 
