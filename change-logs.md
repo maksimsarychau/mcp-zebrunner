@@ -1,5 +1,22 @@
 # Change Logs
 
+## v9.0.1 — Shared OAuth flow store (multi-replica HTTP fix)
+
+### 🐛 Fixed
+
+- **OAuth login across Kubernetes replicas** — `selfauth` and Okta HTTP modes no longer keep pending auth, issued codes, or DCR clients only in process memory. Flow state is persisted under `dirname(TOKEN_STORE_PATH)/oauth-flow` (encrypted per-key files on the same volume as `tokens.enc`), fixing `Invalid or expired state` when `/authorize` and POST `/login` hit different pods.
+- New modules: `src/http/crypto.ts`, `src/http/oauth-flow-store.ts` (`InMemoryOAuthFlowStore` for tests; `FileOAuthFlowStore` when `TOKEN_STORE_PATH` + `TOKEN_STORE_KEY` are set).
+
+### 🔧 Changed
+
+- Optional env `OAUTH_FLOW_STORE_DIR` overrides the default OAuth flow directory.
+- **STDIO mode unchanged** — no OAuth flow store wiring on the STDIO startup path.
+
+### 📋 Ops notes
+
+- All replicas must share the PVC mounted at `TOKEN_STORE_PATH`. Session affinity on `/mcp` is still recommended (MCP session IDs remain in-memory per pod).
+- Rare concurrent writes to single-file `tokens.enc` on simultaneous first-time logins are unchanged; per-user token files remain a future improvement.
+
 ## v9.0.0 — Advanced Zebrunner MCP Server (rebrand + coexistence with official MCP)
 
 ### ⚠️ Breaking changes

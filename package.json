@@ -1,6 +1,6 @@
 {
   "name": "mcp-zebrunner",
-  "version": "9.0.0",
+  "version": "9.0.1",
   "type": "module",
   "description": "Advanced Zebrunner MCP Server — analytics, reporting, and safe mutations for Zebrunner. Complements the official Zebrunner MCP (beta). Tools registered as adv_<name> with legacy aliases kept for backward compatibility.",
   "mcpName": "io.github.maksimsarychau/mcp-zebrunner",

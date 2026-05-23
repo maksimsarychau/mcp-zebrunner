@@ -10694,6 +10694,9 @@ async function main() {
     const { createTokenStore } = await import('./http/token-store.js');
     tokenStore = createTokenStore() ?? undefined;
 
+    const { createOAuthFlowStore } = await import('./http/oauth-flow-store.js');
+    const oauthFlowStore = createOAuthFlowStore();
+
     const mcpServerUrl = process.env.MCP_SERVER_URL ?? `http://localhost:${port}`;
 
     // --- Mode 3: Self-service OAuth (no Okta) ---
@@ -10711,6 +10714,7 @@ async function main() {
         serverUrl: mcpServerUrl,
         zebrunnerBaseUrl: ZEBRUNNER_URL,
         jwtSecret,
+        oauthFlowStore,
       });
       oauthProvider = provider;
       verifyBearer = async (token: string) => {
@@ -10738,7 +10742,7 @@ async function main() {
 
       if (oktaConfig) {
         const { createMcpOAuthProvider } = await import('./http/mcp-oauth-provider.js');
-        const provider = createMcpOAuthProvider(oktaConfig, tokenStore, ZEBRUNNER_URL);
+        const provider = createMcpOAuthProvider(oktaConfig, tokenStore, ZEBRUNNER_URL, oauthFlowStore);
         oauthProvider = provider;
 
         const { createOktaBearerVerifier } = await import('./http/oauth-provider.js');

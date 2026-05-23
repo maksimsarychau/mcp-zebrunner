@@ -1,11 +1,8 @@
-import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'node:crypto';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
+import { deriveKey, encrypt, decrypt } from './crypto.js';
 
-const ALGORITHM = 'aes-256-gcm';
-const KEY_LENGTH = 32;
-const IV_LENGTH = 16;
-const AUTH_TAG_LENGTH = 16;
+const TOKEN_KEY_SALT = 'mcp-zebrunner-token-store';
 
 export interface TokenEntry {
   username: string;
@@ -20,28 +17,6 @@ export interface TokenStore {
   list(): Promise<string[]>;
 }
 
-function deriveKey(secret: string): Buffer {
-  return scryptSync(secret, 'mcp-zebrunner-token-store', KEY_LENGTH);
-}
-
-function encrypt(plaintext: string, key: Buffer): string {
-  const iv = randomBytes(IV_LENGTH);
-  const cipher = createCipheriv(ALGORITHM, key, iv, { authTagLength: AUTH_TAG_LENGTH });
-  const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
-  const authTag = cipher.getAuthTag();
-  return Buffer.concat([iv, authTag, encrypted]).toString('base64');
-}
-
-function decrypt(ciphertext: string, key: Buffer): string {
-  const buf = Buffer.from(ciphertext, 'base64');
-  const iv = buf.subarray(0, IV_LENGTH);
-  const authTag = buf.subarray(IV_LENGTH, IV_LENGTH + AUTH_TAG_LENGTH);
-  const encrypted = buf.subarray(IV_LENGTH + AUTH_TAG_LENGTH);
-  const decipher = createDecipheriv(ALGORITHM, key, iv, { authTagLength: AUTH_TAG_LENGTH });
-  decipher.setAuthTag(authTag);
-  return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString('utf8');
-}
-
 /**
  * Encrypted file-based token store.
  * Stores per-user Zebrunner credentials keyed by Okta email, encrypted with AES-256-GCM.
@@ -54,7 +29,7 @@ export class FileTokenStore implements TokenStore {
 
   constructor(filePath: string, encryptionKey: string) {
     this.filePath = filePath;
-    this.key = deriveKey(encryptionKey);
+    this.key = deriveKey(encryptionKey, TOKEN_KEY_SALT);
   }
 
   private async load(): Promise<void> {
