@@ -1,5 +1,18 @@
 # Change Logs
 
+## v9.0.3 — OAuth hardening, health diagnostics, E2E reliability
+
+### Fixed
+
+- **CodeQL / query params** — `queryParamString()` on OAuth routes; `sanitizeOAuthStoreKey()` rejects non-string keys (duplicate `?state=` no longer coerced).
+- **Bearer auth** — validate `verifyBearer` payload (username, token, optional `baseUrl`) before attaching to `req.auth`.
+- **E2E** — shared `tests/e2e/server-startup.ts`; `MCP_SKIP_INTEGRITY_CHECK` for local runs when `.integrity-signature` is stale after edits.
+
+### Changed
+
+- **`GET /health`** — `storage` block (token + OAuth flow paths/counts); top-level `status: ok` and HTTP 200 preserved for probes.
+- **`MCP_SKIP_INTEGRITY_CHECK`** — documented in `.env.example` (dev/E2E only; do not set in production).
+
 ## v9.0.2 — MCP OAuth redirect URI recovery (Cursor, Claude Code)
 
 ### Fixed
@@ -11,6 +24,7 @@
 
 - Optional env **`OAUTH_RECOVERED_REDIRECT_URIS`** (comma-separated) appends extra redirect URIs for recovered clients.
 - **`GET /health`** — expanded JSON with `mcpServerUrl`, `zebrunnerUrlFromEnv`, and `storage` (token store path/count, OAuth flow store directory and file counts, recovered redirect URI count). **Backward compatible:** still HTTP **200** and top-level `"status":"ok"`; storage issues appear under `storage.health: "degraded"` only.
+- **E2E** — `MCP_SKIP_INTEGRITY_CHECK=true` in test server spawn (dev only); startup waiter accepts HTTP or STDIO ready line; fixes false failures when `.integrity-signature` is stale after local edits.
 
 ## v9.0.1 — Shared OAuth flow store (multi-replica HTTP fix)
 

@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { describe, it, before, after } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { spawn, type ChildProcess } from 'child_process';
