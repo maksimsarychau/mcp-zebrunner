@@ -14,21 +14,31 @@ import {
 import { FileOAuthFlowStore } from '../../src/http/oauth-flow-store.js';
 
 const CURSOR_URI = 'cursor://anysphere.cursor-mcp/oauth/callback';
+const LOOPBACK_OAUTH_CALLBACK = 'http://127.0.0.1/oauth/callback';
+const LOOPBACK_CALLBACK = 'http://127.0.0.1/callback';
+const ENV_EXTRA_APP_URI = 'myapp://cb';
+const ENV_EXTRA_HTTPS_URI = 'https://example.com/cb';
+const CUSTOM_MERGE_URI = 'https://custom.example/oauth/cb';
+
+/** Exact redirect URI membership (avoids CodeQL incomplete URL substring warnings on `.includes()`). */
+function hasExactRedirectUri(uris: readonly string[], expected: string): boolean {
+  return uris.some((u) => u === expected);
+}
 
 describe('mcp-client-fallback-redirects', () => {
   it('includes Cursor, Claude Desktop, and Claude Code redirect patterns', () => {
-    assert.ok(RECOVERED_MCP_CLIENT_REDIRECT_URIS.includes(CURSOR_URI));
-    assert.ok(RECOVERED_MCP_CLIENT_REDIRECT_URIS.some((u) => u.endsWith('/oauth/callback')));
-    assert.ok(RECOVERED_MCP_CLIENT_REDIRECT_URIS.some((u) => u.endsWith('/callback') && !u.includes('oauth')));
+    assert.ok(hasExactRedirectUri(RECOVERED_MCP_CLIENT_REDIRECT_URIS, CURSOR_URI));
+    assert.ok(hasExactRedirectUri(RECOVERED_MCP_CLIENT_REDIRECT_URIS, LOOPBACK_OAUTH_CALLBACK));
+    assert.ok(hasExactRedirectUri(RECOVERED_MCP_CLIENT_REDIRECT_URIS, LOOPBACK_CALLBACK));
   });
 
   it('appends OAUTH_RECOVERED_REDIRECT_URIS from env', () => {
     const prev = process.env.OAUTH_RECOVERED_REDIRECT_URIS;
-    process.env.OAUTH_RECOVERED_REDIRECT_URIS = 'myapp://cb, https://example.com/cb';
+    process.env.OAUTH_RECOVERED_REDIRECT_URIS = `${ENV_EXTRA_APP_URI}, ${ENV_EXTRA_HTTPS_URI}`;
     try {
       const uris = getRecoveredMcpClientRedirectUris();
-      assert.ok(uris.includes('myapp://cb'));
-      assert.ok(uris.includes('https://example.com/cb'));
+      assert.ok(hasExactRedirectUri(uris, ENV_EXTRA_APP_URI));
+      assert.ok(hasExactRedirectUri(uris, ENV_EXTRA_HTTPS_URI));
     } finally {
       if (prev === undefined) delete process.env.OAUTH_RECOVERED_REDIRECT_URIS;
       else process.env.OAUTH_RECOVERED_REDIRECT_URIS = prev;
@@ -41,9 +51,9 @@ describe('mcp-client-fallback-redirects', () => {
   });
 
   it('mergeRecoveredRedirectUris preserves custom URIs', () => {
-    const merged = mergeRecoveredRedirectUris(['https://custom.example/oauth/cb']);
-    assert.ok(merged.includes('https://custom.example/oauth/cb'));
-    assert.ok(merged.includes(CURSOR_URI));
+    const merged = mergeRecoveredRedirectUris([CUSTOM_MERGE_URI]);
+    assert.ok(hasExactRedirectUri(merged, CUSTOM_MERGE_URI));
+    assert.ok(hasExactRedirectUri(merged, CURSOR_URI));
   });
 
   describe('resolveMcpOAuthClient', () => {
@@ -62,8 +72,8 @@ describe('mcp-client-fallback-redirects', () => {
       const store = new FileOAuthFlowStore(dir, storeKey);
       const client = await resolveMcpOAuthClient(store, 'mcp_newclient0001');
       assert.ok(client);
-      assert.ok(client!.redirect_uris.includes(CURSOR_URI));
-      assert.ok(client!.redirect_uris.some((u) => u.endsWith('/callback') && !u.includes('oauth')));
+      assert.ok(hasExactRedirectUri(client!.redirect_uris, CURSOR_URI));
+      assert.ok(hasExactRedirectUri(client!.redirect_uris, LOOPBACK_CALLBACK));
     });
 
     it('merges canonical URIs into stale loopback-only persisted client', async () => {
@@ -79,11 +89,11 @@ describe('mcp-client-fallback-redirects', () => {
       });
 
       const client = await resolveMcpOAuthClient(store, staleId);
-      assert.ok(client!.redirect_uris.includes(CURSOR_URI));
-      assert.ok(client!.redirect_uris.includes('http://127.0.0.1/callback'));
+      assert.ok(hasExactRedirectUri(client!.redirect_uris, CURSOR_URI));
+      assert.ok(hasExactRedirectUri(client!.redirect_uris, LOOPBACK_CALLBACK));
 
       const reloaded = await store.getClient(staleId);
-      assert.ok(reloaded!.redirect_uris.includes(CURSOR_URI));
+      assert.ok(hasExactRedirectUri(reloaded!.redirect_uris, CURSOR_URI));
     });
 
     it('returns null for unknown non-mcp client', async () => {
@@ -97,6 +107,6 @@ describe('mcp-client-fallback-redirects', () => {
     const record = createRecoveredMcpClientRecord('mcp_abc123');
     assert.equal(record.client_id, 'mcp_abc123');
     assert.equal(record.token_endpoint_auth_method, 'none');
-    assert.ok(record.redirect_uris.includes(CURSOR_URI));
+    assert.ok(hasExactRedirectUri(record.redirect_uris, CURSOR_URI));
   });
 });
