@@ -7,6 +7,7 @@ import {
   collectOAuthFlowStoreHealth,
   collectTokenStoreHealth,
   buildHealthStatus,
+  sanitizeHealthProbeError,
 } from '../../src/http/health-status.js';
 import { FileTokenStore } from '../../src/http/token-store.js';
 
@@ -62,6 +63,44 @@ describe('health-status', () => {
     assert.equal(health.backend, 'file');
     assert.equal(health.storedUserCount, 1);
     assert.equal(health.fileExists, true);
+  });
+
+  it('sanitizeHealthProbeError hides raw messages outside dev/test', () => {
+    const prevEnv = process.env.NODE_ENV;
+    const prevDebug = process.env.DEBUG;
+    process.env.NODE_ENV = 'production';
+    delete process.env.DEBUG;
+    try {
+      assert.equal(
+        sanitizeHealthProbeError(new Error('secret path /data/tokens.enc')),
+        'storage probe failed',
+      );
+    } finally {
+      if (prevEnv === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = prevEnv;
+      if (prevDebug === undefined) delete process.env.DEBUG;
+      else process.env.DEBUG = prevDebug;
+    }
+  });
+
+  it('collectOAuthFlowStoreHealth rejects path outside token directory', async () => {
+    const prevEnv = process.env.NODE_ENV;
+    const prevDebug = process.env.DEBUG;
+    process.env.NODE_ENV = 'production';
+    delete process.env.DEBUG;
+    const tokenPath = join(dir, 'tokens.enc');
+    process.env.TOKEN_STORE_PATH = tokenPath;
+    process.env.TOKEN_STORE_KEY = storeKey;
+    process.env.OAUTH_FLOW_STORE_DIR = '../../../etc';
+    try {
+      const health = await collectOAuthFlowStoreHealth();
+      assert.equal(health.scanError, 'storage probe failed');
+    } finally {
+      if (prevEnv === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = prevEnv;
+      if (prevDebug === undefined) delete process.env.DEBUG;
+      else process.env.DEBUG = prevDebug;
+    }
   });
 
   it('buildHealthStatus keeps backward-compatible top-level fields', async () => {

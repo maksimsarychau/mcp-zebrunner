@@ -113,7 +113,7 @@ export async function startHttpServer(
           oauthEnabled: !!oauthProvider,
           tokenStore,
           activeSessions: sessions.size,
-          probeError: err instanceof Error ? err.message : String(err),
+          probeError: err,
         }),
       );
     }

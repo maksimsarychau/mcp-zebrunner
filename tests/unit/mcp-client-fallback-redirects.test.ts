@@ -32,13 +32,13 @@ describe('mcp-client-fallback-redirects', () => {
     assert.ok(hasExactRedirectUri(RECOVERED_MCP_CLIENT_REDIRECT_URIS, LOOPBACK_CALLBACK));
   });
 
-  it('appends OAUTH_RECOVERED_REDIRECT_URIS from env', () => {
+  it('appends allowed OAUTH_RECOVERED_REDIRECT_URIS from env and drops unsafe URLs', () => {
     const prev = process.env.OAUTH_RECOVERED_REDIRECT_URIS;
     process.env.OAUTH_RECOVERED_REDIRECT_URIS = `${ENV_EXTRA_APP_URI}, ${ENV_EXTRA_HTTPS_URI}`;
     try {
       const uris = getRecoveredMcpClientRedirectUris();
       assert.ok(hasExactRedirectUri(uris, ENV_EXTRA_APP_URI));
-      assert.ok(hasExactRedirectUri(uris, ENV_EXTRA_HTTPS_URI));
+      assert.ok(!hasExactRedirectUri(uris, ENV_EXTRA_HTTPS_URI));
     } finally {
       if (prev === undefined) delete process.env.OAUTH_RECOVERED_REDIRECT_URIS;
       else process.env.OAUTH_RECOVERED_REDIRECT_URIS = prev;

@@ -1,4 +1,5 @@
 import type { OAuthFlowStore, OAuthRegisteredClientRecord } from './oauth-flow-store.js';
+import { filterAllowedMcpRedirectUris } from './oauth-redirect-uri-validation.js';
 
 /**
  * Redirect URIs for "recovered" MCP OAuth clients (`mcp_*` IDs) when DCR data was lost
@@ -24,10 +25,11 @@ export const RECOVERED_MCP_CLIENT_REDIRECT_URIS: readonly string[] = [
 
 /** Canonical list plus optional `OAUTH_RECOVERED_REDIRECT_URIS` (comma-separated). */
 export function getRecoveredMcpClientRedirectUris(): string[] {
-  const extra =
+  const extraRaw =
     process.env.OAUTH_RECOVERED_REDIRECT_URIS?.split(',')
       .map((s) => s.trim())
       .filter(Boolean) ?? [];
+  const extra = filterAllowedMcpRedirectUris(extraRaw);
   return [...RECOVERED_MCP_CLIENT_REDIRECT_URIS, ...extra];
 }
 

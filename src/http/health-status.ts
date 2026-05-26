@@ -3,6 +3,7 @@ import { constants } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { TokenStore } from './token-store.js';
 import { getRecoveredMcpClientRedirectUris } from './mcp-client-fallback-redirects.js';
+import { resolveSafeOAuthFlowStoreDir, isNodeEnoent } from './oauth-path-utils.js';
 
 export interface TokenStoreHealth {
   enabled: boolean;
@@ -47,13 +48,22 @@ export interface HealthStatusPayload {
   };
 }
 
+/** Generic message for /health — never expose raw exception text in production. */
+export function sanitizeHealthProbeError(err: unknown): string {
+  const isDev =
+    process.env.DEBUG === 'true' || process.env.NODE_ENV === 'development';
+  if (isDev && err instanceof Error) {
+    return err.message;
+  }
+  return 'storage probe failed';
+}
+
 async function countEncFiles(dir: string): Promise<number> {
   try {
     const names = await readdir(dir);
     return names.filter((n) => n.endsWith('.enc')).length;
   } catch (err: unknown) {
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code === 'ENOENT') return 0;
+    if (isNodeEnoent(err)) return 0;
     throw err;
   }
 }
@@ -88,8 +98,8 @@ export async function collectTokenStoreHealth(
     health.fileExists = st.isFile();
   } catch (err: unknown) {
     health.fileExists = false;
-    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
-      health.loadError = (err as Error).message;
+    if (!isNodeEnoent(err)) {
+      health.loadError = sanitizeHealthProbeError(err);
     }
   }
 
@@ -102,7 +112,7 @@ export async function collectTokenStoreHealth(
   try {
     health.storedUserCount = (await tokenStore.list()).length;
   } catch (err: unknown) {
-    health.loadError = (err as Error).message;
+    health.loadError = sanitizeHealthProbeError(err);
   }
 
   return health;
@@ -119,8 +129,16 @@ export async function collectOAuthFlowStoreHealth(): Promise<OAuthFlowStoreHealt
     };
   }
 
-  const directory =
-    process.env.OAUTH_FLOW_STORE_DIR ?? join(dirname(tokenPath), 'oauth-flow');
+  let directory: string;
+  try {
+    directory = resolveSafeOAuthFlowStoreDir(tokenPath);
+  } catch (err: unknown) {
+    return {
+      enabled: true,
+      backend: 'file',
+      scanError: sanitizeHealthProbeError(err),
+    };
+  }
 
   const health: OAuthFlowStoreHealth = {
     enabled: true,
@@ -136,15 +154,14 @@ export async function collectOAuthFlowStoreHealth(): Promise<OAuthFlowStoreHealt
     health.issuedCodeCount = await countEncFiles(join(directory, 'codes'));
     health.registeredClientCount = await countEncFiles(join(directory, 'clients'));
   } catch (err: unknown) {
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code === 'ENOENT') {
+    if (isNodeEnoent(err)) {
       health.directoryExists = false;
       health.pendingCount = 0;
       health.issuedCodeCount = 0;
       health.registeredClientCount = 0;
       health.writable = await pathWritable(dirname(directory));
     } else {
-      health.scanError = (err as Error).message;
+      health.scanError = sanitizeHealthProbeError(err);
     }
   }
 
@@ -195,7 +212,7 @@ export function buildMinimalHealthStatus(input: {
   oauthEnabled: boolean;
   tokenStore?: TokenStore;
   activeSessions: number;
-  probeError: string;
+  probeError: unknown;
 }): HealthStatusPayload {
   return {
     status: 'ok',
@@ -207,7 +224,7 @@ export function buildMinimalHealthStatus(input: {
     activeSessions: input.activeSessions,
     storage: {
       health: 'degraded',
-      probeError: input.probeError,
+      probeError: sanitizeHealthProbeError(input.probeError),
       tokenStore: { enabled: !!input.tokenStore, backend: input.tokenStore ? 'file' : 'none' },
       oauthFlowStore: { enabled: false, backend: 'memory' },
       recoveredRedirectUriCount: getRecoveredMcpClientRedirectUris().length,

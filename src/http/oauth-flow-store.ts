@@ -1,6 +1,7 @@
 import { mkdir, readFile, unlink, readdir, open } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { deriveKey, encrypt, decrypt } from './crypto.js';
+import { isNodeEnoent, resolveSafeOAuthFlowStoreDir } from './oauth-path-utils.js';
 
 export const PENDING_AUTH_TTL_MS = 10 * 60 * 1000;
 export const ISSUED_CODE_TTL_MS = 5 * 60 * 1000;
@@ -160,8 +161,8 @@ export class FileOAuthFlowStore implements OAuthFlowStore {
     try {
       const raw = await readFile(filePath, 'utf8');
       return JSON.parse(decrypt(raw, this.key)) as T;
-    } catch (err: any) {
-      if (err.code === 'ENOENT') return null;
+    } catch (err: unknown) {
+      if (isNodeEnoent(err)) return null;
       throw err;
     }
   }
@@ -183,8 +184,8 @@ export class FileOAuthFlowStore implements OAuthFlowStore {
 
   async deletePending(stateKey: string): Promise<void> {
     const filePath = this.pathFor('pending', stateKey);
-    await unlink(filePath).catch((err: any) => {
-      if (err.code !== 'ENOENT') throw err;
+    await unlink(filePath).catch((err: unknown) => {
+      if (!isNodeEnoent(err)) throw err;
     });
   }
 
@@ -199,8 +200,8 @@ export class FileOAuthFlowStore implements OAuthFlowStore {
       const raw = await readFile(filePath, 'utf8');
       await unlink(filePath);
       val = JSON.parse(decrypt(raw, this.key)) as T;
-    } catch (err: any) {
-      if (err.code === 'ENOENT') return null;
+    } catch (err: unknown) {
+      if (isNodeEnoent(err)) return null;
       throw err;
     }
     const createdAt = val.createdAt as number | undefined;
@@ -228,8 +229,8 @@ export class FileOAuthFlowStore implements OAuthFlowStore {
     let names: string[];
     try {
       names = await readdir(dir);
-    } catch (err: any) {
-      if (err.code === 'ENOENT') return;
+    } catch (err: unknown) {
+      if (isNodeEnoent(err)) return;
       throw err;
     }
     const now = Date.now();
@@ -250,10 +251,10 @@ export class FileOAuthFlowStore implements OAuthFlowStore {
 }
 
 export function createOAuthFlowStore(): OAuthFlowStore {
-  const tokenPath = process.env.TOKEN_STORE_PATH;
-  const storeKey = process.env.TOKEN_STORE_KEY;
+  const tokenPath = process.env.TOKEN_STORE_PATH?.trim();
+  const storeKey = process.env.TOKEN_STORE_KEY?.trim();
   if (tokenPath && storeKey) {
-    const dir = process.env.OAUTH_FLOW_STORE_DIR ?? join(dirname(tokenPath), 'oauth-flow');
+    const dir = resolveSafeOAuthFlowStoreDir(tokenPath);
     return new FileOAuthFlowStore(dir, storeKey);
   }
   return new InMemoryOAuthFlowStore();

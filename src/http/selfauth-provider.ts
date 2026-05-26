@@ -1,16 +1,16 @@
-import { randomUUID, randomBytes, createHmac } from 'node:crypto';
+import { randomBytes, createHmac } from 'node:crypto';
 import type { Response } from 'express';
 import type { OAuthServerProvider } from '@modelcontextprotocol/sdk/server/auth/provider.js';
 import type { OAuthRegisteredClientsStore } from '@modelcontextprotocol/sdk/server/auth/clients.js';
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import type { TokenStore } from './token-store.js';
 import { TokenValidator } from './token-validator.js';
-import { resolveMcpOAuthClient } from './mcp-client-fallback-redirects.js';
+import type { OAuthClientInformationFull } from '@modelcontextprotocol/sdk/shared/auth.js';
+import { getMcpRegisteredClient, registerMcpOAuthClient } from './oauth-client-store.js';
 import {
   InMemoryOAuthFlowStore,
   type OAuthFlowStore,
   type OAuthPendingAuth,
-  type OAuthRegisteredClientRecord,
 } from './oauth-flow-store.js';
 
 interface IssuedCode extends Record<string, unknown> {
@@ -68,36 +68,15 @@ export class SelfAuthOAuthProvider implements OAuthServerProvider {
 
   get clientsStore(): OAuthRegisteredClientsStore {
     return {
-      getClient: async (clientId: string) => {
-        const client = await resolveMcpOAuthClient(this.flowStore, clientId);
-        return (client ?? undefined) as any;
-      },
-      registerClient: async (clientInfo: any) => {
-        const clientId = `mcp_${randomUUID().replace(/-/g, '').slice(0, 16)}`;
-        const authMethod = clientInfo.token_endpoint_auth_method || 'none';
-        const needsSecret = authMethod !== 'none';
-
-        const registered: OAuthRegisteredClientRecord = {
-          client_id: clientId,
-          ...(needsSecret && { client_secret: randomBytes(32).toString('hex') }),
-          redirect_uris: clientInfo.redirect_uris || [],
-          client_name: clientInfo.client_name,
-          grant_types: clientInfo.grant_types || ['authorization_code'],
-          response_types: clientInfo.response_types || ['code'],
-          token_endpoint_auth_method: authMethod,
-          client_id_issued_at: Math.floor(Date.now() / 1000),
-        };
-
-        await this.flowStore.setClient(clientId, registered);
-        return { ...registered, client_secret_expires_at: 0 } as any;
-      },
+      getClient: async (clientId: string) => getMcpRegisteredClient(this.flowStore, clientId),
+      registerClient: async (clientInfo) => registerMcpOAuthClient(this.flowStore, clientInfo),
     };
   }
 
   // ─── Authorize → redirect to our /login page ───────────────────
 
   async authorize(
-    client: any,
+    client: OAuthClientInformationFull,
     params: { redirectUri: string; codeChallenge: string; state?: string; scopes?: string[]; resource?: URL },
     res: Response,
   ): Promise<void> {
