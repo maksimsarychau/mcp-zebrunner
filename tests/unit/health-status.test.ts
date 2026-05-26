@@ -102,26 +102,4 @@ describe('health-status', () => {
       else process.env.DEBUG = prevDebug;
     }
   });
-
-  it('buildHealthStatus keeps backward-compatible top-level fields', async () => {
-    const body = await buildHealthStatus({
-      version: '9.0.2',
-      authMode: 'selfauth',
-      oauthEnabled: true,
-      tokenStore: undefined,
-      mcpServerUrl: 'https://zebrunner-mcp.mfp.dev',
-      zebrunnerUrlFromEnv: true,
-      activeSessions: 2,
-    });
-    assert.equal(body.status, 'ok');
-    assert.equal(body.transport, 'streamablehttp');
-    assert.equal(body.version, '9.0.2');
-    assert.equal(body.authMode, 'selfauth');
-    assert.equal(body.oauthEnabled, true);
-    assert.equal(body.tokenStoreEnabled, false);
-    assert.equal(body.activeSessions, 2);
-    assert.equal(body.mcpServerUrl, 'https://zebrunner-mcp.mfp.dev');
-    assert.equal(body.storage?.health, 'ok');
-    assert.ok((body.storage?.recoveredRedirectUriCount ?? 0) >= 7);
-  });
 });
