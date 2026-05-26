@@ -5,7 +5,7 @@ import type { OAuthRegisteredClientsStore } from '@modelcontextprotocol/sdk/serv
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import type { TokenStore } from './token-store.js';
 import { TokenValidator } from './token-validator.js';
-import { RECOVERED_MCP_CLIENT_REDIRECT_URIS } from './mcp-client-fallback-redirects.js';
+import { resolveMcpOAuthClient } from './mcp-client-fallback-redirects.js';
 import {
   InMemoryOAuthFlowStore,
   type OAuthFlowStore,
@@ -69,24 +69,8 @@ export class SelfAuthOAuthProvider implements OAuthServerProvider {
   get clientsStore(): OAuthRegisteredClientsStore {
     return {
       getClient: async (clientId: string) => {
-        const existing = await this.flowStore.getClient(clientId);
-        if (existing) return existing as any;
-
-        if (clientId.startsWith('mcp_')) {
-          const fallback: OAuthRegisteredClientRecord = {
-            client_id: clientId,
-            redirect_uris: [...RECOVERED_MCP_CLIENT_REDIRECT_URIS],
-            token_endpoint_auth_method: 'none',
-            client_name: 'Auto-recovered MCP client',
-            grant_types: ['authorization_code'],
-            response_types: ['code'],
-            client_id_issued_at: Math.floor(Date.now() / 1000),
-          };
-          await this.flowStore.setClient(clientId, fallback);
-          return fallback as any;
-        }
-
-        return undefined;
+        const client = await resolveMcpOAuthClient(this.flowStore, clientId);
+        return (client ?? undefined) as any;
       },
       registerClient: async (clientInfo: any) => {
         const clientId = `mcp_${randomUUID().replace(/-/g, '').slice(0, 16)}`;

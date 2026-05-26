@@ -1,5 +1,17 @@
 # Change Logs
 
+## v9.0.2 — MCP OAuth redirect URI recovery (Cursor, Claude Code)
+
+### Fixed
+
+- **`Unregistered redirect_uri`** after redeploy when MCP clients use redirect URIs not in recovered DCR records — expanded fallback list (Cursor `cursor://…`, Claude Code loopback `/callback`, existing Claude Desktop/mcp-remote `/oauth/callback` loopback).
+- **Stale persisted `mcp_*` clients** — `resolveMcpOAuthClient()` merges canonical redirect URIs into on-disk OAuth flow store records on `getClient` (selfauth + Okta HTTP modes).
+
+### Changed
+
+- Optional env **`OAUTH_RECOVERED_REDIRECT_URIS`** (comma-separated) appends extra redirect URIs for recovered clients.
+- **`GET /health`** — expanded JSON with `mcpServerUrl`, `zebrunnerUrlFromEnv`, and `storage` (token store path/count, OAuth flow store directory and file counts, recovered redirect URI count). **Backward compatible:** still HTTP **200** and top-level `"status":"ok"`; storage issues appear under `storage.health: "degraded"` only.
+
 ## v9.0.1 — Shared OAuth flow store (multi-replica HTTP fix)
 
 ### 🐛 Fixed

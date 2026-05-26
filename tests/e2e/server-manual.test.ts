@@ -1,6 +1,7 @@
 import { describe, it, before, after } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { spawn, ChildProcess } from 'child_process';
+import { spawn, type ChildProcess } from 'child_process';
+import { E2E_SERVER_ENV, waitForServerReady } from './server-startup.js';
 
 /**
  * Manual End-to-End tests for the Zebrunner MCP Server
@@ -36,47 +37,20 @@ describe('Manual E2E Tests - Zebrunner MCP Server', () => {
 
     // Start the server process with real environment variables
     serverProcess = spawn('node', ['dist/server.js'], {
-      env: {
-        ...process.env,
-        DEBUG: 'false' // Reduce noise in tests
-      },
-      stdio: ['pipe', 'pipe', 'pipe']
+      env: E2E_SERVER_ENV,
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
 
-    // Wait for server to be ready (with timeout)
-    return new Promise<void>((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        reject(new Error('Server startup timeout after 30 seconds'));
-      }, 30000);
-
-      // Listen to both stdout and stderr for startup message
-      const handleOutput = (data: Buffer) => {
-        const output = data.toString();
-        console.log('Server output:', output.trim());
-
-        if (output.includes('Zebrunner MCP Server started')) {
-          serverReady = true;
-          clearTimeout(timeout);
-          console.log('✅ Server started successfully');
-          resolve();
-        }
-      };
-
-      serverProcess.stdout?.on('data', handleOutput);
-      serverProcess.stderr?.on('data', handleOutput);
-
-      serverProcess.on('error', (error) => {
-        clearTimeout(timeout);
-        reject(error);
-      });
-
-      serverProcess.on('exit', (code) => {
-        if (code !== 0 && !serverReady) {
-          clearTimeout(timeout);
-          reject(new Error(`Server exited with code ${code} before starting`));
-        }
-      });
+    serverProcess.stderr?.on('data', (data: Buffer) => {
+      console.log('Server output:', data.toString().trim());
     });
+    serverProcess.stdout?.on('data', (data: Buffer) => {
+      console.log('Server output:', data.toString().trim());
+    });
+
+    await waitForServerReady(serverProcess, 30_000);
+    serverReady = true;
+    console.log('✅ Server started successfully');
   });
 
   after(() => {
