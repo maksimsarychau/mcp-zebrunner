@@ -82,17 +82,41 @@ export async function startHttpServer(
     console.error(`🔐 OAuth endpoints mounted (mode: ${authMode})`);
   }
 
+  // --- Per-session transport management (declared early for /health) ---
+  interface SessionEntry {
+    transport: StreamableHTTPServerTransport;
+    server: McpServer;
+    lastUsed: number;
+  }
+  const sessions = new Map<string, SessionEntry>();
+
   // --- Health check (unauthenticated) ---
-  app.get('/health', (_req, res) => {
-    res.json({
-      status: 'ok',
-      version: serverVersion,
-      transport: 'streamablehttp',
-      authMode,
-      oauthEnabled: !!oauthProvider,
-      tokenStoreEnabled: !!tokenStore,
-      activeSessions: sessions.size,
-    });
+  app.get('/health', async (_req, res) => {
+    try {
+      const { buildHealthStatus } = await import('./health-status.js');
+      const body = await buildHealthStatus({
+        version: serverVersion,
+        authMode,
+        oauthEnabled: !!oauthProvider,
+        tokenStore,
+        mcpServerUrl: mcpServerUrl || `http://localhost:${port}`,
+        zebrunnerUrlFromEnv,
+        activeSessions: sessions.size,
+      });
+      res.status(200).json(body);
+    } catch (err: unknown) {
+      const { buildMinimalHealthStatus } = await import('./health-status.js');
+      res.status(200).json(
+        buildMinimalHealthStatus({
+          version: serverVersion,
+          authMode,
+          oauthEnabled: !!oauthProvider,
+          tokenStore,
+          activeSessions: sessions.size,
+          probeError: err,
+        }),
+      );
+    }
   });
 
   // --- Auth middleware for /mcp ---
@@ -102,14 +126,6 @@ export async function startHttpServer(
     : undefined;
   const authMw = createAuthMiddleware({ authMode, verifyBearer, resourceMetadataUrl });
   app.use('/mcp', authMw);
-
-  // --- Per-session transport management ---
-  interface SessionEntry {
-    transport: StreamableHTTPServerTransport;
-    server: McpServer;
-    lastUsed: number;
-  }
-  const sessions = new Map<string, SessionEntry>();
 
   app.all('/mcp', async (req, res) => {
     const existingSessionId = req.headers['mcp-session-id'] as string | undefined;
