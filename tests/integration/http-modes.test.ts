@@ -178,6 +178,33 @@ describe('Mode 3: Self-Service OAuth — JWT lifecycle', () => {
     assert.equal(pending.redirectUri, 'http://localhost/cb');
   });
 
+  it('PKCE: challengeForAuthorizationCode matches stored code before exchange', async () => {
+    const pkceChallenge = (await import('pkce-challenge')).default;
+    const { verifyChallenge } = await import('pkce-challenge');
+    const challenge = await pkceChallenge();
+    const codeVerifier = challenge.code_verifier;
+    const codeChallenge = challenge.code_challenge;
+
+    await tokenStore.set('user@test.com', { username: 'testuser', token: 'zeb-token-123' });
+    await provider.storeIssuedCode('pkce-code', {
+      email: 'user@test.com',
+      mcpClientId: 'mcp_client1',
+      redirectUri: 'http://localhost/cb',
+      codeChallenge,
+      createdAt: Date.now(),
+    });
+
+    const client = { client_id: 'mcp_client1' };
+    const storedChallenge = await provider.challengeForAuthorizationCode(
+      client as any,
+      'pkce-code',
+    );
+    assert.ok(await verifyChallenge(codeVerifier, storedChallenge));
+
+    const tokens = await provider.exchangeAuthorizationCode(client, 'pkce-code');
+    assert.ok(tokens.access_token);
+  });
+
   it('full token flow: issue code → exchange → verify', async () => {
     // Store Zebrunner credentials for the user
     await tokenStore.set('user@test.com', { username: 'testuser', token: 'zeb-token-123' });

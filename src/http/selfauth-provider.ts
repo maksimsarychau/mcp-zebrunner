@@ -94,8 +94,15 @@ export class SelfAuthOAuthProvider implements OAuthServerProvider {
     res.redirect(`${this.serverUrl}/login?state=${stateKey}`);
   }
 
-  async challengeForAuthorizationCode(): Promise<string> {
-    return '';
+  async challengeForAuthorizationCode(
+    _client: OAuthClientInformationFull,
+    authorizationCode: string,
+  ): Promise<string> {
+    const issued = await this.flowStore.peekIssuedCode<IssuedCode>(authorizationCode);
+    if (!issued?.codeChallenge) {
+      throw new Error('Invalid or expired authorization code');
+    }
+    return issued.codeChallenge;
   }
 
   // ─── Token exchange: our code → server-signed JWT ──────────────
@@ -158,7 +165,7 @@ export class SelfAuthOAuthProvider implements OAuthServerProvider {
     await this.flowStore.deletePending(stateKey);
   }
 
-  async storeIssuedCode(code: string, data: IssuedCode): Promise<void> {
+  async storeIssuedCode(code: string, data: IssuedCode | Record<string, unknown>): Promise<void> {
     await this.flowStore.setIssuedCode(code, data);
   }
 

@@ -36,6 +36,8 @@ export interface OAuthFlowStore {
   deletePending(stateKey: string): Promise<void>;
 
   setIssuedCode(code: string, data: Record<string, unknown>): Promise<void>;
+  /** Read issued code payload without consuming it (for PKCE validation before token exchange). */
+  peekIssuedCode<T extends Record<string, unknown>>(code: string): Promise<T | null>;
   takeIssuedCode<T extends Record<string, unknown>>(code: string): Promise<T | null>;
 
   setClient(clientId: string, client: OAuthRegisteredClientRecord): Promise<void>;
@@ -91,15 +93,23 @@ export class InMemoryOAuthFlowStore implements OAuthFlowStore {
     this.codes.set(code, data);
   }
 
-  async takeIssuedCode<T extends Record<string, unknown>>(code: string): Promise<T | null> {
+  async peekIssuedCode<T extends Record<string, unknown>>(code: string): Promise<T | null> {
     sanitizeOAuthStoreKey(code);
     const val = this.codes.get(code) as T | undefined;
     if (!val) return null;
-    this.codes.delete(code);
     const createdAt = val.createdAt as number | undefined;
     if (typeof createdAt === 'number' && isExpired(createdAt, ISSUED_CODE_TTL_MS)) {
+      this.codes.delete(code);
       return null;
     }
+    return val;
+  }
+
+  async takeIssuedCode<T extends Record<string, unknown>>(code: string): Promise<T | null> {
+    sanitizeOAuthStoreKey(code);
+    const val = await this.peekIssuedCode<T>(code);
+    if (!val) return null;
+    this.codes.delete(code);
     return val;
   }
 
@@ -193,17 +203,23 @@ export class FileOAuthFlowStore implements OAuthFlowStore {
     await this.writeEncrypted(this.pathFor('codes', code), data);
   }
 
+  async peekIssuedCode<T extends Record<string, unknown>>(code: string): Promise<T | null> {
+    const val = await this.readEncrypted<T>(this.pathFor('codes', code));
+    if (!val) return null;
+    const createdAt = val.createdAt as number | undefined;
+    if (typeof createdAt === 'number' && isExpired(createdAt, ISSUED_CODE_TTL_MS)) {
+      return null;
+    }
+    return val;
+  }
+
   async takeIssuedCode<T extends Record<string, unknown>>(code: string): Promise<T | null> {
     const filePath = this.pathFor('codes', code);
-    let val: T | null;
-    try {
-      const raw = await readFile(filePath, 'utf8');
-      await unlink(filePath);
-      val = JSON.parse(decrypt(raw, this.key)) as T;
-    } catch (err: unknown) {
-      if (isNodeEnoent(err)) return null;
-      throw err;
-    }
+    const val = await this.readEncrypted<T>(filePath);
+    if (!val) return null;
+    await unlink(filePath).catch((err: unknown) => {
+      if (!isNodeEnoent(err)) throw err;
+    });
     const createdAt = val.createdAt as number | undefined;
     if (typeof createdAt === 'number' && isExpired(createdAt, ISSUED_CODE_TTL_MS)) {
       return null;

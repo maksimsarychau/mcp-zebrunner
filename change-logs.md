@@ -1,5 +1,18 @@
 # Change Logs
 
+## v9.0.4 — OAuth PKCE token exchange fix
+
+### Fixed
+
+- **Dependencies** — clean `npm audit` (0 vulnerabilities): `@anthropic-ai/sdk` ^0.99.0 (GHSA-p7fg-763f-g4gf), plus axios, zod, typescript, tsx, `@types/node`, `node-addon-api`, `node-gyp`. `fluent-ffmpeg` unchanged (deprecated, no CVE). Production Docker image unchanged (`npm prune --production` drops devDeps).
+
+- **PKCE (Cursor / Claude / mcp-remote)** — `challengeForAuthorizationCode` returns the stored `codeChallenge` from issued authorization codes (`peekIssuedCode` on `OAuthFlowStore`). Previously returned `''`, so MCP SDK local PKCE validation failed and token exchange returned 500 ("Failed to complete OAuth exchange").
+- **`login-routes.ts`** — store selfauth (`email`) vs Okta (`oktaAccessToken`) issued-code payloads on the correct provider (fixes TypeScript union and wrong-field risk).
+
+### Heads-up (operations)
+
+- **Multi-replica HTTP** — shared `/data` PVC for `tokens.enc` + `oauth-flow` is required; **Ingress session affinity** on `/mcp` is recommended so Streamable HTTP sessions are not split across pods (`Server not initialized` after OAuth).
+
 ## v9.0.3 — OAuth hardening, health diagnostics, E2E reliability
 
 ### Fixed

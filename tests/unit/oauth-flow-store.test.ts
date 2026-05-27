@@ -38,6 +38,19 @@ describe('OAuthFlowStore', () => {
       const second = await store.takeIssuedCode('code1');
       assert.equal(second, null);
     });
+
+    it('peekIssuedCode does not consume the code', async () => {
+      const store = new InMemoryOAuthFlowStore();
+      await store.setIssuedCode('code1', {
+        mcpClientId: 'mcp_a',
+        codeChallenge: 'pkce-challenge-value',
+        createdAt: Date.now(),
+      });
+      const peeked = await store.peekIssuedCode<{ codeChallenge: string }>('code1');
+      assert.equal(peeked?.codeChallenge, 'pkce-challenge-value');
+      const taken = await store.takeIssuedCode('code1');
+      assert.ok(taken);
+    });
   });
 
   describe('FileOAuthFlowStore multi-instance', () => {

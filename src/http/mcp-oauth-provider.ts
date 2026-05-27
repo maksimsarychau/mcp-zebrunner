@@ -93,8 +93,15 @@ export class McpOAuthServerProvider implements OAuthServerProvider {
     res.redirect(oktaAuthUrl.toString());
   }
 
-  async challengeForAuthorizationCode(): Promise<string> {
-    return '';
+  async challengeForAuthorizationCode(
+    _client: OAuthClientInformationFull,
+    authorizationCode: string,
+  ): Promise<string> {
+    const issued = await this.flowStore.peekIssuedCode<IssuedCode>(authorizationCode);
+    if (!issued?.codeChallenge) {
+      throw new Error('Invalid or expired authorization code');
+    }
+    return issued.codeChallenge;
   }
 
   async exchangeAuthorizationCode(
@@ -162,7 +169,7 @@ export class McpOAuthServerProvider implements OAuthServerProvider {
     await this.flowStore.deletePending(stateKey);
   }
 
-  async storeIssuedCode(code: string, data: IssuedCode): Promise<void> {
+  async storeIssuedCode(code: string, data: IssuedCode | Record<string, unknown>): Promise<void> {
     await this.flowStore.setIssuedCode(code, data);
   }
 

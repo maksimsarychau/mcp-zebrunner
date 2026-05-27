@@ -185,15 +185,21 @@ export function createLoginRouter(opts: LoginRouterOptions): Router {
       });
 
       const ourCode = randomBytes(32).toString('hex');
-      await provider.storeIssuedCode(ourCode, {
-        ...(selfAuth
-          ? { email: userKey }
-          : { oktaAccessToken: okta_access_token ?? '', oktaIdToken: okta_id_token }),
+      const issuedCommon = {
         mcpClientId: pending.mcpClientId,
         redirectUri: pending.redirectUri,
         codeChallenge: pending.codeChallenge,
         createdAt: Date.now(),
-      } as any);
+      };
+      if (selfAuth) {
+        await selfAuth.storeIssuedCode(ourCode, { ...issuedCommon, email: userKey });
+      } else {
+        await oktaAuth!.storeIssuedCode(ourCode, {
+          ...issuedCommon,
+          oktaAccessToken: okta_access_token ?? '',
+          oktaIdToken: okta_id_token,
+        });
+      }
 
       await provider.deletePendingAuth(state);
 
