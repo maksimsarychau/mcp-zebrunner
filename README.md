@@ -3,7 +3,7 @@
 
 A **Model Context Protocol (MCP)** server that brings advanced analytics, reporting, failure forensics, and safe TCM mutations to **Zebrunner**. Designed to coexist with the official Zebrunner MCP (beta) — see the "Dual-MCP setup" section below.
 
-> Tool naming: every tool on this server is registered under the canonical `adv_<name>` form (e.g. `adv_create_test_case`, `adv_list_test_runs`) so it never collides with the official Zebrunner MCP. The legacy names are kept as **deprecated aliases** so prompts/scripts that called the old names continue to work for now; aliases will be removed in the next major release. See [`docs/OFFICIAL_MCP_PARITY.md`](docs/OFFICIAL_MCP_PARITY.md) and the `zebrunner://mcp-routing` resource for the dual-MCP routing guide.
+> Tool naming: every tool on this server is registered under the canonical `adv_<name>` form (e.g. `adv_create_test_case`, `adv_list_test_runs`) so it never collides with the official Zebrunner MCP. The legacy names are kept as **deprecated aliases** so prompts/scripts that called the old names continue to work for now; aliases will be removed in the next major release. 
 
 > 📖 **Need help with installation?** Check out our [**Step-by-Step Install Guide**](INSTALL-GUIDE.md) for detailed setup instructions.
 > 
