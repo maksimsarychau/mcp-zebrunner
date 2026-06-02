@@ -1,6 +1,6 @@
 {
   "name": "mcp-zebrunner",
-  "version": "9.0.4",
+  "version": "9.0.5",
   "type": "module",
   "description": "Advanced Zebrunner MCP Server — analytics, reporting, and safe mutations for Zebrunner. Complements the official Zebrunner MCP (beta). Tools registered as adv_<name> with legacy aliases kept for backward compatibility.",
   "mcpName": "io.github.maksimsarychau/mcp-zebrunner",
@@ -59,7 +59,8 @@
     "inspector": "npx @modelcontextprotocol/inspector -- npx tsx src/server.ts",
     "dev:debug": "DEBUG=true tsx watch src/server.ts",
     "sign-release": "tsx scripts/sign-release.ts",
-    "update-control": "tsx scripts/update-control.ts"
+    "update-control": "tsx scripts/update-control.ts",
+    "docker:build:multiarch": "bash scripts/docker-build-push.sh"
   },
   "dependencies": {
     "@ffmpeg-installer/ffmpeg": "^1.1.0",

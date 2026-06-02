@@ -3,7 +3,8 @@
 # Zebrunner MCP Server - Multi-stage Docker Build
 # ══════════════════════════════════════════════════════════════════════════════
 # Supports: stdio transport (default), video/image analysis (ffmpeg, sharp, tesseract)
-# Usage: docker build -t msarychau/mcp-zebrunner:latest .
+# Usage (multi-arch publish): npm run docker:build:multiarch
+# Usage (local single-arch): docker build -t msarychau/mcp-zebrunner:latest .
 # ══════════════════════════════════════════════════════════════════════════════
 
 ARG NODE_VERSION=20
@@ -47,8 +48,10 @@ RUN npm prune --production
 FROM node:${NODE_VERSION}-alpine AS production
 
 # Labels for Docker Hub and container identification
+ARG APP_VERSION=9.0.5
 LABEL org.opencontainers.image.title="Zebrunner MCP Server"
 LABEL org.opencontainers.image.description="MCP server for Zebrunner TCM - test cases, suites, coverage analysis, launchers, and reporting"
+LABEL org.opencontainers.image.version="${APP_VERSION}"
 LABEL org.opencontainers.image.vendor="Maksim Sarychau"
 LABEL org.opencontainers.image.url="https://github.com/maksimsarychau/mcp-zebrunner"
 LABEL org.opencontainers.image.source="https://github.com/maksimsarychau/mcp-zebrunner"
