@@ -1,5 +1,16 @@
 # Change Logs
 
+## v9.0.5 — Multi-arch Docker images (amd64 + arm64)
+
+### Changed
+
+- **Docker Hub** — release builds publish **multi-architecture** manifests (`linux/amd64`, `linux/arm64`) via `npm run docker:build:multiarch` (`scripts/docker-build-push.sh`). Fixes `docker pull` on Apple Silicon while keeping EKS amd64 support under the same tag.
+- **Docs** — `docs/DOCKER_USAGE.md`, `docs/HOSTING_GUIDE.md` updated with buildx workflow; Dockerfile `org.opencontainers.image.version` label.
+
+### Included (9.0.4)
+
+- OAuth PKCE token exchange fix, dependency audit cleanup, `login-routes` issued-code typing.
+
 ## v9.0.4 — OAuth PKCE token exchange fix
 
 ### Fixed
