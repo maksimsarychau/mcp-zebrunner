@@ -314,4 +314,20 @@ describe('ZebrunnerReportingClient Integration Tests', () => {
       console.log('[+] Authentication and API flow test completed successfully');
     });
   });
+
+  describe('Rerun launch failures (gated)', () => {
+    it('should rerun failures when ZEBRUNNER_RERUN_TEST_LAUNCH_ID is set', async function() {
+      const rerunLaunchId = process.env.ZEBRUNNER_RERUN_TEST_LAUNCH_ID;
+      if (!rerunLaunchId || !client) {
+        console.log('⚠️  Skipping rerun test — set ZEBRUNNER_RERUN_TEST_LAUNCH_ID to run');
+        return;
+      }
+
+      const launchId = Number(rerunLaunchId);
+      const projectId = Number(process.env.ZEBRUNNER_RERUN_TEST_PROJECT_ID || TEST_PROJECT_ID);
+      const result = await client.rerunLaunchFailures(launchId, projectId);
+      assert.ok(result);
+      console.log(`✅ Rerun triggered for launch ${launchId}:`, JSON.stringify(result).slice(0, 200));
+    });
+  });
 });

@@ -59,7 +59,8 @@ export const TOOL_SMOKE_INPUTS: Record<string, Record<string, unknown>> = {
   create_test_case: { project_key: "MCP", test_suite_id: 1, title: "Smoke TC", dry_run: true },
   update_test_case: { project_key: "MCP", identifier: 1, title: "Smoke TC", dry_run: true },
   manage_test_run: { project_key: "MCP", action: "create", title: "Smoke Run", dry_run: true },
-  import_launch_results_to_test_run: { project_key: "MCP", test_run_id: 1, launch_id: 1, dry_run: true }
+  import_launch_results_to_test_run: { project_key: "MCP", test_run_id: 1, launch_id: 1, dry_run: true },
+  rerun_launch_failures: { project: "android", launch_id: 1 }
 };
 
 export const TOOL_SCHEMA_REQUIRED_KEYS: Record<string, string[]> = Object.fromEntries(

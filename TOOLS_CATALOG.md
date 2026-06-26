@@ -869,6 +869,35 @@ Weekly stability report for project MCP using:
 - "Import only MCP-82 and MCP-83 results from launch 98765 to test run 123"
 - "Sync launch 45000 results to test run 789 in project MCP, map ABORTED to Skipped"
 
+### `rerun_launch_failures`
+
+**Description:** (Beta) Rerun failed/aborted tests for one or more automation launches via the Reporting API. Triggers real CI/automation reruns. Single mode: provide `launch_id`. Batch mode: omit `launch_id` and optionally filter by `milestone` or `query`; capped by `max_launches` (default 10).
+
+**Parameters:**
+
+
+| Parameter | Type | Required | Description |
+| --------- | ---- | -------- | ----------- |
+| `project` | string / number | yes | Project alias, key, or numeric ID |
+| `launch_id` | number | | Single launch mode — Reporting API launch ID |
+| `milestone` | string | | Batch filter by milestone name |
+| `query` | string | | Batch filter by build number or launch name |
+| `max_launches` | number | | Batch safety cap (default 10, max 50) |
+| `min_failed` | number | | Min failed+aborted count to qualify (default 1) |
+| `skip_errors` | boolean | | Continue batch if one launch fails (default true) |
+| `dry_run` | boolean | | Show targets and API URLs without POST |
+| `confirm` | boolean | | Must be true to execute |
+| `confirmation_token` | string | | Token from preview step |
+
+
+**Permissions:** Requires IAM permission `reporting:test-runs:rerun` on the Zebrunner token.
+
+**Example Prompts:**
+
+- "Rerun failures for launch 132522 in project MFPAND"
+- "Rerun failed tests for the latest 5 launches in milestone 26.19.0 for android"
+- "Preview which launches in project android have failures and can be rerun"
+
 ---
 
 ## Test Coverage & Validation

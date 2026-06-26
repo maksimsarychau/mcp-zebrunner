@@ -256,7 +256,8 @@ export const LaunchListItemSchema = z.object({
   buildNumber: z.string().nullable().optional(),
   jobUrl: z.string().nullable().optional(),
   upstream: z.boolean().optional(),
-  reviewed: z.boolean().optional()
+  reviewed: z.boolean().optional(),
+  isRelaunchPossible: z.boolean().optional()
 });
 
 export type LaunchListItem = z.infer<typeof LaunchListItemSchema>;
@@ -431,6 +432,16 @@ export const LaunchAttemptsResponseSchema = z.object({
 });
 
 export type LaunchAttemptsResponse = z.infer<typeof LaunchAttemptsResponseSchema>;
+
+// Rerun launch response (Reporting API POST .../launches/{id}:rerun)
+export const RerunLaunchResponseSchema = z.object({
+  id: z.coerce.number().optional(),
+  name: z.string().optional(),
+  status: z.string().optional(),
+  data: z.record(z.string(), z.unknown()).optional(),
+}).passthrough();
+
+export type RerunLaunchResponse = z.infer<typeof RerunLaunchResponseSchema>;
 
 // Error types for reporting API
 export class ZebrunnerReportingError extends Error {

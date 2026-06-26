@@ -29,6 +29,8 @@ import {
   JiraIntegrationsResponseSchema,
   LaunchAttemptsResponse,
   LaunchAttemptsResponseSchema,
+  RerunLaunchResponse,
+  RerunLaunchResponseSchema,
   ZebrunnerReportingError,
   ZebrunnerReportingAuthError,
   ZebrunnerReportingNotFoundError
@@ -857,6 +859,32 @@ export class ZebrunnerReportingClient {
       return LaunchesResponseSchema.parse(launchesData);
     } catch (error) {
       throw new ZebrunnerReportingError(`Failed to parse launches data: ${error instanceof Error ? error.message : error}`);
+    }
+  }
+
+  /**
+   * Rerun failed/aborted tests for a launch via Reporting API.
+   * Requires IAM permission reporting:test-runs:rerun.
+   */
+  async rerunLaunchFailures(
+    launchId: number,
+    projectId: number,
+    options?: { rerunFailures?: boolean }
+  ): Promise<RerunLaunchResponse> {
+    const rerunFailures = options?.rerunFailures !== false;
+    const url = `/api/reporting/v1/launches/${launchId}:rerun?projectId=${projectId}&rerunFailures=${rerunFailures}`;
+
+    if (this.config.debug) {
+      console.error(`[ZebrunnerReportingClient] Rerunning failures for launch ${launchId} (projectId=${projectId})`);
+    }
+
+    const response = await this.makeAuthenticatedRequest<any>('POST', url);
+    const data = response.data ?? response;
+
+    try {
+      return RerunLaunchResponseSchema.parse(data);
+    } catch {
+      return data as RerunLaunchResponse;
     }
   }
 
