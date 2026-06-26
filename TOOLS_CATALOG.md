@@ -88,12 +88,12 @@ All tools marked with chart support accept these two parameters:
 
 ### `get_launch_details`
 
-**Description:** Get comprehensive information about a specific launch including test results, environment, build, and execution metadata.
+**Description:** Get comprehensive information about a specific launch including test results, environment, build, and execution metadata. Set `includeJobParameters: true` to fetch CI job parameters (Build now defaults: suite path, build, locale, test_run_rules, and full param schema).
 
 **Example Prompts:**
 
 - "Get launch details for launch 120906"
-- "Show me information about launch 121482"
+- "Show job parameters for launch 132452 to plan a Build now"
 - "What happened in launch 120814?"
 
 ### `get_launch_summary`
@@ -897,6 +897,35 @@ Weekly stability report for project MCP using:
 - "Rerun failures for launch 132522 in project MFPAND"
 - "Rerun failed tests for the latest 5 launches in milestone 26.19.0 for android"
 - "Preview which launches in project android have failures and can be rerun"
+
+### `start_launch`
+
+**Description:** (Beta) Trigger Zebrunner "Build now" — start a new automation launch via Reporting API `job/parameters` + `job:build`. Resolves a template launch by `launch_id`, launch name query, and/or `suite_path`; merges validated parameter overrides; preview/confirm before triggering CI.
+
+**Parameters:**
+
+
+| Parameter | Type | Required | Description |
+| --------- | ---- | -------- | ----------- |
+| `project` | string / number | yes | Project alias, key, or numeric ID |
+| `launch_id` | number | | Explicit template launch ID |
+| `template_query` / `launch_name` | string | | Search past launches by name substring |
+| `suite_path` | string | | Match hidden CI `suite` param (e.g. `mfp/android/critical-flow`) |
+| `build` | string | | Build override — use `.*` for latest build |
+| `locale` | string | | Locale override |
+| `test_run_rules` | string | | Test run rules override |
+| `parameters` | object | | Additional overrides (keys must exist in job/parameters) |
+| `max_template_search` | number | | Template scan cap (default 20) |
+| `dry_run` | boolean | | Show payload without POST |
+| `confirm` | boolean | | Must be true to execute |
+| `confirmation_token` | string | | Token from preview step |
+
+
+**Example Prompts:**
+
+- "Start Minimal-Acceptance launch for latest build in project MFPAND"
+- "Build now Critical flow with build .* and locale en_US"
+- "Preview start_launch for template launch 132452 with test_run_rules PRIORITY=>P0||P1;;"
 
 ---
 

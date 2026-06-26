@@ -9,12 +9,12 @@
 # ══════════════════════════════════════════════════════════════════════════════
 
 name: zebrunner-mcp
-version: "9.0.5"
+version: "9.1.0"
 description: |
   Zebrunner MCP Server - Comprehensive test management integration for AI assistants.
   
   Features:
-  • 60 Tools with annotations (readOnly, destructive, idempotent hints)
+  • 63 Tools with annotations (readOnly, destructive, idempotent hints)
   • Test Case Management (CRUD operations, search, bulk actions)
   • Test Suite Organization (hierarchy, coverage analysis)
   • Test Execution & Reporting (launches, results, dashboards)

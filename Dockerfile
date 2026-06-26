@@ -48,7 +48,7 @@ RUN npm prune --production
 FROM node:${NODE_VERSION}-alpine AS production
 
 # Labels for Docker Hub and container identification
-ARG APP_VERSION=9.0.5
+ARG APP_VERSION=9.1.0
 LABEL org.opencontainers.image.title="Zebrunner MCP Server"
 LABEL org.opencontainers.image.description="MCP server for Zebrunner TCM - test cases, suites, coverage analysis, launchers, and reporting"
 LABEL org.opencontainers.image.version="${APP_VERSION}"

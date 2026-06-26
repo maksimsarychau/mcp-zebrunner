@@ -31,6 +31,10 @@ import {
   LaunchAttemptsResponseSchema,
   RerunLaunchResponse,
   RerunLaunchResponseSchema,
+  LaunchJobParametersResponse,
+  LaunchJobParametersResponseSchema,
+  StartLaunchBuildResponse,
+  StartLaunchBuildResponseSchema,
   ZebrunnerReportingError,
   ZebrunnerReportingAuthError,
   ZebrunnerReportingNotFoundError
@@ -885,6 +889,55 @@ export class ZebrunnerReportingClient {
       return RerunLaunchResponseSchema.parse(data);
     } catch {
       return data as RerunLaunchResponse;
+    }
+  }
+
+  /**
+   * Get CI job parameters for a launch (Build now dialog defaults).
+   */
+  async getLaunchJobParameters(
+    launchId: number,
+    projectId: number
+  ): Promise<LaunchJobParametersResponse> {
+    const url = `/api/reporting/v1/launches/${launchId}/job/parameters?projectId=${projectId}`;
+
+    if (this.config.debug) {
+      console.error(`[ZebrunnerReportingClient] Fetching job parameters for launch ${launchId}`);
+    }
+
+    const response = await this.makeAuthenticatedRequest<any>('GET', url);
+    const data = response.data ?? response;
+
+    try {
+      return LaunchJobParametersResponseSchema.parse(data);
+    } catch (error) {
+      throw new ZebrunnerReportingError(
+        `Failed to parse job parameters: ${error instanceof Error ? error.message : error}`
+      );
+    }
+  }
+
+  /**
+   * Trigger a new CI build from a template launch (Build now).
+   */
+  async startLaunchBuild(
+    launchId: number,
+    projectId: number,
+    payload: Record<string, string | boolean>
+  ): Promise<StartLaunchBuildResponse> {
+    const url = `/api/reporting/v1/launches/${launchId}/job:build?projectId=${projectId}`;
+
+    if (this.config.debug) {
+      console.error(`[ZebrunnerReportingClient] Starting build for launch ${launchId} (projectId=${projectId})`);
+    }
+
+    const response = await this.makeAuthenticatedRequest<any>('POST', url, payload);
+    const data = response.data ?? response;
+
+    try {
+      return StartLaunchBuildResponseSchema.parse(data);
+    } catch {
+      return data as StartLaunchBuildResponse;
     }
   }
 

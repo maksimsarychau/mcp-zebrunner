@@ -330,4 +330,50 @@ describe('ZebrunnerReportingClient Integration Tests', () => {
       console.log(`✅ Rerun triggered for launch ${launchId}:`, JSON.stringify(result).slice(0, 200));
     });
   });
+
+  describe('Launch job parameters (gated)', () => {
+    it('should fetch job parameters when ZEBRUNNER_START_LAUNCH_TEST_LAUNCH_ID is set', async function() {
+      const launchId = process.env.ZEBRUNNER_START_LAUNCH_TEST_LAUNCH_ID;
+      if (!launchId || !client) {
+        console.log('⚠️  Skipping job parameters test — set ZEBRUNNER_START_LAUNCH_TEST_LAUNCH_ID to run');
+        return;
+      }
+
+      const projectId = Number(process.env.ZEBRUNNER_START_LAUNCH_TEST_PROJECT_ID || TEST_PROJECT_ID);
+      const result = await client.getLaunchJobParameters(Number(launchId), projectId);
+      assert.ok(Array.isArray(result.items));
+      assert.ok(result.items.length > 0);
+      console.log(`✅ Job parameters for launch ${launchId}: ${result.items.length} params`);
+    });
+  });
+
+  describe('Start launch build (gated)', () => {
+    it('should trigger build when ZEBRUNNER_START_LAUNCH_EXECUTE=true', async function() {
+      if (process.env.ZEBRUNNER_START_LAUNCH_EXECUTE !== 'true' || !client) {
+        console.log('⚠️  Skipping build execution — set ZEBRUNNER_START_LAUNCH_EXECUTE=true to run');
+        return;
+      }
+
+      const launchId = Number(process.env.ZEBRUNNER_START_LAUNCH_TEST_LAUNCH_ID);
+      const projectId = Number(process.env.ZEBRUNNER_START_LAUNCH_TEST_PROJECT_ID || TEST_PROJECT_ID);
+      if (!launchId) {
+        console.log('⚠️  Skipping — ZEBRUNNER_START_LAUNCH_TEST_LAUNCH_ID required');
+        return;
+      }
+
+      const params = await client.getLaunchJobParameters(launchId, projectId);
+      const payload: Record<string, string | boolean> = {};
+      for (const p of params.items) {
+        if (p.parameterClass === 'BOOLEAN') {
+          payload[p.name] = p.value === true || p.value === 'true';
+        } else {
+          payload[p.name] = p.value == null ? '' : String(p.value);
+        }
+      }
+
+      const result = await client.startLaunchBuild(launchId, projectId, payload);
+      assert.ok(result);
+      console.log(`✅ Build triggered:`, JSON.stringify(result).slice(0, 200));
+    });
+  });
 });

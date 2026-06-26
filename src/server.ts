@@ -66,6 +66,14 @@ import {
   toLaunchRerunTarget,
   type LaunchRerunTarget,
 } from "./utils/launch-rerun.js";
+import {
+  buildParameterOverrides,
+  extractJobSummary,
+  formatParameterDiff,
+  mergeJobParameters,
+  resolveTemplateLaunch,
+  type ResolvedTemplateLaunch,
+} from "./utils/launch-job-build.js";
 // Pre-validation removed from the hot path — the API validates server-side.
 // On error, we enrich the message with valid options to help the user fix the request.
 async function enrichMutationError(
@@ -5002,6 +5010,182 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
     }
   );
 
+  // ========== start_launch (Beta) ==========
+
+  const StartLaunchSchema = z.object({
+    project: z.union([z.enum(["web", "android", "ios", "api"]), z.string(), z.number()])
+      .describe("Project alias (web/android/ios/api), project key, or project ID"),
+    launch_id: z.number().int().positive().optional()
+      .describe("Template launch ID (same as UI Build now). Use when known."),
+    template_query: z.string().optional()
+      .describe("Search past launches by name (e.g. 'Critical', 'Minimal-Acceptance'). Newest match used as template."),
+    launch_name: z.string().optional()
+      .describe("Alias for template_query — launch name substring search."),
+    suite_path: z.string().optional()
+      .describe("Match hidden CI suite param (e.g. 'mfp/android/critical-flow'). Can combine with template_query."),
+    build: z.string().optional()
+      .describe("Build filter override. Use '.*' for latest build."),
+    locale: z.string().optional().describe("Locale override (e.g. 'en_US')."),
+    test_run_rules: z.string().optional()
+      .describe("Test run rules override (e.g. 'PRIORITY=>P0||P1;;')."),
+    parameters: z.record(z.string(), z.union([z.string(), z.boolean()])).optional()
+      .describe("Additional job parameter overrides — keys must exist in job/parameters response."),
+    max_template_search: z.number().int().positive().max(50).default(20)
+      .describe("Max launches to scan when resolving template (default 20)."),
+    dry_run: BoolParam.describe("Show resolved template and merged payload without POST."),
+    confirm: BoolParam.describe("Must be true to execute. Without it, returns a preview for user approval."),
+    confirmation_token: z.string().optional()
+      .describe("Token returned by the preview step. Required when confirm is true."),
+  });
+
+  type StartLaunchArgs = z.infer<typeof StartLaunchSchema> & {
+    _resolvedTemplate?: ResolvedTemplateLaunch;
+    _mergedPayload?: Record<string, string | boolean>;
+  };
+
+  function formatStartLaunchPermissionError(error: unknown): string | null {
+    const message = error instanceof Error ? error.message : String(error);
+    const statusCode = error instanceof ZebrunnerReportingAuthError ? error.statusCode : undefined;
+    if (statusCode === 403 || message.includes("403")) {
+      return "❌ Permission denied: your token may lack IAM permission to trigger launch builds (reporting test-runs build/start).";
+    }
+    return null;
+  }
+
+  server.registerTool(
+    "start_launch",
+    {
+      description: `🚀 (Beta) Start a new automation launch via Zebrunner "Build now" (Reporting API job/parameters + job:build).
+
+Resolves a template launch by launch_id, launch name query, and/or suite_path, fetches live job parameters,
+merges your overrides (build, locale, test_run_rules, or parameters map), and triggers CI.
+
+Use build: ".*" for latest build. Discover parameters first via adv_get_launch_details with includeJobParameters: true.
+
+TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + confirmation_token. 2) After user approval, call with ONLY confirm: true and the confirmation_token. Payload is stored server-side — do NOT re-send other fields.`,
+      inputSchema: StartLaunchSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async (args: StartLaunchArgs) => {
+      try {
+        if (args.confirm) {
+          const restored = validateAndRestoreArgs(args);
+          if ("error" in restored) return { content: [{ type: "text" as const, text: restored.error }] };
+        }
+
+        if (!args.launch_id && !args.template_query && !args.launch_name && !args.suite_path) {
+          return {
+            content: [{
+              type: "text" as const,
+              text: "❌ Provide at least one of: launch_id, template_query / launch_name, or suite_path.",
+            }],
+          };
+        }
+
+        const { projectId } = await resolveProjectId(args.project);
+        const projectKey = await reportingClient.getProjectKey(projectId);
+        const baseUrl = reportingConfig.baseUrl.replace(/\/+$/, "");
+
+        if (!args.confirm) {
+          const template = await resolveTemplateLaunch(reportingClient, projectId, {
+            launchId: args.launch_id,
+            templateQuery: args.template_query ?? args.launch_name,
+            launchName: args.launch_name,
+            suitePath: args.suite_path,
+            maxTemplateSearch: args.max_template_search ?? 20,
+          });
+
+          const overrides = buildParameterOverrides(args);
+          const mergedPayload = mergeJobParameters(template.jobParameters.items, overrides);
+          const summary = extractJobSummary(template.jobParameters.items);
+          const diffLines = formatParameterDiff(template.jobParameters.items, mergedPayload);
+
+          const lines = [
+            "📋 Preview — start_launch",
+            `Project: ${projectKey} (ID ${projectId})`,
+            "",
+            `Template launch: ${template.launchName} (ID ${template.launchId})`,
+            `${baseUrl}/projects/${projectKey}/automation-launches/${template.launchId}`,
+            `Suite path: ${summary.suitePath ?? "(unknown)"}`,
+            "",
+            "Key parameter overrides:",
+            ...diffLines,
+            "",
+            `Total parameters in POST body: ${Object.keys(mergedPayload).length} (includes hidden params with defaults).`,
+            "",
+            "⚠️ This will trigger a real CI/automation build.",
+          ];
+
+          if (args.dry_run) {
+            lines.push("", "DRY RUN — POST payload:", JSON.stringify(mergedPayload, null, 2));
+            lines.push("", `POST /api/reporting/v1/launches/${template.launchId}/job:build?projectId=${projectId}`);
+            return { content: [{ type: "text" as const, text: lines.join("\n") }] };
+          }
+
+          const tokenPayload = { ...args, _resolvedTemplate: template, _mergedPayload: mergedPayload };
+          const token = generateConfirmationToken(JSON.stringify(tokenPayload));
+          lines.push(`confirmation_token: ${token}`);
+          lines.push(`⚠️ To proceed, call again with ONLY: { "confirm": true, "confirmation_token": "${token}" }`);
+          return { content: [{ type: "text" as const, text: lines.join("\n") }] };
+        }
+
+        const template = args._resolvedTemplate;
+        const mergedPayload = args._mergedPayload;
+        if (!template || !mergedPayload) {
+          return {
+            content: [{
+              type: "text" as const,
+              text: "❌ Missing stored build payload. Call without confirm first to get a preview.",
+            }],
+          };
+        }
+
+        const url = `/api/reporting/v1/launches/${template.launchId}/job:build?projectId=${projectId}`;
+        writeAuditLog({
+          timestamp: new Date().toISOString(),
+          tool: "start_launch",
+          method: "POST",
+          url,
+          projectKey,
+          payload: { templateLaunchId: template.launchId, parameterCount: Object.keys(mergedPayload).length },
+        });
+
+        const response = await reportingClient.startLaunchBuild(template.launchId, projectId, mergedPayload);
+        const newLaunchId = typeof response.id === "number" ? response.id : undefined;
+
+        const lines = [
+          `✅ Build triggered from template launch ${template.launchName} (ID ${template.launchId}).`,
+        ];
+        if (newLaunchId != null) {
+          lines.push(`New launch ID: ${newLaunchId}`);
+          lines.push(`${baseUrl}/projects/${projectKey}/automation-launches/${newLaunchId}`);
+        } else {
+          lines.push(`Response: ${JSON.stringify(response).slice(0, 300)}`);
+        }
+
+        return {
+          content: [{
+            type: "text" as const,
+            text: lines.join("\n") + steeringHint("start_launch", { id: newLaunchId ?? template.launchId }),
+          }],
+        };
+      } catch (error: any) {
+        const permMsg = formatStartLaunchPermissionError(error);
+        return {
+          content: [{
+            type: "text" as const,
+            text: permMsg ?? `❌ Error in start_launch: ${error.message}`,
+          }],
+        };
+      }
+    }
+  );
+
   const FileRef = z.union([
     z.object({ fileUuid: z.string().uuid().describe("UUID of a previously uploaded file") }),
     z.object({ file_path: z.string().min(1).describe("Absolute path to a local file to upload automatically") }),
@@ -6428,6 +6612,9 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       launchId: z.number().int().positive().describe("Launch ID (e.g., 118685)"),
       includeLaunchDetails: z.boolean().default(true).describe("Include detailed launch information"),
       includeTestSessions: z.boolean().default(true).describe("Include test sessions data"),
+      includeJobParameters: z.boolean().default(false).describe(
+        "Include CI job parameters from Build now dialog (suite path, build/locale/test_run_rules defaults, all param defs)"
+      ),
       format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format"),
       chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
         "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."

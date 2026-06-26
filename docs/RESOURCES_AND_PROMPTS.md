@@ -1,6 +1,6 @@
 # MCP Resources & Prompts Guide
 
-This guide covers two MCP features that complement the existing 60 tools:
+This guide covers two MCP features that complement the existing 63 tools:
 
 - **Resources** (`@` menu) — read-only reference data injected into the conversation context
 - **Prompts** (`/` commands) — pre-built, tested workflow instructions that guide the AI through multi-tool orchestrations

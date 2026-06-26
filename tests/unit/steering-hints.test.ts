@@ -152,6 +152,14 @@ describe("Steering Hints", () => {
     });
   });
 
+  describe("start_launch", () => {
+    it("suggests monitoring and rerun on failure", () => {
+      const hint = steeringHint("start_launch", { id: 140100 });
+      assert.ok(hint.includes("get_launch_details"));
+      assert.ok(hint.includes("rerun_launch_failures"));
+    });
+  });
+
   describe("edge cases", () => {
     it("returns empty string for unknown tool", () => {
       const hint = steeringHint("nonexistent_tool" as SteeringTool, { id: 1 });
@@ -172,7 +180,7 @@ describe("Steering Hints", () => {
       const tools: SteeringTool[] = [
         "create_test_suite", "create_test_case", "create_test_case_preview",
         "update_test_case", "manage_test_run_create", "manage_test_run_update",
-        "manage_test_run_add_cases", "import_launch_results", "rerun_launch_failures",
+        "manage_test_run_add_cases", "import_launch_results", "rerun_launch_failures", "start_launch",
       ];
       const emojiPattern = /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2702}-\u{27B0}\u{24C2}-\u{1F251}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}]/u;
       for (const tool of tools) {

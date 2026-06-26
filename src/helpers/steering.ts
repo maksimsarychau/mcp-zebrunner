@@ -14,7 +14,8 @@ export type SteeringTool =
   | "manage_test_run_update"
   | "manage_test_run_add_cases"
   | "import_launch_results"
-  | "rerun_launch_failures";
+  | "rerun_launch_failures"
+  | "start_launch";
 
 export interface SteeringContext {
   /** Primary entity ID (suite ID, test case key, run ID, etc.) */
@@ -86,6 +87,14 @@ export function steeringHint(tool: SteeringTool, ctx: SteeringContext): string {
         `  - Monitor rerun: adv_get_launch_details with launch_id: ${ctx.id}\n` +
         `  - List launches: adv_get_all_launches_for_project\n` +
         `  - If failures persist: adv_detailed_analyze_launch_failures with testRunId: ${ctx.id}`
+      );
+
+    case "start_launch":
+      return (
+        `\n\nTip: Next steps:\n` +
+        `  - Monitor build: adv_get_launch_details with launch_id: ${ctx.id}\n` +
+        `  - List launches: adv_get_all_launches_for_project\n` +
+        `  - On failures: adv_rerun_launch_failures with launch_id: ${ctx.id}`
       );
 
     default:

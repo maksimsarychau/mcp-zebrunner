@@ -208,6 +208,10 @@
     "description": "Rerun failed/aborted tests for one or more automation launches via the Reporting API (Beta)"
   },
   {
+    "name": "start_launch",
+    "description": "Trigger Zebrunner Build now to start a new automation launch via job parameters and job:build (Beta)"
+  },
+  {
     "name": "improve_test_case",
     "description": "Get AI-powered suggestions to improve test case quality"
   },

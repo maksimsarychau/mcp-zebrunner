@@ -1,5 +1,17 @@
 # Change Logs
 
+## v9.1.0 — Launch mutations (rerun failures + Build now)
+
+### Added
+
+- **adv_rerun_launch_failures** — Rerun failed/aborted tests for one or many launches (single/batch, preview/confirm).
+- **adv_start_launch** — Trigger CI "Build now" via Reporting API `job/parameters` + `job:build`; template resolution by launch_id, name query, or suite path; dynamic parameter validation.
+- **adv_get_launch_details** — Optional `includeJobParameters` for Build now job discovery (suite path, build/locale/test_run_rules defaults).
+
+### Changed
+
+- Version **9.1.0** across package, server manifest, Docker label, and catalogs (63 tools).
+
 ## v9.0.5 — Multi-arch Docker images (amd64 + arm64)
 
 ### Changed

@@ -763,7 +763,7 @@ Most test case tools support optional **change history enrichment** — fetching
 
 > **Full guide:** [docs/RESOURCES_AND_PROMPTS.md](docs/RESOURCES_AND_PROMPTS.md) — detailed usage, examples, reference tables, and contributor guide.
 
-In addition to 60 tools, the server now provides **13 resources** and **14 prompts** that improve discoverability and automate complex workflows.
+In addition to 63 tools, the server now provides **13 resources** and **14 prompts** that improve discoverability and automate complex workflows.
 
 ### Resources — `@` Context Injection
 
@@ -1472,7 +1472,7 @@ Leverage intelligent validation:
 ## 📚 Additional Documentation
 
 ### 📖 Tool References
-- **[TOOLS_CATALOG.md](TOOLS_CATALOG.md)** - 🆕 **Complete catalog of all 60 tools with natural language examples**
+- **[TOOLS_CATALOG.md](TOOLS_CATALOG.md)** - 🆕 **Complete catalog of all 63 tools with natural language examples**
 - **[docs/RESOURCES_AND_PROMPTS.md](docs/RESOURCES_AND_PROMPTS.md)** - 📎 **MCP Resources & Prompts — full usage guide, reference tables, and contributor guide**
 - **[INSTALL-GUIDE.md](INSTALL-GUIDE.md)** - 📥 **Step-by-step installation and setup guide**
 
