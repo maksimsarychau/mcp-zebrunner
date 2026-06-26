@@ -2,26 +2,42 @@
 
 ## v9.1.0 — Launch mutations (rerun failures + Build now)
 
-### Added
+> Full release notes: [docs/releases/v9.1.0.md](docs/releases/v9.1.0.md)
 
-- **adv_rerun_launch_failures** — Rerun failed/aborted tests for one or many launches (single/batch, preview/confirm).
-- **adv_start_launch** — Trigger CI Build Now via Reporting API `job/parameters` + `job:build` (**Jenkins integration only**; not Launch Launchers); template resolution by launch_id, name query, or suite path.
-- **adv_get_launch_details** — Optional `includeJobParameters` for Jenkins Build Now job discovery (not Launch Launchers).
+### Added — Tools
 
-### Changed
+- **adv_rerun_launch_failures** — Rerun failed/aborted tests for one or many launches (single/batch, preview/confirm). IAM: `reporting:test-runs:rerun`.
+- **adv_start_launch** — Trigger CI **Build Now** via Reporting API `job/parameters` + `job:build` (**Jenkins integration only**; not Launch Launchers); template resolution by `launch_id`, name query, or `suite_path`.
+- **adv_get_launch_details** — Optional `includeJobParameters` for Jenkins Build Now job discovery from a prior launch.
 
-- Version **9.1.0** across package, server manifest, Docker label, and catalogs (63 tools).
-- **adv_start_launch** — Non-en_US locale previews warn and auto-merge `NOT_TAGS` exclusions when `localeTestRunRules` is enabled for the project (configurable in `zebrunner-config.json`).
-- **Documentation** — `localeTestRunRules`, `relaunchFailures`, and `featureScopedLaunch` config blocks documented in README, RESOURCES_AND_PROMPTS, TOOLS_CATALOG.
-- **`/feature-scoped-launch` prompt (17 prompts)** — Feature keyword → test_run_rules TAGS → Build Now per root suite.
+### Added — MCP Prompts (17 total, +2)
 
-**Also configurable in `zebrunner-config.json` (v9.1.0+):**
+- **`/relaunch-regression-failures`** — Discover failed launches (milestone/build or rolling last 7 days), apply `relaunchFailures` exclusions, batch-rerun via `adv_rerun_launch_failures` with preview/confirm.
+- **`/feature-scoped-launch`** — Feature keyword → test discovery → `test_run_rules` TAGS per root suite → Build Now preview/confirm; Jenkins `suite_path` resolved dynamically (args, recent launches, or user).
+
+### Added — Instance configuration (`zebrunner-config.json`)
 
 | Key | Description |
 |-----|-------------|
 | `localeTestRunRules` | Per-project Build Now rules for non-`en_US` locales (`enabled`, `projectKeys`, `enUsOnlyFeatureSuites`, `suiteNameMatch`) |
 | `relaunchFailures` | Launch name exclusions and batch cap for `/relaunch-regression-failures` (`excludeLaunchNamePatterns`, `maxLaunchesPerPlatform`) |
-| `featureScopedLaunch` | Root suite name → Jenkins `suite_path` for `/feature-scoped-launch` (`rootSuiteLaunchPaths`) |
+
+Override via `ZEBRUNNER_CONFIG_JSON` or custom config path. Non-MFP: set `localeTestRunRules.enabled: false` and adjust `relaunchFailures`.
+
+### Changed
+
+- Version **9.1.0** across package, server manifest, Docker label, and catalogs (**63 tools**, **14 resources**, **17 prompts**).
+- **adv_start_launch** — Non-`en_US` locale previews warn and auto-merge `NOT_TAGS` exclusions when `localeTestRunRules` is enabled for the project.
+- Tool steering hints and descriptions for launch mutation workflows (`src/helpers/steering.ts`, `src/server.ts`).
+
+### Documentation
+
+- [docs/releases/v9.1.0.md](docs/releases/v9.1.0.md) — upgrade checklist, non-MFP guidance, quick examples.
+- [README.md](README.md) — launch mutation tools, 17 prompts, project-specific config section.
+- [TOOLS_CATALOG.md](TOOLS_CATALOG.md) — `rerun_launch_failures`, `start_launch`, config cross-links.
+- [docs/RESOURCES_AND_PROMPTS.md](docs/RESOURCES_AND_PROMPTS.md) — new prompts + project-specific automation configuration.
+- [docs/TEST_PROMPTS.md](docs/TEST_PROMPTS.md) — manual test scenarios for relaunch and feature-scoped launch.
+- [custom-catalog.yaml](custom-catalog.yaml), [mcp-catalog.yaml](mcp-catalog.yaml) — prompt counts updated.
 
 ## v9.0.5 — Multi-arch Docker images (amd64 + arm64)
 

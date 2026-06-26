@@ -314,6 +314,12 @@ Runs a 5-check Go/No-Go assessment: pass rate, unresolved failures, runtime degr
 
 Builds per-suite automation coverage tables with TOTAL and TOTAL REGRESSION summary rows. Handles the "Manual Only" detection complexity (automation state vs custom field) automatically.
 
+#### `/regression-summary`
+
+**Parameters:** `project`, `milestone?`, `build?`, `previous_milestone?`
+
+Analyzes regression test results for a milestone or build: aggregated pass/fail summary, new bugs (vs previous milestone), top bugs, bugs per suite, and slowest tests. Guides the LLM to call `adv_regression_results_analyzer` with correct parameters and auto-detect `previous_milestone` when omitted.
+
 ### Analysis Prompts
 
 These prompts guide the AI through focused analysis workflows using 2-4 tools.
@@ -353,9 +359,9 @@ End-to-end workflow: find tests matching a feature keyword, group by root suite,
 
 - **Optional suite scope** — `suite_name` or `suite_path` limits discovery; omit to search the whole project
 - **One launch per root suite** — separate TAGS filter, preview, and confirm for each
-- **Config** — `featureScopedLaunch.rootSuiteLaunchPaths` in zebrunner-config.json maps root suite names to Jenkins `suite_path` (e.g. Minimal Acceptance → `mfp/android/minimal-acceptance`)
+- **Dynamic suite_path** — resolved from prompt args, recent launches (`includeJobParameters`), or by asking the user
 
-**Example:** *Find all Water tests in Minimal Acceptance and run them on build 50977*
+**Example:** *Find all Water tests in Minimal Acceptance and run them on build 50977* (agent may ask for `suite_path` if not provided)
 
 **Best for:** Targeted feature validation runs without executing an entire regression suite.
 
@@ -419,21 +425,8 @@ Several launch workflows read **`zebrunner-config.json`** at runtime. Customize 
 |--------------|---------|-------|
 | `localeTestRunRules` | `adv_start_launch` preview | Only projects listed in `projectKeys`, only when locale ≠ `en_US` |
 | `relaunchFailures` | `/relaunch-regression-failures` prompt | All projects; patterns are launch-name filters, not project keys |
-| `featureScopedLaunch` | `/feature-scoped-launch` prompt | Root suite name → Jenkins `suite_path` hints for Build Now template resolution |
 
-### `featureScopedLaunch` (feature keyword → Build Now)
-
-Maps TCM root suite names to the Jenkins hidden **`suite`** parameter used by `adv_start_launch`:
-
-```json
-"featureScopedLaunch": {
-  "rootSuiteLaunchPaths": {
-    "Minimal Acceptance": "mfp/android/minimal-acceptance"
-  }
-}
-```
-
-The `/feature-scoped-launch` prompt uses this when the user does not pass `suite_path`. Add entries for each root suite you run via Build Now.
+`/feature-scoped-launch` does **not** use zebrunner-config for suite paths — it resolves Jenkins `suite_path` from prompt args, recent launches, or by asking the user.
 
 ### `localeTestRunRules` (Build Now / non-English locales)
 
@@ -567,6 +560,7 @@ The AI knows exactly which custom fields and automation states exist, avoiding t
 | `/executive-dashboard` | E2E | `projects` | Yes | 5-section standup-ready report |
 | `/release-readiness` | E2E | `project`, `milestone?` | Yes | Go/No-Go assessment |
 | `/suite-coverage` | E2E | `projects` | Yes | Per-suite coverage tables |
+| `/regression-summary` | E2E | `project`, `milestone?`, `build?`, `previous_milestone?` | Yes | Regression results overview, new bugs, top bugs, slowest tests |
 | `/review-test-case` | Analysis | `case_key` | Yes | Validate + improve workflow |
 | `/launch-triage` | Analysis | `project` | Yes | Post-regression failure triage |
 | `/relaunch-regression-failures` | Analysis | `projects`, `milestone?`, `build?`, `period?` | Yes | Batch-rerun failed launches (uses relaunchFailures config) |
@@ -586,18 +580,18 @@ The AI knows exactly which custom fields and automation states exist, avoiding t
 
 ```
 src/
-  resources.ts       # ResourceCache class + registerResources() — 13 resources
-  prompts.ts         # Prompt builders + registerPrompts() — 16 prompts
+  resources.ts       # ResourceCache class + registerResources() — 14 resources
+  prompts.ts         # Prompt builders + registerPrompts() — 17 prompts
   server.ts          # Wires resources and prompts: registerResources(server, deps) + registerPrompts(server)
 
 tests/
   unit/
     resource-registry.test.ts   # 24 tests: registration coverage, content validation, cache
-    prompt-registry.test.ts     # 64 tests: registration coverage, content validation, hygiene
+    prompt-registry.test.ts     # 64+ tests: registration coverage, content validation, hygiene
   eval/
     eval-prompts.ts             # 4 resource-aware eval prompts (category: "resource")
   helpers/
-    tool-coverage-matrix.ts     # RESOURCE_MANIFEST (13 entries) + PROMPT_MANIFEST (13 entries)
+    tool-coverage-matrix.ts     # RESOURCE_MANIFEST (14 entries) + PROMPT_MANIFEST (17 entries)
 
 docs/
   TEST_PROMPTS.md               # Sections 14 (Resources) and 15 (Prompts) — manual test scenarios

@@ -46,9 +46,6 @@ const ZebrunnerConfigSchema = z.object({
     excludeLaunchNamePatterns: z.array(z.string()).optional(),
     maxLaunchesPerPlatform: z.number().int().positive().max(50).optional(),
   }).optional(),
-  featureScopedLaunch: z.object({
-    rootSuiteLaunchPaths: z.record(z.string(), z.string()).optional(),
-  }).optional(),
 }).strict().partial();
 
 export type ZebrunnerConfig = z.infer<typeof ZebrunnerConfigSchema>;
@@ -73,9 +70,6 @@ const DEFAULTS: Required<{
   relaunchFailures: {
     excludeLaunchNamePatterns: string[];
     maxLaunchesPerPlatform: number;
-  };
-  featureScopedLaunch: {
-    rootSuiteLaunchPaths: Record<string, string>;
   };
 }> = {
   projectAliases: {
@@ -123,11 +117,6 @@ const DEFAULTS: Required<{
     excludeLaunchNamePatterns: ["Performance"],
     maxLaunchesPerPlatform: 50,
   },
-  featureScopedLaunch: {
-    rootSuiteLaunchPaths: {
-      "Minimal Acceptance": "mfp/android/minimal-acceptance",
-    },
-  },
 };
 
 // ---------------------------------------------------------------------------
@@ -159,9 +148,6 @@ export interface ResolvedConfig {
   relaunchFailures: {
     excludeLaunchNamePatterns: string[];
     maxLaunchesPerPlatform: number;
-  };
-  featureScopedLaunch: {
-    rootSuiteLaunchPaths: Record<string, string>;
   };
 }
 
@@ -271,11 +257,6 @@ function mergeConfig(overrides: ZebrunnerConfig | null): ResolvedConfig {
         ?? DEFAULTS.relaunchFailures.excludeLaunchNamePatterns,
       maxLaunchesPerPlatform: overrides.relaunchFailures?.maxLaunchesPerPlatform
         ?? DEFAULTS.relaunchFailures.maxLaunchesPerPlatform,
-    },
-    featureScopedLaunch: {
-      rootSuiteLaunchPaths: overrides.featureScopedLaunch?.rootSuiteLaunchPaths
-        ? { ...DEFAULTS.featureScopedLaunch.rootSuiteLaunchPaths, ...overrides.featureScopedLaunch.rootSuiteLaunchPaths }
-        : { ...DEFAULTS.featureScopedLaunch.rootSuiteLaunchPaths },
     },
   };
 }

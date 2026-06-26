@@ -20,7 +20,7 @@
 12. [Suite Coverage Report](#12-suite-coverage-report)
 13. [Mutation Tools (Beta)](#13-mutation-tools-beta)
 14. [MCP Resources](#14-mcp-resources-v721)
-15. [MCP Prompts](#15-mcp-prompts-v721)
+15. [MCP Prompts](#15-mcp-prompts-v910)
 16. [Tool Annotations](#16-tool-annotations-v721)
 17. [Tool Metrics & Token Tracking](#17-tool-metrics--token-tracking-v721)
 
@@ -360,6 +360,39 @@
 > Get the full details for the latest Android launch including all test sessions.
 
 **Expected:** Returns launch metadata, test sessions with durations, pass/fail counts, and environment info.
+
+**Prompt 2 — Jenkins job parameters (v9.1.0)**
+> Get launch details for launch 132452 in the Android project with job parameters included.
+
+**Expected:** Uses `includeJobParameters: true`. Returns Jenkins Build Now parameters from the launch's job record (for use with `start_launch` template resolution). Does not apply to Launch Launchers.
+
+---
+
+### `rerun_launch_failures` *(v9.1.0)*
+
+**Prompt 1 — Single launch preview**
+> Preview rerunning failures for launch 132522 in the Android project.
+
+**Expected:** Returns preview table with failed/aborted count and confirmation token. Does not POST until `confirm: true`.
+
+**Prompt 2 — Batch by milestone**
+> Rerun failed tests for the latest launches in milestone 26.19.0 for Android, max 5 launches.
+
+**Expected:** Batch mode without `launch_id`. Filters by milestone, caps at `max_launches: 5`, preview then confirm.
+
+---
+
+### `start_launch` *(v9.1.0)*
+
+**Prompt 1 — Build Now preview**
+> Preview Build Now for Android regression using template launch 132452, build 50977.
+
+**Expected:** Resolves Jenkins template launch, merges parameters, shows preview with confirmation token. Does not trigger CI until confirmed.
+
+**Prompt 2 — With test_run_rules**
+> Preview start_launch for Android with test_run_rules TAGS=>featureSuiteId=12345;; and suite_path from recent Minimal Acceptance launch.
+
+**Expected:** Merges `test_run_rules` into job parameters. If locale ≠ en_US and `localeTestRunRules` enabled for project, preview warns about en_US-only suite exclusions.
 
 ---
 
@@ -1328,7 +1361,9 @@ MCP resources provide read-only reference data accessible via the `@` menu in MC
 
 ---
 
-## 15. MCP Prompts *(v7.2.2)*
+## 15. MCP Prompts *(v9.1.0)*
+
+> **17 prompts** registered. v9.1.0 adds `/relaunch-regression-failures` and `/feature-scoped-launch`. See [release notes](releases/v9.1.0.md).
 
 MCP prompts provide pre-built, tested workflow instructions accessible via the `/` command in MCP clients. Each prompt injects expert-crafted multi-step instructions that guide Claude through complex multi-tool workflows.
 
@@ -1391,9 +1426,7 @@ MCP prompts provide pre-built, tested workflow instructions accessible via the `
 **Prompt 8d — Feature-scoped Build Now via /feature-scoped-launch**
 > Use `/feature-scoped-launch` with project: "android", feature: "Water", suite_name: "Minimal Acceptance", build: "50977"
 
-**Config:** Jenkins `suite_path` hints from `featureScopedLaunch.rootSuiteLaunchPaths` in zebrunner-config.json when `suite_path` is omitted.
-
-**Expected:** Prompt drives adv_aggregate_test_cases_by_feature (test_run_rules format, by_root_suite), builds TAGS=>featureSuiteId=... filter, previews adv_start_launch with test_run_rules, waits for approval, confirms. One launch per root suite with matches.
+**Expected:** Prompt drives adv_aggregate_test_cases_by_feature (test_run_rules format, by_root_suite), builds TAGS=>featureSuiteId=... filter, resolves suite_path from args/recent launches/user, previews adv_start_launch, waits for approval, confirms.
 
 **Prompt 9 — Flaky test review via /flaky-review**
 > Use `/flaky-review` with project: "android"

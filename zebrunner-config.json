@@ -43,10 +43,5 @@
   "relaunchFailures": {
     "excludeLaunchNamePatterns": ["Performance"],
     "maxLaunchesPerPlatform": 50
-  },
-  "featureScopedLaunch": {
-    "rootSuiteLaunchPaths": {
-      "Minimal Acceptance": "mfp/android/minimal-acceptance"
-    }
   }
 }

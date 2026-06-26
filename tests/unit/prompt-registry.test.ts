@@ -333,23 +333,8 @@ describe("Relaunch Regression Failures Prompt", () => {
 });
 
 describe("Feature-Scoped Launch Prompt", () => {
-  const TEST_LAUNCH_PATHS = {
-    rootSuiteLaunchPaths: {
-      "Regression Alpha": "org/platform/regression-alpha",
-    },
-  };
-
   it("references aggregate_test_cases_by_feature and start_launch", () => {
-    const text = buildFeatureScopedLaunchPrompt(
-      "PROJ_A",
-      "Water",
-      "Regression Alpha",
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      TEST_LAUNCH_PATHS,
-    );
+    const text = buildFeatureScopedLaunchPrompt("PROJ_A", "Water", "Regression Alpha");
     assert.ok(text.includes("aggregate_test_cases_by_feature"));
     assert.ok(text.includes("adv_start_launch"));
     assert.ok(text.includes("Water"));
@@ -357,46 +342,20 @@ describe("Feature-Scoped Launch Prompt", () => {
   });
 
   it("includes suite scope when suite_name provided", () => {
-    const text = buildFeatureScopedLaunchPrompt(
-      "PROJ_A",
-      "Water",
-      "Regression Alpha",
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      TEST_LAUNCH_PATHS,
-    );
+    const text = buildFeatureScopedLaunchPrompt("PROJ_A", "Water", "Regression Alpha");
     assert.ok(text.includes("Regression Alpha"));
     assert.ok(text.includes("Suite scope"));
   });
 
-  it("uses configured rootSuiteLaunchPaths from settings", () => {
-    const text = buildFeatureScopedLaunchPrompt(
-      "PROJ_A",
-      "Water",
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      TEST_LAUNCH_PATHS,
-    );
-    assert.ok(text.includes("org/platform/regression-alpha"));
-    assert.ok(text.includes("featureScopedLaunch"));
+  it("resolves suite_path dynamically and asks user", () => {
+    const text = buildFeatureScopedLaunchPrompt("PROJ_A", "Water");
+    assert.ok(text.includes("Ask the user") || text.includes("ask the user"));
+    assert.ok(text.includes("includeJobParameters"));
+    assert.ok(!text.includes("featureScopedLaunch"));
   });
 
   it("builds test_run_rules TAGS guidance and one launch per root suite", () => {
-    const text = buildFeatureScopedLaunchPrompt(
-      "PROJ_A",
-      "Water",
-      undefined,
-      undefined,
-      "50977",
-      undefined,
-      undefined,
-      TEST_LAUNCH_PATHS,
-    );
+    const text = buildFeatureScopedLaunchPrompt("PROJ_A", "Water", undefined, undefined, "50977");
     assert.ok(text.includes("TAGS=>featureSuiteId"));
     assert.ok(text.includes("50977"));
     assert.ok(text.includes("One Build Now launch per root suite"));

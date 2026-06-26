@@ -21,12 +21,6 @@ describe("zebrunner-config relaunchFailures + localeTestRunRules", () => {
     assert.ok(cfg.localeTestRunRules.suiteNameMatch === "exact" || cfg.localeTestRunRules.suiteNameMatch === "includes");
   });
 
-  it("loads featureScopedLaunch with expected shape", () => {
-    reloadConfig();
-    const cfg = getConfig();
-    assert.equal(typeof cfg.featureScopedLaunch.rootSuiteLaunchPaths, "object");
-  });
-
   it("merges relaunchFailures from ZEBRUNNER_CONFIG_JSON override", () => {
     const prev = process.env.ZEBRUNNER_CONFIG_JSON;
     process.env.ZEBRUNNER_CONFIG_JSON = JSON.stringify({

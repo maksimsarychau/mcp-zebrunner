@@ -2,6 +2,8 @@
 
 Complete reference of all available tools with natural language usage examples.
 
+> **v9.1.0:** New launch mutation tools — [`rerun_launch_failures`](#rerun_launch_failures), [`start_launch`](#start_launch), and [`get_launch_details`](#get_launch_details) (`includeJobParameters`). See [release notes](docs/releases/v9.1.0.md).
+
 > **Naming:** Every tool below is registered under two names — the canonical `adv_<name>` form (e.g. `adv_create_test_case`) and a deprecated legacy alias (`<name>`) kept for backward compatibility. Examples often use the legacy short form for readability; both forms behave identically. Prefer the `adv_` form when both this server and the official Zebrunner MCP are connected.
 
 ## 📑 Table of Contents
@@ -877,9 +879,8 @@ Tools and prompts below honor optional blocks in **[zebrunner-config.json](zebru
 |-------|---------------|-----------------|
 | `localeTestRunRules` | `start_launch` | Preview only; project in `projectKeys` and locale ≠ `en_US` |
 | `relaunchFailures` | `/relaunch-regression-failures`, `rerun_launch_failures` (via prompt) | Launch name exclusions + batch cap in prompt text |
-| `featureScopedLaunch` | `/feature-scoped-launch`, `start_launch` (via prompt) | Root suite → Jenkins suite_path hints |
 
-**Non-MFP deployments:** set `localeTestRunRules.enabled: false`, customize `featureScopedLaunch.rootSuiteLaunchPaths` for your suites, and adjust `relaunchFailures.excludeLaunchNamePatterns`.
+**Non-MFP deployments:** set `localeTestRunRules.enabled: false` and adjust `relaunchFailures.excludeLaunchNamePatterns`. `/feature-scoped-launch` resolves Jenkins `suite_path` from user input or recent launches — no config required.
 
 Details: [README — Project-specific automation rules](README.md#project-specific-automation-rules-localetestrunrules--relaunchfailures) · [RESOURCES_AND_PROMPTS.md](docs/RESOURCES_AND_PROMPTS.md#project-specific-automation-configuration)
 
@@ -924,7 +925,7 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 
 **Instance configuration (`localeTestRunRules`):** When enabled and the resolved project key is listed in `projectKeys`, non-`en_US` locale previews warn and may auto-merge `NOT_TAGS` exclusions for suites in `enUsOnlyFeatureSuites`. See [zebrunner-config.json](zebrunner-config.json) and [README](README.md#project-specific-automation-rules-localetestrunrules--relaunchfailures).
 
-**Related MCP prompt:** Use `/feature-scoped-launch` to find tests by feature keyword, build `test_run_rules` TAGS filters per root suite, and preview/trigger Build Now — see `featureScopedLaunch.rootSuiteLaunchPaths` in zebrunner-config.json.
+**Related MCP prompt:** Use `/feature-scoped-launch` to find tests by feature keyword, build `test_run_rules` TAGS filters per root suite, and preview/trigger Build Now (suite_path resolved from args, past launches, or user input).
 
 **Parameters:**
 

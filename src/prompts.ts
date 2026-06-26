@@ -463,10 +463,6 @@ Steps for each platform:
 Present discovery summary BEFORE any mutation preview.`;
 }
 
-export type FeatureScopedLaunchSettings = {
-  rootSuiteLaunchPaths: Record<string, string>;
-};
-
 export function buildFeatureScopedLaunchPrompt(
   project: string,
   feature: string,
@@ -475,34 +471,20 @@ export function buildFeatureScopedLaunchPrompt(
   build?: string,
   locale?: string,
   templateQuery?: string,
-  featureScopedLaunch?: FeatureScopedLaunchSettings,
-  localeSettings?: LocaleTestRunRulesSettings,
 ): string {
-  const launchPaths = featureScopedLaunch ?? getConfig().featureScopedLaunch;
-  const localeCfg = localeSettings ?? getConfig().localeTestRunRules;
-  const configuredPaths = Object.entries(launchPaths.rootSuiteLaunchPaths);
-  const configuredPathsBlock = configuredPaths.length > 0
-    ? configuredPaths.map(([name, path]) => `- "${name}" → suite_path: "${path}"`).join("\n")
-    : "- (none configured — resolve suite_path from user input or past launches)";
-
   const scopeSection = suiteName || suitePath
     ? `**Suite scope:** ${suiteName ? `root suite name "${suiteName}"` : ""}${suiteName && suitePath ? " + " : ""}${suitePath ? `suite_path "${suitePath}"` : ""}`
     : `**Suite scope:** Whole project — discover all root suites containing matches, then one Build Now per root suite`;
 
   const buildClause = build ? `- build: "${build}"` : "- build: ask user or use \".*\" for latest";
-  const localeClause = locale ? `- locale: "${locale}"` : "- locale: omit unless user specifies (non-en_US triggers localeTestRunRules when configured)";
+  const localeClause = locale ? `- locale: "${locale}"` : "- locale: ask user if needed; adv_start_launch applies localeTestRunRules from zebrunner-config.json when configured";
   const templateClause = templateQuery
     ? `- template_query: "${templateQuery}"`
-    : "- template_query: infer from root suite name or featureScopedLaunch.rootSuiteLaunchPaths in zebrunner-config.json";
+    : "- template_query: infer from root suite name or recent launches if suite_path is unknown";
 
   return `Find tests related to feature "${feature}" in project ${project}, build test_run_rules filters per root suite, preview Build Now (adv_start_launch), and trigger after user approval.
 
 ${scopeSection}
-
-## Configuration (zebrunner-config.json)
-**featureScopedLaunch.rootSuiteLaunchPaths** (Jenkins hidden \`suite\` param hints):
-${configuredPathsBlock}
-${localeCfg.enabled ? `\n**localeTestRunRules:** enabled for ${localeCfg.projectKeys.join(", ")} — adv_start_launch preview auto-handles non-en_US NOT_TAGS when applicable.` : ""}
 
 ## CRITICAL RULES
 1. **Never call adv_start_launch with confirm: true** without explicit user approval after each preview.
@@ -510,6 +492,7 @@ ${localeCfg.enabled ? `\n**localeTestRunRules:** enabled for ${localeCfg.project
 3. **One Build Now launch per root suite** that has matching tests — separate test_run_rules and separate preview/confirm for each.
 4. Use **adv_aggregate_test_cases_by_feature** for discovery — do not manually grep test lists unless the tool returns zero matches.
 5. **Jenkins Build Now only** — adv_start_launch does not work with Launch Launchers.
+6. **Resolve suite_path dynamically** — ask the user when not provided; do not assume hardcoded paths.
 
 ## Phase 0 — Resolve project and scope
 - project: "${project}" (resolve alias via adv_get_available_projects if needed)
@@ -521,6 +504,7 @@ ${localeClause}
 ${templateClause}
 
 If suite scope is ambiguous (e.g. user said "Minimal Acceptance" but multiple suites match), ask before proceeding.
+If suite_path is missing for a root suite, **ask the user** before preview (e.g. "What Jenkins suite_path for Minimal Acceptance? e.g. mfp/android/minimal-acceptance").
 
 ## Phase 1 — Discover feature tests and suites
 
@@ -547,15 +531,14 @@ If zero matches: stop and suggest alternate keywords or broader suite scope.
 
 ## Phase 2 — Resolve Build Now template per root suite
 
-For each root suite with matches:
+For each root suite with matches, determine **suite_path** (hidden Jenkins param) dynamically:
 
-1. Determine **suite_path** (hidden Jenkins param), in priority order:
-   - User-provided suite_path arg${suitePath ? ` ("${suitePath}")` : ""}
-   - featureScopedLaunch.rootSuiteLaunchPaths[root suite name] from config
-   - Past launch: adv_get_all_launches_with_filter + adv_get_launch_details with includeJobParameters: true
-   - Ask user if still unknown
+1. User-provided \`suite_path\` prompt arg${suitePath ? ` ("${suitePath}")` : ""} — use for all launches in this session if scoped to one suite
+2. User-provided \`template_query\` or root suite name as launch name search
+3. **Recent launches:** adv_get_all_launches_with_filter (query: root suite name) → adv_get_launch_details with includeJobParameters: true → read \`suite\` param
+4. **Ask the user** if still unknown — do not guess
 
-2. Optionally confirm template via adv_get_launch_details on a recent launch from that suite.
+Optionally confirm template via adv_get_launch_details on a recent matching launch.
 
 ## Phase 3 — Preview and trigger (one root suite at a time)
 
@@ -610,7 +593,7 @@ export function getPromptsCatalog(): PromptMeta[] {
     { name: "review-test-case", title: "Review Test Case", description: "Validate and improve a test case against quality standards with actionable suggestions", category: "Analysis", args: ["case_key"] },
     { name: "launch-triage", title: "Launch Failure Triage", description: "Post-regression failure analysis: find unlinked failures, analyze root causes, recommend actions", category: "Analysis", args: ["project"] },
     { name: "relaunch-regression-failures", title: "Relaunch Regression Failures", description: "Find failed launches (milestone/build or last 7 days), apply relaunchFailures config exclusions, and batch-rerun failures", category: "Analysis", args: ["projects", "milestone?", "build?", "period?"] },
-    { name: "feature-scoped-launch", title: "Feature-Scoped Build Now", description: "Find tests by feature keyword, build test_run_rules per root suite, preview and trigger adv_start_launch", category: "Analysis", args: ["project", "feature", "suite_name?", "suite_path?", "build?", "locale?", "template_query?"] },
+    { name: "feature-scoped-launch", title: "Feature-Scoped Build Now", description: "Find tests by feature keyword, build test_run_rules per root suite, preview and trigger adv_start_launch (suite_path resolved dynamically)", category: "Analysis", args: ["project", "feature", "suite_name?", "suite_path?", "build?", "locale?", "template_query?"] },
     { name: "flaky-review", title: "Flaky Test Review", description: "Find flaky tests, analyze execution history, and recommend stabilization priorities", category: "Analysis", args: ["project"] },
     { name: "find-duplicates", title: "Find Duplicate Test Cases", description: "Analyze test cases for duplicates using structural and optional semantic analysis", category: "Analysis", args: ["project", "suite_id?"] },
     { name: "daily-qa-standup", title: "Daily QA Standup", description: "Prepare a concise daily QA standup summary with pass rates, blockers, flaky tests, and action items", category: "Role-Specific", args: ["projects"] },
