@@ -11,6 +11,8 @@ import {
   buildSuiteCoveragePrompt,
   buildReviewTestCasePrompt,
   buildLaunchTriagePrompt,
+  buildRelaunchRegressionFailuresPrompt,
+  buildFeatureScopedLaunchPrompt,
   buildFlakyReviewPrompt,
   buildFindDuplicatesPrompt,
   buildDailyQaStandupPrompt,
@@ -42,7 +44,7 @@ describe("Prompt Registry Coverage", () => {
   const registeredPrompts = extractPromptRegistrations(promptSource);
 
   it("registers the expected number of prompts", () => {
-    assert.equal(registeredPrompts.length, 15, `Expected 15 prompts, got ${registeredPrompts.length}: ${registeredPrompts.join(", ")}`);
+    assert.equal(registeredPrompts.length, 17, `Expected 17 prompts, got ${registeredPrompts.length}: ${registeredPrompts.join(", ")}`);
   });
 
   it("has unique prompt names", () => {
@@ -59,6 +61,8 @@ describe("Prompt Registry Coverage", () => {
       "suite-coverage",
       "review-test-case",
       "launch-triage",
+      "relaunch-regression-failures",
+      "feature-scoped-launch",
       "flaky-review",
       "find-duplicates",
       "daily-qa-standup",
@@ -228,6 +232,183 @@ describe("Launch Triage Prompt", () => {
   });
 });
 
+describe("Relaunch Regression Failures Prompt", () => {
+  const TEST_RELAUNCH_SETTINGS = {
+    excludeLaunchNamePatterns: ["Benchmark", "LoadTest"],
+    maxLaunchesPerPlatform: 25,
+  };
+
+  const TEST_LOCALE_SETTINGS = {
+    enabled: true,
+    projectKeys: ["PROJ_A", "PROJ_B"],
+    enUsOnlyFeatureSuites: ["FeatureAlpha"],
+    suiteNameMatch: "includes" as const,
+  };
+
+  const DISABLED_LOCALE_SETTINGS = { ...TEST_LOCALE_SETTINGS, enabled: false };
+
+  it("milestone mode references discovery and rerun tools", () => {
+    const text = buildRelaunchRegressionFailuresPrompt(
+      "PROJ_A,PROJ_B",
+      "1.0.0",
+      undefined,
+      undefined,
+      TEST_RELAUNCH_SETTINGS,
+      DISABLED_LOCALE_SETTINGS,
+    );
+    assert.ok(text.includes("PROJ_A,PROJ_B"));
+    assert.ok(text.includes("1.0.0"));
+    assert.ok(text.includes("get_all_launches_with_filter"));
+    assert.ok(text.includes("rerun_launch_failures"));
+  });
+
+  it("mentions preview/confirm safety rules", () => {
+    const text = buildRelaunchRegressionFailuresPrompt(
+      "PROJ_A",
+      "1.0.0",
+      undefined,
+      undefined,
+      TEST_RELAUNCH_SETTINGS,
+      DISABLED_LOCALE_SETTINGS,
+    );
+    assert.ok(text.includes("confirm: true"));
+    assert.ok(text.includes("preview"));
+    assert.ok(text.includes("Never skip the preview step"));
+  });
+
+  it("last_7_days mode mentions startedAt and 7-day window", () => {
+    const text = buildRelaunchRegressionFailuresPrompt(
+      "PROJ_A,PROJ_B,PROJ_C",
+      undefined,
+      undefined,
+      "last_7_days",
+      TEST_RELAUNCH_SETTINGS,
+      DISABLED_LOCALE_SETTINGS,
+    );
+    assert.ok(text.includes("startedAt"));
+    assert.ok(text.includes("7 * 24 * 60 * 60 * 1000") || text.includes("Last 7 days"));
+    assert.ok(text.includes("windowStartMs"));
+  });
+
+  it("uses relaunchFailures config for launch exclusions", () => {
+    const text = buildRelaunchRegressionFailuresPrompt(
+      "PROJ_A",
+      undefined,
+      undefined,
+      undefined,
+      TEST_RELAUNCH_SETTINGS,
+      DISABLED_LOCALE_SETTINGS,
+    );
+    assert.ok(text.includes("relaunchFailures.excludeLaunchNamePatterns"));
+    assert.ok(text.includes('"Benchmark"'));
+    assert.ok(text.includes('"LoadTest"'));
+    assert.ok(text.includes("maxLaunchesPerPlatform"));
+    assert.ok(text.includes("25 launches"));
+  });
+
+  it("mentions localeTestRunRules when enabled in config", () => {
+    const text = buildRelaunchRegressionFailuresPrompt(
+      "PROJ_A",
+      undefined,
+      undefined,
+      undefined,
+      TEST_RELAUNCH_SETTINGS,
+      TEST_LOCALE_SETTINGS,
+    );
+    assert.ok(text.includes("localeTestRunRules"));
+    assert.ok(text.includes("PROJ_A"));
+  });
+
+  it("does not reference start_launch as rerun tool", () => {
+    const text = buildRelaunchRegressionFailuresPrompt(
+      "PROJ_A",
+      "1.0.0",
+      undefined,
+      undefined,
+      TEST_RELAUNCH_SETTINGS,
+      DISABLED_LOCALE_SETTINGS,
+    );
+    assert.ok(text.includes("Do NOT use adv_start_launch"));
+  });
+});
+
+describe("Feature-Scoped Launch Prompt", () => {
+  const TEST_LAUNCH_PATHS = {
+    rootSuiteLaunchPaths: {
+      "Regression Alpha": "org/platform/regression-alpha",
+    },
+  };
+
+  it("references aggregate_test_cases_by_feature and start_launch", () => {
+    const text = buildFeatureScopedLaunchPrompt(
+      "PROJ_A",
+      "Water",
+      "Regression Alpha",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      TEST_LAUNCH_PATHS,
+    );
+    assert.ok(text.includes("aggregate_test_cases_by_feature"));
+    assert.ok(text.includes("adv_start_launch"));
+    assert.ok(text.includes("Water"));
+    assert.ok(text.includes("PROJ_A"));
+  });
+
+  it("includes suite scope when suite_name provided", () => {
+    const text = buildFeatureScopedLaunchPrompt(
+      "PROJ_A",
+      "Water",
+      "Regression Alpha",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      TEST_LAUNCH_PATHS,
+    );
+    assert.ok(text.includes("Regression Alpha"));
+    assert.ok(text.includes("Suite scope"));
+  });
+
+  it("uses configured rootSuiteLaunchPaths from settings", () => {
+    const text = buildFeatureScopedLaunchPrompt(
+      "PROJ_A",
+      "Water",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      TEST_LAUNCH_PATHS,
+    );
+    assert.ok(text.includes("org/platform/regression-alpha"));
+    assert.ok(text.includes("featureScopedLaunch"));
+  });
+
+  it("builds test_run_rules TAGS guidance and one launch per root suite", () => {
+    const text = buildFeatureScopedLaunchPrompt(
+      "PROJ_A",
+      "Water",
+      undefined,
+      undefined,
+      "50977",
+      undefined,
+      undefined,
+      TEST_LAUNCH_PATHS,
+    );
+    assert.ok(text.includes("TAGS=>featureSuiteId"));
+    assert.ok(text.includes("50977"));
+    assert.ok(text.includes("One Build Now launch per root suite"));
+    assert.ok(text.includes("confirm: true"));
+  });
+
+  it("supports whole-project search when no suite scope", () => {
+    const text = buildFeatureScopedLaunchPrompt("PROJ_A", "Water");
+    assert.ok(text.includes("Whole project"));
+  });
+});
+
 describe("Flaky Review Prompt", () => {
   const text = buildFlakyReviewPrompt("android");
 
@@ -323,8 +504,8 @@ describe("Project Overview Prompt", () => {
 describe("getPromptsCatalog()", () => {
   const catalog = getPromptsCatalog();
 
-  it("returns exactly 15 prompts matching registered count", () => {
-    assert.equal(catalog.length, 15);
+  it("returns exactly 17 prompts matching registered count", () => {
+    assert.equal(catalog.length, 17);
   });
 
   it("every entry has required fields", () => {
@@ -369,6 +550,8 @@ describe("Prompt Hygiene", () => {
     { name: "release-readiness", fn: () => buildReleaseReadinessPrompt("TEST_PROJ") },
     { name: "suite-coverage", fn: () => buildSuiteCoveragePrompt("TEST_PROJ") },
     { name: "launch-triage", fn: () => buildLaunchTriagePrompt("TEST_PROJ") },
+    { name: "relaunch-regression-failures", fn: () => buildRelaunchRegressionFailuresPrompt("TEST_PROJ", "26.19.0") },
+    { name: "feature-scoped-launch", fn: () => buildFeatureScopedLaunchPrompt("TEST_PROJ", "Water", "Suite A") },
     { name: "flaky-review", fn: () => buildFlakyReviewPrompt("TEST_PROJ") },
     { name: "find-duplicates", fn: () => buildFindDuplicatesPrompt("TEST_PROJ") },
     { name: "daily-qa-standup", fn: () => buildDailyQaStandupPrompt("TEST_PROJ") },

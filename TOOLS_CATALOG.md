@@ -869,6 +869,22 @@ Weekly stability report for project MCP using:
 - "Import only MCP-82 and MCP-83 results from launch 98765 to test run 123"
 - "Sync launch 45000 results to test run 789 in project MCP, map ABORTED to Skipped"
 
+## Launch mutations & instance configuration
+
+Tools and prompts below honor optional blocks in **[zebrunner-config.json](zebrunner-config.json)** (or `ZEBRUNNER_CONFIG_JSON`). Customize per deployment; defaults in the repo target MFP Jenkins automation.
+
+| Block | Tool / prompt | When it applies |
+|-------|---------------|-----------------|
+| `localeTestRunRules` | `start_launch` | Preview only; project in `projectKeys` and locale ≠ `en_US` |
+| `relaunchFailures` | `/relaunch-regression-failures`, `rerun_launch_failures` (via prompt) | Launch name exclusions + batch cap in prompt text |
+| `featureScopedLaunch` | `/feature-scoped-launch`, `start_launch` (via prompt) | Root suite → Jenkins suite_path hints |
+
+**Non-MFP deployments:** set `localeTestRunRules.enabled: false`, customize `featureScopedLaunch.rootSuiteLaunchPaths` for your suites, and adjust `relaunchFailures.excludeLaunchNamePatterns`.
+
+Details: [README — Project-specific automation rules](README.md#project-specific-automation-rules-localetestrunrules--relaunchfailures) · [RESOURCES_AND_PROMPTS.md](docs/RESOURCES_AND_PROMPTS.md#project-specific-automation-configuration)
+
+---
+
 ### `rerun_launch_failures`
 
 **Description:** (Beta) Rerun failed/aborted tests for one or more automation launches via the Reporting API. Triggers real CI/automation reruns. Single mode: provide `launch_id`. Batch mode: omit `launch_id` and optionally filter by `milestone` or `query`; capped by `max_launches` (default 10).
@@ -898,11 +914,17 @@ Weekly stability report for project MCP using:
 - "Rerun failed tests for the latest 5 launches in milestone 26.19.0 for android"
 - "Preview which launches in project android have failures and can be rerun"
 
+**Related MCP prompt:** Use `/relaunch-regression-failures` for full regression rerun workflows — discovers failed launches by milestone/build or last 7 days, applies `relaunchFailures.excludeLaunchNamePatterns` from zebrunner-config.json, and orchestrates preview/confirm batch reruns across platforms.
+
 ### `start_launch`
 
 **Description:** (Beta) Trigger Zebrunner **Build Now** (Jenkins integration only) — start a new automation launch via Reporting API `job/parameters` + `job:build`. **Does NOT work with Launch Launchers.** Resolves a template launch by `launch_id`, launch name query, and/or `suite_path`; merges validated parameter overrides; preview/confirm before triggering CI.
 
 **Integration requirement:** Project must use Zebrunner Jenkins integration with Build Now. Launch Launchers are not supported by this tool.
+
+**Instance configuration (`localeTestRunRules`):** When enabled and the resolved project key is listed in `projectKeys`, non-`en_US` locale previews warn and may auto-merge `NOT_TAGS` exclusions for suites in `enUsOnlyFeatureSuites`. See [zebrunner-config.json](zebrunner-config.json) and [README](README.md#project-specific-automation-rules-localetestrunrules--relaunchfailures).
+
+**Related MCP prompt:** Use `/feature-scoped-launch` to find tests by feature keyword, build `test_run_rules` TAGS filters per root suite, and preview/trigger Build Now — see `featureScopedLaunch.rootSuiteLaunchPaths` in zebrunner-config.json.
 
 **Parameters:**
 
@@ -914,8 +936,8 @@ Weekly stability report for project MCP using:
 | `template_query` / `launch_name` | string | | Search past launches by name substring |
 | `suite_path` | string | | Match hidden CI `suite` param (e.g. `mfp/android/critical-flow`) |
 | `build` | string | | Build override — use `.*` for latest build |
-| `locale` | string | | Locale override |
-| `test_run_rules` | string | | Test run rules override |
+| `locale` | string | | Locale override — when `localeTestRunRules` is enabled for the project, non-en_US may auto-merge NOT_TAGS exclusions |
+| `test_run_rules` | string | | Test run rules override — en_US-only suite exclusions are configured in `zebrunner-config.json` → `localeTestRunRules` |
 | `parameters` | object | | Additional overrides (keys must exist in job/parameters) |
 | `max_template_search` | number | | Template scan cap (default 20) |
 | `dry_run` | boolean | | Show payload without POST |
@@ -927,6 +949,7 @@ Weekly stability report for project MCP using:
 
 - "Start Minimal-Acceptance launch for latest build in project MFPAND"
 - "Build now Critical flow with build .* and locale en_US"
+- "Build now regression for locale de_DE when localeTestRunRules is enabled for the project (see zebrunner-config.json)"
 - "Preview start_launch for template launch 132452 with test_run_rules PRIORITY=>P0||P1;;"
 
 ---
@@ -1042,6 +1065,8 @@ Weekly stability report for project MCP using:
 - "Get automation tags for all test cases mentioning 'diary' feature"
 - "Show me all 'food search' related test cases grouped by suite"
 - "Generate test run rules for 'onboarding' feature"
+
+**Related MCP prompt:** Use `/feature-scoped-launch` for the full workflow — discovery, TAGS filter per root suite, Build Now preview/confirm.
 
 **Output Formats:**
 

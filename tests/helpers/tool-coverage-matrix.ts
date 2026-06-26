@@ -101,6 +101,8 @@ export const PROMPT_MANIFEST: Record<string, { category: "e2e" | "analysis" | "r
   "suite-coverage":       { category: "e2e",      args: ["projects"] },
   "review-test-case":     { category: "analysis", args: ["case_key"] },
   "launch-triage":        { category: "analysis", args: ["project"] },
+  "relaunch-regression-failures": { category: "analysis", args: ["projects", "milestone", "build", "period"] },
+  "feature-scoped-launch": { category: "analysis", args: ["project", "feature", "suite_name", "suite_path", "build", "locale", "template_query"] },
   "flaky-review":         { category: "analysis", args: ["project"] },
   "find-duplicates":      { category: "analysis", args: ["project", "suite_id"] },
   "daily-qa-standup":     { category: "role",     args: ["projects"] },

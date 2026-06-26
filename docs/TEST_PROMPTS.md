@@ -1376,6 +1376,25 @@ MCP prompts provide pre-built, tested workflow instructions accessible via the `
 
 **Expected:** Prompt drives post-regression failure analysis. Claude should find the latest launch, identify failures without linked Jira issues, and analyze top failures with root cause analysis.
 
+**Prompt 8b — Relaunch regression failures via /relaunch-regression-failures (milestone mode)**
+> Use `/relaunch-regression-failures` with projects: "android,ios", milestone: "26.19.0"
+
+**Config:** Launch exclusions and batch cap come from `relaunchFailures` in [zebrunner-config.json](../zebrunner-config.json). See [Project-specific automation configuration](RESOURCES_AND_PROMPTS.md#project-specific-automation-configuration).
+
+**Expected:** Prompt drives discovery of failed launches for the milestone on each platform. Claude should paginate `get_all_launches_with_filter`, exclude launches matching `relaunchFailures.excludeLaunchNamePatterns` from zebrunner-config.json, present eligible and skipped tables, then call `rerun_launch_failures` in batch mode (preview → user approval → confirm). Must not skip preview or auto-confirm.
+
+**Prompt 8c — Relaunch failures last 7 days via /relaunch-regression-failures**
+> Use `/relaunch-regression-failures` with projects: "web,android,ios", period: "last_7_days"
+
+**Expected:** Prompt drives time-based discovery — paginate launches without milestone/query, filter on `startedAt` within rolling 7 days, exclude launches per `relaunchFailures.excludeLaunchNamePatterns`, then rerun eligible launch IDs via single-launch mode (preview/confirm per launch or grouped). Must warn if more than `relaunchFailures.maxLaunchesPerPlatform` eligible launches per platform.
+
+**Prompt 8d — Feature-scoped Build Now via /feature-scoped-launch**
+> Use `/feature-scoped-launch` with project: "android", feature: "Water", suite_name: "Minimal Acceptance", build: "50977"
+
+**Config:** Jenkins `suite_path` hints from `featureScopedLaunch.rootSuiteLaunchPaths` in zebrunner-config.json when `suite_path` is omitted.
+
+**Expected:** Prompt drives adv_aggregate_test_cases_by_feature (test_run_rules format, by_root_suite), builds TAGS=>featureSuiteId=... filter, previews adv_start_launch with test_run_rules, waits for approval, confirms. One launch per root suite with matches.
+
 **Prompt 9 — Flaky test review via /flaky-review**
 > Use `/flaky-review` with project: "android"
 

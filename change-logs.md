@@ -11,6 +11,17 @@
 ### Changed
 
 - Version **9.1.0** across package, server manifest, Docker label, and catalogs (63 tools).
+- **adv_start_launch** — Non-en_US locale previews warn and auto-merge `NOT_TAGS` exclusions when `localeTestRunRules` is enabled for the project (configurable in `zebrunner-config.json`).
+- **Documentation** — `localeTestRunRules`, `relaunchFailures`, and `featureScopedLaunch` config blocks documented in README, RESOURCES_AND_PROMPTS, TOOLS_CATALOG.
+- **`/feature-scoped-launch` prompt (17 prompts)** — Feature keyword → test_run_rules TAGS → Build Now per root suite.
+
+**Also configurable in `zebrunner-config.json` (v9.1.0+):**
+
+| Key | Description |
+|-----|-------------|
+| `localeTestRunRules` | Per-project Build Now rules for non-`en_US` locales (`enabled`, `projectKeys`, `enUsOnlyFeatureSuites`, `suiteNameMatch`) |
+| `relaunchFailures` | Launch name exclusions and batch cap for `/relaunch-regression-failures` (`excludeLaunchNamePatterns`, `maxLaunchesPerPlatform`) |
+| `featureScopedLaunch` | Root suite name → Jenkins `suite_path` for `/feature-scoped-launch` (`rootSuiteLaunchPaths`) |
 
 ## v9.0.5 — Multi-arch Docker images (amd64 + arm64)
 

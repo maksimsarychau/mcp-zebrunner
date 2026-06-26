@@ -11,6 +11,16 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { getConfig } from "./utils/config-loader.js";
+import type { LocaleTestRunRulesSettings } from "./utils/locale-test-run-rules.js";
+import { LOCALE_TEST_RUN_RULES_TOOL_NOTE } from "./utils/locale-test-run-rules.js";
+import type { RelaunchFailuresSettings } from "./utils/relaunch-failures-config.js";
+import {
+  formatLaunchExcludeCheckDescription,
+  formatLaunchExcludeRegexHint,
+  formatSkippedLaunchesTableLabel,
+  formatLaunchExcludePatternsList,
+} from "./utils/relaunch-failures-config.js";
 
 // ── Prompt text builders (exported for unit testing) ─────────────────────────
 
@@ -325,6 +335,260 @@ The tool will produce a comprehensive report including:
 Present the output as-is — it is already formatted as a structured regression summary report.`;
 }
 
+export function buildRelaunchRegressionFailuresPrompt(
+  projects: string,
+  milestone?: string,
+  build?: string,
+  period?: string,
+  relaunchSettings?: RelaunchFailuresSettings,
+  localeSettings?: LocaleTestRunRulesSettings,
+): string {
+  const relaunchCfg = relaunchSettings ?? getConfig().relaunchFailures;
+  const localeCfg = localeSettings ?? getConfig().localeTestRunRules;
+  const excludePatterns = relaunchCfg.excludeLaunchNamePatterns;
+  const maxLaunches = relaunchCfg.maxLaunchesPerPlatform;
+  const excludeDescription = formatLaunchExcludeCheckDescription(excludePatterns);
+  const excludeRegexHint = formatLaunchExcludeRegexHint(excludePatterns);
+  const skippedTableLabel = formatSkippedLaunchesTableLabel(excludePatterns);
+  const patternList = formatLaunchExcludePatternsList(excludePatterns);
+
+  const isLast7Days = period?.toLowerCase() === "last_7_days";
+
+  let scopeSection: string;
+  if (isLast7Days) {
+    scopeSection = `**Scope: Last 7 days** (rolling window from now — NOT calendar week)
+- Use time-based discovery — do NOT filter by milestone or build`;
+  } else if (milestone || build) {
+    const parts: string[] = [];
+    if (milestone) parts.push(`milestone: "${milestone}"`);
+    if (build) parts.push(`build: "${build}"`);
+    scopeSection = `**Scope: Milestone/build regression**
+- ${parts.join(", ")}`;
+  } else {
+    scopeSection = `**Scope: NOT YET RESOLVED**
+- Ask the user to choose ONE:
+  1. **Milestone/build regression** — provide milestone (e.g. "26.19.0") and/or build number
+  2. **Last 7 days** — all failed launches in the rolling last 7 days (period: "last_7_days")
+- Optionally call adv_get_project_milestones to suggest recent milestones`;
+  }
+
+  const milestoneDiscovery = milestone || build
+    ? `Use adv_get_all_launches_with_filter with:
+- project: current platform
+${milestone ? `- milestone: "${milestone}"` : ""}
+${build ? `- query: "${build}"` : ""}
+- pageSize: 100, paginate until all pages fetched`
+    : `When user provides milestone and/or build: paginate adv_get_all_launches_with_filter with milestone/query filters.`;
+
+  const last7Discovery = isLast7Days
+    ? `1. Compute windowStartMs = Date.now() - 7 * 24 * 60 * 60 * 1000
+2. Paginate adv_get_all_launches_with_filter WITHOUT milestone/query (pageSize: 100)
+3. Keep launches where startedAt >= windowStartMs
+4. Early stop: if an entire page's newest startedAt is below windowStartMs, stop paginating (launches are typically newest-first)
+5. Apply configured launch name exclusion filter and failure eligibility below`
+    : `When period is last_7_days: paginate without milestone/query, filter client-side on startedAt within rolling 7 days.`;
+
+  const localeNote = localeCfg.enabled
+    ? `\n6. **Locale note:** For Build Now (adv_start_launch) with non-en_US locale on configured projects (${localeCfg.projectKeys.join(", ")}), see zebrunner-config.json \`localeTestRunRules\` — ${LOCALE_TEST_RUN_RULES_TOOL_NOTE} This rerun workflow does not use Build Now.`
+    : "";
+
+  return `Relaunch failed tests for platform(s): ${projects}.
+
+${scopeSection}
+
+## Configuration (zebrunner-config.json)
+- \`relaunchFailures.excludeLaunchNamePatterns\`: ${patternList}
+- \`relaunchFailures.maxLaunchesPerPlatform\`: ${maxLaunches}
+${localeCfg.enabled ? `- \`localeTestRunRules\`: enabled for ${localeCfg.projectKeys.join(", ")} (Build Now only; not this rerun workflow)` : ""}
+
+## CRITICAL RULES (always follow)
+1. **ALWAYS exclude configured launch name patterns** — skip launches where ${excludeDescription}. List excluded launches in a "${skippedTableLabel}" table. Never rerun them. Patterns from config: ${patternList}.
+2. **Never call confirm: true** without explicit user approval after showing the preview.
+3. **Never skip the preview step** before any rerun.
+4. **Do NOT use adv_start_launch** — that triggers Jenkins Build Now (different workflow). Use adv_rerun_launch_failures only.
+5. Batch rerun cap is **${maxLaunches} launches** per platform (relaunchFailures.maxLaunchesPerPlatform) — warn and offer follow-up if more exist.
+
+## Phase 0 — Resolve inputs
+- Parse projects: "${projects}" (comma-separated platforms; process each sequentially)
+${!milestone && !build && !isLast7Days ? "- If scope is unclear, ask the user before proceeding" : ""}
+
+## Phase 1 — Discovery (per platform)
+
+### Launch name exclusion filter (apply first to every launch)
+Skip launch when ${excludeDescription}.
+${excludePatterns.length === 1 ? `Match hint: launch.name matches ${excludeRegexHint}` : `Match each configured pattern (case-insensitive): ${patternList}`}
+
+### Milestone/build mode
+${milestoneDiscovery}
+
+### Last 7 days mode
+${last7Discovery}${localeNote}
+
+### Failure eligibility (after launch name exclusions)
+Keep launches where:
+- (failed ?? 0) + (aborted ?? 0) >= 1
+- status is NOT IN_PROGRESS or RUNNING
+- isRelaunchPossible is not false
+
+Build two tables per platform:
+1. **Eligible for rerun** — launch ID, name, failed, aborted, status, startedAt (if period mode)
+2. **${skippedTableLabel}** — launch ID, name, failed count (even if they had failures)
+
+## Phase 2 — Rerun (per platform with eligible launches)
+
+Choose execution strategy:
+
+| Condition | Approach |
+|-----------|----------|
+| Milestone/build scope AND zero excluded-pattern launches were skipped from discovery | Single batch adv_rerun_launch_failures: { project, milestone?, query?, max_launches: ${maxLaunches}, min_failed: 1 } |
+| last_7_days scope OR any excluded-pattern launches were skipped from a milestone/build set | Rerun ONLY filtered launch IDs via single-launch mode: { project, launch_id } — preview → user approval → confirm, one at a time (up to ${maxLaunches} per platform) |
+
+**Why not blind batch rerun when exclusions were skipped?** Batch mode re-fetches by milestone/query and would include excluded launches with failures.
+
+Steps for each platform:
+1. If zero eligible launches → report "nothing to rerun"
+2. If count > ${maxLaunches} → warn; process first ${maxLaunches}; list remainder IDs for follow-up
+3. Call adv_rerun_launch_failures WITHOUT confirm → show preview
+4. **STOP and wait for explicit user approval**
+5. On approval: call with ONLY { confirm: true, confirmation_token }
+6. Collect per-launch results
+
+## Phase 3 — Final report
+- Platforms processed
+- Total launches found, eligible count, skipped excluded-pattern count
+- Rerun success/failure counts per platform
+- Links to launches where returned
+- Reminder: triggers real CI reruns; requires reporting:test-runs:rerun permission
+
+Present discovery summary BEFORE any mutation preview.`;
+}
+
+export type FeatureScopedLaunchSettings = {
+  rootSuiteLaunchPaths: Record<string, string>;
+};
+
+export function buildFeatureScopedLaunchPrompt(
+  project: string,
+  feature: string,
+  suiteName?: string,
+  suitePath?: string,
+  build?: string,
+  locale?: string,
+  templateQuery?: string,
+  featureScopedLaunch?: FeatureScopedLaunchSettings,
+  localeSettings?: LocaleTestRunRulesSettings,
+): string {
+  const launchPaths = featureScopedLaunch ?? getConfig().featureScopedLaunch;
+  const localeCfg = localeSettings ?? getConfig().localeTestRunRules;
+  const configuredPaths = Object.entries(launchPaths.rootSuiteLaunchPaths);
+  const configuredPathsBlock = configuredPaths.length > 0
+    ? configuredPaths.map(([name, path]) => `- "${name}" → suite_path: "${path}"`).join("\n")
+    : "- (none configured — resolve suite_path from user input or past launches)";
+
+  const scopeSection = suiteName || suitePath
+    ? `**Suite scope:** ${suiteName ? `root suite name "${suiteName}"` : ""}${suiteName && suitePath ? " + " : ""}${suitePath ? `suite_path "${suitePath}"` : ""}`
+    : `**Suite scope:** Whole project — discover all root suites containing matches, then one Build Now per root suite`;
+
+  const buildClause = build ? `- build: "${build}"` : "- build: ask user or use \".*\" for latest";
+  const localeClause = locale ? `- locale: "${locale}"` : "- locale: omit unless user specifies (non-en_US triggers localeTestRunRules when configured)";
+  const templateClause = templateQuery
+    ? `- template_query: "${templateQuery}"`
+    : "- template_query: infer from root suite name or featureScopedLaunch.rootSuiteLaunchPaths in zebrunner-config.json";
+
+  return `Find tests related to feature "${feature}" in project ${project}, build test_run_rules filters per root suite, preview Build Now (adv_start_launch), and trigger after user approval.
+
+${scopeSection}
+
+## Configuration (zebrunner-config.json)
+**featureScopedLaunch.rootSuiteLaunchPaths** (Jenkins hidden \`suite\` param hints):
+${configuredPathsBlock}
+${localeCfg.enabled ? `\n**localeTestRunRules:** enabled for ${localeCfg.projectKeys.join(", ")} — adv_start_launch preview auto-handles non-en_US NOT_TAGS when applicable.` : ""}
+
+## CRITICAL RULES
+1. **Never call adv_start_launch with confirm: true** without explicit user approval after each preview.
+2. **Never skip preview** before triggering CI.
+3. **One Build Now launch per root suite** that has matching tests — separate test_run_rules and separate preview/confirm for each.
+4. Use **adv_aggregate_test_cases_by_feature** for discovery — do not manually grep test lists unless the tool returns zero matches.
+5. **Jenkins Build Now only** — adv_start_launch does not work with Launch Launchers.
+
+## Phase 0 — Resolve project and scope
+- project: "${project}" (resolve alias via adv_get_available_projects if needed)
+- feature keyword: "${feature}" (case-insensitive search in title, description, preconditions, steps)
+${suiteName ? `- Filter results to root suite whose name matches "${suiteName}" (case-insensitive)` : ""}
+${suitePath ? `- Use suite_path "${suitePath}" for adv_start_launch template resolution when launching this scope` : ""}
+${buildClause}
+${localeClause}
+${templateClause}
+
+If suite scope is ambiguous (e.g. user said "Minimal Acceptance" but multiple suites match), ask before proceeding.
+
+## Phase 1 — Discover feature tests and suites
+
+1. Call **adv_aggregate_test_cases_by_feature** with:
+   - project_key: resolved project key for "${project}"
+   - feature_keyword: "${feature}"
+   - output_format: "test_run_rules"
+   - tags_format: "by_root_suite"
+
+2. Parse the output:
+   - Root suites with matching test cases
+   - Feature suite IDs per root suite
+   - TAGS lines: \`TAGS=>featureSuiteId=X||featureSuiteId=Y\`
+
+3. ${suiteName || suitePath ? "Keep only root suites matching the requested scope." : "Include every root suite that has at least one match."}
+
+4. Present a **discovery summary table** per root suite:
+   - Root suite name and RootSuiteId
+   - Feature suites (name, featureSuiteId, test case count)
+   - Matching test case keys/titles (top examples)
+   - Proposed **test_run_rules** value: \`TAGS=>featureSuiteId=...;;\` (use || between IDs in the same root suite)
+
+If zero matches: stop and suggest alternate keywords or broader suite scope.
+
+## Phase 2 — Resolve Build Now template per root suite
+
+For each root suite with matches:
+
+1. Determine **suite_path** (hidden Jenkins param), in priority order:
+   - User-provided suite_path arg${suitePath ? ` ("${suitePath}")` : ""}
+   - featureScopedLaunch.rootSuiteLaunchPaths[root suite name] from config
+   - Past launch: adv_get_all_launches_with_filter + adv_get_launch_details with includeJobParameters: true
+   - Ask user if still unknown
+
+2. Optionally confirm template via adv_get_launch_details on a recent launch from that suite.
+
+## Phase 3 — Preview and trigger (one root suite at a time)
+
+For **each** root suite (sequential, not parallel):
+
+1. Call **adv_start_launch** WITHOUT confirm:
+   - project: "${project}"
+   - suite_path: resolved path for this root suite
+   - test_run_rules: TAGS filter from Phase 1 for this root suite only
+   ${build ? `- build: "${build}"` : ""}
+   ${locale ? `- locale: "${locale}"` : ""}
+   ${templateQuery ? `- template_query: "${templateQuery}"` : ""}
+
+2. Show preview to user: template launch, suite path, build, test_run_rules, test count scope.
+
+3. **STOP — wait for explicit user approval** for this root suite.
+
+4. On approval: call adv_start_launch with ONLY { confirm: true, confirmation_token }.
+
+5. Record new launch ID and link before moving to the next root suite.
+
+If user declines a root suite, skip it and continue with others only if user asks.
+
+## Phase 4 — Final report
+- Feature keyword and project
+- Root suites processed vs skipped
+- test_run_rules used per launch
+- Launch IDs and links for triggered builds
+- Reminder: monitor via adv_get_launch_details; failures via adv_rerun_launch_failures
+
+Present Phase 1 discovery summary BEFORE any adv_start_launch preview.`;
+}
+
 // ── Prompt catalog (used by about_mcp_tools) ────────────────────────────────
 
 export type PromptMeta = {
@@ -345,6 +609,8 @@ export function getPromptsCatalog(): PromptMeta[] {
     { name: "suite-coverage", title: "Suite Coverage Table", description: "Build per-suite automation coverage table across platforms with TOTAL and TOTAL REGRESSION rows", category: "E2E Metrics", args: ["projects"] },
     { name: "review-test-case", title: "Review Test Case", description: "Validate and improve a test case against quality standards with actionable suggestions", category: "Analysis", args: ["case_key"] },
     { name: "launch-triage", title: "Launch Failure Triage", description: "Post-regression failure analysis: find unlinked failures, analyze root causes, recommend actions", category: "Analysis", args: ["project"] },
+    { name: "relaunch-regression-failures", title: "Relaunch Regression Failures", description: "Find failed launches (milestone/build or last 7 days), apply relaunchFailures config exclusions, and batch-rerun failures", category: "Analysis", args: ["projects", "milestone?", "build?", "period?"] },
+    { name: "feature-scoped-launch", title: "Feature-Scoped Build Now", description: "Find tests by feature keyword, build test_run_rules per root suite, preview and trigger adv_start_launch", category: "Analysis", args: ["project", "feature", "suite_name?", "suite_path?", "build?", "locale?", "template_query?"] },
     { name: "flaky-review", title: "Flaky Test Review", description: "Find flaky tests, analyze execution history, and recommend stabilization priorities", category: "Analysis", args: ["project"] },
     { name: "find-duplicates", title: "Find Duplicate Test Cases", description: "Analyze test cases for duplicates using structural and optional semantic analysis", category: "Analysis", args: ["project", "suite_id?"] },
     { name: "daily-qa-standup", title: "Daily QA Standup", description: "Prepare a concise daily QA standup summary with pass rates, blockers, flaky tests, and action items", category: "Role-Specific", args: ["projects"] },
@@ -516,6 +782,52 @@ export function registerPrompts(server: McpServer): void {
       messages: [{
         role: "user" as const,
         content: { type: "text" as const, text: buildLaunchTriagePrompt(project) },
+      }],
+    }),
+  );
+
+  server.registerPrompt(
+    "relaunch-regression-failures",
+    {
+      title: "Relaunch Regression Failures",
+      description: "Find failed launches (milestone/build or last 7 days), apply relaunchFailures.excludeLaunchNamePatterns from zebrunner-config.json, and batch-rerun failures",
+      argsSchema: {
+        projects: z.string().describe("Platform(s), e.g. 'android' or 'android,ios,api'"),
+        milestone: z.string().optional().describe("Regression milestone, e.g. '26.19.0'"),
+        build: z.string().optional().describe("Build number filter, e.g. 'mcp-app-2.1.0-45915'"),
+        period: z.string().optional().describe("Time scope: 'last_7_days' for rolling 7-day window (omit milestone/build)"),
+      },
+    },
+    async ({ projects, milestone, build, period }) => ({
+      messages: [{
+        role: "user" as const,
+        content: { type: "text" as const, text: buildRelaunchRegressionFailuresPrompt(projects, milestone, build, period) },
+      }],
+    }),
+  );
+
+  server.registerPrompt(
+    "feature-scoped-launch",
+    {
+      title: "Feature-Scoped Build Now",
+      description: "Find tests by feature keyword, build test_run_rules TAGS filters per root suite, preview and trigger adv_start_launch (Jenkins Build Now)",
+      argsSchema: {
+        project: z.string().describe("Platform/project key or alias, e.g. 'android' or 'MFPAND'"),
+        feature: z.string().describe("Feature keyword to search (case-insensitive), e.g. 'Water'"),
+        suite_name: z.string().optional().describe("Optional root suite name scope, e.g. 'Minimal Acceptance'"),
+        suite_path: z.string().optional().describe("Optional Jenkins suite path for template, e.g. 'mfp/android/minimal-acceptance'"),
+        build: z.string().optional().describe("Build number override, e.g. '50977' or '.*' for latest"),
+        locale: z.string().optional().describe("Locale override, e.g. 'en_US' or 'de_DE'"),
+        template_query: z.string().optional().describe("Optional launch name substring to resolve template"),
+      },
+    },
+    async ({ project, feature, suite_name, suite_path, build, locale, template_query }) => ({
+      messages: [{
+        role: "user" as const,
+        content: {
+          type: "text" as const,
+          text: buildFeatureScopedLaunchPrompt(project, feature, suite_name, suite_path, build, locale, template_query),
+        },
       }],
     }),
   );

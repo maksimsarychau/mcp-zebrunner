@@ -330,6 +330,35 @@ Three-step quality review: fetch test case details, validate against quality sta
 
 Post-regression failure triage: finds the latest launch, identifies failures without linked Jira issues, performs root cause analysis on the top 3-5 failures, and recommends actions.
 
+#### `/relaunch-regression-failures`
+
+**Parameters:** `projects` (comma-separated), `milestone?`, `build?`, `period?` (set to `last_7_days` for rolling 7-day window)
+
+Discovers failed launches and reruns failures via `adv_rerun_launch_failures` with preview/confirm. Supports two discovery modes:
+
+- **Milestone/build** — filter launches by milestone and/or build query
+- **Last 7 days** — paginate all launches and filter client-side on `startedAt` (rolling window, not calendar week)
+
+**Always excludes launches matching `relaunchFailures.excludeLaunchNamePatterns`** from [zebrunner-config.json](../zebrunner-config.json) (default: `"Performance"`). Uses batch rerun when exclusion-safe; otherwise reruns filtered launch IDs one at a time. Cap: `relaunchFailures.maxLaunchesPerPlatform` per platform (default 50).
+
+> **Configure for your projects:** Edit `relaunchFailures` in `zebrunner-config.json` — see [Project-specific automation configuration](#project-specific-automation-configuration). Non-MFP users can set `"excludeLaunchNamePatterns": []`.
+
+**Best for:** Re-running regression failures after a milestone run or weekly failure cleanup across platforms.
+
+#### `/feature-scoped-launch`
+
+**Parameters:** `project`, `feature` (required), `suite_name?`, `suite_path?`, `build?`, `locale?`, `template_query?`
+
+End-to-end workflow: find tests matching a feature keyword, group by root suite, build `test_run_rules` TAGS filters, preview **adv_start_launch** (Jenkins Build Now) per root suite, and trigger after user approval.
+
+- **Optional suite scope** — `suite_name` or `suite_path` limits discovery; omit to search the whole project
+- **One launch per root suite** — separate TAGS filter, preview, and confirm for each
+- **Config** — `featureScopedLaunch.rootSuiteLaunchPaths` in zebrunner-config.json maps root suite names to Jenkins `suite_path` (e.g. Minimal Acceptance → `mfp/android/minimal-acceptance`)
+
+**Example:** *Find all Water tests in Minimal Acceptance and run them on build 50977*
+
+**Best for:** Targeted feature validation runs without executing an entire regression suite.
+
 #### `/flaky-review`
 
 **Parameters:** `project` (single project key)
@@ -379,6 +408,78 @@ Generates a comprehensive project health card: suite structure, coverage metrics
 Shows tool usage metrics for the current MCP session by calling `about_mcp_tools` with `mode: "metrics"`. Displays per-tool call counts, average/min/max durations, response sizes, and error counts.
 
 **Best for:** Debugging performance, understanding session activity, and verifying tool behavior.
+
+---
+
+## Project-specific automation configuration
+
+Several launch workflows read **`zebrunner-config.json`** at runtime. Customize this file (or `ZEBRUNNER_CONFIG_JSON`) so rules match **your** projects — the shipped defaults target MFP Jenkins automation and are safe to disable or replace.
+
+| Config block | Used by | Scope |
+|--------------|---------|-------|
+| `localeTestRunRules` | `adv_start_launch` preview | Only projects listed in `projectKeys`, only when locale ≠ `en_US` |
+| `relaunchFailures` | `/relaunch-regression-failures` prompt | All projects; patterns are launch-name filters, not project keys |
+| `featureScopedLaunch` | `/feature-scoped-launch` prompt | Root suite name → Jenkins `suite_path` hints for Build Now template resolution |
+
+### `featureScopedLaunch` (feature keyword → Build Now)
+
+Maps TCM root suite names to the Jenkins hidden **`suite`** parameter used by `adv_start_launch`:
+
+```json
+"featureScopedLaunch": {
+  "rootSuiteLaunchPaths": {
+    "Minimal Acceptance": "mfp/android/minimal-acceptance"
+  }
+}
+```
+
+The `/feature-scoped-launch` prompt uses this when the user does not pass `suite_path`. Add entries for each root suite you run via Build Now.
+
+### `localeTestRunRules` (Build Now / non-English locales)
+
+When `enabled: true` and the target project key is in `projectKeys`, `adv_start_launch` preview for a non-`en_US` locale will:
+
+1. **Warn** that configured `enUsOnlyFeatureSuites` should be excluded via `test_run_rules`
+2. **Discover** matching TCM feature suites by name
+3. **Auto-merge** missing `NOT_TAGS=>featureSuiteId=...;;` into `test_run_rules` before confirm
+
+Projects **not** in `projectKeys` (e.g. `MCP` on a demo instance) are unaffected — no extra API calls, no warnings.
+
+```json
+"localeTestRunRules": {
+  "enabled": true,
+  "projectKeys": ["MFPAND", "MFPIOS", "MFPWEB"],
+  "enUsOnlyFeatureSuites": ["Plans", "Workout Routines", "Recipe Discovery"],
+  "suiteNameMatch": "includes"
+}
+```
+
+Set `"enabled": false` for deployments that do not use locale-specific Jenkins parameters.
+
+### `relaunchFailures` (batch failure rerun)
+
+The `/relaunch-regression-failures` prompt embeds these values so the agent knows which launches to skip and the batch cap:
+
+```json
+"relaunchFailures": {
+  "excludeLaunchNamePatterns": ["Performance"],
+  "maxLaunchesPerPlatform": 50
+}
+```
+
+- **`excludeLaunchNamePatterns`** — case-insensitive substring match on launch **name** (not suite path). Use `[]` if nothing should be excluded.
+- **`maxLaunchesPerPlatform`** — aligns with `adv_rerun_launch_failures` `max_launches` in prompt workflows.
+
+`adv_rerun_launch_failures` tool description cross-links this block; the tool itself does not re-read patterns at runtime (the prompt orchestrates discovery + filtering).
+
+### Non-MFP / multi-tenant checklist
+
+1. Update `projectAliases` to your Zebrunner project keys.
+2. Set `localeTestRunRules.enabled` to `false` **or** replace `projectKeys` / `enUsOnlyFeatureSuites` with your suite names.
+3. Adjust `relaunchFailures.excludeLaunchNamePatterns` for your launch naming (or `[]`).
+4. Override via `ZEBRUNNER_CONFIG_JSON` in Docker/K8s without editing the repo file.
+
+Full key reference: [README — Instance Configuration File](../README.md#project-specific-automation-rules-localetestrunrules--relaunchfailures).
 
 ---
 
@@ -468,6 +569,8 @@ The AI knows exactly which custom fields and automation states exist, avoiding t
 | `/suite-coverage` | E2E | `projects` | Yes | Per-suite coverage tables |
 | `/review-test-case` | Analysis | `case_key` | Yes | Validate + improve workflow |
 | `/launch-triage` | Analysis | `project` | Yes | Post-regression failure triage |
+| `/relaunch-regression-failures` | Analysis | `projects`, `milestone?`, `build?`, `period?` | Yes | Batch-rerun failed launches (uses relaunchFailures config) |
+| `/feature-scoped-launch` | Analysis | `project`, `feature`, `suite_name?`, `suite_path?`, `build?`, `locale?`, `template_query?` | Yes | Feature keyword → test_run_rules → Build Now per root suite |
 | `/flaky-review` | Analysis | `project` | Yes | Flaky test detection + plan |
 | `/find-duplicates` | Analysis | `project`, `suite_id?` | Yes | Structural + semantic duplicates |
 | `/daily-qa-standup` | Role | `projects` | Yes | Daily standup summary |
@@ -484,7 +587,7 @@ The AI knows exactly which custom fields and automation states exist, avoiding t
 ```
 src/
   resources.ts       # ResourceCache class + registerResources() — 13 resources
-  prompts.ts         # Prompt builders + registerPrompts() — 14 prompts
+  prompts.ts         # Prompt builders + registerPrompts() — 16 prompts
   server.ts          # Wires resources and prompts: registerResources(server, deps) + registerPrompts(server)
 
 tests/

@@ -33,5 +33,20 @@
     "dashboard": "Dashboard",
     "premium": "Premium Features",
     "export": "Export"
+  },
+  "localeTestRunRules": {
+    "enabled": true,
+    "projectKeys": ["MFPAND", "MFPIOS", "MFPWEB"],
+    "enUsOnlyFeatureSuites": ["Plans", "Workout Routines", "Recipe Discovery"],
+    "suiteNameMatch": "includes"
+  },
+  "relaunchFailures": {
+    "excludeLaunchNamePatterns": ["Performance"],
+    "maxLaunchesPerPlatform": 50
+  },
+  "featureScopedLaunch": {
+    "rootSuiteLaunchPaths": {
+      "Minimal Acceptance": "mfp/android/minimal-acceptance"
+    }
   }
 }

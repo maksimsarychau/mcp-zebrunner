@@ -1220,13 +1220,17 @@ The MCP server ships with a `zebrunner-config.json` in the project root that con
   "featureAreaKeywords": {
     "quicklog": "Search & Quick Log",
     "search": "Search & Quick Log",
-    "notification": "Notifications",
-    "meal": "Meal Management",
-    "message": "Messages",
-    "goal": "Goals",
-    "dashboard": "Dashboard",
-    "premium": "Premium Features",
-    "export": "Export"
+    "notification": "Notifications"
+  },
+  "localeTestRunRules": {
+    "enabled": true,
+    "projectKeys": ["AND", "IOS", "WEB"],
+    "enUsOnlyFeatureSuites": ["Plans", "Workout Routines", "Recipe Discovery"],
+    "suiteNameMatch": "includes"
+  },
+  "relaunchFailures": {
+    "excludeLaunchNamePatterns": ["Performance"],
+    "maxLaunchesPerPlatform": 50
   }
 }
 ```
@@ -1239,8 +1243,79 @@ The MCP server ships with a `zebrunner-config.json` in the project root that con
 | `dashboardNames` | Dashboard display names used by widget SQL queries. Must match dashboard names in your Zebrunner workspace. |
 | `platformMap` | Maps platform aliases to widget SQL `PLATFORM` filter values. |
 | `featureAreaKeywords` | Keyword-to-label mapping used by regression stability reports to bucket test names into feature areas. Customize for your application's feature structure. |
+| `localeTestRunRules` | **Project-scoped Build Now rules** — see [below](#project-specific-automation-rules-localetestrunrules--relaunchfailures). Used by `adv_start_launch` when locale ≠ `en_US`. |
+| `relaunchFailures` | **Project-scoped rerun rules** — see [below](#project-specific-automation-rules-localetestrunrules--relaunchfailures). Used by `/relaunch-regression-failures` and referenced by `adv_rerun_launch_failures`. |
+| `featureScopedLaunch` | **Build Now suite path hints** — `rootSuiteLaunchPaths` maps root suite names to Jenkins `suite_path` for `/feature-scoped-launch`. |
 
 Individual keys can be omitted — only the keys you include will override the defaults.
+
+#### Project-specific automation rules (`localeTestRunRules`, `relaunchFailures` & `featureScopedLaunch`)
+
+These optional blocks configure **launch mutation workflows** per project. They do **not** affect read-only tools, TCM tools, or projects outside the configured scope.
+
+**`localeTestRunRules`** — `adv_start_launch` (Jenkins Build Now) when the effective locale is not `en_US`:
+
+| Sub-key | Description |
+|---------|-------------|
+| `enabled` | Master switch. Set `false` to disable locale-based NOT_TAGS logic entirely. |
+| `projectKeys` | Zebrunner project keys where rules apply (e.g. `["MFPAND", "MFPIOS"]`). Other projects are unchanged. |
+| `enUsOnlyFeatureSuites` | TCM feature suite names that are English-only; auto-excluded via `NOT_TAGS` in `test_run_rules` on preview. |
+| `suiteNameMatch` | `"exact"` or `"includes"` — how suite names are matched when discovering feature suite IDs. |
+
+**`relaunchFailures`** — `/relaunch-regression-failures` prompt and batch rerun guidance:
+
+| Sub-key | Description |
+|---------|-------------|
+| `excludeLaunchNamePatterns` | Launch **names** to skip when discovering failures (case-insensitive substring match). Default: `["Performance"]`. |
+| `maxLaunchesPerPlatform` | Cap per platform in the prompt workflow (default `50`, matches `adv_rerun_launch_failures` max). |
+
+**`featureScopedLaunch`** — `/feature-scoped-launch` prompt maps root suite names to Jenkins hidden `suite` param:
+
+| Sub-key | Description |
+|---------|-------------|
+| `rootSuiteLaunchPaths` | Object mapping root suite display name → `suite_path` for `adv_start_launch` (e.g. `"Minimal Acceptance": "mfp/android/minimal-acceptance"`) |
+
+**Examples**
+
+*MFP-style deployment* (shipped defaults in repo `zebrunner-config.json`):
+
+```json
+"localeTestRunRules": {
+  "enabled": true,
+  "projectKeys": ["MFPAND", "MFPIOS", "MFPWEB"],
+  "enUsOnlyFeatureSuites": ["Plans", "Workout Routines", "Recipe Discovery"],
+  "suiteNameMatch": "includes"
+},
+"relaunchFailures": {
+  "excludeLaunchNamePatterns": ["Performance"],
+  "maxLaunchesPerPlatform": 50
+},
+"featureScopedLaunch": {
+  "rootSuiteLaunchPaths": {
+    "Minimal Acceptance": "mfp/android/minimal-acceptance"
+  }
+}
+```
+
+*Generic / non-MFP deployment* (e.g. only project `MCP` for demos, no locale exclusions):
+
+```json
+"projectAliases": { "demo": "MCP" },
+"testConnectionProjectKey": "MCP",
+"localeTestRunRules": { "enabled": false },
+"relaunchFailures": {
+  "excludeLaunchNamePatterns": [],
+  "maxLaunchesPerPlatform": 50
+}
+```
+
+*Minimal override via env* (Docker/K8s without mounting the file):
+
+```bash
+ZEBRUNNER_CONFIG_JSON='{"localeTestRunRules":{"enabled":false},"relaunchFailures":{"excludeLaunchNamePatterns":["Benchmark"]}}'
+```
+
+See also: [docs/RESOURCES_AND_PROMPTS.md](docs/RESOURCES_AND_PROMPTS.md#project-specific-automation-configuration) for how prompts and tools consume these settings.
 
 ### Per-User Zebrunner URL (v8.1.0+)
 

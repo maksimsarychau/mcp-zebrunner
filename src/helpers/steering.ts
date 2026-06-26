@@ -94,7 +94,8 @@ export function steeringHint(tool: SteeringTool, ctx: SteeringContext): string {
         `\n\nTip: Next steps:\n` +
         `  - Monitor build: adv_get_launch_details with launch_id: ${ctx.id}\n` +
         `  - List launches: adv_get_all_launches_for_project\n` +
-        `  - On failures: adv_rerun_launch_failures with launch_id: ${ctx.id}`
+        `  - On failures: adv_rerun_launch_failures with launch_id: ${ctx.id}\n` +
+        `  - Non-en_US builds: check zebrunner-config.json localeTestRunRules if NOT_TAGS exclusions apply`
       );
 
     default:

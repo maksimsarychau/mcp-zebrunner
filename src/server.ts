@@ -75,6 +75,13 @@ import {
   type ResolvedTemplateLaunch,
   START_LAUNCH_JENKINS_ONLY_NOTE,
 } from "./utils/launch-job-build.js";
+import {
+  applyEnUsOnlyExclusionsToTestRunRules,
+  findFeatureSuiteIdsByNames,
+  isLocaleTestRunRulesProject,
+  isNonEnUsLocale,
+  LOCALE_TEST_RUN_RULES_TOOL_NOTE,
+} from "./utils/locale-test-run-rules.js";
 // Pre-validation removed from the hot path — the API validates server-side.
 // On error, we enrich the message with valid options to help the user fix the request.
 async function enrichMutationError(
@@ -4834,7 +4841,9 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       description: `🔄 (Beta) Rerun failed/aborted tests for one or more automation launches via the Reporting API.
 
 Single mode: provide launch_id. Batch mode: omit launch_id — scans launches (optional milestone/query filters),
-collects eligible launches with failures, capped by max_launches (default 10).
+collects eligible launches with failures, capped by max_launches (default 10, max 50; see zebrunner-config.json relaunchFailures.maxLaunchesPerPlatform for prompt workflows).
+
+For full regression rerun with configured launch name exclusions, use MCP prompt /relaunch-regression-failures (relaunchFailures.excludeLaunchNamePatterns).
 
 Triggers real CI/automation reruns. Always preview first.
 
@@ -5026,9 +5035,9 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       .describe("Match hidden CI suite param (e.g. 'mfp/android/critical-flow'). Can combine with template_query."),
     build: z.string().optional()
       .describe("Build filter override. Use '.*' for latest build."),
-    locale: z.string().optional().describe("Locale override (e.g. 'en_US')."),
+    locale: z.string().optional().describe("Locale override (e.g. 'en_US', 'de_DE'). When localeTestRunRules is enabled for the project, non-en_US may auto-merge NOT_TAGS exclusions."),
     test_run_rules: z.string().optional()
-      .describe("Test run rules override (e.g. 'PRIORITY=>P0||P1;;')."),
+      .describe("Test run rules override (e.g. 'PRIORITY=>P0||P1;;'). NOT_TAGS exclusions for en_US-only suites apply per zebrunner-config.json localeTestRunRules."),
     parameters: z.record(z.string(), z.union([z.string(), z.boolean()])).optional()
       .describe("Additional job parameter overrides — keys must exist in job/parameters response."),
     max_template_search: z.number().int().positive().max(50).default(20)
@@ -5059,6 +5068,8 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       description: `🚀 (Beta) Start a new automation launch via Zebrunner "Build now" (Reporting API job/parameters + job:build).
 
 IMPORTANT: ${START_LAUNCH_JENKINS_ONLY_NOTE}
+
+${LOCALE_TEST_RUN_RULES_TOOL_NOTE}
 
 Resolves a template launch by launch_id, launch name query, and/or suite_path, fetches live job parameters,
 merges your overrides (build, locale, test_run_rules, or parameters map), and triggers CI.
@@ -5104,8 +5115,44 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           });
 
           const overrides = buildParameterOverrides(args);
-          const mergedPayload = mergeJobParameters(template.jobParameters.items, overrides);
+          let mergedPayload = mergeJobParameters(template.jobParameters.items, overrides);
           const summary = extractJobSummary(template.jobParameters.items);
+          const effectiveLocale = String(mergedPayload.locale ?? summary.localeDefault ?? "");
+          const localeRuleLines: string[] = [];
+
+          const localeSettings = getConfig().localeTestRunRules;
+
+          if (
+            isNonEnUsLocale(effectiveLocale)
+            && isLocaleTestRunRulesProject(projectKey, localeSettings)
+          ) {
+            try {
+              const allSuites = await client.getAllTestSuites(projectKey);
+              const featureSuiteIds = findFeatureSuiteIdsByNames(
+                allSuites,
+                localeSettings.enUsOnlyFeatureSuites,
+                localeSettings.suiteNameMatch,
+              );
+              const currentRules = String(mergedPayload.test_run_rules ?? "");
+              const applied = applyEnUsOnlyExclusionsToTestRunRules(
+                effectiveLocale,
+                currentRules,
+                featureSuiteIds,
+                localeSettings,
+              );
+              localeRuleLines.push(...applied.warningLines);
+              if (applied.autoApplied) {
+                mergedPayload = { ...mergedPayload, test_run_rules: applied.effectiveRules };
+              }
+            } catch (localeErr: unknown) {
+              const msg = localeErr instanceof Error ? localeErr.message : String(localeErr);
+              localeRuleLines.push(
+                `⚠️ Could not auto-discover en_US-only feature suites: ${msg}`,
+                `   ${LOCALE_TEST_RUN_RULES_TOOL_NOTE}`,
+              );
+            }
+          }
+
           const diffLines = formatParameterDiff(template.jobParameters.items, mergedPayload);
 
           const lines = [
@@ -5117,6 +5164,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
             `${baseUrl}/projects/${projectKey}/automation-launches/${template.launchId}`,
             `Suite path: ${summary.suitePath ?? "(unknown)"}`,
             "",
+            ...(localeRuleLines.length > 0 ? [...localeRuleLines, ""] : []),
             "Key parameter overrides:",
             ...diffLines,
             "",

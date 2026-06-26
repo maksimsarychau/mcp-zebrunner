@@ -36,6 +36,19 @@ const ZebrunnerConfigSchema = z.object({
   }).partial().optional(),
   platformMap: z.record(z.string(), z.array(z.string())).optional(),
   featureAreaKeywords: z.record(z.string(), z.string()).optional(),
+  localeTestRunRules: z.object({
+    enabled: z.boolean().optional(),
+    projectKeys: z.array(z.string()).optional(),
+    enUsOnlyFeatureSuites: z.array(z.string()).optional(),
+    suiteNameMatch: z.enum(["exact", "includes"]).optional(),
+  }).optional(),
+  relaunchFailures: z.object({
+    excludeLaunchNamePatterns: z.array(z.string()).optional(),
+    maxLaunchesPerPlatform: z.number().int().positive().max(50).optional(),
+  }).optional(),
+  featureScopedLaunch: z.object({
+    rootSuiteLaunchPaths: z.record(z.string(), z.string()).optional(),
+  }).optional(),
 }).strict().partial();
 
 export type ZebrunnerConfig = z.infer<typeof ZebrunnerConfigSchema>;
@@ -51,6 +64,19 @@ const DEFAULTS: Required<{
   dashboardNames: { weeklyResults: string; bugsReproRate: string };
   platformMap: Record<string, string[]>;
   featureAreaKeywords: Record<string, string>;
+  localeTestRunRules: {
+    enabled: boolean;
+    projectKeys: string[];
+    enUsOnlyFeatureSuites: string[];
+    suiteNameMatch: "exact" | "includes";
+  };
+  relaunchFailures: {
+    excludeLaunchNamePatterns: string[];
+    maxLaunchesPerPlatform: number;
+  };
+  featureScopedLaunch: {
+    rootSuiteLaunchPaths: Record<string, string>;
+  };
 }> = {
   projectAliases: {
     web: "MFPWEB",
@@ -87,6 +113,21 @@ const DEFAULTS: Required<{
     premium: "Premium Features",
     export: "Export",
   },
+  localeTestRunRules: {
+    enabled: true,
+    projectKeys: ["MFPAND", "MFPIOS", "MFPWEB"],
+    enUsOnlyFeatureSuites: ["Plans", "Workout Routines", "Recipe Discovery"],
+    suiteNameMatch: "includes",
+  },
+  relaunchFailures: {
+    excludeLaunchNamePatterns: ["Performance"],
+    maxLaunchesPerPlatform: 50,
+  },
+  featureScopedLaunch: {
+    rootSuiteLaunchPaths: {
+      "Minimal Acceptance": "mfp/android/minimal-acceptance",
+    },
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -109,6 +150,19 @@ export interface ResolvedConfig {
   };
   platformMap: Record<string, string[]>;
   featureAreaKeywords: Record<string, string>;
+  localeTestRunRules: {
+    enabled: boolean;
+    projectKeys: string[];
+    enUsOnlyFeatureSuites: string[];
+    suiteNameMatch: "exact" | "includes";
+  };
+  relaunchFailures: {
+    excludeLaunchNamePatterns: string[];
+    maxLaunchesPerPlatform: number;
+  };
+  featureScopedLaunch: {
+    rootSuiteLaunchPaths: Record<string, string>;
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -204,6 +258,25 @@ function mergeConfig(overrides: ZebrunnerConfig | null): ResolvedConfig {
     featureAreaKeywords: overrides.featureAreaKeywords
       ? { ...DEFAULTS.featureAreaKeywords, ...overrides.featureAreaKeywords }
       : { ...DEFAULTS.featureAreaKeywords },
+    localeTestRunRules: {
+      enabled: overrides.localeTestRunRules?.enabled ?? DEFAULTS.localeTestRunRules.enabled,
+      projectKeys: overrides.localeTestRunRules?.projectKeys ?? DEFAULTS.localeTestRunRules.projectKeys,
+      enUsOnlyFeatureSuites: overrides.localeTestRunRules?.enUsOnlyFeatureSuites
+        ?? DEFAULTS.localeTestRunRules.enUsOnlyFeatureSuites,
+      suiteNameMatch: overrides.localeTestRunRules?.suiteNameMatch
+        ?? DEFAULTS.localeTestRunRules.suiteNameMatch,
+    },
+    relaunchFailures: {
+      excludeLaunchNamePatterns: overrides.relaunchFailures?.excludeLaunchNamePatterns
+        ?? DEFAULTS.relaunchFailures.excludeLaunchNamePatterns,
+      maxLaunchesPerPlatform: overrides.relaunchFailures?.maxLaunchesPerPlatform
+        ?? DEFAULTS.relaunchFailures.maxLaunchesPerPlatform,
+    },
+    featureScopedLaunch: {
+      rootSuiteLaunchPaths: overrides.featureScopedLaunch?.rootSuiteLaunchPaths
+        ? { ...DEFAULTS.featureScopedLaunch.rootSuiteLaunchPaths, ...overrides.featureScopedLaunch.rootSuiteLaunchPaths }
+        : { ...DEFAULTS.featureScopedLaunch.rootSuiteLaunchPaths },
+    },
   };
 }
 

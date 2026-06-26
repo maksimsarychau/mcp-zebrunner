@@ -157,6 +157,7 @@ describe("Steering Hints", () => {
       const hint = steeringHint("start_launch", { id: 140100 });
       assert.ok(hint.includes("get_launch_details"));
       assert.ok(hint.includes("rerun_launch_failures"));
+      assert.ok(hint.includes("localeTestRunRules"));
     });
   });
 
