@@ -893,7 +893,8 @@ export class ZebrunnerReportingClient {
   }
 
   /**
-   * Get CI job parameters for a launch (Build now dialog defaults).
+   * Get CI job parameters for a launch (Jenkins Build Now dialog defaults).
+   * Not available for Launch Launchers.
    */
   async getLaunchJobParameters(
     launchId: number,
@@ -918,7 +919,8 @@ export class ZebrunnerReportingClient {
   }
 
   /**
-   * Trigger a new CI build from a template launch (Build now).
+   * Trigger a new CI build from a template launch (Jenkins Build Now).
+   * Requires Jenkins integration — not supported for Launch Launchers.
    */
   async startLaunchBuild(
     launchId: number,

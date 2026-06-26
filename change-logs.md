@@ -5,8 +5,8 @@
 ### Added
 
 - **adv_rerun_launch_failures** — Rerun failed/aborted tests for one or many launches (single/batch, preview/confirm).
-- **adv_start_launch** — Trigger CI "Build now" via Reporting API `job/parameters` + `job:build`; template resolution by launch_id, name query, or suite path; dynamic parameter validation.
-- **adv_get_launch_details** — Optional `includeJobParameters` for Build now job discovery (suite path, build/locale/test_run_rules defaults).
+- **adv_start_launch** — Trigger CI Build Now via Reporting API `job/parameters` + `job:build` (**Jenkins integration only**; not Launch Launchers); template resolution by launch_id, name query, or suite path.
+- **adv_get_launch_details** — Optional `includeJobParameters` for Jenkins Build Now job discovery (not Launch Launchers).
 
 ### Changed
 

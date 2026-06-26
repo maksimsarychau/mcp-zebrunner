@@ -444,7 +444,7 @@ export const RerunLaunchResponseSchema = z.object({
 
 export type RerunLaunchResponse = z.infer<typeof RerunLaunchResponseSchema>;
 
-// Launch job parameter (Build now dialog)
+// Launch job parameter (Jenkins Build Now dialog — not Launch Launchers)
 export const LaunchJobParameterSchema = z.object({
   name: z.string(),
   parameterClass: z.enum(['STRING', 'BOOLEAN', 'HIDDEN']),
@@ -459,7 +459,7 @@ export const LaunchJobParametersResponseSchema = z.object({
 
 export type LaunchJobParametersResponse = z.infer<typeof LaunchJobParametersResponseSchema>;
 
-// Start launch build response (Reporting API POST .../launches/{id}/job:build)
+// Start launch build response (Jenkins Build Now POST .../launches/{id}/job:build)
 export const StartLaunchBuildResponseSchema = z.object({
   id: z.coerce.number().optional(),
   name: z.string().optional(),

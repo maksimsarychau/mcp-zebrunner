@@ -56,4 +56,10 @@ describe("launch-job-build utilities", () => {
     assert.ok(lines.some((l) => l.includes("build: 999")));
     assert.ok(lines.some((l) => l.includes("default: .*")));
   });
+
+  it("exports Jenkins-only integration note", async () => {
+    const { START_LAUNCH_JENKINS_ONLY_NOTE } = await import("../../src/utils/launch-job-build.js");
+    assert.ok(START_LAUNCH_JENKINS_ONLY_NOTE.includes("Jenkins"));
+    assert.ok(START_LAUNCH_JENKINS_ONLY_NOTE.includes("Launch Launchers"));
+  });
 });

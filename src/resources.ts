@@ -227,7 +227,7 @@ export function buildMcpRoutingContent(): object {
           "Runtime + flakiness analytics (adv_analyze_regression_runtime, adv_find_flaky_tests)",
           "Duplicate / coverage analysis (adv_analyze_test_cases_duplicates*, adv_get_enhanced_test_coverage_with_rules)",
           "Video + screenshot AI (adv_analyze_test_execution_video, adv_analyze_screenshot)",
-          "Preview/confirm safe mutations (adv_create_test_case, adv_update_test_case, adv_manage_test_run, adv_import_launch_results_to_test_run, adv_rerun_launch_failures, adv_start_launch)",
+          "Preview/confirm safe mutations (adv_create_test_case, adv_update_test_case, adv_manage_test_run, adv_import_launch_results_to_test_run, adv_rerun_launch_failures, adv_start_launch [Jenkins Build Now only])",
           "Charts, role-specific prompts, session metrics, suite hierarchy navigation",
         ],
       },

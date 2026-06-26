@@ -1,6 +1,10 @@
 import type { ZebrunnerReportingClient } from "../api/reporting-client.js";
 import type { LaunchJobParameter, LaunchJobParametersResponse } from "../types/reporting.js";
 
+/** Shown in tool docs and preview — Build Now is Jenkins-only, not Launch Launchers. */
+export const START_LAUNCH_JENKINS_ONLY_NOTE =
+  "Jenkins integration only (Zebrunner Build Now). Does NOT work with Launch Launchers.";
+
 export interface JobSummary {
   suitePath: string | null;
   buildDefault: string | null;

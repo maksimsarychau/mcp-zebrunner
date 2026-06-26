@@ -88,7 +88,7 @@ All tools marked with chart support accept these two parameters:
 
 ### `get_launch_details`
 
-**Description:** Get comprehensive information about a specific launch including test results, environment, build, and execution metadata. Set `includeJobParameters: true` to fetch CI job parameters (Build now defaults: suite path, build, locale, test_run_rules, and full param schema).
+**Description:** Get comprehensive information about a specific launch including test results, environment, build, and execution metadata. Set `includeJobParameters: true` to fetch CI job parameters from **Jenkins Build Now** (suite path, build, locale, test_run_rules, and full param schema). **Not available for Launch Launchers** — Jenkins integration only.
 
 **Example Prompts:**
 
@@ -900,7 +900,9 @@ Weekly stability report for project MCP using:
 
 ### `start_launch`
 
-**Description:** (Beta) Trigger Zebrunner "Build now" — start a new automation launch via Reporting API `job/parameters` + `job:build`. Resolves a template launch by `launch_id`, launch name query, and/or `suite_path`; merges validated parameter overrides; preview/confirm before triggering CI.
+**Description:** (Beta) Trigger Zebrunner **Build Now** (Jenkins integration only) — start a new automation launch via Reporting API `job/parameters` + `job:build`. **Does NOT work with Launch Launchers.** Resolves a template launch by `launch_id`, launch name query, and/or `suite_path`; merges validated parameter overrides; preview/confirm before triggering CI.
+
+**Integration requirement:** Project must use Zebrunner Jenkins integration with Build Now. Launch Launchers are not supported by this tool.
 
 **Parameters:**
 

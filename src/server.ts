@@ -73,6 +73,7 @@ import {
   mergeJobParameters,
   resolveTemplateLaunch,
   type ResolvedTemplateLaunch,
+  START_LAUNCH_JENKINS_ONLY_NOTE,
 } from "./utils/launch-job-build.js";
 // Pre-validation removed from the hot path — the API validates server-side.
 // On error, we enrich the message with valid options to help the user fix the request.
@@ -5057,6 +5058,8 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
     {
       description: `🚀 (Beta) Start a new automation launch via Zebrunner "Build now" (Reporting API job/parameters + job:build).
 
+IMPORTANT: ${START_LAUNCH_JENKINS_ONLY_NOTE}
+
 Resolves a template launch by launch_id, launch name query, and/or suite_path, fetches live job parameters,
 merges your overrides (build, locale, test_run_rules, or parameters map), and triggers CI.
 
@@ -5107,6 +5110,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
 
           const lines = [
             "📋 Preview — start_launch",
+            `⚠️ ${START_LAUNCH_JENKINS_ONLY_NOTE}`,
             `Project: ${projectKey} (ID ${projectId})`,
             "",
             `Template launch: ${template.launchName} (ID ${template.launchId})`,
@@ -6613,7 +6617,8 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       includeLaunchDetails: z.boolean().default(true).describe("Include detailed launch information"),
       includeTestSessions: z.boolean().default(true).describe("Include test sessions data"),
       includeJobParameters: z.boolean().default(false).describe(
-        "Include CI job parameters from Build now dialog (suite path, build/locale/test_run_rules defaults, all param defs)"
+        "Include CI job parameters from Jenkins Build Now dialog (suite path, build/locale/test_run_rules defaults). " +
+        "Jenkins integration only — not available for Launch Launchers."
       ),
       format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format"),
       chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
