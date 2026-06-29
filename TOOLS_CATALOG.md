@@ -2,6 +2,8 @@
 
 Complete reference of all available tools with natural language usage examples.
 
+> **v9.1.0:** New launch mutation tools — [`rerun_launch_failures`](#rerun_launch_failures), [`start_launch`](#start_launch), and [`get_launch_details`](#get_launch_details) (`includeJobParameters`). See [release notes](docs/releases/v9.1.0.md).
+
 > **Naming:** Every tool below is registered under two names — the canonical `adv_<name>` form (e.g. `adv_create_test_case`) and a deprecated legacy alias (`<name>`) kept for backward compatibility. Examples often use the legacy short form for readability; both forms behave identically. Prefer the `adv_` form when both this server and the official Zebrunner MCP are connected.
 
 ## 📑 Table of Contents
@@ -88,12 +90,12 @@ All tools marked with chart support accept these two parameters:
 
 ### `get_launch_details`
 
-**Description:** Get comprehensive information about a specific launch including test results, environment, build, and execution metadata.
+**Description:** Get comprehensive information about a specific launch including test results, environment, build, and execution metadata. Set `includeJobParameters: true` to fetch CI job parameters from **Jenkins Build Now** (suite path, build, locale, test_run_rules, and full param schema). **Not available for Launch Launchers** — Jenkins integration only.
 
 **Example Prompts:**
 
 - "Get launch details for launch 120906"
-- "Show me information about launch 121482"
+- "Show job parameters for launch 132452 to plan a Build now"
 - "What happened in launch 120814?"
 
 ### `get_launch_summary`
@@ -869,6 +871,88 @@ Weekly stability report for project MCP using:
 - "Import only MCP-82 and MCP-83 results from launch 98765 to test run 123"
 - "Sync launch 45000 results to test run 789 in project MCP, map ABORTED to Skipped"
 
+## Launch mutations & instance configuration
+
+Tools and prompts below honor optional blocks in **[zebrunner-config.json](zebrunner-config.json)** (or `ZEBRUNNER_CONFIG_JSON`). Customize per deployment; defaults in the repo target MFP Jenkins automation.
+
+| Block | Tool / prompt | When it applies |
+|-------|---------------|-----------------|
+| `localeTestRunRules` | `start_launch` | Preview only; project in `projectKeys` and locale ≠ `en_US` |
+| `relaunchFailures` | `/relaunch-regression-failures`, `rerun_launch_failures` (via prompt) | Launch name exclusions + batch cap in prompt text |
+
+**Non-MFP deployments:** set `localeTestRunRules.enabled: false` and adjust `relaunchFailures.excludeLaunchNamePatterns`. `/feature-scoped-launch` resolves Jenkins `suite_path` from user input or recent launches — no config required.
+
+Details: [README — Project-specific automation rules](README.md#project-specific-automation-rules-localetestrunrules--relaunchfailures) · [RESOURCES_AND_PROMPTS.md](docs/RESOURCES_AND_PROMPTS.md#project-specific-automation-configuration)
+
+---
+
+### `rerun_launch_failures`
+
+**Description:** (Beta) Rerun failed/aborted tests for one or more automation launches via the Reporting API. Triggers real CI/automation reruns. Single mode: provide `launch_id`. Batch mode: omit `launch_id` and optionally filter by `milestone` or `query`; capped by `max_launches` (default 10).
+
+**Parameters:**
+
+
+| Parameter | Type | Required | Description |
+| --------- | ---- | -------- | ----------- |
+| `project` | string / number | yes | Project alias, key, or numeric ID |
+| `launch_id` | number | | Single launch mode — Reporting API launch ID |
+| `milestone` | string | | Batch filter by milestone name |
+| `query` | string | | Batch filter by build number or launch name |
+| `max_launches` | number | | Batch safety cap (default 10, max 50) |
+| `min_failed` | number | | Min failed+aborted count to qualify (default 1) |
+| `skip_errors` | boolean | | Continue batch if one launch fails (default true) |
+| `dry_run` | boolean | | Show targets and API URLs without POST |
+| `confirm` | boolean | | Must be true to execute |
+| `confirmation_token` | string | | Token from preview step |
+
+
+**Permissions:** Requires IAM permission `reporting:test-runs:rerun` on the Zebrunner token.
+
+**Example Prompts:**
+
+- "Rerun failures for launch 132522 in project MFPAND"
+- "Rerun failed tests for the latest 5 launches in milestone 26.19.0 for android"
+- "Preview which launches in project android have failures and can be rerun"
+
+**Related MCP prompt:** Use `/relaunch-regression-failures` for full regression rerun workflows — discovers failed launches by milestone/build or last 7 days, applies `relaunchFailures.excludeLaunchNamePatterns` from zebrunner-config.json, and orchestrates preview/confirm batch reruns across platforms.
+
+### `start_launch`
+
+**Description:** (Beta) Trigger Zebrunner **Build Now** (Jenkins integration only) — start a new automation launch via Reporting API `job/parameters` + `job:build`. **Does NOT work with Launch Launchers.** Resolves a template launch by `launch_id`, launch name query, and/or `suite_path`; merges validated parameter overrides; preview/confirm before triggering CI.
+
+**Integration requirement:** Project must use Zebrunner Jenkins integration with Build Now. Launch Launchers are not supported by this tool.
+
+**Instance configuration (`localeTestRunRules`):** When enabled and the resolved project key is listed in `projectKeys`, non-`en_US` locale previews warn and may auto-merge `NOT_TAGS` exclusions for suites in `enUsOnlyFeatureSuites`. See [zebrunner-config.json](zebrunner-config.json) and [README](README.md#project-specific-automation-rules-localetestrunrules--relaunchfailures).
+
+**Related MCP prompt:** Use `/feature-scoped-launch` to find tests by feature keyword, build `test_run_rules` TAGS filters per root suite, and preview/trigger Build Now (suite_path resolved from args, past launches, or user input).
+
+**Parameters:**
+
+
+| Parameter | Type | Required | Description |
+| --------- | ---- | -------- | ----------- |
+| `project` | string / number | yes | Project alias, key, or numeric ID |
+| `launch_id` | number | | Explicit template launch ID |
+| `template_query` / `launch_name` | string | | Search past launches by name substring |
+| `suite_path` | string | | Match hidden CI `suite` param (e.g. `mfp/android/critical-flow`) |
+| `build` | string | | Build override — use `.*` for latest build |
+| `locale` | string | | Locale override — when `localeTestRunRules` is enabled for the project, non-en_US may auto-merge NOT_TAGS exclusions |
+| `test_run_rules` | string | | Test run rules override — en_US-only suite exclusions are configured in `zebrunner-config.json` → `localeTestRunRules` |
+| `parameters` | object | | Additional overrides (keys must exist in job/parameters) |
+| `max_template_search` | number | | Template scan cap (default 20) |
+| `dry_run` | boolean | | Show payload without POST |
+| `confirm` | boolean | | Must be true to execute |
+| `confirmation_token` | string | | Token from preview step |
+
+
+**Example Prompts:**
+
+- "Start Minimal-Acceptance launch for latest build in project MFPAND"
+- "Build now Critical flow with build .* and locale en_US"
+- "Build now regression for locale de_DE when localeTestRunRules is enabled for the project (see zebrunner-config.json)"
+- "Preview start_launch for template launch 132452 with test_run_rules PRIORITY=>P0||P1;;"
+
 ---
 
 ## Test Coverage & Validation
@@ -982,6 +1066,8 @@ Weekly stability report for project MCP using:
 - "Get automation tags for all test cases mentioning 'diary' feature"
 - "Show me all 'food search' related test cases grouped by suite"
 - "Generate test run rules for 'onboarding' feature"
+
+**Related MCP prompt:** Use `/feature-scoped-launch` for the full workflow — discovery, TAGS filter per root suite, Build Now preview/confirm.
 
 **Output Formats:**
 

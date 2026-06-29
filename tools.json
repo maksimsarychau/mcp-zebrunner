@@ -204,6 +204,14 @@
     "description": "Import automation launch results into a TCM Test Run by bridging Reporting API launches to Public API test runs (Beta)"
   },
   {
+    "name": "rerun_launch_failures",
+    "description": "Rerun failed/aborted tests for one or more automation launches via the Reporting API (Beta)"
+  },
+  {
+    "name": "start_launch",
+    "description": "Trigger Zebrunner Build Now (Jenkins integration only, not Launch Launchers) via job parameters and job:build (Beta)"
+  },
+  {
     "name": "improve_test_case",
     "description": "Get AI-powered suggestions to improve test case quality"
   },

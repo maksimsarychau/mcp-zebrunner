@@ -256,7 +256,9 @@ export const LaunchListItemSchema = z.object({
   buildNumber: z.string().nullable().optional(),
   jobUrl: z.string().nullable().optional(),
   upstream: z.boolean().optional(),
-  reviewed: z.boolean().optional()
+  reviewed: z.boolean().optional(),
+  isRelaunchPossible: z.boolean().optional(),
+  isLaunchAgainPossible: z.boolean().optional()
 });
 
 export type LaunchListItem = z.infer<typeof LaunchListItemSchema>;
@@ -431,6 +433,41 @@ export const LaunchAttemptsResponseSchema = z.object({
 });
 
 export type LaunchAttemptsResponse = z.infer<typeof LaunchAttemptsResponseSchema>;
+
+// Rerun launch response (Reporting API POST .../launches/{id}:rerun)
+export const RerunLaunchResponseSchema = z.object({
+  id: z.coerce.number().optional(),
+  name: z.string().optional(),
+  status: z.string().optional(),
+  data: z.record(z.string(), z.unknown()).optional(),
+}).passthrough();
+
+export type RerunLaunchResponse = z.infer<typeof RerunLaunchResponseSchema>;
+
+// Launch job parameter (Jenkins Build Now dialog — not Launch Launchers)
+export const LaunchJobParameterSchema = z.object({
+  name: z.string(),
+  parameterClass: z.enum(['STRING', 'BOOLEAN', 'HIDDEN']),
+  value: z.union([z.string(), z.boolean(), z.null()]).optional(),
+});
+
+export type LaunchJobParameter = z.infer<typeof LaunchJobParameterSchema>;
+
+export const LaunchJobParametersResponseSchema = z.object({
+  items: z.array(LaunchJobParameterSchema),
+});
+
+export type LaunchJobParametersResponse = z.infer<typeof LaunchJobParametersResponseSchema>;
+
+// Start launch build response (Jenkins Build Now POST .../launches/{id}/job:build)
+export const StartLaunchBuildResponseSchema = z.object({
+  id: z.coerce.number().optional(),
+  name: z.string().optional(),
+  status: z.string().optional(),
+  data: z.record(z.string(), z.unknown()).optional(),
+}).passthrough();
+
+export type StartLaunchBuildResponse = z.infer<typeof StartLaunchBuildResponseSchema>;
 
 // Error types for reporting API
 export class ZebrunnerReportingError extends Error {

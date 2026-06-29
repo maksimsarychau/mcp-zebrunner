@@ -7,6 +7,7 @@ import { VideoAnalyzer } from "../utils/video-analysis/analyzer.js";
 import type { TestEffectiveDuration, TestSessionBreakdown, SessionResolutionStrategy, TestSessionResponse } from "../types/reporting.js";
 import { buildChartResponse, type ChartConfig } from "../utils/chart-generator.js";
 import { getConfig } from "../utils/config-loader.js";
+import { extractJobSummary } from "../utils/launch-job-build.js";
 
 /**
  * MCP Tool handlers for Zebrunner Reporting API
@@ -33,7 +34,8 @@ export class ZebrunnerReportingToolHandlers {
       projectId, 
       launchId, 
       includeLaunchDetails, 
-      includeTestSessions, 
+      includeTestSessions,
+      includeJobParameters,
       format 
     } = input;
 
@@ -149,6 +151,16 @@ export class ZebrunnerReportingToolHandlers {
           }
         } catch (error: any) {
           results.testSessionsError = `Failed to fetch test data: ${error.message}`;
+        }
+      }
+
+      if (includeJobParameters) {
+        try {
+          const jobParameters = await this.reportingClient.getLaunchJobParameters(launchId, resolvedProjectId!);
+          results.jobParameters = jobParameters;
+          results.jobSummary = extractJobSummary(jobParameters.items);
+        } catch (error: any) {
+          results.jobParametersError = `Failed to fetch job parameters: ${error.message}`;
         }
       }
 

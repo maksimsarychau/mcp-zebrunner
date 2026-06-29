@@ -27,7 +27,7 @@
 
 ## 1. Executive Summary
 
-The Advanced Zebrunner MCP Server exposes **61 tools** (under `adv_<name>` names) to AI assistants (Claude, Cursor, ChatGPT). When a user asks "Show me the latest test failures," the AI must:
+The Advanced Zebrunner MCP Server exposes **63 tools** (under `adv_<name>` names) to AI assistants (Claude, Cursor, ChatGPT). When a user asks "Show me the latest test failures," the AI must:
 
 1. **Pick the right tool** from 52 options (e.g., `detailed_analyze_launch_failures`)
 2. **Provide the right arguments** (e.g., `project: "MY_PROJECT"`, `launch_id: 12345`)
@@ -54,7 +54,7 @@ The Evaluation Framework automatically tests all three of these steps using a re
 
 ### The Problem
 
-The Advanced Zebrunner MCP Server has 61 tools with overlapping capabilities. For example:
+The Advanced Zebrunner MCP Server has 63 tools with overlapping capabilities. For example:
 
 - `adv_list_test_suites` vs `adv_get_tcm_test_suites_by_project` — both list suites
 - `adv_get_test_cases_advanced` vs `adv_get_test_cases_by_suite_smart` — both retrieve test cases by suite

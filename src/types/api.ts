@@ -126,6 +126,8 @@ export const GetLauncherDetailsInputSchema = z.object({
   launchId: z.number().int().positive(),
   includeLaunchDetails: z.boolean().default(true),
   includeTestSessions: z.boolean().default(true),
+  includeJobParameters: z.boolean().default(false)
+    .describe("Jenkins Build Now job parameters only — not available for Launch Launchers"),
   format: z.enum(['dto', 'json', 'string']).default('json')
 });
 

@@ -59,7 +59,9 @@ export const TOOL_SMOKE_INPUTS: Record<string, Record<string, unknown>> = {
   create_test_case: { project_key: "MCP", test_suite_id: 1, title: "Smoke TC", dry_run: true },
   update_test_case: { project_key: "MCP", identifier: 1, title: "Smoke TC", dry_run: true },
   manage_test_run: { project_key: "MCP", action: "create", title: "Smoke Run", dry_run: true },
-  import_launch_results_to_test_run: { project_key: "MCP", test_run_id: 1, launch_id: 1, dry_run: true }
+  import_launch_results_to_test_run: { project_key: "MCP", test_run_id: 1, launch_id: 1, dry_run: true },
+  rerun_launch_failures: { project: "android", launch_id: 1 },
+  start_launch: { project: "android", launch_id: 1 }
 };
 
 export const TOOL_SCHEMA_REQUIRED_KEYS: Record<string, string[]> = Object.fromEntries(
@@ -99,6 +101,8 @@ export const PROMPT_MANIFEST: Record<string, { category: "e2e" | "analysis" | "r
   "suite-coverage":       { category: "e2e",      args: ["projects"] },
   "review-test-case":     { category: "analysis", args: ["case_key"] },
   "launch-triage":        { category: "analysis", args: ["project"] },
+  "relaunch-regression-failures": { category: "analysis", args: ["projects", "milestone", "build", "period"] },
+  "feature-scoped-launch": { category: "analysis", args: ["project", "feature", "suite_name", "suite_path", "build", "locale", "template_query"] },
   "flaky-review":         { category: "analysis", args: ["project"] },
   "find-duplicates":      { category: "analysis", args: ["project", "suite_id"] },
   "daily-qa-standup":     { category: "role",     args: ["projects"] },

@@ -5,6 +5,8 @@ A **Model Context Protocol (MCP)** server that brings advanced analytics, report
 
 > Tool naming: every tool on this server is registered under the canonical `adv_<name>` form (e.g. `adv_create_test_case`, `adv_list_test_runs`) so it never collides with the official Zebrunner MCP. The legacy names are kept as **deprecated aliases** so prompts/scripts that called the old names continue to work for now; aliases will be removed in the next major release. 
 
+> 🆕 **v9.1.0** — Launch mutations: `adv_rerun_launch_failures`, `adv_start_launch` (Jenkins Build Now), plus `/relaunch-regression-failures` and `/feature-scoped-launch` prompts. See [release notes](docs/releases/v9.1.0.md).
+>
 > 📖 **Need help with installation?** Check out our [**Step-by-Step Install Guide**](INSTALL-GUIDE.md) for detailed setup instructions.
 > 
 > 🚀 **Installing via npm?** See our [**MCP NPM Installation Guide**](MCP_NPM_INSTALLATION_GUIDE.md) for Claude Desktop, Cursor, IntelliJ IDEA, and ChatGPT Desktop configuration.
@@ -656,7 +658,9 @@ Most test case tools support optional **change history enrichment** — fetching
 #### **Launch Operations** ⭐ *Essential for Managers*
 | Tool | Description | Example Usage | Best For |
 |------|-------------|---------------|----------|
-| `get_launch_details` | Comprehensive launch information | `"Get launch details for launch 118685"` | **Managers, Leads** |
+| `get_launch_details` | Comprehensive launch information; optional `includeJobParameters` for Jenkins Build Now discovery | `"Get launch details for launch 118685 with job parameters"` | **Managers, Leads, SDETs** |
+| `rerun_launch_failures` | 🆕 **v9.1.0** Rerun failed/aborted tests for one or many launches (preview/confirm) | `"Rerun failures for launch 132522 in project android"` | **Managers, SDETs** |
+| `start_launch` | 🆕 **v9.1.0** Trigger Jenkins **Build Now** (not Launch Launchers); preview/confirm | `"Build now regression for android milestone 26.19.0 build 50977"` | **Managers, SDETs** |
 | `get_launch_summary` | Quick launch overview | `"Show me summary for launch 118685"` | **Managers** |
 | `get_all_launches_for_project` | List individual launch executions with pagination | `"List launches for project MCP from last month"` | **Managers, Leads** |
 | `get_all_launches_with_filter` | Search launches by milestone/build/name | `"Find launches for milestone 2.1.0 and build 'mcp-app-2.1.0'"` | **Managers, Leads** |
@@ -763,7 +767,7 @@ Most test case tools support optional **change history enrichment** — fetching
 
 > **Full guide:** [docs/RESOURCES_AND_PROMPTS.md](docs/RESOURCES_AND_PROMPTS.md) — detailed usage, examples, reference tables, and contributor guide.
 
-In addition to 60 tools, the server now provides **13 resources** and **14 prompts** that improve discoverability and automate complex workflows.
+In addition to 63 tools, the server now provides **14 resources** and **17 prompts** that improve discoverability and automate complex workflows.
 
 ### Resources — `@` Context Injection
 
@@ -804,8 +808,11 @@ Prompts are pre-built workflow instructions triggered via the `/` command menu. 
 | `/executive-dashboard` | `projects` | 5-section standup-ready dashboard |
 | `/release-readiness` | `project`, `milestone?` | Go/No-Go assessment with evidence |
 | `/suite-coverage` | `projects` | Per-suite coverage tables (TOTAL + TOTAL REGRESSION) |
+| `/regression-summary` | `project`, `milestone?`, `build?` | Regression results overview, new bugs, top bugs, slowest tests |
 | `/review-test-case` | `case_key` | Validate + improve a test case |
 | `/launch-triage` | `project` | Post-regression failure analysis |
+| `/relaunch-regression-failures` | `projects`, `milestone?`, `build?`, `period?` | 🆕 **v9.1.0** Discover failed launches and batch-rerun failures |
+| `/feature-scoped-launch` | `project`, `feature`, `suite_name?`, `build?` | 🆕 **v9.1.0** Feature keyword → test_run_rules → Build Now per root suite |
 | `/flaky-review` | `project` | Flaky test detection + stabilization plan |
 | `/find-duplicates` | `project`, `suite_id?` | Structural + semantic duplicate analysis |
 | `/daily-qa-standup` | `projects` | Daily standup summary with action items |
@@ -1220,13 +1227,17 @@ The MCP server ships with a `zebrunner-config.json` in the project root that con
   "featureAreaKeywords": {
     "quicklog": "Search & Quick Log",
     "search": "Search & Quick Log",
-    "notification": "Notifications",
-    "meal": "Meal Management",
-    "message": "Messages",
-    "goal": "Goals",
-    "dashboard": "Dashboard",
-    "premium": "Premium Features",
-    "export": "Export"
+    "notification": "Notifications"
+  },
+  "localeTestRunRules": {
+    "enabled": true,
+    "projectKeys": ["AND", "IOS", "WEB"],
+    "enUsOnlyFeatureSuites": ["Plans", "Workout Routines", "Recipe Discovery"],
+    "suiteNameMatch": "includes"
+  },
+  "relaunchFailures": {
+    "excludeLaunchNamePatterns": ["Performance"],
+    "maxLaunchesPerPlatform": 50
   }
 }
 ```
@@ -1239,8 +1250,69 @@ The MCP server ships with a `zebrunner-config.json` in the project root that con
 | `dashboardNames` | Dashboard display names used by widget SQL queries. Must match dashboard names in your Zebrunner workspace. |
 | `platformMap` | Maps platform aliases to widget SQL `PLATFORM` filter values. |
 | `featureAreaKeywords` | Keyword-to-label mapping used by regression stability reports to bucket test names into feature areas. Customize for your application's feature structure. |
+| `localeTestRunRules` | **Project-scoped Build Now rules** — see [below](#project-specific-automation-rules-localetestrunrules--relaunchfailures). Used by `adv_start_launch` when locale ≠ `en_US`. |
+| `relaunchFailures` | **Project-scoped rerun rules** — see [below](#project-specific-automation-rules-localetestrunrules--relaunchfailures). Used by `/relaunch-regression-failures` and referenced by `adv_rerun_launch_failures`. |
 
 Individual keys can be omitted — only the keys you include will override the defaults.
+
+#### Project-specific automation rules (`localeTestRunRules` & `relaunchFailures`)
+
+These optional blocks configure **launch mutation workflows** per project. They do **not** affect read-only tools, TCM tools, or projects outside the configured scope.
+
+**`localeTestRunRules`** — `adv_start_launch` (Jenkins Build Now) when the effective locale is not `en_US`:
+
+| Sub-key | Description |
+|---------|-------------|
+| `enabled` | Master switch. Set `false` to disable locale-based NOT_TAGS logic entirely. |
+| `projectKeys` | Zebrunner project keys where rules apply (e.g. `["MCP", "DEF"]`). Other projects are unchanged. |
+| `enUsOnlyFeatureSuites` | TCM feature suite names that are English-only; auto-excluded via `NOT_TAGS` in `test_run_rules` on preview. |
+| `suiteNameMatch` | `"exact"` or `"includes"` — how suite names are matched when discovering feature suite IDs. |
+
+**`relaunchFailures`** — `/relaunch-regression-failures` prompt and batch rerun guidance:
+
+| Sub-key | Description |
+|---------|-------------|
+| `excludeLaunchNamePatterns` | Launch **names** to skip when discovering failures (case-insensitive substring match). Default: `["Performance"]`. |
+| `maxLaunchesPerPlatform` | Cap per platform in the prompt workflow (default `50`, matches `adv_rerun_launch_failures` max). |
+
+**`/feature-scoped-launch`** does not use `zebrunner-config.json` for Jenkins `suite_path` — the prompt resolves it from args, recent launches, or by asking the user.
+
+**Examples**
+
+*CUSTOMER-style deployment* (shipped defaults in repo `zebrunner-config.json`):
+
+```json
+"localeTestRunRules": {
+  "enabled": true,
+  "projectKeys": ["MCP", "DEF", "WEB"],
+  "enUsOnlyFeatureSuites": ["Plans", "Workout Routines", "Recipe Discovery"],
+  "suiteNameMatch": "includes"
+},
+"relaunchFailures": {
+  "excludeLaunchNamePatterns": ["Performance"],
+  "maxLaunchesPerPlatform": 50
+}
+```
+
+*Generic / non-CUSTOMER deployment* (e.g. only project `MCP` for demos, no locale exclusions):
+
+```json
+"projectAliases": { "demo": "MCP" },
+"testConnectionProjectKey": "MCP",
+"localeTestRunRules": { "enabled": false },
+"relaunchFailures": {
+  "excludeLaunchNamePatterns": [],
+  "maxLaunchesPerPlatform": 50
+}
+```
+
+*Minimal override via env* (Docker/K8s without mounting the file):
+
+```bash
+ZEBRUNNER_CONFIG_JSON='{"localeTestRunRules":{"enabled":false},"relaunchFailures":{"excludeLaunchNamePatterns":["Benchmark"]}}'
+```
+
+See also: [docs/RESOURCES_AND_PROMPTS.md](docs/RESOURCES_AND_PROMPTS.md#project-specific-automation-configuration) for how prompts and tools consume these settings.
 
 ### Per-User Zebrunner URL (v8.1.0+)
 
@@ -1472,7 +1544,7 @@ Leverage intelligent validation:
 ## 📚 Additional Documentation
 
 ### 📖 Tool References
-- **[TOOLS_CATALOG.md](TOOLS_CATALOG.md)** - 🆕 **Complete catalog of all 60 tools with natural language examples**
+- **[TOOLS_CATALOG.md](TOOLS_CATALOG.md)** - 🆕 **Complete catalog of all 63 tools with natural language examples**
 - **[docs/RESOURCES_AND_PROMPTS.md](docs/RESOURCES_AND_PROMPTS.md)** - 📎 **MCP Resources & Prompts — full usage guide, reference tables, and contributor guide**
 - **[INSTALL-GUIDE.md](INSTALL-GUIDE.md)** - 📥 **Step-by-step installation and setup guide**
 
@@ -1488,6 +1560,7 @@ Leverage intelligent validation:
 ### 🔍 Specialized Guides
 - **[docs/archive/SCREENSHOT_ANALYSIS.md](docs/archive/SCREENSHOT_ANALYSIS.md)** - 📸 **Screenshot download and visual analysis guide**
 - **[change-logs.md](change-logs.md)** - 📝 **Version history and feature updates**
+- **[docs/releases/v9.1.0.md](docs/releases/v9.1.0.md)** - 🆕 **v9.1.0 release notes — launch mutations, prompts, and config**
 
 ### 🛠️ Feature Documentation
 - **[docs/TERMINOLOGY.md](docs/TERMINOLOGY.md)** - 📖 **Test vs Test Case vs Test Run vs Launch — glossary and counting rules**
