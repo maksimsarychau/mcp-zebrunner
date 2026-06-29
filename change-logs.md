@@ -22,7 +22,7 @@
 | `localeTestRunRules` | Per-project Build Now rules for non-`en_US` locales (`enabled`, `projectKeys`, `enUsOnlyFeatureSuites`, `suiteNameMatch`) |
 | `relaunchFailures` | Launch name exclusions and batch cap for `/relaunch-regression-failures` (`excludeLaunchNamePatterns`, `maxLaunchesPerPlatform`) |
 
-Override via `ZEBRUNNER_CONFIG_JSON` or custom config path. Non-MFP: set `localeTestRunRules.enabled: false` and adjust `relaunchFailures`.
+Override via `ZEBRUNNER_CONFIG_JSON` or custom config path. Non-CUSTOMER: set `localeTestRunRules.enabled: false` and adjust `relaunchFailures`.
 
 ### Changed
 
@@ -32,7 +32,7 @@ Override via `ZEBRUNNER_CONFIG_JSON` or custom config path. Non-MFP: set `locale
 
 ### Documentation
 
-- [docs/releases/v9.1.0.md](docs/releases/v9.1.0.md) — upgrade checklist, non-MFP guidance, quick examples.
+- [docs/releases/v9.1.0.md](docs/releases/v9.1.0.md) — upgrade checklist, non-CUSTOMER guidance, quick examples.
 - [README.md](README.md) — launch mutation tools, 17 prompts, project-specific config section.
 - [TOOLS_CATALOG.md](TOOLS_CATALOG.md) — `rerun_launch_failures`, `start_launch`, config cross-links.
 - [docs/RESOURCES_AND_PROMPTS.md](docs/RESOURCES_AND_PROMPTS.md) — new prompts + project-specific automation configuration.

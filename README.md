@@ -1264,7 +1264,7 @@ These optional blocks configure **launch mutation workflows** per project. They 
 | Sub-key | Description |
 |---------|-------------|
 | `enabled` | Master switch. Set `false` to disable locale-based NOT_TAGS logic entirely. |
-| `projectKeys` | Zebrunner project keys where rules apply (e.g. `["MFPAND", "MFPIOS"]`). Other projects are unchanged. |
+| `projectKeys` | Zebrunner project keys where rules apply (e.g. `["MCP", "DEF"]`). Other projects are unchanged. |
 | `enUsOnlyFeatureSuites` | TCM feature suite names that are English-only; auto-excluded via `NOT_TAGS` in `test_run_rules` on preview. |
 | `suiteNameMatch` | `"exact"` or `"includes"` — how suite names are matched when discovering feature suite IDs. |
 
@@ -1279,12 +1279,12 @@ These optional blocks configure **launch mutation workflows** per project. They 
 
 **Examples**
 
-*MFP-style deployment* (shipped defaults in repo `zebrunner-config.json`):
+*CUSTOMER-style deployment* (shipped defaults in repo `zebrunner-config.json`):
 
 ```json
 "localeTestRunRules": {
   "enabled": true,
-  "projectKeys": ["MFPAND", "MFPIOS", "MFPWEB"],
+  "projectKeys": ["MCP", "DEF", "WEB"],
   "enUsOnlyFeatureSuites": ["Plans", "Workout Routines", "Recipe Discovery"],
   "suiteNameMatch": "includes"
 },
@@ -1294,7 +1294,7 @@ These optional blocks configure **launch mutation workflows** per project. They 
 }
 ```
 
-*Generic / non-MFP deployment* (e.g. only project `MCP` for demos, no locale exclusions):
+*Generic / non-CUSTOMER deployment* (e.g. only project `MCP` for demos, no locale exclusions):
 
 ```json
 "projectAliases": { "demo": "MCP" },
