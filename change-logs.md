@@ -2,7 +2,7 @@
 
 ## v9.1.0 — Launch mutations (rerun failures + Build now)
 
-> Full release notes: [docs/releases/v9.1.0.md](docs/releases/v9.1.0.md)
+> Full release notes: [GitHub Release v9.1.0](https://github.com/maksimsarychau/mcp-zebrunner/releases/tag/v9.1.0)
 
 ### Added — Tools
 
@@ -32,12 +32,17 @@ Override via `ZEBRUNNER_CONFIG_JSON` or custom config path. Non-CUSTOMER: set `l
 
 ### Documentation
 
-- [docs/releases/v9.1.0.md](docs/releases/v9.1.0.md) — upgrade checklist, non-CUSTOMER guidance, quick examples.
+- [GitHub Release v9.1.0](https://github.com/maksimsarychau/mcp-zebrunner/releases/tag/v9.1.0) — upgrade checklist, non-CUSTOMER guidance, quick examples.
 - [README.md](README.md) — launch mutation tools, 17 prompts, project-specific config section.
 - [TOOLS_CATALOG.md](TOOLS_CATALOG.md) — `rerun_launch_failures`, `start_launch`, config cross-links.
 - [docs/RESOURCES_AND_PROMPTS.md](docs/RESOURCES_AND_PROMPTS.md) — new prompts + project-specific automation configuration.
 - [docs/TEST_PROMPTS.md](docs/TEST_PROMPTS.md) — manual test scenarios for relaunch and feature-scoped launch.
 - [custom-catalog.yaml](custom-catalog.yaml), [mcp-catalog.yaml](mcp-catalog.yaml) — prompt counts updated.
+- [docs/AI_MCP_BENEFITS.md](docs/AI_MCP_BENEFITS.md) — dual-MCP gap table (what Advanced does not cover); official MCP now ~70 tools / 10 prompts per [Zebrunner MCP docs](https://zebrunner.com/documentation/guide/mcp/).
+- [docs/RESOURCES_AND_PROMPTS.md](docs/RESOURCES_AND_PROMPTS.md) — official vs Advanced prompt routing section.
+- README dual-MCP table refreshed (launcher platform, file triage, `list_projects`).
+- `zebrunner://mcp-routing` resource — expanded official-server `best_for` list ([src/resources.ts](src/resources.ts)).
+- Internal parity docs refreshed against official MCP guide + `api-docs.json` (gitignored): `docs/API_COVERAGE.md`, `docs/OFFICIAL_MCP_PARITY.md`.
 
 ## v9.0.5 — Multi-arch Docker images (amd64 + arm64)
 
@@ -127,11 +132,9 @@ Every legacy short name will be re-registered as a deprecated alias that routes 
 ### ✨ New
 
 - New static MCP resource `zebrunner://mcp-routing` and new `about_mcp_tools` mode `routing` — both surface the dual-MCP decision table (when to use official `zebrunner` vs this server).
-- New docs:
-  - [`docs/OFFICIAL_MCP_PARITY.md`](docs/OFFICIAL_MCP_PARITY.md) — human-readable diff between our tools and the official MCP.
-  - [`docs/OFFICIAL_MCP_DIFF.json`](docs/OFFICIAL_MCP_DIFF.json) — machine-readable diff for tooling.
-  - [`docs/API_COVERAGE.md`](docs/API_COVERAGE.md) — `api-docs.json` path → tool mapping (official vs advanced).
-  - [`docs/IMPLEMENTATION_NOTES.md`](docs/IMPLEMENTATION_NOTES.md) — running log of decisions during this work.
+- Dual-MCP parity and routing (via MCP surfaces in the public repo):
+  - `zebrunner://mcp-routing` resource — human-readable tool-by-tool diff and routing table
+  - `about_mcp_tools` with `mode='routing'` — same guidance inside chat
 
 ### 🔧 Changed
 
@@ -143,7 +146,7 @@ Every legacy short name will be re-registered as a deprecated alias that routes 
 ### 🤝 Coexistence with the official Zebrunner MCP
 
 - The two servers expose disjoint tool namespaces (our prefix vs. their unprefixed names).
-- Prompts are also disjoint (our 15 reporting/role-specific prompts vs. the official 6 triage/CRUD recipes).
+- Prompts are also disjoint (our 17 reporting/role-specific prompts vs. the official 10 triage/TCM/launcher recipes).
 - The README's "Dual-MCP setup" section shows the canonical `.cursor/mcp.json` for running both at once and includes a rule-of-thumb table.
 
 ### 📦 Files / versions bumped

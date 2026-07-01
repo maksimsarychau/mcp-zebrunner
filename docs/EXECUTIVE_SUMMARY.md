@@ -183,7 +183,7 @@ Planned enhancements:
 
 - **Installation Guide:** [INSTALL-GUIDE.md](../INSTALL-GUIDE.md)
 - **npm Guide:** [MCP_NPM_INSTALLATION_GUIDE.md](../MCP_NPM_INSTALLATION_GUIDE.md)
-- **Docker Guide:** [DOCKER_USAGE.md](DOCKER_USAGE.md)
+- **Docker & Compose:** [README Usage Methods](../README.md#-usage-methods) — STDIO and HTTP modes; see [`docker-compose.yml`](../docker-compose.yml) and [`docker-compose.http.yml`](../docker-compose.http.yml) in the repo root.
 - **Full Tools Catalog:** [TOOLS_CATALOG.md](../TOOLS_CATALOG.md)
 - **Change Log:** [change-logs.md](../change-logs.md)
 
@@ -193,4 +193,4 @@ Planned enhancements:
 
 ---
 
-*Last Updated: April 2026*
+*Last Updated: v9.1.0 - July 2026*

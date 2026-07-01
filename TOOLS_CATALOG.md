@@ -2,7 +2,7 @@
 
 Complete reference of all available tools with natural language usage examples.
 
-> **v9.1.0:** New launch mutation tools — [`rerun_launch_failures`](#rerun_launch_failures), [`start_launch`](#start_launch), and [`get_launch_details`](#get_launch_details) (`includeJobParameters`). See [release notes](docs/releases/v9.1.0.md).
+> **v9.1.0:** New launch mutation tools — [`rerun_launch_failures`](#rerun_launch_failures), [`start_launch`](#start_launch), and [`get_launch_details`](#get_launch_details) (`includeJobParameters`). See [GitHub Release v9.1.0](https://github.com/maksimsarychau/mcp-zebrunner/releases/tag/v9.1.0).
 
 > **Naming:** Every tool below is registered under two names — the canonical `adv_<name>` form (e.g. `adv_create_test_case`) and a deprecated legacy alias (`<name>`) kept for backward compatibility. Examples often use the legacy short form for readability; both forms behave identically. Prefer the `adv_` form when both this server and the official Zebrunner MCP are connected.
 
@@ -1468,6 +1468,6 @@ For large datasets, you can specify filters and limits:
 
 ---
 
-**Last Updated:** v7.0.0 - April 2026
+**Last Updated:** v9.1.0 - July 2026
 
 For the latest features and updates, see [change-logs.md](change-logs.md).

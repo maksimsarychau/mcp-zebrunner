@@ -5,7 +5,7 @@ A **Model Context Protocol (MCP)** server that brings advanced analytics, report
 
 > Tool naming: every tool on this server is registered under the canonical `adv_<name>` form (e.g. `adv_create_test_case`, `adv_list_test_runs`) so it never collides with the official Zebrunner MCP. The legacy names are kept as **deprecated aliases** so prompts/scripts that called the old names continue to work for now; aliases will be removed in the next major release. 
 
-> 🆕 **v9.1.0** — Launch mutations: `adv_rerun_launch_failures`, `adv_start_launch` (Jenkins Build Now), plus `/relaunch-regression-failures` and `/feature-scoped-launch` prompts. See [release notes](docs/releases/v9.1.0.md).
+> 🆕 **v9.1.0** — Launch mutations: `adv_rerun_launch_failures`, `adv_start_launch` (Jenkins Build Now), plus `/relaunch-regression-failures` and `/feature-scoped-launch` prompts. See [GitHub Release v9.1.0](https://github.com/maksimsarychau/mcp-zebrunner/releases/tag/v9.1.0).
 >
 > 📖 **Need help with installation?** Check out our [**Step-by-Step Install Guide**](INSTALL-GUIDE.md) for detailed setup instructions.
 > 
@@ -15,7 +15,7 @@ A **Model Context Protocol (MCP)** server that brings advanced analytics, report
 
 ## 🔥 Why This Server
 
-This is the **Advanced Zebrunner MCP Server** — built to go well beyond basic test case management and help QA teams work smarter and faster with AI. Compared to the official Zebrunner MCP (beta, ~47 CRUD-focused tools), this server provides **60+ tools** with deep analytics, reporting, and automation capabilities, and is safe to run side-by-side with the official server:
+This is the **Advanced Zebrunner MCP Server** — built to go well beyond basic test case management and help QA teams work smarter and faster with AI. Compared to the official Zebrunner MCP (beta, ~70 tools spanning Public REST + Reporting/TAM/Launcher), this server provides **63 analytics-focused tools** (`adv_*` prefix) and is safe to run side-by-side with the official server:
 
 - **[Reporting & Analytics](#-reporting--analytics)** — dashboards, pass-rate trends, regression stability reports, runtime efficiency analysis, bug reviews, and weekly delta tracking
 - **[Test Coverage & Analysis](#-test-coverage--analysis)** — coverage gaps, automation readiness scoring, and cross-suite analysis
@@ -534,18 +534,16 @@ Rule of thumb when both are connected:
 
 | Use **`zebrunner`** (official) for | Use **`mcp-zebrunner`** (Advanced) for |
 |------------------------------------|----------------------------------------|
-| Standard CRUD (test cases, suites, runs, shared steps) | Failure forensics, runtime + flakiness analytics |
-| Server-side `filter` DSL on `list_test_cases` / `list_test_runs` | Reporting, dashboards, regression analyzers |
-| File upload / download, bulk launch ops, milestone create | Preview/confirm safe mutations (`adv_create_test_case`, …) |
+| `list_projects`, shared steps, test run replace/close, custom field create | Failure forensics, runtime + flakiness analytics |
+| Server-side `filter` DSL; file upload + screenshot content in triage | Reporting, dashboards, regression analyzers |
+| Bulk launch/test comments, issue linking, launcher/preset CRUD, `launch_tests` | Preview/confirm TCM mutations; Jenkins Build Now / rerun failures |
 
 Inside chat, ask `about_mcp_tools` with `mode: "routing"` or open the
-`zebrunner://mcp-routing` resource to get the same guidance.
-See [`docs/OFFICIAL_MCP_PARITY.md`](docs/OFFICIAL_MCP_PARITY.md) for the
-full live-generated diff.
+`zebrunner://mcp-routing` resource for the full live-generated diff and routing table.
 
 ## 🛠️ Available Tools
 
-Once connected, you can use these tools through natural language in your AI assistant. Here's a comprehensive reference of all 40+ available tools organized by category.
+Once connected, you can use these tools through natural language in your AI assistant. This section highlights all **63 tools** organized by category. For the complete catalog with natural-language examples for every tool, see **[TOOLS_CATALOG.md](TOOLS_CATALOG.md)**.
 
 > All tools are registered under two names: the **canonical `adv_<name>` form** (e.g. `adv_create_test_case`, recommended in new prompts and required when both MCPs are connected to avoid collisions with the official Zebrunner MCP) and a **deprecated legacy alias** (`<name>`, kept temporarily so existing prompts keep working). Examples below use the legacy form for brevity; both forms behave identically.
 
@@ -1560,7 +1558,7 @@ Leverage intelligent validation:
 ### 🔍 Specialized Guides
 - **[docs/archive/SCREENSHOT_ANALYSIS.md](docs/archive/SCREENSHOT_ANALYSIS.md)** - 📸 **Screenshot download and visual analysis guide**
 - **[change-logs.md](change-logs.md)** - 📝 **Version history and feature updates**
-- **[docs/releases/v9.1.0.md](docs/releases/v9.1.0.md)** - 🆕 **v9.1.0 release notes — launch mutations, prompts, and config**
+- **[GitHub Release v9.1.0](https://github.com/maksimsarychau/mcp-zebrunner/releases/tag/v9.1.0)** - 🆕 **v9.1.0 release notes — launch mutations, prompts, and config**
 
 ### 🛠️ Feature Documentation
 - **[docs/TERMINOLOGY.md](docs/TERMINOLOGY.md)** - 📖 **Test vs Test Case vs Test Run vs Launch — glossary and counting rules**

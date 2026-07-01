@@ -115,13 +115,13 @@ Available across multiple channels:
 
 ---
 
-## 60 Tools Across Three Domains
+## 63 Tools Across Three Domains
 
 **Test Case Management:** retrieve, search, filter, validate, improve, **create**, and **update** test cases and suites.
 
 **Mutation & Safety:** create/update test cases and suites with two-step confirmation, audit logging, forced draft, and source traceability.
 
-**Reporting & Analytics:** launch analysis, failure forensics, video analysis, weekly reports, bug analysis, and Jira ticket generation.
+**Reporting & Analytics:** launch analysis, failure forensics, video analysis, weekly reports, bug analysis, Jenkins Build Now / rerun-failures, and Jira ticket generation.
 
 See the full [Tools Catalog](../TOOLS_CATALOG.md) for details.
 
@@ -131,4 +131,4 @@ See the full [Tools Catalog](../TOOLS_CATALOG.md) for details.
 
 ---
 
-*Last Updated: April 2026*
+*Last Updated: v9.1.0 - July 2026*
