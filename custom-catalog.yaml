@@ -67,7 +67,7 @@ servers:
         example: "user@example.com"
         
       ZEBRUNNER_TOKEN:
-        description: "Personal access token (Settings → API Tokens) or refreshToken from SSO session (see docs/OKTA_ACCESS_INVESTIGATION.md)"
+        description: "Personal access token from Zebrunner (Settings → API Tokens) or refreshToken from an SSO session (see Zebrunner IAM documentation)"
         required: true
         secret: true
         

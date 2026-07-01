@@ -1363,7 +1363,7 @@ MCP resources provide read-only reference data accessible via the `@` menu in MC
 
 ## 15. MCP Prompts *(v9.1.0)*
 
-> **17 prompts** registered. v9.1.0 adds `/relaunch-regression-failures` and `/feature-scoped-launch`. See [release notes](releases/v9.1.0.md).
+> **17 prompts** registered. v9.1.0 adds `/relaunch-regression-failures` and `/feature-scoped-launch`. See [GitHub Release v9.1.0](https://github.com/maksimsarychau/mcp-zebrunner/releases/tag/v9.1.0).
 
 MCP prompts provide pre-built, tested workflow instructions accessible via the `/` command in MCP clients. Each prompt injects expert-crafted multi-step instructions that guide Claude through complex multi-tool workflows.
 
@@ -1547,4 +1547,4 @@ Requires LLM provider config in `.env` — see `.env.example` (`EVAL_PROVIDER=lo
 
 ---
 
-*Last Updated: April 2026*
+*Last Updated: v9.1.0 - July 2026*

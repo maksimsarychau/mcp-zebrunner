@@ -74,7 +74,7 @@ config:
     type: secret
     required: true
     title: "API Token"
-    description: "Personal access token from Zebrunner (Settings → API Tokens) or refreshToken from SSO session (see docs/OKTA_ACCESS_INVESTIGATION.md)"
+    description: "Personal access token from Zebrunner (Settings → API Tokens) or refreshToken from an SSO session (see Zebrunner IAM documentation)"
     placeholder: "your-api-token"
 
   # Optional settings
