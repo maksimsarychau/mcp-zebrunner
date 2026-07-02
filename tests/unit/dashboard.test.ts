@@ -1,5 +1,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import * as os from "node:os";
+import * as path from "node:path";
+import * as fs from "node:fs";
 
 // ── dashboard-template tests ──────────────────────────────────────────────
 
@@ -353,6 +356,7 @@ describe("ReportHandler: quality_dashboard report", () => {
       report_types: ["quality_dashboard"],
       projects: ["android"],
       period: "Last 30 Days",
+      inline: true,
     });
 
     assert.ok(Array.isArray(result.content));
@@ -374,11 +378,35 @@ describe("ReportHandler: quality_dashboard report", () => {
       report_types: ["quality_dashboard"],
       projects: ["android"],
       period: "Last 30 Days",
+      inline: true,
     });
 
     const imageBlocks = result.content.filter((c: any) => c.type === "image");
     assert.ok(imageBlocks.length > 0, "should have at least one PNG chart");
     assert.equal(imageBlocks[0].mimeType, "image/png");
+  });
+
+  it("default (inline=false) writes artifacts to disk and does NOT inline HTML/base64", async () => {
+    const handler = createMockHandler();
+    const outDir = path.join(os.tmpdir(), "zeb-report-test-" + process.pid);
+    const result = await handler.generateReport({
+      report_types: ["quality_dashboard"],
+      projects: ["android"],
+      period: "Last 30 Days",
+      output_dir: outDir,
+    });
+
+    // No inline HTML document, no base64 image blocks.
+    const textBlocks = result.content.filter((c: any) => c.type === "text");
+    assert.ok(!textBlocks.some((b: any) => b.text.includes("<!DOCTYPE html>")), "should not inline HTML");
+    assert.equal(result.content.filter((c: any) => c.type === "image").length, 0, "should not inline base64 charts");
+
+    // A path pointing at a real, written .html file is returned.
+    const refBlock = textBlocks.find((b: any) => b.text.includes("written to disk"));
+    assert.ok(refBlock, "should reference on-disk artifacts");
+    const m = refBlock.text.match(/`([^`]+\.html)`/);
+    assert.ok(m, "should include an .html path");
+    assert.ok(fs.existsSync(m[1]), "the referenced HTML file should exist on disk");
   });
 
   it("handles multiple projects", async () => {
@@ -679,6 +707,7 @@ describe("ReportHandler: executive_dashboard report", () => {
       report_types: ["executive_dashboard"],
       projects: ["android"],
       period: "Last 30 Days",
+      inline: true,
     });
 
     const textBlocks = result.content.filter((c: any) => c.type === "text");

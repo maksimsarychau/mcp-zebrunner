@@ -6794,6 +6794,12 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       previous_milestone: z.string().optional().describe(
         "Baseline milestone for delta comparison (runtime_efficiency, release_readiness)"
       ),
+      inline: z.boolean().default(false).describe(
+        "When false (default), the HTML dashboard + PNG charts are written to disk and the response returns file paths + a markdown summary (token-sane). Set true to inline the full HTML + base64 charts in the response."
+      ),
+      output_dir: z.string().optional().describe(
+        "Directory for on-disk report artifacts when inline=false. Default: <tmp>/zebrunner-reports."
+      ),
     },
       annotations: {
         readOnlyHint: true,
@@ -6815,6 +6821,8 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           targets: args.targets,
           exclude_suite_patterns: args.exclude_suite_patterns,
           previous_milestone: args.previous_milestone,
+          inline: args.inline,
+          output_dir: args.output_dir,
         });
       } catch (error: any) {
         debugLog("Error in generate_report", { error: error.message, args });

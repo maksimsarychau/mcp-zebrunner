@@ -108,6 +108,11 @@ export interface ReportInput {
   targets?: PassRateTargets;
   exclude_suite_patterns?: string[];
   previous_milestone?: string;
+  /** When false (default), the HTML dashboard + PNG charts are written to disk and the response
+   * carries file paths + a markdown summary instead of inlining the (large) HTML/base64 blobs. */
+  inline?: boolean;
+  /** Directory for on-disk report artifacts when inline=false. Defaults to <tmp>/zebrunner-reports. */
+  output_dir?: string;
 }
 
 export interface ReportOutput {

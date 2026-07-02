@@ -26,6 +26,7 @@ import {
   type DashboardData,
   type DashboardSection,
 } from "../../utils/dashboard-template.js";
+import { writeReportArtifacts } from "./artifact-writer.js";
 
 interface ExecutiveData {
   passRate?: PassRateData;
@@ -54,6 +55,7 @@ export async function generateExecutiveReport(
 
   const sections = buildDashboardSections(allData, mergedTargets, top_bugs_limit, ctx);
 
+  const chartPngs: Buffer[] = [];
   for (const section of sections) {
     if (section.chartType === 'table') continue;
     try {
@@ -69,8 +71,7 @@ export async function generateExecutiveReport(
         width: 800,
         height: 400,
       };
-      const pngBuffer = await generatePngChart(chartConfig);
-      contentBlocks.push({ type: "image" as const, data: pngBuffer.toString('base64'), mimeType: "image/png" });
+      chartPngs.push(await generatePngChart(chartConfig));
     } catch {
       // PNG generation failed
     }
@@ -86,10 +87,27 @@ export async function generateExecutiveReport(
   };
   const htmlDashboard = generateDashboardHtml(dashboardData);
 
-  contentBlocks.push({
-    type: "text" as const,
-    text: `\n\n---\n\n[HTML_DASHBOARD]\nSave as .html and open in a browser for interactive charts.\n\n\`\`\`html\n${htmlDashboard}\n\`\`\``,
-  });
+  if (input.inline === true) {
+    for (const png of chartPngs) {
+      contentBlocks.push({ type: "image" as const, data: png.toString('base64'), mimeType: "image/png" });
+    }
+    contentBlocks.push({
+      type: "text" as const,
+      text: `\n\n---\n\n[HTML_DASHBOARD]\nSave as .html and open in a browser for interactive charts.\n\n\`\`\`html\n${htmlDashboard}\n\`\`\``,
+    });
+  } else {
+    const written = writeReportArtifacts('executive-report', htmlDashboard, chartPngs, generatedAt, input.output_dir);
+    contentBlocks.push({
+      type: "text" as const,
+      text:
+        `\n\n---\n\n**Report artifacts written to disk** (pass \`inline: true\` to embed instead):\n` +
+        `- HTML dashboard: \`${written.htmlPath}\`\n` +
+        (written.chartPaths.length
+          ? written.chartPaths.map((p, i) => `- Chart ${i + 1}: \`${p}\``).join('\n') + '\n'
+          : '') +
+        `\nOpen the HTML in a browser for interactive charts, or Read the PNGs for the rendered views.`,
+    });
+  }
 
   return { content: contentBlocks };
 }

@@ -28,6 +28,7 @@ import {
   type DashboardData,
   type DashboardSection,
 } from "../../utils/dashboard-template.js";
+import { writeReportArtifacts } from "./artifact-writer.js";
 
 interface ProjectDashboardData {
   passRate?: PassRateData;
@@ -118,25 +119,41 @@ export async function generateQualityDashboardReport(
     text: buildMarkdownSummary(dashboardData, allData, mergedTargets, ctx),
   });
 
+  // Render PNG charts once (reused for inline blocks or disk artifacts).
+  const chartPngs: Buffer[] = [];
   for (const section of dashboardSections) {
     if (section.chartType === 'table') continue;
     try {
       const chartConfig = sectionToChartConfig(section);
-      const pngBuffer = await generatePngChart(chartConfig);
-      contentBlocks.push({
-        type: "image" as const,
-        data: pngBuffer.toString('base64'),
-        mimeType: "image/png",
-      });
+      chartPngs.push(await generatePngChart(chartConfig));
     } catch {
       // PNG generation failed — markdown text is still there
     }
   }
 
-  contentBlocks.push({
-    type: "text" as const,
-    text: `\n\n---\n\n[HTML_DASHBOARD]\nThe self-contained HTML dashboard is attached below. Save it as a .html file and open in a browser for interactive charts.\n\n\`\`\`html\n${htmlDashboard}\n\`\`\``,
-  });
+  const inline = input.inline === true;
+  if (inline) {
+    for (const png of chartPngs) {
+      contentBlocks.push({ type: "image" as const, data: png.toString('base64'), mimeType: "image/png" });
+    }
+    contentBlocks.push({
+      type: "text" as const,
+      text: `\n\n---\n\n[HTML_DASHBOARD]\nThe self-contained HTML dashboard is attached below. Save it as a .html file and open in a browser for interactive charts.\n\n\`\`\`html\n${htmlDashboard}\n\`\`\``,
+    });
+  } else {
+    // Token-sane default: write HTML + PNGs to disk, return paths only.
+    const written = writeReportArtifacts('quality-dashboard', htmlDashboard, chartPngs, generatedAt, input.output_dir);
+    contentBlocks.push({
+      type: "text" as const,
+      text:
+        `\n\n---\n\n**Report artifacts written to disk** (pass \`inline: true\` to embed instead):\n` +
+        `- HTML dashboard: \`${written.htmlPath}\`\n` +
+        (written.chartPaths.length
+          ? written.chartPaths.map((p, i) => `- Chart ${i + 1}: \`${p}\``).join('\n') + '\n'
+          : '') +
+        `\nOpen the HTML in a browser for interactive charts, or Read the PNGs for the rendered views.`,
+    });
+  }
 
   return { content: contentBlocks };
 }
