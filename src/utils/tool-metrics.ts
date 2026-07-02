@@ -104,6 +104,12 @@ export function wrapToolHandler<T extends (...args: any[]) => any>(
       : 0;
 
     metrics.record(name, Date.now() - start, responseChars, isError);
+    // Per-response byte telemetry → stderr only (never into the response). approxTokens = chars/4.
+    try {
+      console.error(`[telemetry] tool=${name} responseBytes=${responseChars} approxTokens=${Math.round(responseChars / 4)}`);
+    } catch {
+      /* telemetry must never break a response */
+    }
     return result;
   };
   return wrapped as T;
