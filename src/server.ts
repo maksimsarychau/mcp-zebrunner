@@ -1571,9 +1571,10 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
   server.registerTool(
     "get_test_cases_advanced",
     {
-      description: "📊 Advanced test case retrieval with filtering and pagination (✨ Enhanced with automation state and date filtering)\n" +
-    "⚠️  IMPORTANT: Use 'suite_id' for direct parent suites, 'root_suite_id' for root suites that contain sub-suites.\n" +
-    "💡 TIP: Use 'get_test_cases_by_suite_smart' for automatic suite type detection!",
+      description: "[DEPRECATED for suite-scoped reads → prefer get_test_cases_by_suite_smart] " +
+    "Advanced test case retrieval. Still functional and the only tool with date / automation-state / " +
+    "field-path filtering — use it ONLY when you need those filters; otherwise use get_test_cases_by_suite_smart " +
+    "(auto suite-type detection). suite_id = direct parent; root_suite_id = root incl. sub-suites.",
     inputSchema: {
       project_key: z.string().min(1).describe("Project key"),
       suite_id: z.number().int().positive().optional().describe("Filter by direct parent suite ID (for child suites)"),
