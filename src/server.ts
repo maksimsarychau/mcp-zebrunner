@@ -227,7 +227,7 @@ type Period = (typeof ALL_PERIODS)[number];
 function debugLog(message: string, data?: unknown) {
   if (DEBUG_MODE) {
     try {
-      const serializedData = data ? JSON.stringify(data, null, 2) : '';
+      const serializedData = data ? JSON.stringify(data) : '';
       console.error(`🔍 [DEBUG] ${message}`, serializedData);
     } catch (error) {
       console.error(`🔍 [DEBUG] ${message}`, '[Data serialization failed]', error instanceof Error ? error.message : 'Unknown error');
@@ -1045,7 +1045,7 @@ function createConfiguredServer(): McpServer {
     inputSchema: {
       project_key: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
       project_id: z.number().int().positive().optional().describe("Project ID (alternative to project_key)"),
-      format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format"),
+      format: z.enum(['compact', 'dto', 'json', 'string']).default('compact').describe("Output format"),
       include_hierarchy: z.boolean().default(false).describe("Include hierarchy information"),
       page: z.number().int().nonnegative().default(0).describe("Page number (0-based)"),
       size: z.number().int().positive().max(1000).default(50).describe("Page size (configurable via MAX_PAGE_SIZE env var)"),
@@ -1090,7 +1090,7 @@ function createConfiguredServer(): McpServer {
             total_count: totalCount,
             pages_traversed: pageCount,
             project_key: project_key || String(project_id)
-          }, null, 2) }] };
+          }) }] };
         }
 
         // Get clickable links configuration
@@ -1176,7 +1176,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
     inputSchema: {
       project_key: z.string().min(1).optional().describe("Project key (e.g., 'MCP', 'MCP'). Auto-detected from case_key if it contains a key pattern like 'MCP-29'. Required when case_key is a numeric ID."),
       case_key: z.string().min(1).describe("Test case key (e.g., 'MCP-29') OR numeric test case ID (e.g., '86280'). When providing a numeric ID, project_key is required."),
-      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
+      format: z.enum(['compact', 'dto', 'json', 'string', 'markdown']).default('compact').describe("Output format"),
       include_debug: z.boolean().default(false).describe("Include debug information in markdown"),
       include_suite_hierarchy: z.boolean().default(false).describe("Include featureSuiteId and rootSuiteId with suite hierarchy path"),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI"),
@@ -1334,7 +1334,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
       project_key: z.string().min(1).describe("Project key"),
       root_suite_id: z.number().int().positive().describe("Root suite ID to get all subsuites from"),
       include_root: z.boolean().default(true).describe("Include the root suite in results"),
-      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
+      format: z.enum(['compact', 'dto', 'json', 'string', 'markdown']).default('compact').describe("Output format"),
       page: z.number().int().nonnegative().default(0).describe("Page number (0-based)"),
       size: z.number().int().positive().max(1000).default(50).describe("Page size (configurable via MAX_PAGE_SIZE env var)"),
       count_only: z.boolean().default(false).describe(
@@ -1394,7 +1394,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
             root_suite_id,
             root_suite_name: rootSuite.title || rootSuite.name,
             includes_root: include_root
-          }, null, 2) }] };
+          }) }] };
         }
 
         // Sort by ID for consistent ordering
@@ -1469,7 +1469,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
       field_path: z.string().optional().describe("Filter by any field using dot-notation path. Top-level: 'title', 'key', 'deprecated'. Nested: 'priority.name', 'automationState.name', 'testSuite.id', 'createdBy.username'. Custom fields: 'customField.manualOnly', 'customField.caseStatus'. Triggers client-side filtering (paginates all pages)."),
       field_value: z.string().optional().describe("Value to match against the field. Required for 'exact', 'contains', and 'regex' modes. Not needed for 'exists' mode."),
       field_match: z.enum(["exact", "contains", "regex", "exists"]).default("exact").describe("Match mode: 'exact' (case-insensitive equality), 'contains' (substring), 'regex' (pattern), 'exists' (field is present and non-null)"),
-      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
+      format: z.enum(['compact', 'dto', 'json', 'string', 'markdown']).default('compact').describe("Output format"),
       page: z.number().int().nonnegative().default(0).describe("Page number (0-based)"),
       size: z.number().int().positive().max(100).default(100).describe("Page size (configurable via MAX_PAGE_SIZE env var)"),
       count_only: z.boolean().default(false).describe(
@@ -1577,7 +1577,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
               pages_traversed: pageCount,
               field_filter: { path: fFilter!.fieldPath, value: fFilter!.fieldValue, mode: fFilter!.matchMode },
               project_key
-            }, null, 2) }] };
+            }) }] };
           }
 
           const limited = matched.slice(0, size);
@@ -1632,7 +1632,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
             total_count: totalCount,
             pages_traversed: pageCount,
             project_key
-          }, null, 2) }] };
+          }) }] };
         }
 
         const response = await client.getTestCases(project_key, { ...baseSearchParams, page, size });
@@ -1746,7 +1746,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
       project_key: z.string().min(1).describe("Project key"),
       root_suite_id: z.number().int().positive().optional().describe("Start from specific root suite"),
       max_depth: z.number().int().positive().max(10).default(5).describe("Maximum tree depth"),
-      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
+      format: z.enum(['compact', 'dto', 'json', 'string', 'markdown']).default('compact').describe("Output format"),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI")
     },
       annotations: {
@@ -1841,7 +1841,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
         "When true with get_all, returns only the total count without test case data. " +
         "Efficient for metrics collection -- avoids 1MB response limit on large projects."
       ),
-      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
+      format: z.enum(['compact', 'dto', 'json', 'string', 'markdown']).default('compact').describe("Output format"),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI"),
       include_history: z.boolean().default(false).describe("When true, each test case includes a 'history' array of change log entries. Filtered to steps, preconditions, expected results, and lifecycle events (automation state changes, deprecation) by default."),
       history_filter: z.enum(['steps_only', 'events_only', 'all']).default('steps_only').describe("What to include in history. 'steps_only': step/precondition/expectedResult diffs only. 'events_only': lifecycle events only (automated, deprecated, etc.). 'all': everything. Only used when include_history=true."),
@@ -1891,7 +1891,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
             pages_traversed: pageCount,
             automation_states: automationStateInfo,
             project_key
-          }, null, 2) }] };
+          }) }] };
         }
 
         if (get_all) {
@@ -1951,7 +1951,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
             const avgItemSize = resultText.length / processedCases.length;
             const safeCount = Math.floor(MAX_RESPONSE_BYTES / avgItemSize * 0.9);
             const truncated = processedCases.slice(0, Math.max(safeCount, 1));
-            const truncatedText = JSON.stringify(truncated, null, 2);
+            const truncatedText = JSON.stringify(truncated);
             return { content: [{ type: "text" as const, text:
               `Found ${processedCases.length} total for automation state(s): ${automationStateInfo}, returning first ${truncated.length} ` +
               `(response truncated to stay under MCP 1MB limit).\n` +
@@ -2135,7 +2135,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
         return {
           content: [{
             type: "text" as const,
-            text: JSON.stringify(result, null, 2)
+            text: JSON.stringify(result)
           }]
         };
 
@@ -2157,7 +2157,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
       description: "🔧 Get available automation states for a project (names and IDs)",
     inputSchema: {
       project: z.union([z.enum(["web","android","ios","api"]), z.string(), z.number()]).describe("Project alias (web/android/ios/api), project key, or project ID"),
-      format: z.enum(['json', 'markdown']).default('json').describe("Output format")
+      format: z.enum(['compact', 'json', 'markdown']).default('compact').describe("Output format")
     },
       annotations: {
         readOnlyHint: true,
@@ -2236,7 +2236,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
         return {
           content: [{
             type: "text" as const,
-            text: JSON.stringify(result, null, 2)
+            text: JSON.stringify(result)
           }]
         };
 
@@ -2266,7 +2266,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
         "When true with get_all, returns only the total count without test case data. " +
         "Efficient for metrics collection -- avoids 1MB response limit on large projects."
       ),
-      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
+      format: z.enum(['compact', 'dto', 'json', 'string', 'markdown']).default('compact').describe("Output format"),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI"),
       include_history: z.boolean().default(false).describe("When true, each test case includes a 'history' array of change log entries. Filtered to steps, preconditions, expected results, and lifecycle events (automation state changes, deprecation) by default."),
       history_filter: z.enum(['steps_only', 'events_only', 'all']).default('steps_only').describe("What to include in history. 'steps_only': step/precondition/expectedResult diffs only. 'events_only': lifecycle events only (automated, deprecated, etc.). 'all': everything. Only used when include_history=true."),
@@ -2309,7 +2309,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
             pages_traversed: pageCount,
             title_filter: title,
             project_key
-          }, null, 2) }] };
+          }) }] };
         }
 
         if (get_all) {
@@ -2365,7 +2365,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
             const avgItemSize = resultText.length / processedCases.length;
             const safeCount = Math.floor(MAX_RESPONSE_BYTES / avgItemSize * 0.9);
             const truncated = processedCases.slice(0, Math.max(safeCount, 1));
-            const truncatedText = JSON.stringify(truncated, null, 2);
+            const truncatedText = JSON.stringify(truncated);
             return { content: [{ type: "text" as const, text:
               `Found ${processedCases.length} total matching title "${title}", returning first ${truncated.length} ` +
               `(response truncated to stay under MCP 1MB limit).\n` +
@@ -2480,7 +2480,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
         "When true with get_all, returns only the total count without test case data. " +
         "Efficient for metrics collection -- avoids 1MB response limit on large projects."
       ),
-      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
+      format: z.enum(['compact', 'dto', 'json', 'string', 'markdown']).default('compact').describe("Output format"),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI"),
       include_history: z.boolean().default(false).describe("When true, each test case includes a 'history' array of change log entries. Filtered to steps, preconditions, expected results, and lifecycle events (automation state changes, deprecation) by default."),
       history_filter: z.enum(['steps_only', 'events_only', 'all']).default('steps_only').describe("What to include in history. 'steps_only': step/precondition/expectedResult diffs only. 'events_only': lifecycle events only (automated, deprecated, etc.). 'all': everything. Only used when include_history=true."),
@@ -2609,7 +2609,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
               rql_filters_applied: filter || "(none)",
               field_filter: { path: fFilter!.fieldPath, value: fFilter!.fieldValue, mode: fFilter!.matchMode },
               project_key
-            }, null, 2) }] };
+            }) }] };
           }
 
           let processedCases = matched;
@@ -2644,7 +2644,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
             const avgItemSize = resultText.length / limited.length;
             const safeCount = Math.floor(MAX_RESPONSE_BYTES / avgItemSize * 0.9);
             const truncated = limited.slice(0, Math.max(safeCount, 1));
-            const truncatedText = JSON.stringify(truncated, null, 2);
+            const truncatedText = JSON.stringify(truncated);
             return { content: [{ type: "text" as const, text:
               `Found ${matched.length} matching field filter (${allCases.length} total before filter), returning first ${truncated.length} ` +
               `(response truncated to stay under MCP 1MB limit).\n` +
@@ -2685,7 +2685,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
             filters_applied: filter,
             client_side_filters: needsClientSideFilter ? { last_modified_after, last_modified_before, exclude_deleted } : undefined,
             project_key
-          }, null, 2) }] };
+          }) }] };
         }
 
         if (get_all) {
@@ -2739,7 +2739,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
             const avgItemSize = resultText.length / processedCases.length;
             const safeCount = Math.floor(MAX_RESPONSE_BYTES / avgItemSize * 0.9);
             const truncated = processedCases.slice(0, Math.max(safeCount, 1));
-            const truncatedText = JSON.stringify(truncated, null, 2);
+            const truncatedText = JSON.stringify(truncated);
             return { content: [{ type: "text" as const, text:
               `Found ${processedCases.length} total matching filters, returning first ${truncated.length} ` +
               `(response truncated to stay under MCP 1MB limit).\n` +
@@ -2837,7 +2837,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
       description: "🎯 Get available priorities for a project (names and IDs)",
     inputSchema: {
       project: z.union([z.enum(["web","android","ios","api"]), z.string(), z.number()]).describe("Project alias (web/android/ios/api), project key, or project ID"),
-      format: z.enum(['json', 'markdown']).default('json').describe("Output format")
+      format: z.enum(['compact', 'json', 'markdown']).default('compact').describe("Output format")
     },
       annotations: {
         readOnlyHint: true,
@@ -2903,7 +2903,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
         return {
           content: [{
             type: "text" as const,
-            text: JSON.stringify(result, null, 2)
+            text: JSON.stringify(result)
           }]
         };
 
@@ -3418,7 +3418,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
         "When true, paginates through all pages and returns only the total count of suites without data. " +
         "Useful for metrics and dashboards. Bypasses MCP response size limits."
       ),
-      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format")
+      format: z.enum(['compact', 'dto', 'json', 'string', 'markdown']).default('compact').describe("Output format")
     },
       annotations: {
         readOnlyHint: true,
@@ -3449,7 +3449,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
             total_count: totalCount,
             pages_traversed: pageCount,
             project_key
-          }, null, 2) }] };
+          }) }] };
         }
 
         // Validate page size against configured maximum
@@ -3502,7 +3502,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
         "When true, returns only the total count of suites without data. " +
         "Paginates internally to count all suites, but skips hierarchy processing and formatting."
       ),
-      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format")
+      format: z.enum(['compact', 'dto', 'json', 'string', 'markdown']).default('compact').describe("Output format")
     },
       annotations: {
         readOnlyHint: true,
@@ -3545,7 +3545,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
             total_count: allSuites.length,
             pages_traversed: page,
             project_key
-          }, null, 2) }] };
+          }) }] };
         }
 
         // Apply hierarchy processing if requested
@@ -3583,7 +3583,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
       description: "🌳 Get root suites (suites with no parent) from project",
     inputSchema: {
       project_key: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
-      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format")
+      format: z.enum(['compact', 'dto', 'json', 'string', 'markdown']).default('compact').describe("Output format")
     },
       annotations: {
         readOnlyHint: true,
@@ -3641,7 +3641,7 @@ Supports two modes:
       suite_id: z.number().int().positive().describe("Suite ID to find"),
       mode: z.enum(['simple', 'full']).default('simple').describe("'simple' = fast direct API call (default). 'full' = hierarchy-enriched with root suite chain and clickable links."),
       only_root_suites: z.boolean().default(false).describe("(full mode only) Search only in root suites"),
-      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
+      format: z.enum(['compact', 'dto', 'json', 'string', 'markdown']).default('compact').describe("Output format"),
       include_clickable_links: z.boolean().default(false).describe("(full mode only) Include clickable links to Zebrunner web UI")
     },
       annotations: {
@@ -5330,7 +5330,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       description: "📋 Get ALL TCM test cases by project using comprehensive pagination",
     inputSchema: {
       project_key: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
-      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
+      format: z.enum(['compact', 'dto', 'json', 'string', 'markdown']).default('compact').describe("Output format"),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI"),
       exclude_deprecated: z.boolean().default(false).describe("Exclude deprecated test cases from results"),
       exclude_draft: z.boolean().default(false).describe("Exclude draft test cases from results"),
@@ -5387,7 +5387,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
             pages_traversed: pageCount,
             filters_applied: rqlFilter || "none",
             project_key
-          }, null, 2) }] };
+          }) }] };
         }
 
         // Get clickable links configuration
@@ -5485,7 +5485,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           const avgItemSize = resultText.length / enhancedTestCases.length;
           const safeCount = Math.floor(MAX_RESPONSE_BYTES / avgItemSize * 0.9);
           const truncated = enhancedTestCases.slice(0, Math.max(safeCount, 1));
-          const truncatedText = JSON.stringify(truncated, null, 2);
+          const truncatedText = JSON.stringify(truncated);
           return { content: [{ type: "text" as const, text:
             `Found ${allTestCases.length} total test cases for ${project_key}, returning first ${truncated.length} ` +
             `(response truncated to stay under MCP 1MB limit).\n` +
@@ -5518,7 +5518,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       description: "🌳 Get ALL TCM test cases enriched with root suite ID information",
     inputSchema: {
       project_key: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
-      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
+      format: z.enum(['compact', 'dto', 'json', 'string', 'markdown']).default('compact').describe("Output format"),
       count_only: z.boolean().default(false).describe(
         "When true, returns only the total count without test case data. " +
         "Skips hierarchy enrichment for maximum efficiency."
@@ -5555,7 +5555,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
             total_count: totalCount,
             pages_traversed: pageCount,
             project_key
-          }, null, 2) }] };
+          }) }] };
         }
 
         // Get all test cases using proper token-based pagination
@@ -5603,7 +5603,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           const avgItemSize = resultText.length / enrichedTestCases.length;
           const safeCount = Math.floor(MAX_RESPONSE_BYTES / avgItemSize * 0.9);
           const truncated = enrichedTestCases.slice(0, Math.max(safeCount, 1));
-          const truncatedText = JSON.stringify(truncated, null, 2);
+          const truncatedText = JSON.stringify(truncated);
           return { content: [{ type: "text" as const, text:
             `Found ${enrichedTestCases.length} total test cases with root suite IDs for ${project_key}, returning first ${truncated.length} ` +
             `(response truncated to stay under MCP 1MB limit).\n` +
@@ -5637,7 +5637,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
     inputSchema: {
       project_key: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
       suite_id: z.number().int().positive().describe("Suite ID to find root for"),
-      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format")
+      format: z.enum(['compact', 'dto', 'json', 'string', 'markdown']).default('compact').describe("Output format")
     },
       annotations: {
         readOnlyHint: true,
@@ -5700,7 +5700,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       project_key: z.string().min(1).describe("Project key (e.g., 'MCP')"),
       suite_id: z.number().int().positive().describe("Suite ID to get test cases from"),
       include_steps: z.boolean().default(false).describe("Include detailed test steps for first few cases"),
-      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
+      format: z.enum(['compact', 'dto', 'json', 'string', 'markdown']).default('compact').describe("Output format"),
       get_all: z.boolean().default(true).describe("Get all test cases (true) or paginated results (false)"),
       include_sub_suites: z.boolean().default(true).describe("Include test cases from sub-suites (if any)"),
       count_only: z.boolean().default(false).describe(
@@ -5807,7 +5807,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
             is_root_suite: isRootSuite,
             has_children: hasChildren,
             project_key
-          }, null, 2) }] };
+          }) }] };
         }
 
         // Step 5: Get test cases using appropriate method
@@ -6056,7 +6056,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           const avgItemSize = resultText.length / testCases.length;
           const safeCount = Math.floor(MAX_RESPONSE_BYTES / avgItemSize * 0.9);
           const truncated = testCases.slice(0, Math.max(safeCount, 1));
-          const truncatedText = JSON.stringify(truncated, null, 2);
+          const truncatedText = JSON.stringify(truncated);
           return { content: [{ type: "text" as const, text:
             `Found ${testCases.length} total test cases in suite ${suite_id}, returning first ${truncated.length} ` +
             `(response truncated to stay under MCP 1MB limit).\n` +
@@ -6097,7 +6097,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       launchId: z.number().int().positive().describe("Launch ID (e.g., 118685)"),
       includeLaunchDetails: z.boolean().default(true).describe("Include detailed launch information"),
       includeTestSessions: z.boolean().default(true).describe("Include test sessions data"),
-      format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format"),
+      format: z.enum(['compact', 'dto', 'json', 'string']).default('compact').describe("Output format"),
       chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
         "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
       ),
@@ -6162,7 +6162,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       summaryOnly: z.boolean().default(false).describe("Return only statistics without full test list (most lightweight)"),
       includeLabels: z.boolean().default(false).describe("Include labels array (increases token usage)"),
       includeTestCases: z.boolean().default(false).describe("Include testCases array (increases token usage)"),
-      format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format"),
+      format: z.enum(['compact', 'dto', 'json', 'string']).default('compact').describe("Output format"),
       session_resolution: z.enum(['auto', 'per_test', 'launch_level']).default('auto').describe("Session duration resolution strategy: auto (launch-level first, fallback per-test), per_test, or launch_level"),
       jira_base_url: z.string().url().optional().describe("Override JIRA base URL (e.g., 'https://myproject.atlassian.net'). If not set, resolved from Zebrunner integrations or JIRA_BASE_URL env var"),
       count_only: z.boolean().default(false).describe(
@@ -6414,7 +6414,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       projectKey: z.string().min(1).optional().describe("Project key (e.g., 'android' or 'ANDROID') - alternative to projectId"),
       projectId: z.number().int().positive().optional().describe("Project ID (e.g., 7) - alternative to projectKey"),
       launchId: z.number().int().positive().describe("Launch ID (e.g., 118685)"),
-      format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format"),
+      format: z.enum(['compact', 'dto', 'json', 'string']).default('compact').describe("Output format"),
       jira_base_url: z.string().url().optional().describe("Override JIRA base URL (e.g., 'https://myproject.atlassian.net'). If not set, resolved from Zebrunner integrations or JIRA_BASE_URL env var"),
       chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
         "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
@@ -6460,7 +6460,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       previous_build: z.string().optional().describe("Previous build identifier for baseline comparison"),
       include_test_details: z.boolean().default(false).describe("Include per-test duration listing within each duration class"),
       include_attempts_details: z.boolean().default(true).describe("Include detailed re-run attempt breakdown per launch"),
-      format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format"),
+      format: z.enum(['compact', 'dto', 'json', 'string']).default('compact').describe("Output format"),
       session_resolution: z.enum(['auto', 'per_test', 'launch_level']).default('auto').describe("Session duration resolution strategy: auto (launch-level first, fallback per-test), per_test, or launch_level"),
       medium_threshold_seconds: z.number().int().positive().default(300).describe("Duration threshold (seconds) above which a test is classified as Medium. Default: 300 (5 min)"),
       long_threshold_seconds: z.number().int().positive().default(600).describe("Duration threshold (seconds) above which a test is classified as Long. Default: 600 (10 min)"),
@@ -6965,7 +6965,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           return { content: [{ type: "text" as const, text: JSON.stringify({
             total_count: countData._meta.total,
             project: args.project
-          }, null, 2) }] };
+          }) }] };
         }
 
         // Get launches using the new API method
@@ -6993,7 +6993,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           return {
             content: [{
               type: "text" as const,
-              text: JSON.stringify(launchesData, null, 2)
+              text: JSON.stringify(launchesData)
             }]
           };
         }
@@ -7131,7 +7131,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
             total_count: countData._meta.total,
             project: args.project,
             filter: filterDesc
-          }, null, 2) }] };
+          }) }] };
         }
 
         // Get launches using the new API method with filters
@@ -7161,7 +7161,7 @@ if (args.format === 'raw') {
           return {
             content: [{
               type: "text" as const,
-              text: JSON.stringify(launchesData, null, 2)
+              text: JSON.stringify(launchesData)
             }]
           };
         }
@@ -7269,7 +7269,7 @@ if (args.format === 'raw') {
           content: [
             {
               type: "text" as const,
-              text: JSON.stringify(result, null, 2)
+              text: JSON.stringify(result)
             }
           ]
         };
@@ -7507,7 +7507,7 @@ if (args.format === 'raw') {
         }
 
         return {
-          content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }]
+          content: [{ type: "text" as const, text: JSON.stringify(result) }]
         };
       } catch (error: any) {
         debugLog("Error in get_platform_results_by_period", { error: error.message, args });
@@ -7581,7 +7581,7 @@ if (args.format === 'raw') {
 
         if (args.format === 'raw') {
           return {
-            content: [{ type: "text" as const, text: JSON.stringify(raw, null, 2) }]
+            content: [{ type: "text" as const, text: JSON.stringify(raw) }]
           };
         }
 
@@ -7591,7 +7591,7 @@ if (args.format === 'raw') {
         if (rows.length === 0) {
           const formatValue = args.format as 'raw' | 'formatted';
           return {
-            content: [{ type: "text" as const, text: formatValue === 'raw' ? JSON.stringify(raw, null, 2) : "No bug data found" }]
+            content: [{ type: "text" as const, text: formatValue === 'raw' ? JSON.stringify(raw) : "No bug data found" }]
           };
         }
 
@@ -7680,7 +7680,7 @@ if (args.format === 'raw') {
         const formatValue = args.format as 'raw' | 'formatted';
         if (formatValue === 'raw') {
           return {
-            content: [{ type: "text" as const, text: JSON.stringify(top, null, 2) }]
+            content: [{ type: "text" as const, text: JSON.stringify(top) }]
           };
         }
 
@@ -7982,7 +7982,7 @@ if (args.format === 'raw') {
                   ...b,
                   failureDetails: b.failureDetails || undefined
                 }))
-              }, null, 2) 
+              }) 
             }]
           };
         }
@@ -8194,7 +8194,7 @@ ${priorityAnalysis.statistics.withoutDefects > 0 ? `- **Tracking Gap:** ${priori
                 summary: summaryInfo,
                 totalFailures: detailsInfo.length,
                 failures: detailsInfo
-              }, null, 2) 
+              }) 
             }]
           };
         }
@@ -8345,7 +8345,7 @@ ${detailsInfo.map((detail, i) => {
               total_count: countData._meta.total,
               project: args.project,
               status: args.status
-            }, null, 2) }] };
+            }) }] };
           }
           // For "incomplete"/"overdue", need to paginate and apply client-side filter
           let totalFiltered = 0;
@@ -8368,7 +8368,7 @@ ${detailsInfo.map((detail, i) => {
             project: args.project,
             status: args.status,
             pages_traversed: page - 1
-          }, null, 2) }] };
+          }) }] };
         }
 
         const milestonesData = await reportingClient.getMilestones(projectId, {
@@ -8445,7 +8445,7 @@ ${detailsInfo.map((detail, i) => {
         }
 
         return {
-          content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }]
+          content: [{ type: "text" as const, text: JSON.stringify(result) }]
         };
       } catch (error: any) {
         debugLog("Error in get_project_milestones", { error: error.message, args });
@@ -8560,7 +8560,7 @@ ${detailsInfo.map((detail, i) => {
         }
 
         return {
-          content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }]
+          content: [{ type: "text" as const, text: JSON.stringify(result) }]
         };
       } catch (error: any) {
         debugLog("Error in get_available_projects", { error: error.message, args });
@@ -8792,7 +8792,7 @@ ${detailsInfo.map((detail, i) => {
             pages_traversed: pageCount,
             project_key: projectKey,
             ...(filter ? { filter } : {})
-          }, null, 2) }] };
+          }) }] };
         }
 
         const testRunsData = await client.listPublicTestRuns({
@@ -8873,7 +8873,7 @@ ${detailsInfo.map((detail, i) => {
         }
 
         return {
-          content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }]
+          content: [{ type: "text" as const, text: JSON.stringify(result) }]
         };
       } catch (error: any) {
         debugLog("Error in list_test_runs", { error: error.message, args });
@@ -9015,7 +9015,7 @@ ${detailsInfo.map((detail, i) => {
         }
 
         return {
-          content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }]
+          content: [{ type: "text" as const, text: JSON.stringify(result) }]
         };
       } catch (error: any) {
         debugLog("Error in get_test_run_by_id", { error: error.message, args });
@@ -9149,7 +9149,7 @@ ${detailsInfo.map((detail, i) => {
         }
 
         return {
-          content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }]
+          content: [{ type: "text" as const, text: JSON.stringify(result) }]
         };
       } catch (error: any) {
         debugLog("Error in list_test_run_test_cases", { error: error.message, args });
@@ -9201,7 +9201,7 @@ ${detailsInfo.map((detail, i) => {
 
         if (args.format === "raw") {
           return {
-            content: [{ type: "text" as const, text: JSON.stringify(response, null, 2) }]
+            content: [{ type: "text" as const, text: JSON.stringify(response) }]
           };
         }
 
@@ -9279,7 +9279,7 @@ ${detailsInfo.map((detail, i) => {
 
         if (args.format === "raw") {
           return {
-            content: [{ type: "text" as const, text: JSON.stringify(response, null, 2) }]
+            content: [{ type: "text" as const, text: JSON.stringify(response) }]
           };
         }
 
@@ -9493,7 +9493,7 @@ ${detailsInfo.map((detail, i) => {
           return {
             content: [{
               type: "text" as const,
-              text: JSON.stringify(enhancedResult, null, 2)
+              text: JSON.stringify(enhancedResult)
             }]
           };
         }
@@ -9861,7 +9861,7 @@ ${detailsInfo.map((detail, i) => {
           return {
             content: [{
               type: "text" as const,
-              text: JSON.stringify(enhancedResult, null, 2)
+              text: JSON.stringify(enhancedResult)
             }]
           };
         }
@@ -10429,7 +10429,7 @@ ${detailsInfo.map((detail, i) => {
               : `TAGS=>${Array.from(allFeatureSuiteIds).sort((a, b) => a - b).map(id => `featureSuiteId=${id}`).join('||')}`
           };
           
-          output = JSON.stringify(dto, null, 2);
+          output = JSON.stringify(dto);
 
         } else if (output_format === 'short') {
           // Short format: Root Suite -> Direct Parent -> TestCaseKey + Name

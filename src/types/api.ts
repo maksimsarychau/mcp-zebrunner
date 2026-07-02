@@ -3,7 +3,7 @@ import { z } from "zod";
 /** API-related types and interfaces */
 
 // Output format options
-export type OutputFormat = 'dto' | 'json' | 'string' | 'markdown';
+export type OutputFormat = 'compact' | 'compact' | 'dto' | 'json' | 'string' | 'markdown';
 
 // Pagination options
 export interface PaginationOptions {
@@ -72,7 +72,7 @@ export const GetTestCasesInputSchema = z.object({
   suiteId: z.number().int().positive().optional(),
   rootSuiteId: z.number().int().positive().optional(),
   includeSteps: z.boolean().default(false),
-  format: z.enum(['dto', 'json', 'string']).default('json'),
+  format: z.enum(['compact', 'dto', 'json', 'string']).default('compact'),
   page: z.number().int().nonnegative().optional(),
   size: z.number().int().positive().max(200).optional()
 });
@@ -82,7 +82,7 @@ export const GetTestSuitesInputSchema = z.object({
   parentSuiteId: z.number().int().positive().optional(),
   rootOnly: z.boolean().default(false),
   includeHierarchy: z.boolean().default(false),
-  format: z.enum(['dto', 'json', 'string']).default('json'),
+  format: z.enum(['compact', 'dto', 'json', 'string']).default('compact'),
   page: z.number().int().nonnegative().optional(),
   size: z.number().int().positive().max(200).optional()
 });
@@ -93,7 +93,7 @@ export const GetTestRunsInputSchema = z.object({
   milestone: z.string().optional(),
   build: z.string().optional(),
   environment: z.string().optional(),
-  format: z.enum(['dto', 'json', 'string']).default('json'),
+  format: z.enum(['compact', 'dto', 'json', 'string']).default('compact'),
   page: z.number().int().nonnegative().optional(),
   size: z.number().int().positive().max(200).optional()
 });
@@ -102,7 +102,7 @@ export const GetTestResultsInputSchema = z.object({
   projectKey: z.string().min(1),
   runId: z.number().int().positive(),
   status: z.string().optional(),
-  format: z.enum(['dto', 'json', 'string']).default('json')
+  format: z.enum(['compact', 'dto', 'json', 'string']).default('compact')
 });
 
 
@@ -110,14 +110,14 @@ export const FindTestCaseByKeyInputSchema = z.object({
   projectKey: z.string().min(1),
   caseKey: z.string().min(1),
   includeSteps: z.boolean().default(true),
-  format: z.enum(['dto', 'json', 'string']).default('json')
+  format: z.enum(['compact', 'dto', 'json', 'string']).default('compact')
 });
 
 export const GetSuiteHierarchyInputSchema = z.object({
   projectKey: z.string().min(1),
   rootSuiteId: z.number().int().positive().optional(),
   maxDepth: z.number().int().positive().max(10).default(5),
-  format: z.enum(['dto', 'json', 'string']).default('json')
+  format: z.enum(['compact', 'dto', 'json', 'string']).default('compact')
 });
 
 export const GetLauncherDetailsInputSchema = z.object({
@@ -126,7 +126,7 @@ export const GetLauncherDetailsInputSchema = z.object({
   launchId: z.number().int().positive(),
   includeLaunchDetails: z.boolean().default(true),
   includeTestSessions: z.boolean().default(true),
-  format: z.enum(['dto', 'json', 'string']).default('json')
+  format: z.enum(['compact', 'dto', 'json', 'string']).default('compact')
 });
 
 export const AnalyzeTestFailureInputSchema = z.object({
@@ -148,7 +148,7 @@ export const ValidateTestCaseInputSchema = z.object({
   caseKey: z.string().min(1),
   rulesFilePath: z.string().optional(),
   checkpointsFilePath: z.string().optional(),
-  format: z.enum(['dto', 'json', 'string', 'markdown']).default('json'),
+  format: z.enum(['compact', 'dto', 'json', 'string', 'markdown']).default('compact'),
   improveIfPossible: z.boolean().default(true)
 });
 

@@ -421,7 +421,7 @@ export class ZebrunnerToolHandlers {
         const result = improvementResult 
           ? { validation: validationResult, improvement: improvementResult }
           : validationResult;
-        formattedResult = JSON.stringify(result, null, 2);
+        formattedResult = JSON.stringify(result);
       }
       
       return {
@@ -759,7 +759,7 @@ export class ZebrunnerToolHandlers {
           improvement: improvementResult,
           finalTestCase,
           changesApplied: applyHighConfidenceChanges
-        }, null, 2);
+        });
       }
       
       return {

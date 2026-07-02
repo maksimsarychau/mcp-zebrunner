@@ -13,7 +13,11 @@ export class FormatProcessor {
     switch (format) {
       case 'dto':
         return data;
+      case 'compact':
+        // Minified JSON — token-sane default for agent-facing tools.
+        return JSON.stringify(data) as any;
       case 'json':
+        // Pretty-printed — explicit opt-in for human/debug inspection.
         return JSON.stringify(data, null, 2) as any;
       case 'string':
         return this.convertToReadableString(data, fieldsLayout) as any;

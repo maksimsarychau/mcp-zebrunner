@@ -191,7 +191,7 @@ export class ZebrunnerReportingToolHandlers {
     summaryOnly?: boolean;
     includeLabels?: boolean;
     includeTestCases?: boolean;
-    format?: 'dto' | 'json' | 'string';
+    format?: 'compact' | 'dto' | 'json' | 'string';
     session_resolution?: SessionResolutionStrategy;
     jira_base_url?: string;
     count_only?: boolean;
@@ -274,7 +274,7 @@ export class ZebrunnerReportingToolHandlers {
           filtered_count: filtered.length,
           by_status: byStatus,
           launch_id: launchId
-        }, null, 2) }] };
+        }) }] };
       }
 
       // Resolve session-aware effective durations for tests with retries
@@ -629,12 +629,12 @@ export class ZebrunnerReportingToolHandlers {
             unmatched_current: buildResolution.summary.unmatchedCurrent.length,
             unmatched_previous: buildResolution.summary.unmatchedPrevious.length,
             project_key: projectKey
-          }, null, 2) }] };
+          }) }] };
         }
         return { content: [{ type: "text" as const, text: JSON.stringify({
           suites_provided: suites.length,
           project_key: projectKey
-        }, null, 2) }] };
+        }) }] };
       }
 
       const normalizedThresholds = this.normalizeStabilityThresholds(thresholds);
@@ -820,7 +820,7 @@ export class ZebrunnerReportingToolHandlers {
           content: [
             {
               type: "text" as const,
-              text: JSON.stringify(response, null, 2)
+              text: JSON.stringify(response)
             }
           ]
         };
@@ -1432,7 +1432,7 @@ export class ZebrunnerReportingToolHandlers {
   /**
    * Get launcher summary - quick overview without detailed test sessions
    */
-  async getLauncherSummary(input: { projectKey?: string; projectId?: number; launchId: number; format?: 'dto' | 'json' | 'string'; jira_base_url?: string; chart?: 'none' | 'png' | 'html' | 'text'; chart_type?: 'auto' | 'pie' | 'bar' | 'stacked_bar' | 'horizontal_bar' | 'line' }) {
+  async getLauncherSummary(input: { projectKey?: string; projectId?: number; launchId: number; format?: 'compact' | 'dto' | 'json' | 'string'; jira_base_url?: string; chart?: 'none' | 'png' | 'html' | 'text'; chart_type?: 'auto' | 'pie' | 'bar' | 'stacked_bar' | 'horizontal_bar' | 'line' }) {
     const { projectKey, projectId, launchId, format = 'json', jira_base_url, chart = 'none', chart_type = 'auto' as const } = input;
 
     try {
@@ -1517,7 +1517,7 @@ export class ZebrunnerReportingToolHandlers {
     projectKey?: string;
     projectId?: number;
     limit?: number;
-    format?: 'dto' | 'json' | 'string';
+    format?: 'compact' | 'dto' | 'json' | 'string';
     count_only?: boolean;
     chart?: 'none' | 'png' | 'html' | 'text';
     chart_type?: 'auto' | 'pie' | 'bar' | 'stacked_bar' | 'horizontal_bar' | 'line';
@@ -1569,7 +1569,7 @@ export class ZebrunnerReportingToolHandlers {
           test_id: testId,
           launch_id: testRunId,
           limit_used: limit
-        }, null, 2) }] };
+        }) }] };
       }
 
       if (chart && chart !== 'none') {
@@ -3008,7 +3008,7 @@ export class ZebrunnerReportingToolHandlers {
         content: [
           {
             type: "text" as const,
-            text: JSON.stringify(result, null, 2)
+            text: JSON.stringify(result)
           }
         ]
       };
@@ -4305,7 +4305,7 @@ export class ZebrunnerReportingToolHandlers {
           total_failed: totalFailedTests,
           filter_type: filterType,
           launch_id: testRunId
-        }, null, 2) }] };
+        }) }] };
       }
 
       const { chart = 'none', chart_type = 'auto' as const } = input;
@@ -6046,7 +6046,7 @@ async analyzeTestExecutionVideoTool(input: AnalyzeTestExecutionVideoInput): Prom
     previousBuild?: string;
     includeTestDetails?: boolean;
     includeAttemptsDetails?: boolean;
-    format?: 'dto' | 'json' | 'string';
+    format?: 'compact' | 'dto' | 'json' | 'string';
     session_resolution?: SessionResolutionStrategy;
     medium_threshold_seconds?: number;
     long_threshold_seconds?: number;
@@ -6580,7 +6580,7 @@ async analyzeTestExecutionVideoTool(input: AnalyzeTestExecutionVideoInput): Prom
               launches_scanned: allLaunches.length,
               period_days,
               project: resolvedProjectKey || resolvedProjectId,
-            }, null, 2),
+            }),
           }],
         };
       }
@@ -6794,7 +6794,7 @@ async analyzeTestExecutionVideoTool(input: AnalyzeTestExecutionVideoInput): Prom
       return {
         content: [{
           type: 'text' as const,
-          text: JSON.stringify(result, null, 2),
+          text: JSON.stringify(result),
         }],
       };
     } catch (error: any) {

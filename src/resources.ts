@@ -347,7 +347,7 @@ export function registerResources(server: McpServer, deps: ResourceDependencies)
         contents: [{
           uri: "zebrunner://projects",
           mimeType: "application/json",
-          text: JSON.stringify(projects, null, 2),
+          text: JSON.stringify(projects),
         }],
       };
     },
@@ -365,7 +365,7 @@ export function registerResources(server: McpServer, deps: ResourceDependencies)
       contents: [{
         uri: "zebrunner://reports/types",
         mimeType: "application/json",
-        text: JSON.stringify(buildReportTypesContent(), null, 2),
+        text: JSON.stringify(buildReportTypesContent()),
       }],
     }),
   );
@@ -400,7 +400,7 @@ export function registerResources(server: McpServer, deps: ResourceDependencies)
         contents: [{
           uri: uri.href,
           mimeType: "application/json",
-          text: JSON.stringify(rootSuites, null, 2),
+          text: JSON.stringify(rootSuites),
         }],
       };
     },
@@ -434,7 +434,7 @@ export function registerResources(server: McpServer, deps: ResourceDependencies)
         contents: [{
           uri: uri.href,
           mimeType: "application/json",
-          text: JSON.stringify(states, null, 2),
+          text: JSON.stringify(states),
         }],
       };
     },
@@ -468,7 +468,7 @@ export function registerResources(server: McpServer, deps: ResourceDependencies)
         contents: [{
           uri: uri.href,
           mimeType: "application/json",
-          text: JSON.stringify(priorities, null, 2),
+          text: JSON.stringify(priorities),
         }],
       };
     },
@@ -486,7 +486,7 @@ export function registerResources(server: McpServer, deps: ResourceDependencies)
       contents: [{
         uri: "zebrunner://periods",
         mimeType: "application/json",
-        text: JSON.stringify(buildPeriodsContent(), null, 2),
+        text: JSON.stringify(buildPeriodsContent()),
       }],
     }),
   );
@@ -503,7 +503,7 @@ export function registerResources(server: McpServer, deps: ResourceDependencies)
       contents: [{
         uri: "zebrunner://charts",
         mimeType: "application/json",
-        text: JSON.stringify(buildChartOptionsContent(), null, 2),
+        text: JSON.stringify(buildChartOptionsContent()),
       }],
     }),
   );
@@ -520,7 +520,7 @@ export function registerResources(server: McpServer, deps: ResourceDependencies)
       contents: [{
         uri: "zebrunner://formats",
         mimeType: "application/json",
-        text: JSON.stringify(buildFormatReferenceContent(), null, 2),
+        text: JSON.stringify(buildFormatReferenceContent()),
       }],
     }),
   );
@@ -558,7 +558,7 @@ export function registerResources(server: McpServer, deps: ResourceDependencies)
         contents: [{
           uri: uri.href,
           mimeType: "application/json",
-          text: JSON.stringify(milestones, null, 2),
+          text: JSON.stringify(milestones),
         }],
       };
     },
@@ -591,7 +591,7 @@ export function registerResources(server: McpServer, deps: ResourceDependencies)
         contents: [{
           uri: uri.href,
           mimeType: "application/json",
-          text: JSON.stringify(statuses, null, 2),
+          text: JSON.stringify(statuses),
         }],
       };
     },
@@ -624,7 +624,7 @@ export function registerResources(server: McpServer, deps: ResourceDependencies)
         contents: [{
           uri: uri.href,
           mimeType: "application/json",
-          text: JSON.stringify(groups, null, 2),
+          text: JSON.stringify(groups),
         }],
       };
     },
@@ -658,7 +658,7 @@ export function registerResources(server: McpServer, deps: ResourceDependencies)
         contents: [{
           uri: uri.href,
           mimeType: "application/json",
-          text: JSON.stringify(layout, null, 2),
+          text: JSON.stringify(layout),
         }],
       };
     },
@@ -697,7 +697,7 @@ export function registerResources(server: McpServer, deps: ResourceDependencies)
         contents: [{
           uri: uri.href,
           mimeType: "application/json",
-          text: JSON.stringify(hierarchy, null, 2),
+          text: JSON.stringify(hierarchy),
         }],
       };
     },

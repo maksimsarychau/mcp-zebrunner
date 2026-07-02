@@ -186,7 +186,7 @@ async function executeAnalysis(
           project_key: projectKey,
           milestone: resolvedMilestoneName || milestone,
           build,
-        }, null, 2),
+        }),
       }],
     };
   }
@@ -725,7 +725,7 @@ function formatOutput(
   jiraBase: string | null,
 ): string {
   if (format === "json") {
-    return JSON.stringify(result, null, 2);
+    return JSON.stringify(result);
   }
 
   const lines: string[] = [];
