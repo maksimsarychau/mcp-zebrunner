@@ -1395,6 +1395,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
         project_key: z.string().min(1).optional().describe("Default project key for numeric IDs / keys without a resolvable prefix. Per-key 'PREFIX-N' keys auto-detect their project."),
         detail: z.enum(['summary', 'full']).default('summary').describe("summary (default) trims each case to id/key/title/priority/automationState/deprecated; full returns every field."),
         fields: z.array(z.string()).optional().describe("Explicit top-level field allowlist to project (wins over `detail`)."),
+        concurrency: z.number().int().positive().max(32).default(8).describe("Max simultaneous fetches (default 8). Bounds load on the Zebrunner API for large key lists."),
         format: z.enum(['compact', 'dto', 'json', 'string']).default('compact').describe("Output format"),
       },
       annotations: {
@@ -1405,29 +1406,43 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
       },
     },
     async (args) => {
-      const { keys, project_key, detail, fields, format } = args;
+      const { keys, project_key, detail, fields, concurrency, format } = args;
       const notFound: string[] = [];
 
-      const settled = await Promise.allSettled(
-        keys.map(async (rawKey: string) => {
-          const key = rawKey.trim();
-          const isNumericId = /^\d+$/.test(key);
-          let pk = project_key;
-          if (!isNumericId) {
-            try {
-              pk = FormatProcessor.resolveProjectKey({ case_key: key, project_key }).project_key;
-            } catch {
-              // fall through — pk stays as project_key (may be undefined)
-            }
+      const fetchOne = async (rawKey: string) => {
+        const key = rawKey.trim();
+        const isNumericId = /^\d+$/.test(key);
+        let pk = project_key;
+        if (!isNumericId) {
+          try {
+            pk = FormatProcessor.resolveProjectKey({ case_key: key, project_key }).project_key;
+          } catch {
+            // fall through — pk stays as project_key (may be undefined)
           }
-          if (!pk) throw new Error(`unresolved project for key ${key}`);
-          const tc = isNumericId
-            ? await client.getTestCaseById(pk, parseInt(key, 10))
-            : await client.getTestCaseByKey(pk, key);
-          if (!tc) throw new Error(`not found: ${key}`);
-          return { key, tc };
-        }),
-      );
+        }
+        if (!pk) throw new Error(`unresolved project for key ${key}`);
+        const tc = isNumericId
+          ? await client.getTestCaseById(pk, parseInt(key, 10))
+          : await client.getTestCaseByKey(pk, key);
+        if (!tc) throw new Error(`not found: ${key}`);
+        return { key, tc };
+      };
+
+      // Bounded-concurrency pool — preserves order + per-key settled semantics without firing
+      // all N requests at the Zebrunner API at once.
+      const settled: Array<{ status: 'fulfilled'; value: any } | { status: 'rejected' }> = new Array(keys.length);
+      let cursor = 0;
+      const workers = Array.from({ length: Math.min(concurrency, keys.length) }, async () => {
+        while (cursor < keys.length) {
+          const i = cursor++;
+          try {
+            settled[i] = { status: 'fulfilled', value: await fetchOne(keys[i]) };
+          } catch {
+            settled[i] = { status: 'rejected' };
+          }
+        }
+      });
+      await Promise.all(workers);
 
       const found: any[] = [];
       settled.forEach((r, i) => {
