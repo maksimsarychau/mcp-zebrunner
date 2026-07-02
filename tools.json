@@ -157,7 +157,11 @@
   },
   {
     "name": "get_test_case_by_key",
-    "description": "Get detailed information for a specific test case by its key (e.g., MCP-123). Default format is 'json' \u2014 recommended when using as data source for create_test_case or update_test_case. Supports optional include_history to enrich with change log entries (steps, preconditions, automation state, deprecation events)."
+    "description": "Get detailed information for a specific test case by its key (e.g., MCP-123). Default format is 'json' — recommended when using as data source for create_test_case or update_test_case. Supports optional include_history to enrich with change log entries (steps, preconditions, automation state, deprecation events)."
+  },
+  {
+    "name": "batch_get_test_cases",
+    "description": "Fetch many test cases by key in one call (replaces N get_test_case_by_key round-trips). Returns {results, notFound}; unresolved keys go to notFound[] and never fail the call. Defaults to detail=summary; supports fields[] projection."
   },
   {
     "name": "get_test_case_by_title",

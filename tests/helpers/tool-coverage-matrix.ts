@@ -1,6 +1,7 @@
 export const TOOL_SMOKE_INPUTS: Record<string, Record<string, unknown>> = {
   list_test_suites: { project_key: "MCP" },
   get_test_case_by_key: { project_key: "MCP", case_key: "MCP-1" },
+  batch_get_test_cases: { keys: ["MCP-1", "MCP-2"] },
   get_all_subsuites: { project_key: "MCP", root_suite_id: 1 },
   get_test_cases_advanced: { project_key: "MCP" },
   get_suite_hierarchy: { project_key: "MCP" },

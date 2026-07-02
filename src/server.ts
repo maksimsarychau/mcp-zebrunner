@@ -1382,6 +1382,75 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
     }
   );
 
+  server.registerTool(
+    "batch_get_test_cases",
+    {
+      description:
+        "🔎 Fetch MANY test cases by key in ONE call (replaces N get_test_case_by_key round-trips). " +
+        "Returns { results: [...projected], notFound: [...] }. Unresolved keys never fail the call — " +
+        "they land in notFound[]. Defaults to detail=summary; use it after a query/filter to read the few " +
+        "candidates you picked.",
+      inputSchema: {
+        keys: z.array(z.string().min(1)).min(1).max(200).describe("Test case keys (e.g., ['ANDR-1','ANDR-2']) and/or numeric IDs. Numeric IDs require project_key."),
+        project_key: z.string().min(1).optional().describe("Default project key for numeric IDs / keys without a resolvable prefix. Per-key 'PREFIX-N' keys auto-detect their project."),
+        detail: z.enum(['summary', 'full']).default('summary').describe("summary (default) trims each case to id/key/title/priority/automationState/deprecated; full returns every field."),
+        fields: z.array(z.string()).optional().describe("Explicit top-level field allowlist to project (wins over `detail`)."),
+        format: z.enum(['compact', 'dto', 'json', 'string']).default('compact').describe("Output format"),
+      },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async (args) => {
+      const { keys, project_key, detail, fields, format } = args;
+      const notFound: string[] = [];
+
+      const settled = await Promise.allSettled(
+        keys.map(async (rawKey: string) => {
+          const key = rawKey.trim();
+          const isNumericId = /^\d+$/.test(key);
+          let pk = project_key;
+          if (!isNumericId) {
+            try {
+              pk = FormatProcessor.resolveProjectKey({ case_key: key, project_key }).project_key;
+            } catch {
+              // fall through — pk stays as project_key (may be undefined)
+            }
+          }
+          if (!pk) throw new Error(`unresolved project for key ${key}`);
+          const tc = isNumericId
+            ? await client.getTestCaseById(pk, parseInt(key, 10))
+            : await client.getTestCaseByKey(pk, key);
+          if (!tc) throw new Error(`not found: ${key}`);
+          return { key, tc };
+        }),
+      );
+
+      const found: any[] = [];
+      settled.forEach((r, i) => {
+        if (r.status === 'fulfilled' && r.value) {
+          found.push(r.value.tc);
+        } else {
+          notFound.push(keys[i].trim());
+        }
+      });
+
+      const results = projectTestCases(found, detail as DetailLevel, fields);
+      const payload = { requested: keys.length, found: found.length, notFound, results };
+      const formatted = FormatProcessor.format(payload, format as any);
+
+      return {
+        content: [{
+          type: "text" as const,
+          text: typeof formatted === 'string' ? formatted : JSON.stringify(formatted),
+        }],
+      };
+    }
+  );
+
   // ========== ENHANCED FEATURES ==========
 
   server.registerTool(
