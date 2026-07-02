@@ -5487,6 +5487,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       max_results: z.number().int().positive().max(10000).default(200).describe("Maximum number of results (default 200; raise explicitly for full dumps — large values risk the MCP 1MB limit)."),
       detail: z.enum(['summary', 'full']).default('summary').describe("summary (default) trims each case to id/key/title/priority/automationState/deprecated; full returns every field. Use count_only for metrics."),
       fields: z.array(z.string()).optional().describe("Explicit top-level field allowlist to project (wins over `detail`)."),
+      include_root_suite: z.boolean().default(false).describe("Enrich each case with its rootSuiteId (fetches + processes suite hierarchy). Merges the former get_all_tcm_test_cases_with_root_suite_id tool."),
       count_only: z.boolean().default(false).describe(
         "When true, returns only the total count without test case data. " +
         "Efficient for metrics collection -- avoids 1MB response limit on large projects."
@@ -5504,9 +5505,9 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
     },
     async (args) => {
       try {
-        const { project_key, format, include_clickable_links, exclude_deprecated, exclude_draft, exclude_deleted, max_results, detail, fields, count_only, include_history, history_filter, history_limit } = args;
+        const { project_key, format, include_clickable_links, exclude_deprecated, exclude_draft, exclude_deleted, max_results, detail, fields, include_root_suite, count_only, include_history, history_filter, history_limit } = args;
 
-        debugLog("Getting all TCM test cases", { project_key, include_clickable_links, max_results, count_only });
+        debugLog("Getting all TCM test cases", { project_key, include_clickable_links, max_results, count_only, include_root_suite });
 
         // Build RQL filter for status exclusions
         // Note: `deleted` is NOT supported in RQL — must be filtered client-side
@@ -5610,6 +5611,28 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           }
         }
 
+        // Optionally enrich with rootSuiteId (merges get_all_tcm_test_cases_with_root_suite_id).
+        let casesForOutput: any[] = enhancedTestCases;
+        if (include_root_suite && casesForOutput.length > 0) {
+          try {
+            const allSuites = await client.getAllTestSuites(project_key);
+            const processedSuites = HierarchyProcessor.setRootParentsToSuites(allSuites);
+            casesForOutput = casesForOutput.map((tc: any) => {
+              const sid = tc.testSuite?.id;
+              return sid ? { ...tc, rootSuiteId: HierarchyProcessor.getRootIdBySuiteId(processedSuites, sid) } : tc;
+            });
+          } catch (err: any) {
+            debugLog("Failed root-suite enrichment", { error: err.message });
+          }
+        }
+
+        const rootSummaryFields = ['id', 'key', 'title', 'priority', 'automationState', 'deprecated', 'webUrl', 'rootSuiteId'];
+        const projectedForOutput = projectTestCases(
+          casesForOutput,
+          detail as DetailLevel,
+          fields ?? (include_root_suite && detail === 'summary' ? rootSummaryFields : undefined),
+        );
+
         const resultPayload: any = {
           project_key,
           total_fetched: allTestCases.length,
@@ -5620,7 +5643,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
             exclude_draft,
             exclude_deleted
           },
-          test_cases: projectTestCases(enhancedTestCases, detail as DetailLevel, fields)
+          test_cases: projectedForOutput
         };
 
         if (include_history) {
@@ -5666,7 +5689,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
   server.registerTool(
     "get_all_tcm_test_cases_with_root_suite_id",
     {
-      description: "🌳 Get ALL TCM test cases enriched with root suite ID information",
+      description: "[DEPRECATED → use get_all_tcm_test_cases_by_project with include_root_suite=true] Get ALL TCM test cases enriched with root suite ID. Still functional; superseded by the merged boolean.",
     inputSchema: {
       project_key: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
       format: z.enum(['compact', 'dto', 'json', 'string', 'markdown']).default('compact').describe("Output format"),
