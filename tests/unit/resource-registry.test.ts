@@ -36,7 +36,7 @@ describe("Resource Registry Coverage", () => {
   const registeredResources = extractResourceRegistrations(resourceSource);
 
   it("registers the expected number of resources", () => {
-    assert.equal(registeredResources.length, 13, `Expected 13 resources, got ${registeredResources.length}: ${registeredResources.join(", ")}`);
+    assert.equal(registeredResources.length, 14, `Expected 14 resources, got ${registeredResources.length}: ${registeredResources.join(", ")}`);
   });
 
   it("has unique resource names", () => {
@@ -47,6 +47,7 @@ describe("Resource Registry Coverage", () => {
     const expected = [
       "available_projects",
       "report_types",
+      "mcp_routing",
       "project_root_suites",
       "project_automation_states",
       "project_priorities",
@@ -71,7 +72,7 @@ describe("Resource Registry Coverage", () => {
     while ((match = uriRegex.exec(resourceSource)) !== null) {
       uris.push(match[0]);
     }
-    assert.ok(uris.length >= 13, `should have at least 13 zebrunner:// URIs, got ${uris.length}`);
+    assert.ok(uris.length >= 14, `should have at least 14 zebrunner:// URIs, got ${uris.length}`);
     for (const uri of uris) {
       assert.ok(uri.startsWith("zebrunner://"), `URI should use zebrunner:// scheme: ${uri}`);
     }
@@ -181,8 +182,8 @@ describe("Format Reference Resource Content", () => {
 describe("getResourcesCatalog()", () => {
   const catalog = getResourcesCatalog();
 
-  it("returns exactly 13 resources matching registered count", () => {
-    assert.equal(catalog.length, 13);
+  it("returns exactly 14 resources matching registered count", () => {
+    assert.equal(catalog.length, 14);
   });
 
   it("every entry has required fields", () => {
@@ -207,10 +208,10 @@ describe("getResourcesCatalog()", () => {
     assert.equal(new Set(names).size, names.length, "catalog names should be unique");
   });
 
-  it("includes 5 static and 8 template resources", () => {
+  it("includes 6 static and 8 template resources", () => {
     const statics = catalog.filter(r => r.type === "static");
     const templates = catalog.filter(r => r.type === "template");
-    assert.equal(statics.length, 5, `expected 5 static, got ${statics.length}`);
+    assert.equal(statics.length, 6, `expected 6 static, got ${statics.length}`);
     assert.equal(templates.length, 8, `expected 8 template, got ${templates.length}`);
   });
 

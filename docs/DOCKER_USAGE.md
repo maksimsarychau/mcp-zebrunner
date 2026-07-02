@@ -81,21 +81,34 @@ If you only need **lightweight test-case management** against Zebrunner’s API,
 
 ### Build the Docker Image
 
+**Published images** on Docker Hub are **multi-architecture** (`linux/amd64` + `linux/arm64`). The same tag works on Intel/AMD servers (typical EKS x86) and Apple Silicon (local Docker Desktop).
+
 ```bash
 # Clone the repository
 git clone https://github.com/maksimsarychau/mcp-zebrunner.git
 cd mcp-zebrunner
+npm ci
 
-# Build with integrity signing (recommended)
+# ── Release publish (multi-arch → Docker Hub) ──
+docker login -u msarychau
+npm run docker:build:multiarch
+# Equivalent: bash scripts/docker-build-push.sh
+
+# ── Local single-arch (fast iteration on your machine) ──
 npm run build
 npm run sign-release
 docker build -t msarychau/mcp-zebrunner:latest .
 
-# Or build with Docker Compose
+# ── Docker Compose (uses local build context) ──
 docker compose build
+```
 
-# Or build with Docker Compose
-docker compose build
+**Verify manifest after push:**
+
+```bash
+VERSION=$(node -p "require('./package.json').version")
+docker buildx imagetools inspect msarychau/mcp-zebrunner:${VERSION}
+# Expect platforms: linux/amd64, linux/arm64
 ```
 
 ### Run Locally with Docker Compose
@@ -512,17 +525,33 @@ docker mcp client connect claude
 ### Building
 
 ```bash
-# Build with integrity signing (recommended for releases)
-npm run build
-npm run sign-release
+# Multi-arch publish (amd64 + arm64) — recommended for Docker Hub / production
+docker login -u msarychau
+npm run docker:build:multiarch
+
+# Manual multi-arch (same as npm script)
+npm run build && npm run sign-release
+docker buildx create --name mcp-zebrunner-builder --driver docker-container --use 2>/dev/null \
+  || docker buildx use mcp-zebrunner-builder
+docker buildx inspect --bootstrap
+VERSION=$(node -p "require('./package.json').version")
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  --build-arg APP_VERSION="${VERSION}" \
+  -t msarychau/mcp-zebrunner:${VERSION} \
+  -t msarychau/mcp-zebrunner:latest \
+  --push .
+
+# Local single-arch only (your current CPU — not for Hub publish)
+npm run build && npm run sign-release
 docker build -t msarychau/mcp-zebrunner:latest .
 
-# Build via Docker Compose
+# Docker Compose
 docker compose build
-
-# Build with no cache
 docker compose build --no-cache
 ```
+
+**Apple Silicon (M1/M2/M3):** `docker pull msarychau/mcp-zebrunner:latest` uses the **arm64** manifest. **Intel/AMD** hosts and most EKS clusters use **amd64**. Older amd64-only tags fail on Mac with `no matching manifest for linux/arm64` — use **9.0.5+** multi-arch tags.
 
 ### Running
 
@@ -560,17 +589,30 @@ docker run --rm \
 
 ### Publishing to Docker Hub
 
+Use **buildx** so one tag includes **amd64** and **arm64** (required for mixed Mac + Linux/EKS fleets):
+
 ```bash
-# Login to Docker Hub
 docker login -u msarychau
-
-# Tag with version (use current version from package.json)
-docker tag msarychau/mcp-zebrunner:latest msarychau/mcp-zebrunner:$(node -p "require('./package.json').version")
-
-# Push both tags
-docker push msarychau/mcp-zebrunner:$(node -p "require('./package.json').version")
-docker push msarychau/mcp-zebrunner:latest
+npm run docker:build:multiarch
 ```
+
+This runs `npm run build`, `npm run sign-release`, then pushes:
+
+- `msarychau/mcp-zebrunner:<version>` (from `package.json`, e.g. `9.0.5`)
+- `msarychau/mcp-zebrunner:latest`
+
+**Do not** use plain `docker build` + `docker push` for production releases unless you only need one architecture.
+
+**Environment overrides** (optional):
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `DOCKER_IMAGE` | `msarychau/mcp-zebrunner` | Image name |
+| `DOCKER_PLATFORMS` | `linux/amd64,linux/arm64` | Target platforms |
+| `DOCKER_BUILDX_BUILDER` | `mcp-zebrunner-builder` | Buildx builder name |
+| `DOCKER_PUSH` | `1` | Set `0` for local single-platform test build |
+
+**Disk space:** multi-arch builds use more cache — `docker buildx prune -af` if builds fail with no space.
 
 ---
 

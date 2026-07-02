@@ -16,6 +16,10 @@ import {
   COLORS,
 } from "./types.js";
 import { generatePngChart, type ChartConfig } from "../../utils/chart-generator.js";
+import {
+  formatPassRateTableRow,
+  hasPassRateMetrics,
+} from "./pass-rate-display.js";
 
 export async function generatePassRateReport(
   ctx: ReportContext,
@@ -49,16 +53,19 @@ export async function generatePassRateReport(
   }
   contentBlocks.push({ type: "text" as const, text: buildPassRateMarkdown(data, mergedTargets, period, milestone) });
 
-  try {
-    const chartConfig = buildPassRateChart(data, mergedTargets);
-    const pngBuffer = await generatePngChart(chartConfig);
-    contentBlocks.push({
-      type: "image" as const,
-      data: pngBuffer.toString('base64'),
-      mimeType: "image/png",
-    });
-  } catch {
-    // PNG generation failed — markdown is still available
+  const chartData = data.filter(hasPassRateMetrics);
+  if (chartData.length > 0) {
+    try {
+      const chartConfig = buildPassRateChart(chartData, mergedTargets);
+      const pngBuffer = await generatePngChart(chartConfig);
+      contentBlocks.push({
+        type: "image" as const,
+        data: pngBuffer.toString('base64'),
+        mimeType: "image/png",
+      });
+    } catch {
+      // PNG generation failed — markdown is still available
+    }
   }
 
   return { content: contentBlocks };
@@ -75,30 +82,51 @@ function buildPassRateMarkdown(
   lines.push(`**Period:** ${period}${milestone ? ` | **Milestone:** ${milestone}` : ''}`);
   lines.push('');
 
+  for (const d of data) {
+    if (d.milestoneNote) {
+      lines.push(`> ⚠️ **${d.project}:** ${d.milestoneNote}`);
+    }
+  }
+  if (data.some(d => d.milestoneNote)) {
+    lines.push('');
+  }
+
   lines.push('| Platform | Total | Passed | Failed | Known Issues | Skipped | Pass Rate | excl. Known | Target | Status |');
   lines.push('| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :---: |');
 
   for (const d of data) {
     const target = targets[d.project.toLowerCase()] ?? targets[d.project] ?? 90;
-    const icon = d.passRate >= target ? '✅' : '⚠️';
-    lines.push(`| ${d.project} | ${d.total} | ${d.passed} | ${d.failed} | ${d.knownIssue} | ${d.skipped} | ${d.passRate}% | ${d.passRateExclKnown}% | ${target}% | ${icon} |`);
+    lines.push(formatPassRateTableRow(d, target));
   }
 
   lines.push('');
 
-  const allMeet = data.every(d => {
-    const target = targets[d.project.toLowerCase()] ?? targets[d.project] ?? 90;
-    return d.passRate >= target;
-  });
+  const withMetrics = data.filter(hasPassRateMetrics);
+  const noLaunches = data.filter(d => d.noMilestoneLaunches);
+  if (noLaunches.length > 0) {
+    lines.push(
+      `**No launches on milestone:** ${noLaunches.map(d => d.project).join(', ')} (pass rate not calculated).`
+    );
+    lines.push('');
+  }
 
-  if (allMeet) {
-    lines.push('**All platforms are on target.**');
+  if (withMetrics.length === 0) {
+    lines.push('**No pass rate metrics** for the requested milestone filter.');
   } else {
-    const below = data.filter(d => {
+    const allMeet = withMetrics.every(d => {
       const target = targets[d.project.toLowerCase()] ?? targets[d.project] ?? 90;
-      return d.passRate < target;
+      return d.passRate >= target;
     });
-    lines.push(`**Platforms below target:** ${below.map(d => d.project).join(', ')}`);
+
+    if (allMeet) {
+      lines.push('**All platforms with data are on target.**');
+    } else {
+      const below = withMetrics.filter(d => {
+        const target = targets[d.project.toLowerCase()] ?? targets[d.project] ?? 90;
+        return d.passRate < target;
+      });
+      lines.push(`**Platforms below target:** ${below.map(d => d.project).join(', ')}`);
+    }
   }
 
   return lines.join('\n');

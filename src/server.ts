@@ -17,7 +17,7 @@ import { RulesParser } from "./utils/rules-parser.js";
 import { TestGenerator } from "./utils/test-generator.js";
 import { getClickableLinkConfig, generateTestCaseLink, addTestCaseWebUrl, generateSuiteLink, addSuiteWebUrl } from "./utils/clickable-links.js";
 import { ZebrunnerConfig } from "./types/api.js";
-import { ZebrunnerReportingConfig } from "./types/reporting.js";
+import { ZebrunnerReportingConfig, ZebrunnerReportingAuthError } from "./types/reporting.js";
 import {
   ZebrunnerTestCase,
   ZebrunnerTestSuite,
@@ -27,7 +27,11 @@ import {
 } from "./types/core.js";
 import { stealthIntegrityCheck } from "./stealth-integrity.js";
 import { sanitizeRqlString } from "./utils/security.js";
-import { buildChartResponse, type ChartConfig } from "./utils/chart-generator.js";
+import {
+  buildChartResponse,
+  buildStackedStatusChartDatasets,
+  type ChartConfig,
+} from "./utils/chart-generator.js";
 import { matchesField, filterByField, type FieldFilter, type FieldMatchMode } from "./utils/custom-field-filter.js";
 import {
   ALL_PERIODS as SHARED_ALL_PERIODS,
@@ -35,10 +39,11 @@ import {
   getPlatformMap,
   buildParamsConfig as sharedBuildParamsConfig,
   createWidgetSqlCaller,
+  parseWidgetStatusCounts,
   type WidgetSqlCaller,
 } from "./utils/widget-sql.js";
 import { getConfig } from "./utils/config-loader.js";
-import { registerResources, getResourcesCatalog } from "./resources.js";
+import { registerResources, getResourcesCatalog, buildMcpRoutingContent } from "./resources.js";
 import { registerPrompts, getPromptsCatalog } from "./prompts.js";
 import {
   loadToolIntelSnapshot,
@@ -56,6 +61,27 @@ import { ZebrunnerMutationClient } from "./api/mutation-client.js";
 import { writeAuditLog } from "./helpers/audit.js";
 import { steeringHint } from "./helpers/steering.js";
 import { computeDiff, formatDiff } from "./helpers/diff.js";
+import {
+  getLaunchRerunIneligibilityReason,
+  toLaunchRerunTarget,
+  type LaunchRerunTarget,
+} from "./utils/launch-rerun.js";
+import {
+  buildParameterOverrides,
+  extractJobSummary,
+  formatParameterDiff,
+  mergeJobParameters,
+  resolveTemplateLaunch,
+  type ResolvedTemplateLaunch,
+  START_LAUNCH_JENKINS_ONLY_NOTE,
+} from "./utils/launch-job-build.js";
+import {
+  applyEnUsOnlyExclusionsToTestRunRules,
+  findFeatureSuiteIdsByNames,
+  isLocaleTestRunRulesProject,
+  isNonEnUsLocale,
+  LOCALE_TEST_RUN_RULES_TOOL_NOTE,
+} from "./utils/locale-test-run-rules.js";
 // Pre-validation removed from the hot path — the API validates server-side.
 // On error, we enrich the message with valid options to help the user fix the request.
 async function enrichMutationError(
@@ -1078,12 +1104,65 @@ function createConfiguredServer(): McpServer {
   const toolMetrics = new ToolMetrics();
   _metricsRef = toolMetrics;
 
+  // ── Tool prefix + alias rules for the Advanced Zebrunner MCP Server ──
+  // Every tool is registered under the canonical `adv_<name>` form so it never
+  // collides with the official Zebrunner MCP (some names are shared). As of
+  // v9.0.0, the legacy short names (`create_test_case`, etc.) are NOT
+  // registered by default — this is the breaking change announced in the
+  // 9.0.0 release notes.
+  //
+  // Escape hatch: set the env var `ZEBRUNNER_REGISTER_LEGACY_ALIASES=true`
+  // to also register every old name as a deprecated alias that routes to the
+  // same handler as its `adv_<name>` counterpart. Use this to roll back if a
+  // prompt / script / agent rule was still calling the old names and you need
+  // a moment to migrate it. Metrics still record under the canonical name so
+  // dashboards remain comparable.
+  const ADV_TOOL_PREFIX = "adv_";
+  const ADV_DESC_PREFIX = "[Advanced Zebrunner MCP] ";
+  const LEGACY_ALIAS_ENV_FLAGS = ["1", "true", "yes", "on"];
+  const REGISTER_LEGACY_ALIASES = LEGACY_ALIAS_ENV_FLAGS.includes(
+    (process.env.ZEBRUNNER_REGISTER_LEGACY_ALIASES ?? "").trim().toLowerCase()
+  );
+  if (REGISTER_LEGACY_ALIASES) {
+    debugLog(
+      "Legacy tool aliases enabled (ZEBRUNNER_REGISTER_LEGACY_ALIASES=true). " +
+      "Each tool will be exposed under both adv_<name> and <name>; aliases are deprecated and scheduled for removal in a future major release."
+    );
+  }
+
   const origRegisterTool = server.registerTool.bind(server);
   server.registerTool = ((name: string, config: any, handler: any) => {
-    return origRegisterTool(name, config, wrapToolHandler(name, handler, toolMetrics));
+    // Defensive: if a caller already passes an adv_-prefixed name, register
+    // it once without creating an alias to itself.
+    if (typeof name === "string" && name.startsWith(ADV_TOOL_PREFIX)) {
+      return origRegisterTool(name, config, wrapToolHandler(name, handler, toolMetrics));
+    }
+
+    const advName = `${ADV_TOOL_PREFIX}${name}`;
+    const baseDescription = typeof config?.description === "string" ? config.description : "";
+    const advancedConfig = {
+      ...config,
+      description: `${ADV_DESC_PREFIX}${baseDescription}`,
+    };
+
+    const primaryResult = origRegisterTool(
+      advName,
+      advancedConfig,
+      wrapToolHandler(advName, handler, toolMetrics),
+    );
+
+    if (!REGISTER_LEGACY_ALIASES) {
+      return primaryResult;
+    }
+
+    const legacyConfig = {
+      ...config,
+      description: `[deprecated alias — use ${advName}] ${baseDescription}`,
+    };
+    return origRegisterTool(name, legacyConfig, wrapToolHandler(advName, handler, toolMetrics));
   }) as typeof server.registerTool;
 
-  debugLog("🚀 Starting Zebrunner Unified MCP Server with Reporting API", {
+  debugLog("🚀 Starting Advanced Zebrunner MCP Server (mcp-zebrunner) with Reporting API", {
     url: ZEBRUNNER_URL,
     debug: DEBUG_MODE,
     reportingApiEnabled: true
@@ -1227,7 +1306,7 @@ function createConfiguredServer(): McpServer {
 • Test case key: 'MCP-29', 'MCP-2'
 • Numeric ID: '86280' (requires project_key)
 • From Zebrunner URL: extract project_key and caseId from URLs like https://example.zebrunner.com/projects/MCP/test-cases?caseId=86280 → project_key='MCP', case_key='86280'
-Default format is 'json' which exposes all raw field values. Use 'json' when using this tool as a data source for create_test_case or update_test_case. 'markdown' format may omit some raw field content.`,
+Default format is 'json' which exposes all raw field values. Use 'json' when using this tool as a data source for adv_create_test_case or adv_update_test_case. 'markdown' format may omit some raw field content.`,
     inputSchema: {
       project_key: z.string().min(1).optional().describe("Project key (e.g., 'MCP', 'MCP'). Auto-detected from case_key if it contains a key pattern like 'MCP-29'. Required when case_key is a numeric ID."),
       case_key: z.string().min(1).describe("Test case key (e.g., 'MCP-29') OR numeric test case ID (e.g., '86280'). When providing a numeric ID, project_key is required."),
@@ -4836,6 +4915,494 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
     }
   );
 
+  // ========== rerun_launch_failures (Beta) ==========
+
+  const RerunLaunchFailuresSchema = z.object({
+    project: z.union([z.enum(["web", "android", "ios", "api"]), z.string(), z.number()])
+      .describe("Project alias (web/android/ios/api), project key, or project ID"),
+    launch_id: z.number().int().positive().optional()
+      .describe("Single launch mode: Reporting API launch ID to rerun failures for. Omit for batch mode."),
+    milestone: z.string().optional()
+      .describe("Batch mode filter: milestone name (e.g., '25.39.0'). Passed to launches listing API."),
+    query: z.string().optional()
+      .describe("Batch mode filter: build number or launch name search query."),
+    max_launches: z.number().int().positive().max(50).default(10)
+      .describe("Batch mode safety cap — max eligible launches to rerun (default 10, max 50)."),
+    min_failed: z.number().int().min(0).default(1)
+      .describe("Minimum failed+aborted test count for a launch to qualify (default 1)."),
+    skip_errors: BoolParam.describe("When true (default), continue batch if one launch fails."),
+    dry_run: BoolParam.describe("If true, show resolved targets and API URLs without POST."),
+    confirm: BoolParam.describe("Must be true to execute. Without it, returns a preview for user approval."),
+    confirmation_token: z.string().optional()
+      .describe("Token returned by the preview step. Required when confirm is true."),
+  });
+
+  type RerunLaunchFailuresArgs = z.infer<typeof RerunLaunchFailuresSchema> & {
+    _resolvedTargets?: LaunchRerunTarget[];
+  };
+
+  async function discoverLaunchRerunTargets(
+    projectId: number,
+    args: RerunLaunchFailuresArgs,
+  ): Promise<{ targets: LaunchRerunTarget[]; skipped: { launchId: number; name: string; reason: string }[] }> {
+    const skipped: { launchId: number; name: string; reason: string }[] = [];
+    const minFailed = args.min_failed ?? 1;
+    const maxLaunches = args.max_launches ?? 10;
+
+    if (args.launch_id != null) {
+      const launch = await reportingClient.getLaunch(args.launch_id, projectId);
+      const reason = getLaunchRerunIneligibilityReason(launch, minFailed);
+      if (reason) {
+        skipped.push({ launchId: args.launch_id, name: launch.name, reason });
+        return { targets: [], skipped };
+      }
+      return {
+        targets: [toLaunchRerunTarget({ ...launch, id: launch.id, name: launch.name })],
+        skipped,
+      };
+    }
+
+    const targets: LaunchRerunTarget[] = [];
+    let page = 1;
+    const pageSize = 100;
+
+    while (targets.length < maxLaunches) {
+      const data = await reportingClient.getLaunches(projectId, {
+        page,
+        pageSize,
+        milestone: args.milestone,
+        query: args.query,
+      });
+
+      for (const launch of data.items) {
+        const reason = getLaunchRerunIneligibilityReason(launch, minFailed);
+        if (reason) {
+          skipped.push({ launchId: launch.id, name: launch.name, reason });
+          continue;
+        }
+        targets.push(toLaunchRerunTarget(launch));
+        if (targets.length >= maxLaunches) break;
+      }
+
+      if (page >= data._meta.totalPages || data.items.length === 0) break;
+      page++;
+    }
+
+    return { targets, skipped };
+  }
+
+  function formatRerunPermissionError(error: unknown): string | null {
+    const message = error instanceof Error ? error.message : String(error);
+    const statusCode = error instanceof ZebrunnerReportingAuthError ? error.statusCode : undefined;
+    if (statusCode === 403 || message.includes("403")) {
+      return "❌ Permission denied: your token needs IAM permission `reporting:test-runs:rerun` to rerun launch failures.";
+    }
+    return null;
+  }
+
+  server.registerTool(
+    "rerun_launch_failures",
+    {
+      description: `🔄 (Beta) Rerun failed/aborted tests for one or more automation launches via the Reporting API.
+
+Single mode: provide launch_id. Batch mode: omit launch_id — scans launches (optional milestone/query filters),
+collects eligible launches with failures, capped by max_launches (default 10, max 50; see zebrunner-config.json relaunchFailures.maxLaunchesPerPlatform for prompt workflows).
+
+For full regression rerun with configured launch name exclusions, use MCP prompt /relaunch-regression-failures (relaunchFailures.excludeLaunchNamePatterns).
+
+Triggers real CI/automation reruns. Always preview first.
+
+TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + confirmation_token. 2) After user approval, call with ONLY confirm: true and the confirmation_token. Targets are stored server-side — do NOT re-send other fields.`,
+      inputSchema: RerunLaunchFailuresSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async (args: RerunLaunchFailuresArgs) => {
+      try {
+        if (args.confirm) {
+          const restored = validateAndRestoreArgs(args);
+          if ("error" in restored) return { content: [{ type: "text" as const, text: restored.error }] };
+        }
+
+        const { projectId } = await resolveProjectId(args.project);
+        const projectKey = await reportingClient.getProjectKey(projectId);
+        const baseUrl = reportingConfig.baseUrl.replace(/\/+$/, "");
+
+        const targets = args.confirm && args._resolvedTargets?.length
+          ? args._resolvedTargets
+          : (await discoverLaunchRerunTargets(projectId, args)).targets;
+
+        if (!args.confirm) {
+          const { targets: previewTargets, skipped } = await discoverLaunchRerunTargets(projectId, args);
+
+          if (previewTargets.length === 0) {
+            const lines = [
+              "📋 Preview — rerun_launch_failures",
+              `Project: ${projectKey} (ID ${projectId})`,
+              "",
+              "❌ No eligible launches found for failure rerun.",
+            ];
+            if (skipped.length > 0) {
+              lines.push("", "Skipped launches:");
+              for (const s of skipped.slice(0, 20)) {
+                lines.push(`  • ${s.name} (ID ${s.launchId}): ${s.reason}`);
+              }
+              if (skipped.length > 20) lines.push(`  ... and ${skipped.length - 20} more`);
+            }
+            return { content: [{ type: "text" as const, text: lines.join("\n") }] };
+          }
+
+          const modeLabel = args.launch_id != null ? "single launch" : `batch (max ${args.max_launches ?? 10})`;
+          const lines = [
+            "📋 Preview — rerun_launch_failures",
+            `Project: ${projectKey} (ID ${projectId})`,
+            `Mode: ${modeLabel}`,
+            `Will rerun failures for ${previewTargets.length} launch(es):`,
+            "",
+            "| Launch ID | Name | Failed | Aborted | Status |",
+            "|-----------|------|--------|---------|--------|",
+          ];
+
+          for (const t of previewTargets) {
+            lines.push(`| ${t.launchId} | ${t.name.slice(0, 40)} | ${t.failed} | ${t.aborted} | ${t.status} |`);
+            lines.push(`  URL: ${baseUrl}/projects/${projectKey}/automation-launches/${t.launchId}`);
+          }
+
+          if (!args.launch_id) {
+            lines.push("");
+            lines.push(`Showing first ${previewTargets.length} eligible launch(es) (max_launches=${args.max_launches ?? 10}).`);
+          }
+
+          if (skipped.length > 0) {
+            lines.push("", `Skipped ${skipped.length} ineligible launch(es) (first 10):`);
+            for (const s of skipped.slice(0, 10)) {
+              lines.push(`  • ${s.name} (ID ${s.launchId}): ${s.reason}`);
+            }
+          }
+
+          lines.push("");
+          lines.push("⚠️ This will trigger real automation reruns for failed/aborted tests.");
+
+          if (args.dry_run) {
+            lines.push("", "DRY RUN — API calls that would be made:");
+            for (const t of previewTargets) {
+              lines.push(`  POST /api/reporting/v1/launches/${t.launchId}:rerun?projectId=${projectId}&rerunFailures=true`);
+            }
+            return { content: [{ type: "text" as const, text: lines.join("\n") }] };
+          }
+
+          const tokenPayload = { ...args, _resolvedTargets: previewTargets };
+          const token = generateConfirmationToken(JSON.stringify(tokenPayload));
+          lines.push(`confirmation_token: ${token}`);
+          lines.push(`⚠️ To proceed, call again with ONLY: { "confirm": true, "confirmation_token": "${token}" }`);
+          return { content: [{ type: "text" as const, text: lines.join("\n") }] };
+        }
+
+        if (targets.length === 0) {
+          return { content: [{ type: "text" as const, text: "❌ No launch targets to rerun. Call without confirm first to get a preview." }] };
+        }
+
+        const results: { launchId: number; name: string; success: boolean; message: string; newLaunchId?: number }[] = [];
+
+        for (const target of targets) {
+          const url = `/api/reporting/v1/launches/${target.launchId}:rerun?projectId=${projectId}&rerunFailures=true`;
+          try {
+            writeAuditLog({
+              timestamp: new Date().toISOString(),
+              tool: "rerun_launch_failures",
+              method: "POST",
+              url,
+              projectKey,
+              payload: { launchId: target.launchId, rerunFailures: true },
+            });
+
+            const response = await reportingClient.rerunLaunchFailures(target.launchId, projectId);
+            const newLaunchId = typeof response.id === "number" ? response.id : undefined;
+            const detail = newLaunchId != null
+              ? `new launch/attempt ID: ${newLaunchId}`
+              : JSON.stringify(response).slice(0, 200);
+            results.push({
+              launchId: target.launchId,
+              name: target.name,
+              success: true,
+              message: detail,
+              newLaunchId,
+            });
+          } catch (error: any) {
+            const permMsg = formatRerunPermissionError(error);
+            const message = permMsg ?? error.message ?? String(error);
+            results.push({
+              launchId: target.launchId,
+              name: target.name,
+              success: false,
+              message,
+            });
+            if (args.skip_errors === false) {
+              break;
+            }
+          }
+        }
+
+        const succeeded = results.filter((r) => r.success);
+        const failed = results.filter((r) => !r.success);
+
+        const lines = [
+          `✅ Rerun completed: ${succeeded.length} succeeded, ${failed.length} failed out of ${results.length} launch(es).`,
+          "",
+        ];
+
+        for (const r of results) {
+          const icon = r.success ? "✅" : "❌";
+          lines.push(`${icon} ${r.name} (ID ${r.launchId})`);
+          lines.push(`   ${baseUrl}/projects/${projectKey}/automation-launches/${r.launchId}`);
+          lines.push(`   ${r.message}`);
+          if (r.newLaunchId != null) {
+            lines.push(`   Rerun launch: ${baseUrl}/projects/${projectKey}/automation-launches/${r.newLaunchId}`);
+          }
+          lines.push("");
+        }
+
+        const firstLaunchId = succeeded[0]?.launchId ?? targets[0]?.launchId;
+        return {
+          content: [{
+            type: "text" as const,
+            text: lines.join("\n").trim() + steeringHint("rerun_launch_failures", { id: firstLaunchId ?? 0 }),
+          }],
+        };
+      } catch (error: any) {
+        const permMsg = formatRerunPermissionError(error);
+        return {
+          content: [{
+            type: "text" as const,
+            text: permMsg ?? `❌ Error in rerun_launch_failures: ${error.message}`,
+          }],
+        };
+      }
+    }
+  );
+
+  // ========== start_launch (Beta) ==========
+
+  const StartLaunchSchema = z.object({
+    project: z.union([z.enum(["web", "android", "ios", "api"]), z.string(), z.number()])
+      .describe("Project alias (web/android/ios/api), project key, or project ID"),
+    launch_id: z.number().int().positive().optional()
+      .describe("Template launch ID (same as UI Build now). Use when known."),
+    template_query: z.string().optional()
+      .describe("Search past launches by name (e.g. 'Critical', 'Minimal-Acceptance'). Newest match used as template."),
+    launch_name: z.string().optional()
+      .describe("Alias for template_query — launch name substring search."),
+    suite_path: z.string().optional()
+      .describe("Match hidden CI suite param (e.g. 'mfp/android/critical-flow'). Can combine with template_query."),
+    build: z.string().optional()
+      .describe("Build filter override. Use '.*' for latest build."),
+    locale: z.string().optional().describe("Locale override (e.g. 'en_US', 'de_DE'). When localeTestRunRules is enabled for the project, non-en_US may auto-merge NOT_TAGS exclusions."),
+    test_run_rules: z.string().optional()
+      .describe("Test run rules override (e.g. 'PRIORITY=>P0||P1;;'). NOT_TAGS exclusions for en_US-only suites apply per zebrunner-config.json localeTestRunRules."),
+    parameters: z.record(z.string(), z.union([z.string(), z.boolean()])).optional()
+      .describe("Additional job parameter overrides — keys must exist in job/parameters response."),
+    max_template_search: z.number().int().positive().max(50).default(20)
+      .describe("Max launches to scan when resolving template (default 20)."),
+    dry_run: BoolParam.describe("Show resolved template and merged payload without POST."),
+    confirm: BoolParam.describe("Must be true to execute. Without it, returns a preview for user approval."),
+    confirmation_token: z.string().optional()
+      .describe("Token returned by the preview step. Required when confirm is true."),
+  });
+
+  type StartLaunchArgs = z.infer<typeof StartLaunchSchema> & {
+    _resolvedTemplate?: ResolvedTemplateLaunch;
+    _mergedPayload?: Record<string, string | boolean>;
+  };
+
+  function formatStartLaunchPermissionError(error: unknown): string | null {
+    const message = error instanceof Error ? error.message : String(error);
+    const statusCode = error instanceof ZebrunnerReportingAuthError ? error.statusCode : undefined;
+    if (statusCode === 403 || message.includes("403")) {
+      return "❌ Permission denied: your token may lack IAM permission to trigger launch builds (reporting test-runs build/start).";
+    }
+    return null;
+  }
+
+  server.registerTool(
+    "start_launch",
+    {
+      description: `🚀 (Beta) Start a new automation launch via Zebrunner "Build now" (Reporting API job/parameters + job:build).
+
+IMPORTANT: ${START_LAUNCH_JENKINS_ONLY_NOTE}
+
+${LOCALE_TEST_RUN_RULES_TOOL_NOTE}
+
+Resolves a template launch by launch_id, launch name query, and/or suite_path, fetches live job parameters,
+merges your overrides (build, locale, test_run_rules, or parameters map), and triggers CI.
+
+Use build: ".*" for latest build. Discover parameters first via adv_get_launch_details with includeJobParameters: true.
+
+TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + confirmation_token. 2) After user approval, call with ONLY confirm: true and the confirmation_token. Payload is stored server-side — do NOT re-send other fields.`,
+      inputSchema: StartLaunchSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async (args: StartLaunchArgs) => {
+      try {
+        if (args.confirm) {
+          const restored = validateAndRestoreArgs(args);
+          if ("error" in restored) return { content: [{ type: "text" as const, text: restored.error }] };
+        }
+
+        if (!args.launch_id && !args.template_query && !args.launch_name && !args.suite_path) {
+          return {
+            content: [{
+              type: "text" as const,
+              text: "❌ Provide at least one of: launch_id, template_query / launch_name, or suite_path.",
+            }],
+          };
+        }
+
+        const { projectId } = await resolveProjectId(args.project);
+        const projectKey = await reportingClient.getProjectKey(projectId);
+        const baseUrl = reportingConfig.baseUrl.replace(/\/+$/, "");
+
+        if (!args.confirm) {
+          const template = await resolveTemplateLaunch(reportingClient, projectId, {
+            launchId: args.launch_id,
+            templateQuery: args.template_query ?? args.launch_name,
+            launchName: args.launch_name,
+            suitePath: args.suite_path,
+            maxTemplateSearch: args.max_template_search ?? 20,
+          });
+
+          const overrides = buildParameterOverrides(args);
+          let mergedPayload = mergeJobParameters(template.jobParameters.items, overrides);
+          const summary = extractJobSummary(template.jobParameters.items);
+          const effectiveLocale = String(mergedPayload.locale ?? summary.localeDefault ?? "");
+          const localeRuleLines: string[] = [];
+
+          const localeSettings = getConfig().localeTestRunRules;
+
+          if (
+            isNonEnUsLocale(effectiveLocale)
+            && isLocaleTestRunRulesProject(projectKey, localeSettings)
+          ) {
+            try {
+              const allSuites = await client.getAllTestSuites(projectKey);
+              const featureSuiteIds = findFeatureSuiteIdsByNames(
+                allSuites,
+                localeSettings.enUsOnlyFeatureSuites,
+                localeSettings.suiteNameMatch,
+              );
+              const currentRules = String(mergedPayload.test_run_rules ?? "");
+              const applied = applyEnUsOnlyExclusionsToTestRunRules(
+                effectiveLocale,
+                currentRules,
+                featureSuiteIds,
+                localeSettings,
+              );
+              localeRuleLines.push(...applied.warningLines);
+              if (applied.autoApplied) {
+                mergedPayload = { ...mergedPayload, test_run_rules: applied.effectiveRules };
+              }
+            } catch (localeErr: unknown) {
+              const msg = localeErr instanceof Error ? localeErr.message : String(localeErr);
+              localeRuleLines.push(
+                `⚠️ Could not auto-discover en_US-only feature suites: ${msg}`,
+                `   ${LOCALE_TEST_RUN_RULES_TOOL_NOTE}`,
+              );
+            }
+          }
+
+          const diffLines = formatParameterDiff(template.jobParameters.items, mergedPayload);
+
+          const lines = [
+            "📋 Preview — start_launch",
+            `⚠️ ${START_LAUNCH_JENKINS_ONLY_NOTE}`,
+            `Project: ${projectKey} (ID ${projectId})`,
+            "",
+            `Template launch: ${template.launchName} (ID ${template.launchId})`,
+            `${baseUrl}/projects/${projectKey}/automation-launches/${template.launchId}`,
+            `Suite path: ${summary.suitePath ?? "(unknown)"}`,
+            "",
+            ...(localeRuleLines.length > 0 ? [...localeRuleLines, ""] : []),
+            "Key parameter overrides:",
+            ...diffLines,
+            "",
+            `Total parameters in POST body: ${Object.keys(mergedPayload).length} (includes hidden params with defaults).`,
+            "",
+            "⚠️ This will trigger a real CI/automation build.",
+          ];
+
+          if (args.dry_run) {
+            lines.push("", "DRY RUN — POST payload:", JSON.stringify(mergedPayload, null, 2));
+            lines.push("", `POST /api/reporting/v1/launches/${template.launchId}/job:build?projectId=${projectId}`);
+            return { content: [{ type: "text" as const, text: lines.join("\n") }] };
+          }
+
+          const tokenPayload = { ...args, _resolvedTemplate: template, _mergedPayload: mergedPayload };
+          const token = generateConfirmationToken(JSON.stringify(tokenPayload));
+          lines.push(`confirmation_token: ${token}`);
+          lines.push(`⚠️ To proceed, call again with ONLY: { "confirm": true, "confirmation_token": "${token}" }`);
+          return { content: [{ type: "text" as const, text: lines.join("\n") }] };
+        }
+
+        const template = args._resolvedTemplate;
+        const mergedPayload = args._mergedPayload;
+        if (!template || !mergedPayload) {
+          return {
+            content: [{
+              type: "text" as const,
+              text: "❌ Missing stored build payload. Call without confirm first to get a preview.",
+            }],
+          };
+        }
+
+        const url = `/api/reporting/v1/launches/${template.launchId}/job:build?projectId=${projectId}`;
+        writeAuditLog({
+          timestamp: new Date().toISOString(),
+          tool: "start_launch",
+          method: "POST",
+          url,
+          projectKey,
+          payload: { templateLaunchId: template.launchId, parameterCount: Object.keys(mergedPayload).length },
+        });
+
+        const response = await reportingClient.startLaunchBuild(template.launchId, projectId, mergedPayload);
+        const newLaunchId = typeof response.id === "number" ? response.id : undefined;
+
+        const lines = [
+          `✅ Build triggered from template launch ${template.launchName} (ID ${template.launchId}).`,
+        ];
+        if (newLaunchId != null) {
+          lines.push(`New launch ID: ${newLaunchId}`);
+          lines.push(`${baseUrl}/projects/${projectKey}/automation-launches/${newLaunchId}`);
+        } else {
+          lines.push(`Response: ${JSON.stringify(response).slice(0, 300)}`);
+        }
+
+        return {
+          content: [{
+            type: "text" as const,
+            text: lines.join("\n") + steeringHint("start_launch", { id: newLaunchId ?? template.launchId }),
+          }],
+        };
+      } catch (error: any) {
+        const permMsg = formatStartLaunchPermissionError(error);
+        return {
+          content: [{
+            type: "text" as const,
+            text: permMsg ?? `❌ Error in start_launch: ${error.message}`,
+          }],
+        };
+      }
+    }
+  );
+
   const FileRef = z.union([
     z.object({ fileUuid: z.string().uuid().describe("UUID of a previously uploaded file") }),
     z.object({ file_path: z.string().min(1).describe("Absolute path to a local file to upload automatically") }),
@@ -4894,11 +5461,11 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
     {
       description: `🔧 (Beta) Create a new Test Case in a Zebrunner project.
 Requires Engineer role or higher in the target project.
-Available automation states and priorities can be discovered via list_automation_states and list_priorities tools.
-Custom field keys must be systemName values (not display names) from list_custom_fields.
+Available automation states and priorities can be discovered via adv_get_automation_states and adv_get_automation_priorities tools (the project's project_fields_layout resource also exposes them).
+Custom field keys must use systemName values (not display names) — discover them via the zebrunner://projects/{project_key}/fields resource or via the official Zebrunner MCP list_custom_fields tool when dual-MCP.
 Attachments accept either { fileUuid } for pre-uploaded files or { file_path } for local files (uploaded automatically).
 Optionally, pass source_case_key to pre-populate fields from an existing test case (explicit args override source values). When copying, the source test case URL is automatically prepended to the description for traceability.
-SAFETY: All created test cases are forced to draft=true regardless of the provided value. Review it and update manually or use update_test_case to publish when ready.
+SAFETY: All created test cases are forced to draft=true regardless of the provided value. Review it and update manually or use adv_update_test_case to publish when ready.
 Use dry_run: true to preview the raw payload without any validation.
 Pass review: true to run a quality review against project rules after creation.
 TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + confirmation_token. 2) After user approval, call with ONLY confirm: true and the confirmation_token (optionally review: true). The full payload is stored server-side — do NOT re-send other fields.`,
@@ -5264,7 +5831,7 @@ Requires Engineer role or higher in the target project.
 Auto-detects the endpoint: numeric identifier → /test-cases/{id}, string identifier → /test-cases/key:{key}.
 Both use PATCH — only provided fields are updated.
 Attachments accept either { fileUuid } for pre-uploaded files or { file_path } for local files (uploaded automatically).
-⚠️ IMPORTANT: 'steps' and 'requirements' are atomic — providing a non-null list replaces ALL existing items. To add a single step, first retrieve the current steps via get_test_case_by_key and include all of them in the update.
+⚠️ IMPORTANT: 'steps' and 'requirements' are atomic — providing a non-null list replaces ALL existing items. To add a single step, first retrieve the current steps via adv_get_test_case_by_key and include all of them in the update.
 TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + confirmation_token. 2) After user approval, call with ONLY confirm: true and the confirmation_token (optionally review: true). The full payload is stored server-side — do NOT re-send other fields.`,
       inputSchema: UpdateTestCaseSchema,
       annotations: {
@@ -6303,6 +6870,10 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       launchId: z.number().int().positive().describe("Launch ID (e.g., 118685)"),
       includeLaunchDetails: z.boolean().default(true).describe("Include detailed launch information"),
       includeTestSessions: z.boolean().default(true).describe("Include test sessions data"),
+      includeJobParameters: z.boolean().default(false).describe(
+        "Include CI job parameters from Jenkins Build Now dialog (suite path, build/locale/test_run_rules defaults). " +
+        "Jenkins integration only — not available for Launch Launchers."
+      ),
       format: z.enum(['compact', 'dto', 'json', 'string']).default('compact').describe("Output format"),
       chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
         "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
@@ -7525,12 +8096,12 @@ if (args.format === 'raw') {
   server.registerTool(
     "about_mcp_tools",
     {
-      description: "📚 Discover Zebrunner MCP capabilities: tools summary/detail, prompts catalog (/commands), resources catalog (@data). Use mode='summary' for a full overview including tool, prompt, and resource counts.",
+      description: "📚 Discover Advanced Zebrunner MCP Server capabilities: tools summary/detail, prompts catalog (/commands), resources catalog (@data), or dual-MCP routing guidance. Use mode='summary' for a full overview, or mode='routing' for the table that explains when to prefer the official `zebrunner` MCP vs this server when both are connected.",
       inputSchema: {
-        mode: z.enum(["summary", "tool", "prompts", "resources", "metrics"]).default("summary")
-          .describe("summary: full overview (tools + prompts + resources counts); tool: detailed view for one tool; prompts: list all /prompts; resources: list all @resources; metrics: session tool usage stats"),
+        mode: z.enum(["summary", "tool", "prompts", "resources", "metrics", "routing"]).default("summary")
+          .describe("summary: full overview (tools + prompts + resources counts); tool: detailed view for one tool; prompts: list all /prompts; resources: list all @resources; metrics: session tool usage stats; routing: dual-MCP routing guide (official zebrunner vs Advanced Zebrunner MCP Server)"),
         tool_name: z.string().optional()
-          .describe("Tool name for mode='tool', e.g. analyze_test_execution_video"),
+          .describe("Tool name for mode='tool', e.g. adv_analyze_test_execution_video"),
         include_examples: z.boolean().default(true)
           .describe("Include example prompts (applies to summary and tool modes)"),
         include_token_estimates: z.boolean().default(true)
@@ -7582,6 +8153,69 @@ if (args.format === 'raw') {
         if (args.mode === "metrics") {
           const header = `MCP version: ${snapshot.mcpVersion}\n\n`;
           return { content: [{ type: "text" as const, text: header + toolMetrics.getSummaryMarkdown() }] };
+        }
+
+        if (args.mode === "routing") {
+          const routing = buildMcpRoutingContent() as {
+            title: string;
+            summary: string;
+            servers: Array<{
+              config_key: string;
+              display_name: string;
+              url?: string;
+              tool_prefix?: string;
+              best_for: string[];
+            }>;
+            tool_name_collisions: string[];
+            naming: { primary_form: string; legacy_alias: string; removal_target: string };
+            semantic_warnings: Array<{ tool: string; official_meaning: string; advanced_meaning: string }>;
+            helpful_resources: string[];
+          };
+
+          const lines: string[] = [];
+          lines.push(`# ${routing.title}`);
+          lines.push("");
+          lines.push(`MCP version: ${snapshot.mcpVersion}`);
+          lines.push("");
+          lines.push(routing.summary);
+          lines.push("");
+          lines.push("## When to use which server");
+          lines.push("");
+          for (const srv of routing.servers) {
+            const headerBits = [`**\`${srv.config_key}\`** — ${srv.display_name}`];
+            if (srv.url) headerBits.push(`URL: \`${srv.url}\``);
+            if (srv.tool_prefix) headerBits.push(`Tool prefix: \`${srv.tool_prefix}\``);
+            lines.push(`### ${headerBits[0]}`);
+            for (const extra of headerBits.slice(1)) lines.push(`- ${extra}`);
+            lines.push("");
+            lines.push("Best for:");
+            for (const item of srv.best_for) lines.push(`- ${item}`);
+            lines.push("");
+          }
+          lines.push("## Tool-name collisions (both servers expose the same name)");
+          lines.push("");
+          for (const collision of routing.tool_name_collisions) {
+            lines.push(`- \`${collision}\` → on this server: \`adv_${collision}\` (with \`${collision}\` kept as deprecated alias).`);
+          }
+          lines.push("");
+          lines.push("## Naming policy");
+          lines.push(`- Primary form: ${routing.naming.primary_form}`);
+          lines.push(`- Legacy alias: ${routing.naming.legacy_alias}`);
+          lines.push(`- ${routing.naming.removal_target}`);
+          lines.push("");
+          if (routing.semantic_warnings.length > 0) {
+            lines.push("## Semantic warnings");
+            for (const sw of routing.semantic_warnings) {
+              lines.push(`- \`${sw.tool}\``);
+              lines.push(`  - Official MCP: ${sw.official_meaning}`);
+              lines.push(`  - Advanced MCP: ${sw.advanced_meaning}`);
+            }
+            lines.push("");
+          }
+          lines.push("## More info");
+          for (const ref of routing.helpful_resources) lines.push(`- ${ref}`);
+
+          return { content: [{ type: "text" as const, text: lines.join("\n") }] };
         }
 
         const toolsSummary = markdownForAllTools(snapshot, {
@@ -7682,16 +8316,33 @@ if (args.format === 'raw') {
         if (args.chart && args.chart !== 'none') {
           const rows: any[] = Array.isArray(data) ? data : [];
           if (rows.length > 0) {
+            const statusCounts = parseWidgetStatusCounts(rows);
+            if (statusCounts) {
+              const chartLabel = args.milestone.length > 0
+                ? args.milestone.join(', ')
+                : String(args.platform ?? args.project);
+              const chartConfig: ChartConfig = {
+                type: args.chart_type !== 'auto' ? args.chart_type : 'stacked_bar',
+                title: `Platform Results (${args.period})`,
+                labels: [chartLabel],
+                datasets: buildStackedStatusChartDatasets(statusCounts),
+              };
+              return buildChartResponse(
+                chartConfig,
+                args.chart as 'png' | 'html' | 'text',
+                `Platform results for ${args.period}`,
+              );
+            }
+
             const sampleKeys = Object.keys(rows[0]);
             debugLog("Platform chart: row keys", sampleKeys);
 
-            // Auto-discover label column: first column whose value is a non-numeric string
+            // Column-oriented widget rows (multi-platform table)
             const labelKey = sampleKeys.find(k => {
               const v = rows[0][k];
               return typeof v === 'string' && isNaN(Number(v));
             }) ?? sampleKeys[0];
 
-            // Auto-discover numeric dataset columns (passed, failed, skipped, etc.)
             const numericKeys = sampleKeys.filter(k => {
               if (k === labelKey) return false;
               const v = rows[0][k];
@@ -10790,6 +11441,9 @@ async function main() {
     const { createTokenStore } = await import('./http/token-store.js');
     tokenStore = createTokenStore() ?? undefined;
 
+    const { createOAuthFlowStore } = await import('./http/oauth-flow-store.js');
+    const oauthFlowStore = createOAuthFlowStore();
+
     const mcpServerUrl = process.env.MCP_SERVER_URL ?? `http://localhost:${port}`;
 
     // --- Mode 3: Self-service OAuth (no Okta) ---
@@ -10807,6 +11461,7 @@ async function main() {
         serverUrl: mcpServerUrl,
         zebrunnerBaseUrl: ZEBRUNNER_URL,
         jwtSecret,
+        oauthFlowStore,
       });
       oauthProvider = provider;
       verifyBearer = async (token: string) => {
@@ -10834,7 +11489,7 @@ async function main() {
 
       if (oktaConfig) {
         const { createMcpOAuthProvider } = await import('./http/mcp-oauth-provider.js');
-        const provider = createMcpOAuthProvider(oktaConfig, tokenStore, ZEBRUNNER_URL);
+        const provider = createMcpOAuthProvider(oktaConfig, tokenStore, ZEBRUNNER_URL, oauthFlowStore);
         oauthProvider = provider;
 
         const { createOktaBearerVerifier } = await import('./http/oauth-provider.js');

@@ -28,17 +28,17 @@ function extractServerTools(serverSource: string): string[] {
   return tools;
 }
 
-describe("Tool Registry Coverage (62 tools)", () => {
+describe("Tool Registry Coverage (64 tools)", () => {
   it("ensures every registered server tool has smoke coverage metadata", () => {
     const root = getProjectRoot();
     const serverSource = fs.readFileSync(path.join(root, "src", "server.ts"), "utf-8");
     const serverTools = extractServerTools(serverSource);
 
-    assert.equal(serverTools.length, 62, "server.ts should register exactly 62 tools");
-    assert.equal(new Set(serverTools).size, 62, "all registered tools should be unique");
+    assert.equal(serverTools.length, 64, "server.ts should register exactly 64 tools");
+    assert.equal(new Set(serverTools).size, 64, "all registered tools should be unique");
 
     const coverageKeys = Object.keys(TOOL_SMOKE_INPUTS);
-    assert.equal(coverageKeys.length, 62, "smoke coverage map should include 62 tools");
+    assert.equal(coverageKeys.length, 64, "smoke coverage map should include 64 tools");
 
     const missingCoverage = serverTools.filter(tool => !(tool in TOOL_SMOKE_INPUTS));
     assert.deepEqual(missingCoverage, [], `missing smoke coverage for: ${missingCoverage.join(", ")}`);
@@ -63,20 +63,27 @@ describe("Tool Registry Coverage (62 tools)", () => {
 });
 
 describe("Critical Tool Intelligence Checks", () => {
-  it("loads snapshot and includes newly added about tool", () => {
+  it("loads snapshot and includes newly added about tool under adv_ form", () => {
     const snapshot = loadToolIntelSnapshot();
     assert.ok(snapshot.mcpVersion && snapshot.mcpVersion !== "unknown", "snapshot should include MCP version");
     assert.ok(snapshot.tools.length >= 54, "tool intel snapshot should include all tools");
-    assert.ok(snapshot.tools.some(tool => tool.name === "about_mcp_tools"), "about_mcp_tools should be present in snapshot");
+    assert.ok(
+      snapshot.tools.some(tool => tool.name === "adv_about_mcp_tools"),
+      "adv_about_mcp_tools should be present in snapshot (v9.0.0 adv_ prefix is mandatory)"
+    );
   });
 
-  it("provides non-empty token estimates for critical tools", () => {
+  it("provides non-empty token estimates for critical tools (both adv_ and legacy forms)", () => {
     const critical = [
+      "adv_analyze_test_failure",
+      "adv_detailed_analyze_launch_failures",
+      "adv_analyze_test_execution_video",
+      "adv_generate_weekly_regression_stability_report",
+      "adv_about_mcp_tools",
+      // legacy-name lookups still resolve thanks to tokenEstimateForTool's
+      // automatic adv_ prefix stripping, in case prompts pass the old form.
       "analyze_test_failure",
-      "detailed_analyze_launch_failures",
-      "analyze_test_execution_video",
-      "generate_weekly_regression_stability_report",
-      "about_mcp_tools"
+      "about_mcp_tools",
     ];
     for (const tool of critical) {
       const estimate = tokenEstimateForTool(tool);
@@ -109,7 +116,7 @@ describe("Critical Tool Intelligence Checks", () => {
 
   it("includes MCP version in tool-detail output", () => {
     const snapshot = loadToolIntelSnapshot();
-    const markdown = markdownForToolDetails(snapshot, "about_mcp_tools", {
+    const markdown = markdownForToolDetails(snapshot, "adv_about_mcp_tools", {
       includeExamples: true,
       includeTokenEstimates: true,
       includeRoleBenefits: true
@@ -120,7 +127,7 @@ describe("Critical Tool Intelligence Checks", () => {
 
 // ── Tool Annotations Coverage ─────────────────────────────────────────────────
 
-describe("Tool Annotations Coverage (60 tools)", () => {
+describe("Tool Annotations Coverage (63 tools)", () => {
   const root = getProjectRoot();
   const serverSource = fs.readFileSync(path.join(root, "src", "server.ts"), "utf-8");
 
@@ -129,6 +136,8 @@ describe("Tool Annotations Coverage (60 tools)", () => {
     "update_test_suite",
     "manage_test_run",
     "import_launch_results_to_test_run",
+    "rerun_launch_failures",
+    "start_launch",
     "create_test_case",
     "update_test_case",
   ]);
@@ -154,7 +163,7 @@ describe("Tool Annotations Coverage (60 tools)", () => {
     while ((match = toolsRegex.exec(serverSource)) !== null) {
       allTools.push(match[1]);
     }
-    assert.equal(allTools.length, 62, "should have 62 registered tools");
+    assert.equal(allTools.length, 64, "should have 64 registered tools");
 
     const missing: string[] = [];
     for (const tool of allTools) {
@@ -164,7 +173,7 @@ describe("Tool Annotations Coverage (60 tools)", () => {
     assert.deepEqual(missing, [], `tools missing annotations: ${missing.join(", ")}`);
   });
 
-  it("all 54 read-only tools have readOnlyHint: true", () => {
+  it("all 55 read-only tools have readOnlyHint: true", () => {
     const toolsRegex = /server\.registerTool\(\s*\n\s*"([^"]+)"/g;
     let match: RegExpExecArray | null;
     const errors: string[] = [];
@@ -178,7 +187,7 @@ describe("Tool Annotations Coverage (60 tools)", () => {
     assert.deepEqual(errors, [], `read-only tools missing readOnlyHint: true: ${errors.join(", ")}`);
   });
 
-  it("all 6 mutation tools have readOnlyHint: false", () => {
+  it("all 8 mutation tools have readOnlyHint: false", () => {
     for (const tool of MUTATION_TOOLS) {
       const annotations = extractAnnotationsForTool(serverSource, tool);
       assert.ok(annotations, `${tool} should have annotations`);
@@ -213,6 +222,20 @@ describe("Tool Annotations Coverage (60 tools)", () => {
     assert.ok(annotations);
     assert.equal(annotations!.destructiveHint, true, "import tool should be destructive (overrides results)");
   });
+
+  it("rerun_launch_failures has destructiveHint: true", () => {
+    const annotations = extractAnnotationsForTool(serverSource, "rerun_launch_failures");
+    assert.ok(annotations);
+    assert.equal(annotations!.destructiveHint, true, "rerun tool should be destructive (triggers CI)");
+    assert.equal(annotations!.idempotentHint, false, "rerun tool should not be idempotent");
+  });
+
+  it("start_launch has destructiveHint: true", () => {
+    const annotations = extractAnnotationsForTool(serverSource, "start_launch");
+    assert.ok(annotations);
+    assert.equal(annotations!.destructiveHint, true, "start_launch should be destructive (triggers CI)");
+    assert.equal(annotations!.idempotentHint, false, "start_launch should not be idempotent");
+  });
 });
 
 // ── markdownForPrompts / markdownForResources formatting ──────────────────────
@@ -244,7 +267,7 @@ describe("markdownForPrompts formatting", () => {
   const md = markdownForPrompts(prompts, "7.2.2");
 
   it("includes header and version", () => {
-    assert.ok(md.includes("# Zebrunner MCP Prompts"));
+    assert.ok(md.includes("# Advanced Zebrunner MCP — Prompts"));
     assert.ok(md.includes("MCP version: 7.2.2"));
   });
 
@@ -275,7 +298,7 @@ describe("markdownForResources formatting", () => {
   const md = markdownForResources(resources, "7.2.2");
 
   it("includes header and version", () => {
-    assert.ok(md.includes("# Zebrunner MCP Resources"));
+    assert.ok(md.includes("# Advanced Zebrunner MCP — Resources"));
     assert.ok(md.includes("MCP version: 7.2.2"));
   });
 

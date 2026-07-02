@@ -8,7 +8,12 @@
 import { ZebrunnerReportingClient } from "../api/reporting-client.js";
 import { EnhancedZebrunnerClient } from "../api/enhanced-client.js";
 import { ZebrunnerReportingToolHandlers } from "./reporting-tools.js";
-import { buildParamsConfig, getTemplate, type WidgetSqlCaller } from "../utils/widget-sql.js";
+import {
+  buildParamsConfig,
+  getTemplate,
+  parseWidgetStatusCounts,
+  type WidgetSqlCaller,
+} from "../utils/widget-sql.js";
 import { getConfig } from "../utils/config-loader.js";
 
 import {
@@ -34,6 +39,7 @@ import { generatePassRateReport } from "./reports/pass-rate-report.js";
 import { generateRuntimeReport } from "./reports/runtime-report.js";
 import { generateExecutiveReport } from "./reports/executive-report.js";
 import { generateReleaseReadinessReport } from "./reports/release-readiness.js";
+import { noMilestoneLaunchesMessage } from "./reports/pass-rate-display.js";
 
 export { type ReportInput, type ReportOutput } from "./reports/types.js";
 
@@ -130,6 +136,28 @@ export class ReportHandler implements ReportContext {
   // ── Shared Fetch Methods ──────────────────────────────────────────────
 
   async fetchPassRate(ctx: ProjectContext, period: string, milestone?: string): Promise<PassRateData> {
+    const result = await this.fetchPassRateOnce(ctx, period, milestone);
+
+    if (milestone && result.total === 0) {
+      console.error(
+        `⚠️ [fetchPassRate] ${ctx.alias}: no launches assigned to milestone "${milestone}" — ` +
+        `pass rate omitted (not 0%)`
+      );
+      return {
+        ...result,
+        noMilestoneLaunches: true,
+        milestoneNote: noMilestoneLaunchesMessage(milestone),
+      };
+    }
+
+    return result;
+  }
+
+  private async fetchPassRateOnce(
+    ctx: ProjectContext,
+    period: string,
+    milestone?: string,
+  ): Promise<PassRateData> {
     const params = buildParamsConfig({
       period,
       milestone: milestone ? [milestone] : [],
@@ -146,98 +174,60 @@ export class ReportHandler implements ReportContext {
     let passed = 0, failed = 0, skipped = 0, knownIssue = 0, aborted = 0;
     let dataSource: 'widget_sql' | 'launches_fallback' = 'widget_sql';
 
-    if (rows.length > 0) {
-      const allKeys = Object.keys(rows[0]);
-
-      // Classify every column using explicit name table first, then substring fallback.
-      const classify = (key: string): 'passed' | 'failed' | 'skipped' | 'knownIssue' | 'aborted' | null => {
-        const kl = key.toLowerCase().replace(/[\s_-]+/g, '');
-
-        const exactMap: Record<string, 'passed' | 'failed' | 'skipped' | 'knownIssue' | 'aborted'> = {
-          passed: 'passed',
-          failed: 'failed',
-          skipped: 'skipped',
-          aborted: 'aborted',
-          knownissue: 'knownIssue',
-          known_issue: 'knownIssue',
-          inprogress: 'knownIssue',
-          queued: 'skipped',
-        };
-        if (exactMap[kl]) return exactMap[kl];
-
-        if (kl.includes('pass')) return 'passed';
-        if (kl.includes('fail')) return 'failed';
-        if (kl.includes('skip')) return 'skipped';
-        if (kl.includes('known') || kl.includes('issue')) return 'knownIssue';
-        if (kl.includes('abort')) return 'aborted';
-        return null;
-      };
-
-      const columnMap = new Map<string, 'passed' | 'failed' | 'skipped' | 'knownIssue' | 'aborted'>();
-      const unmappedColumns: string[] = [];
-
-      for (const k of allKeys) {
-        const cat = classify(k);
-        if (cat) {
-          columnMap.set(k, cat);
-        } else {
-          // Check if value is numeric — only flag numeric columns as unmapped
-          const v = rows[0][k];
-          const isNumeric = typeof v === 'number' || (typeof v === 'string' && !isNaN(Number(v)) && v !== '');
-          if (isNumeric) unmappedColumns.push(k);
-        }
-      }
-
-      if (unmappedColumns.length > 0) {
-        console.error(
-          `⚠️ [fetchPassRate] Unmapped numeric columns for project ${ctx.alias}: [${unmappedColumns.join(', ')}]. ` +
-          `Mapped: ${JSON.stringify(Object.fromEntries(columnMap))}`
-        );
-      }
-
-      for (const row of rows) {
-        for (const [k, cat] of columnMap) {
-          const val = parseInt(row[k] ?? '0', 10) || 0;
-          if (cat === 'passed') passed += val;
-          else if (cat === 'failed') failed += val;
-          else if (cat === 'skipped') skipped += val;
-          else if (cat === 'knownIssue') knownIssue += val;
-          else if (cat === 'aborted') aborted += val;
-        }
-      }
-
+    const widgetCounts = parseWidgetStatusCounts(rows);
+    if (widgetCounts) {
+      passed = widgetCounts.passed;
+      failed = widgetCounts.failed;
+      skipped = widgetCounts.skipped;
+      knownIssue = widgetCounts.knownIssue;
+      aborted = widgetCounts.aborted;
       console.error(
-        `📊 [fetchPassRate] ${ctx.alias}: ${rows.length} row(s), ` +
-        `columns=[${[...columnMap.entries()].map(([k, v]) => `${k}->${v}`).join(', ')}], ` +
+        `📊 [fetchPassRate] ${ctx.alias}: parsed ${rows.length} widget row(s), ` +
         `passed=${passed} failed=${failed} skipped=${skipped} knownIssue=${knownIssue} aborted=${aborted}`
       );
-    } else {
+    }
+
+    const widgetTotal = passed + failed + skipped + knownIssue + aborted;
+    if (widgetTotal === 0) {
       dataSource = 'launches_fallback';
-      console.error(`⚠️ [fetchPassRate] No widget rows for ${ctx.alias}, falling back to launches API (pageSize=50)`);
-
-      const launches = await this.reportingClient.getLaunches(ctx.projectId, {
-        pageSize: 50,
-        milestone,
-      });
-      const items = launches.items || [];
-
-      if (items.length === 0) {
-        console.error(`⚠️ [fetchPassRate] Launches API also returned 0 items for ${ctx.alias}`);
-      }
-
-      for (const l of items) {
-        passed += l.passed || 0;
-        failed += l.failed || 0;
-        skipped += l.skipped || 0;
-        aborted += l.aborted || 0;
-        // knownIssue is not available on launch summary items
-      }
-
+      const reason = rows.length === 0
+        ? 'no widget rows'
+        : 'widget rows did not yield status counts';
       console.error(
-        `📊 [fetchPassRate] ${ctx.alias} (launches fallback, ${items.length} launches): ` +
-        `passed=${passed} failed=${failed} skipped=${skipped} aborted=${aborted} ` +
-        `(knownIssue not available in launches API)`
+        `⚠️ [fetchPassRate] ${ctx.alias}: ${reason}, falling back to launches API`
       );
+
+      let page = 1;
+      let totalPages = 1;
+      let launchCount = 0;
+      while (page <= totalPages) {
+        const launches = await this.reportingClient.getLaunches(ctx.projectId, {
+          page,
+          pageSize: 100,
+          milestone,
+        });
+        totalPages = launches._meta?.totalPages ?? 1;
+        const items = launches.items || [];
+        launchCount += items.length;
+
+        for (const l of items) {
+          passed += l.passed || 0;
+          failed += l.failed || 0;
+          skipped += l.skipped || 0;
+          aborted += l.aborted || 0;
+        }
+        page += 1;
+      }
+
+      if (launchCount === 0) {
+        console.error(`⚠️ [fetchPassRate] Launches API returned 0 items for ${ctx.alias}`);
+      } else {
+        console.error(
+          `📊 [fetchPassRate] ${ctx.alias} (launches fallback, ${launchCount} launches): ` +
+          `passed=${passed} failed=${failed} skipped=${skipped} aborted=${aborted} ` +
+          `(knownIssue not available in launches API)`
+        );
+      }
     }
 
     const total = passed + failed + skipped + knownIssue + aborted;
@@ -245,10 +235,15 @@ export class ReportHandler implements ReportContext {
     const totalExclKnown = total - knownIssue;
     const passRateExclKnown = totalExclKnown > 0 ? Math.round((passed / totalExclKnown) * 1000) / 10 : 0;
 
-    if (total === 0) {
+    if (total === 0 && milestone) {
       console.error(
-        `⚠️ [fetchPassRate] ${ctx.alias}: total=0 → passRate=0%. ` +
-        `Data source: ${dataSource}, period="${period}", milestone="${milestone ?? 'none'}"`
+        `⚠️ [fetchPassRate] ${ctx.alias}: total=0 for milestone="${milestone}" ` +
+        `(data source: ${dataSource}) — will mark as no launches on milestone`
+      );
+    } else if (total === 0) {
+      console.error(
+        `⚠️ [fetchPassRate] ${ctx.alias}: total=0 for period="${period}" ` +
+        `(data source: ${dataSource})`
       );
     }
 

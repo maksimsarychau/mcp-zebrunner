@@ -4,7 +4,7 @@ This guide covers end-to-end testing of Mode 4 (Okta OAuth + per-user Zebrunner 
 
 ## Prerequisites
 
-- Okta OIDC Web Application configured (see `docs/HOSTING_GUIDE.md`)
+- Okta OIDC Web Application configured (see [README Usage Methods](../README.md#-usage-methods) — Mode 4 / Okta OAuth)
 - Okta Authorization Server ("default") with Access Policy + Rule
 - Docker or local Node.js environment
 - `.env` file with Mode 4 configuration

@@ -166,23 +166,57 @@ export function loadToolIntelSnapshot(): ToolIntelSnapshot {
     // keep "unknown"
   }
 
+  // Expand the canonical tools.json list (still keyed by legacy names) into
+  // the dual-name registry the server actually exposes at runtime:
+  //   - "adv_<name>"  — primary / canonical (description carries the
+  //                     [Advanced Zebrunner MCP] prefix).
+  //   - "<name>"      — deprecated alias, included ONLY when the legacy-alias
+  //                     env var is set (matches src/server.ts behaviour).
+  // The TOOLS_CATALOG.md is keyed by legacy names; the catalog entry is shared
+  // by both rows so descriptions and examples stay consistent.
+  const ADV_PREFIX = "adv_";
+  const ADV_DESC_PREFIX = "[Advanced Zebrunner MCP] ";
+  const LEGACY_ALIAS_TRUTHY = ["1", "true", "yes", "on"];
+  const registerLegacyAliases = LEGACY_ALIAS_TRUTHY.includes(
+    (process.env.ZEBRUNNER_REGISTER_LEGACY_ALIASES ?? "").trim().toLowerCase()
+  );
+  const expanded: ToolCatalogEntry[] = [];
+  for (const tool of tools) {
+    const legacyName = tool.name;
+    const advName = `${ADV_PREFIX}${legacyName}`;
+    const catalog = catalogByTool.get(legacyName);
+    const baseDescription = catalog?.description || tool.description || "";
+    const category = catalog?.category ?? null;
+    const examples = catalog?.examples ?? [];
+
+    expanded.push({
+      name: advName,
+      description: `${ADV_DESC_PREFIX}${baseDescription}`,
+      category,
+      examples
+    });
+    if (registerLegacyAliases) {
+      expanded.push({
+        name: legacyName,
+        description: `[deprecated alias — use ${advName}] ${baseDescription}`,
+        category,
+        examples
+      });
+    }
+  }
+
   return {
     mcpVersion,
-    tools: tools.map(tool => {
-      const catalog = catalogByTool.get(tool.name);
-      return {
-        name: tool.name,
-        description: catalog?.description || tool.description,
-        category: catalog?.category ?? null,
-        examples: catalog?.examples ?? []
-      };
-    }),
+    tools: expanded,
     roleBenefits
   };
 }
 
 export function tokenEstimateForTool(toolName: string): string {
-  return TOKEN_RANGE_BY_TOOL[toolName] || TOKEN_RANGE_DEFAULT;
+  // Token estimates are keyed by the legacy (un-prefixed) tool name; if the
+  // caller passes the `adv_<name>` form, strip the prefix before looking up.
+  const legacyName = toolName.startsWith("adv_") ? toolName.slice("adv_".length) : toolName;
+  return TOKEN_RANGE_BY_TOOL[toolName] || TOKEN_RANGE_BY_TOOL[legacyName] || TOKEN_RANGE_DEFAULT;
 }
 
 export function markdownForAllTools(snapshot: ToolIntelSnapshot, options: {
@@ -191,7 +225,9 @@ export function markdownForAllTools(snapshot: ToolIntelSnapshot, options: {
   includeRoleBenefits: boolean;
 }): string {
   const lines: string[] = [];
-  lines.push("# Using Zebrunner MCP: Tools Summary");
+  lines.push("# Using the Advanced Zebrunner MCP Server: Tools Summary");
+  lines.push("");
+  lines.push("Tools are registered under two names: the recommended `adv_<name>` form (e.g. `adv_create_test_case`) and a deprecated legacy alias (`<name>`) kept for backward compatibility. Prefer the `adv_` form in new prompts and scripts.");
   lines.push("");
   lines.push(`MCP version: ${snapshot.mcpVersion}`);
   lines.push("");
@@ -254,7 +290,7 @@ export function markdownForToolDetails(snapshot: ToolIntelSnapshot, toolName: st
   }
 
   const lines: string[] = [];
-  lines.push(`# Using Zebrunner MCP: Tool Details`);
+  lines.push(`# Using the Advanced Zebrunner MCP Server: Tool Details`);
   lines.push("");
   lines.push(`MCP version: ${snapshot.mcpVersion}`);
   lines.push("");
@@ -290,7 +326,7 @@ export function markdownForToolDetails(snapshot: ToolIntelSnapshot, toolName: st
 
 export function markdownForPrompts(prompts: PromptMeta[], mcpVersion: string): string {
   const lines: string[] = [];
-  lines.push("# Zebrunner MCP Prompts");
+  lines.push("# Advanced Zebrunner MCP — Prompts");
   lines.push("");
   lines.push(`MCP version: ${mcpVersion}`);
   lines.push("");
@@ -324,7 +360,7 @@ export function markdownForPrompts(prompts: PromptMeta[], mcpVersion: string): s
 
 export function markdownForResources(resources: ResourceMeta[], mcpVersion: string): string {
   const lines: string[] = [];
-  lines.push("# Zebrunner MCP Resources");
+  lines.push("# Advanced Zebrunner MCP — Resources");
   lines.push("");
   lines.push(`MCP version: ${mcpVersion}`);
   lines.push("");

@@ -30,6 +30,7 @@ describe('regression guards', () => {
         const allowed =
           /typeof /.test(line) || // dto-fallback ternary
           /\$\{/.test(line) || // interpolated into human-facing prose
+          /DRY RUN|[Pp]ayload:/.test(line) || // human-facing dry-run previews
           /console\.error/.test(line) ||
           /debugLog/.test(line);
         if (!allowed) offenders.push(`${path.relative(SRC, f)}:${i + 1}`);

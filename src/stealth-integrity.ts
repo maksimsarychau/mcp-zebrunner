@@ -305,6 +305,11 @@ function evaluatePayload(payload: ControlPayload, currentVersion: string): { ok:
 }
 
 export async function stealthIntegrityCheck(): Promise<void> {
+  // Local E2E / dev after source edits — official releases keep signing enabled.
+  if (process.env.MCP_SKIP_INTEGRITY_CHECK === 'true') {
+    return;
+  }
+
   const root = getProjectRoot();
 
   // If no signature file, skip silently (dev mode / pre-signing / npm without it)

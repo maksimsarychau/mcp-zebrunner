@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { getSelfAuthProvider } from './selfauth-provider.js';
 import { getMcpOAuthProvider } from './mcp-oauth-provider.js';
 import { normalizeZebrunnerUrl, toWebUrl } from './url-utils.js';
+import { queryParamString } from './query-params.js';
 
 export interface LoginRouterOptions {
   zebrunnerBaseUrl?: string;
@@ -24,12 +25,13 @@ export function createLoginRouter(opts: LoginRouterOptions): Router {
   const { zebrunnerBaseUrl, zebrunnerUrlFromEnv } = opts;
 
   router.get('/', (req: Request, res: Response) => {
-    const state = req.query.state as string | undefined;
-    const error = req.query.error as string | undefined;
-    const email = req.query.email as string | undefined;
-    const zebrunnerUrl = req.query.zebrunner_url as string | undefined;
-    const oktaAccessToken = req.query.okta_access_token as string | undefined;
-    const oktaIdToken = req.query.okta_id_token as string | undefined;
+    const query = req.query as Record<string, unknown>;
+    const state = queryParamString(query, 'state');
+    const error = queryParamString(query, 'error');
+    const email = queryParamString(query, 'email');
+    const zebrunnerUrl = queryParamString(query, 'zebrunner_url');
+    const oktaAccessToken = queryParamString(query, 'okta_access_token');
+    const oktaIdToken = queryParamString(query, 'okta_id_token');
     if (!state) {
       res.status(400).send('Missing state parameter. Please restart the login flow from your MCP client.');
       return;
@@ -70,7 +72,7 @@ export function createLoginRouter(opts: LoginRouterOptions): Router {
       return;
     }
 
-    const pending = provider.getPendingAuth(state);
+    const pending = await provider.getPendingAuth(state);
     if (!pending) {
       res.status(400).send('Invalid or expired state. Please restart the login flow from your MCP client.');
       return;
@@ -183,17 +185,23 @@ export function createLoginRouter(opts: LoginRouterOptions): Router {
       });
 
       const ourCode = randomBytes(32).toString('hex');
-      provider.storeIssuedCode(ourCode, {
-        ...(selfAuth
-          ? { email: userKey }
-          : { oktaAccessToken: okta_access_token ?? '', oktaIdToken: okta_id_token }),
+      const issuedCommon = {
         mcpClientId: pending.mcpClientId,
         redirectUri: pending.redirectUri,
         codeChallenge: pending.codeChallenge,
         createdAt: Date.now(),
-      } as any);
+      };
+      if (selfAuth) {
+        await selfAuth.storeIssuedCode(ourCode, { ...issuedCommon, email: userKey });
+      } else {
+        await oktaAuth!.storeIssuedCode(ourCode, {
+          ...issuedCommon,
+          oktaAccessToken: okta_access_token ?? '',
+          oktaIdToken: okta_id_token,
+        });
+      }
 
-      provider.deletePendingAuth(state);
+      await provider.deletePendingAuth(state);
 
       const clientRedirect = new URL(pending.redirectUri);
       clientRedirect.searchParams.set('code', ourCode);
@@ -278,7 +286,7 @@ document.querySelector('form').addEventListener('submit', function(e) {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Zebrunner MCP — Sign In</title>
+  <title>Advanced Zebrunner MCP Server — Sign In</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: system-ui, -apple-system, sans-serif; background: #f5f5f7; display: flex; justify-content: center; align-items: center; min-height: 100vh; color: #1d1d1f; }

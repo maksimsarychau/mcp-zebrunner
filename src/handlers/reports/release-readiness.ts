@@ -75,7 +75,13 @@ async function assessPlatform(
   try {
     passRate = await ctx.fetchPassRate(pCtx, period, milestone);
     const target = targets[pCtx.alias.toLowerCase()] ?? targets[pCtx.alias] ?? 90;
-    if (passRate.passRate >= target) {
+    if (passRate.noMilestoneLaunches) {
+      checks.push({
+        name: 'Pass Rate',
+        status: 'WARN',
+        detail: passRate.milestoneNote ?? `No launches assigned to milestone "${milestone ?? ''}"`,
+      });
+    } else if (passRate.passRate >= target) {
       checks.push({ name: 'Pass Rate', status: 'PASS', detail: `${passRate.passRate}% (target: ${target}%)` });
     } else if (passRate.passRateExclKnown >= target) {
       checks.push({ name: 'Pass Rate', status: 'WARN', detail: `${passRate.passRate}% raw (${passRate.passRateExclKnown}% excl. known issues) — target: ${target}%` });
@@ -87,7 +93,7 @@ async function assessPlatform(
   }
 
   // 2. Unresolved Failures
-  if (passRate) {
+  if (passRate && !passRate.noMilestoneLaunches) {
     const unresolvedFailures = passRate.failed - passRate.knownIssue;
     if (unresolvedFailures <= 0) {
       checks.push({ name: 'Unresolved Failures', status: 'PASS', detail: `All ${passRate.failed} failures have linked issues` });

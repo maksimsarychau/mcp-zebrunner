@@ -1,7 +1,14 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { argKeyPresent, normalizeArgKey } from "./eval-arg-aliases.js";
 import type { EvalConfig } from "./eval-config.js";
 import type { EvalPrompt } from "./eval-prompts.js";
 import type { TokenUsage } from "./eval-report.js";
+import {
+  type EvalLlmClient,
+  type EvalLlmResponse,
+  checkRefusalFromResponse,
+  firstToolCall,
+  getJudgeTools,
+} from "./eval-llm-client.js";
 
 export interface JudgeScore {
   relevance: number;
@@ -15,80 +22,47 @@ export interface JudgeResult {
   tokenUsage?: TokenUsage;
 }
 
-const JUDGE_TOOL = {
-  name: "score_output",
-  description: "Score the quality of the MCP tool output",
-  input_schema: {
-    type: "object" as const,
-    properties: {
-      relevance: {
-        type: "number",
-        description: "1-5: Does the output answer the user's question?",
-      },
-      completeness: {
-        type: "number",
-        description: "1-5: Are all expected data points present?",
-      },
-      format: {
-        type: "number",
-        description: "1-5: Is the output well-structured and readable?",
-      },
-      reasoning: {
-        type: "string",
-        description: "Brief explanation of the scores",
-      },
-    },
-    required: ["relevance", "completeness", "format", "reasoning"],
-  },
-};
-
 /**
- * Use Claude as a judge to score tool output quality.
- * Returns both the score and the token usage from the judge LLM call.
+ * Use the configured LLM as a judge to score tool output quality.
  */
 export async function judgeToolOutput(
-  client: Anthropic,
+  client: EvalLlmClient,
   config: EvalConfig,
   prompt: EvalPrompt,
   populatedPrompt: string,
-  toolOutput: string
+  toolOutput: string,
 ): Promise<JudgeResult> {
   const expectedPatterns = prompt.expectedOutputPatterns?.length
     ? `\nExpected output patterns: ${prompt.expectedOutputPatterns.join(", ")}`
     : "";
 
-  const response = await client.messages.create({
+  const response = await client.chatWithTools({
     model: config.judgeModel,
-    max_tokens: 512,
+    maxTokens: 512,
     temperature: 0,
-    tools: [JUDGE_TOOL],
-    tool_choice: { type: "tool" as const, name: "score_output" },
-    messages: [
-      {
-        role: "user",
-        content:
-          `You are an evaluation judge for a QA automation tool. Score the tool output on a 1-5 scale.\n\n` +
-          `User prompt: "${populatedPrompt}"\n` +
-          `Tool: ${prompt.expectedTools.join(", ")}${expectedPatterns}\n\n` +
-          `Tool output (first 3000 chars):\n${toolOutput.slice(0, 3000)}`,
-      },
-    ],
+    tools: getJudgeTools(config),
+    toolChoice: { name: "score_output" },
+    userMessage:
+      `You are an evaluation judge for a QA automation tool. Score the tool output on a 1-5 scale.\n\n` +
+      `User prompt: "${populatedPrompt}"\n` +
+      `Tool: ${prompt.expectedTools.join(", ")}${expectedPatterns}\n\n` +
+      `Tool output (first 3000 chars):\n${toolOutput.slice(0, 3000)}`,
   });
 
   const tokenUsage: TokenUsage = {
-    inputTokens: response.usage?.input_tokens ?? 0,
-    outputTokens: response.usage?.output_tokens ?? 0,
+    inputTokens: response.usage.inputTokens,
+    outputTokens: response.usage.outputTokens,
   };
 
-  const toolUse = response.content.find((b) => b.type === "tool_use");
-  if (!toolUse || toolUse.type !== "tool_use") {
+  const toolUse = firstToolCall(response);
+  if (!toolUse) {
     return {
       score: { relevance: 1, completeness: 1, format: 1, reasoning: "Judge failed to produce scores" },
       tokenUsage,
     };
   }
 
-  const input = toolUse.input as Record<string, unknown>;
+  const input = toolUse.input;
   return {
     score: {
       relevance: clampScore(input.relevance),
@@ -106,31 +80,29 @@ function clampScore(val: unknown): number {
   return Math.max(1, Math.min(5, Math.round(n)));
 }
 
-/**
- * Check if a tool name is in the expected list.
- */
-export function checkToolSelection(
-  selectedTool: string | undefined,
-  expectedTools: string[]
-): boolean {
-  if (!selectedTool) return false;
-  return expectedTools.includes(selectedTool);
+/** Canonical v9 tool name (`adv_*`). Accepts legacy names for alias-enabled servers. */
+export function canonicalToolName(name: string): string {
+  return name.startsWith("adv_") ? name : `adv_${name}`;
 }
 
-/**
- * Check if the tool arguments contain the expected keys.
- * Uses case-insensitive matching and common aliases (project_key/projectKey).
- */
+export function checkToolSelection(
+  selectedTool: string | undefined,
+  expectedTools: string[],
+): boolean {
+  if (!selectedTool || expectedTools.length === 0) return false;
+  const selected = canonicalToolName(selectedTool);
+  return expectedTools.some((e) => canonicalToolName(e) === selected);
+}
+
 export function checkArgKeys(
   args: Record<string, unknown>,
-  expectedKeys: string[]
+  expectedKeys: string[],
 ): { pass: boolean; missing: string[] } {
   const normalizedArgs = normalizeArgKeys(args);
   const missing: string[] = [];
 
   for (const key of expectedKeys) {
-    const normalized = normalizeKey(key);
-    if (!(normalized in normalizedArgs)) {
+    if (!argKeyPresent(normalizedArgs, key)) {
       missing.push(key);
     }
   }
@@ -138,12 +110,9 @@ export function checkArgKeys(
   return { pass: missing.length === 0, missing };
 }
 
-/**
- * Check if output text matches expected patterns (regex).
- */
 export function checkOutputPatterns(
   output: string,
-  patterns: string[]
+  patterns: string[],
 ): { pass: boolean; failedPatterns: string[] } {
   const failed: string[] = [];
   for (const pat of patterns) {
@@ -154,39 +123,34 @@ export function checkOutputPatterns(
   return { pass: failed.length === 0, failedPatterns: failed };
 }
 
-/**
- * Check that the LLM did NOT select any tool (expected for out-of-scope, ambiguous, prompt injection).
- * Returns true if the LLM correctly refused to use a tool.
- */
+/** @deprecated Use checkRefusalFromResponse on EvalLlmResponse */
 export function checkRefusal(
-  response: { content: Array<{ type: string; [key: string]: any }> }
+  response: { content: Array<{ type: string; name?: string; [key: string]: unknown }> },
 ): { refused: boolean; selectedTool?: string } {
   const toolUse = response.content.find((b) => b.type === "tool_use");
   if (!toolUse) {
     return { refused: true };
   }
-  return { refused: false, selectedTool: toolUse.name };
+  return { refused: false, selectedTool: toolUse.name as string | undefined };
 }
 
-/**
- * Check that the LLM did NOT select any of the forbidden tools.
- * For tool confusion tests where the LLM should pick the RIGHT tool, not the confused one.
- */
+export function checkRefusalResponse(response: EvalLlmResponse): { refused: boolean; selectedTool?: string } {
+  return checkRefusalFromResponse(response);
+}
+
 export function checkForbiddenToolNotUsed(
   selectedTool: string | undefined,
-  forbiddenTools: string[]
+  forbiddenTools: string[],
 ): { pass: boolean; violatedTool?: string } {
   if (!selectedTool) return { pass: true };
-  if (forbiddenTools.includes(selectedTool)) {
+  const selected = canonicalToolName(selectedTool);
+  const forbidden = forbiddenTools.some((t) => canonicalToolName(t) === selected);
+  if (forbidden) {
     return { pass: false, violatedTool: selectedTool };
   }
   return { pass: true };
 }
 
-/**
- * Check that the MCP tool output indicates an error (for invalid data tests).
- * The tool should return an error message, not successful data.
- */
 export function checkErrorOutput(mcpOutput: string): {
   hasError: boolean;
   details: string;
@@ -218,14 +182,10 @@ export function checkErrorOutput(mcpOutput: string): {
   return { hasError: false, details: "No error indicators found in output" };
 }
 
-function normalizeKey(key: string): string {
-  return key.toLowerCase().replace(/_/g, "");
-}
-
 function normalizeArgKeys(args: Record<string, unknown>): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(args)) {
-    result[normalizeKey(k)] = v;
+    result[normalizeArgKey(k)] = v;
   }
   return result;
 }

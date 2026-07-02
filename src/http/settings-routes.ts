@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import type { TokenStore } from './token-store.js';
 import { normalizeZebrunnerUrl, toWebUrl } from './url-utils.js';
+import { queryParamString } from './query-params.js';
 
 export interface SettingsRouterOptions {
   tokenStore: TokenStore;
@@ -21,9 +22,10 @@ export function createSettingsRouter(opts: SettingsRouterOptions): Router {
   const { tokenStore, zebrunnerBaseUrl, zebrunnerUrlFromEnv } = opts;
 
   router.get('/', async (req: Request, res: Response) => {
-    const email = req.query.email as string | undefined;
-    const success = req.query.success as string | undefined;
-    const error = req.query.error as string | undefined;
+    const query = req.query as Record<string, unknown>;
+    const email = queryParamString(query, 'email');
+    const success = queryParamString(query, 'success');
+    const error = queryParamString(query, 'error');
 
     if (!email) {
       res.status(400).send('Missing email parameter.');
@@ -176,7 +178,7 @@ function SETTINGS_HTML(opts: {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Zebrunner MCP — Settings</title>
+  <title>Advanced Zebrunner MCP Server — Settings</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: system-ui, -apple-system, sans-serif; background: #f5f5f7; display: flex; justify-content: center; align-items: center; min-height: 100vh; color: #1d1d1f; }

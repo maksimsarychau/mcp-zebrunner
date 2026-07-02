@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Zebrunner MCP Server includes a sophisticated **3-tier intelligent rules system** that transforms how you work with test cases. This system provides automated validation, improvement suggestions, and intelligent code generation based on configurable quality standards.
+The Advanced Zebrunner MCP Server includes a sophisticated **3-tier intelligent rules system** that transforms how you work with test cases. This system provides automated validation, improvement suggestions, and intelligent code generation based on configurable quality standards.
 
 ## The Three-Tier Architecture
 
@@ -377,4 +377,4 @@ This intelligent rules system transforms test case management from a manual, sub
 
 ---
 
-*Last Updated: April 2026*
+*Last Updated: v9.1.0 - July 2026*

@@ -2,7 +2,8 @@ import 'dotenv/config';
 import { describe, it, before, after } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { existsSync } from 'fs';
-import { spawn, ChildProcess } from 'child_process';
+import { spawn, type ChildProcess } from 'child_process';
+import { E2E_SERVER_ENV, waitForServerReady } from './server-startup.js';
 
 /**
  * End-to-End tests for the Zebrunner MCP Server
@@ -86,37 +87,13 @@ describe('Zebrunner MCP Server E2E Tests', () => {
     
     // Start the server process
     serverProcess = spawn('node', ['dist/server.js'], {
-      env: {
-        ...process.env,
-        DEBUG: 'false'
-      },
-      stdio: ['pipe', 'pipe', 'pipe']
+      env: E2E_SERVER_ENV,
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
 
-    // Wait for server to be ready
-    return new Promise<void>((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        reject(new Error('Server startup timeout after 10 seconds'));
-      }, 10000);
-
-      const handleOutput = (data: Buffer) => {
-        const output = data.toString();
-        if (output.includes('Zebrunner MCP Server started')) {
-          serverReady = true;
-          clearTimeout(timeout);
-          console.log('✅ Server started successfully');
-          resolve();
-        }
-      };
-
-      serverProcess.stdout?.on('data', handleOutput);
-      serverProcess.stderr?.on('data', handleOutput);
-
-      serverProcess.on('error', (error) => {
-        clearTimeout(timeout);
-        reject(error);
-      });
-    });
+    await waitForServerReady(serverProcess, 30_000);
+    serverReady = true;
+    console.log('✅ Server started successfully');
   });
 
   after(() => {

@@ -159,6 +159,74 @@ describe('Auth Middleware', () => {
       assert.equal(res.statusCode, 401);
     });
 
+    it('returns 401 when verifyBearer returns empty username', async () => {
+      const mw = createAuthMiddleware({
+        authMode: 'okta',
+        verifyBearer: async () => ({ username: '  ', zebrunnerToken: 'zeb-token' }),
+      });
+      const req = mockReq({ authorization: 'Bearer jwt' });
+      const res = mockRes();
+      let nextCalled = false;
+
+      await mw(req, res, () => { nextCalled = true; });
+
+      assert.ok(!nextCalled);
+      assert.equal(res.statusCode, 401);
+    });
+
+    it('returns 401 when verifyBearer returns empty zebrunner token', async () => {
+      const mw = createAuthMiddleware({
+        authMode: 'okta',
+        verifyBearer: async () => ({ username: 'user', zebrunnerToken: '' }),
+      });
+      const req = mockReq({ authorization: 'Bearer jwt' });
+      const res = mockRes();
+      let nextCalled = false;
+
+      await mw(req, res, () => { nextCalled = true; });
+
+      assert.ok(!nextCalled);
+      assert.equal(res.statusCode, 401);
+    });
+
+    it('returns 401 when verifyBearer returns invalid baseUrl', async () => {
+      const mw = createAuthMiddleware({
+        authMode: 'okta',
+        verifyBearer: async () => ({
+          username: 'user',
+          zebrunnerToken: 'zeb-token',
+          baseUrl: 'not-a-url',
+        }),
+      });
+      const req = mockReq({ authorization: 'Bearer jwt' });
+      const res = mockRes();
+      let nextCalled = false;
+
+      await mw(req, res, () => { nextCalled = true; });
+
+      assert.ok(!nextCalled);
+      assert.equal(res.statusCode, 401);
+    });
+
+    it('accepts valid baseUrl from verifyBearer', async () => {
+      const mw = createAuthMiddleware({
+        authMode: 'okta',
+        verifyBearer: async () => ({
+          username: 'user',
+          zebrunnerToken: 'zeb-token',
+          baseUrl: 'https://zebrunner.example.com',
+        }),
+      });
+      const req = mockReq({ authorization: 'Bearer jwt' });
+      const res = mockRes();
+      let nextCalled = false;
+
+      await mw(req, res, () => { nextCalled = true; });
+
+      assert.ok(nextCalled);
+      assert.equal(req.auth?.baseUrl, 'https://zebrunner.example.com');
+    });
+
     it('rejects header auth when authMode=okta', async () => {
       const mw = createAuthMiddleware({ authMode: 'okta' });
       const req = mockReq({

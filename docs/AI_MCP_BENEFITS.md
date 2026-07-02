@@ -6,7 +6,7 @@
 
 ## Why MCP for Test Management?
 
-The **Model Context Protocol (MCP)** is an open standard that connects AI assistants directly to external tools and data sources. MCP Zebrunner uses this protocol to bridge Zebrunner's test management platform with AI assistants like Claude, Cursor, ChatGPT, and IntelliJ IDEA — replacing manual dashboard navigation with natural-language queries.
+The **Model Context Protocol (MCP)** is an open standard that connects AI assistants directly to external tools and data sources. The **Advanced Zebrunner MCP Server** (npm package `mcp-zebrunner`) uses this protocol to bridge Zebrunner's test management platform with AI assistants like Claude, Cursor, ChatGPT, and IntelliJ IDEA — replacing manual dashboard navigation with natural-language queries. It is designed to coexist with Zebrunner's official hosted MCP (beta), exposing every tool under the `adv_<name>` prefix to avoid name collisions.
 
 ---
 
@@ -115,20 +115,20 @@ Available across multiple channels:
 
 ---
 
-## 60 Tools Across Three Domains
+## 63 Tools Across Three Domains
 
 **Test Case Management:** retrieve, search, filter, validate, improve, **create**, and **update** test cases and suites.
 
 **Mutation & Safety:** create/update test cases and suites with two-step confirmation, audit logging, forced draft, and source traceability.
 
-**Reporting & Analytics:** launch analysis, failure forensics, video analysis, weekly reports, bug analysis, and Jira ticket generation.
+**Reporting & Analytics:** launch analysis, failure forensics, video analysis, weekly reports, bug analysis, Jenkins Build Now / rerun-failures, and Jira ticket generation.
 
 See the full [Tools Catalog](../TOOLS_CATALOG.md) for details.
 
 ---
 
-**Bottom line:** MCP Zebrunner turns test data into actionable intelligence — accessible to any role, through natural language, in seconds instead of hours.
+**Bottom line:** the Advanced Zebrunner MCP Server turns test data into actionable intelligence — accessible to any role, through natural language, in seconds instead of hours.
 
 ---
 
-*Last Updated: April 2026*
+*Last Updated: v9.1.0 - July 2026*

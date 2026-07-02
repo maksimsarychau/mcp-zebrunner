@@ -1,4 +1,4 @@
-# MCP Zebrunner: Executive Summary
+# Advanced Zebrunner MCP Server — Executive Summary
 
 **Author:** Maksim Sarychau
 
@@ -6,7 +6,7 @@
 
 ## Overview
 
-MCP Zebrunner is a bridge between Zebrunner and AI assistants (Claude, Cursor, ChatGPT, IntelliJ IDEA) that enables natural‑language access to test data, analysis, and reporting. It reduces manual navigation, standardizes output, and accelerates decision‑making across QA, engineering, and leadership.
+The Advanced Zebrunner MCP Server (npm package `mcp-zebrunner`) is a bridge between Zebrunner and AI assistants (Claude, Cursor, ChatGPT, IntelliJ IDEA) that enables natural‑language access to test data, analysis, and reporting. It reduces manual navigation, standardizes output, and accelerates decision‑making across QA, engineering, and leadership. It complements Zebrunner's official hosted MCP (beta) and can be installed side-by-side with it; the two servers expose disjoint tool namespaces thanks to the `adv_` prefix used by this server.
 
 ---
 
@@ -107,7 +107,7 @@ MCP Zebrunner provides a natural‑language interface for test management. Inste
 - ⚠️ **MCP Registry** — publication in progress
 
 ### Scale
-- **60 tools** across test management, mutation, and reporting  
+- **63 tools** across test management, mutation, and reporting  
 - **Multiple integrations** — Claude Desktop, Cursor, ChatGPT Desktop, IntelliJ IDEA, Docker  
 - **Rules engine** for quality validation  
 - **Multiple output formats** — JSON, Markdown, Jira‑ready
@@ -183,7 +183,7 @@ Planned enhancements:
 
 - **Installation Guide:** [INSTALL-GUIDE.md](../INSTALL-GUIDE.md)
 - **npm Guide:** [MCP_NPM_INSTALLATION_GUIDE.md](../MCP_NPM_INSTALLATION_GUIDE.md)
-- **Docker Guide:** [DOCKER_USAGE.md](DOCKER_USAGE.md)
+- **Docker & Compose:** [README Usage Methods](../README.md#-usage-methods) — STDIO and HTTP modes; see [`docker-compose.yml`](../docker-compose.yml) and [`docker-compose.http.yml`](../docker-compose.http.yml) in the repo root.
 - **Full Tools Catalog:** [TOOLS_CATALOG.md](../TOOLS_CATALOG.md)
 - **Change Log:** [change-logs.md](../change-logs.md)
 
@@ -193,4 +193,4 @@ Planned enhancements:
 
 ---
 
-*Last Updated: April 2026*
+*Last Updated: v9.1.0 - July 2026*

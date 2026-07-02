@@ -1,0 +1,32 @@
+---
+description: Maintain a running implementation-notes log during every implementation session
+alwaysApply: true
+---
+
+# Implementation Notes Convention
+
+When implementing any non-trivial change in this repository (plans, refactors, multi-step features), keep `docs/IMPLEMENTATION_NOTES.md` up to date as a running log.
+
+## Required behavior
+
+- Before touching code on a new task, scan the latest entry in `docs/IMPLEMENTATION_NOTES.md` so you don't repeat or contradict prior decisions.
+- Append a **new dated section** for the current session:
+
+```
+## YYYY-MM-DD HH:MM — <short topic>
+```
+
+- Inside the section, include any of the following sub-sections that have content (skip the ones that don't):
+  - **Decisions outside the spec** — choices not nailed down by the plan/spec/user.
+  - **Plan deviations** — places where the plan was changed in practice, with reason.
+  - **Tradeoffs** — alternatives considered and why we picked the one we did.
+  - **Follow-ups deferred** — work intentionally postponed; link where it lives.
+  - **Heads-up for the user** — anything they need to know after the change lands.
+
+- Newest entry goes on top; never delete or rewrite past entries (history is the point).
+- Reference concrete file paths, tool names, or commit hashes when relevant so the entry stays grounded.
+
+## When to skip
+
+- Pure formatting fixes, typo corrections, trivial dependency bumps, or one-line config changes.
+- Read-only investigations that do not change behavior (unless they uncover something worth recording).
