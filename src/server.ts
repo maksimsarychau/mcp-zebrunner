@@ -7113,7 +7113,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         "When true, returns only the total count of launches without full data. " +
         "Uses API metadata for an efficient single-request count. Bypasses MCP response size limits."
       ),
-      format: z.enum(['raw', 'formatted']).default('formatted').describe("Output format - 'raw' for full API response, 'formatted' for user-friendly display"),
+      format: z.enum(['compact', 'raw', 'formatted']).default('compact').describe("Output format - 'compact' (default) trimmed structured JSON per launch (token-sane, agent-facing); 'raw' full API response; 'formatted' emoji-decorated human display."),
       chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
         "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
       ),
@@ -7171,6 +7171,26 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
               text: JSON.stringify(launchesData)
             }]
           };
+        }
+
+        // Compact (default): trimmed structured JSON — no emoji, no per-launch prose.
+        if (args.format === 'compact') {
+          const { items, _meta } = launchesData;
+          const compact = {
+            project: args.project,
+            pagination: { page: args.page, totalPages: _meta?.totalPages, total: _meta?.total },
+            launches: (items || []).map((l: any) => ({
+              id: l.id,
+              name: l.name,
+              status: l.status,
+              milestone: l.milestone?.name,
+              build: l.buildNumber,
+              startedAt: l.startedAt,
+              finishedAt: l.finishedAt,
+              results: { total: l.total || 0, passed: l.passed || 0, failed: l.failed || 0, skipped: l.skipped || 0 },
+            })),
+          };
+          return { content: [{ type: "text" as const, text: JSON.stringify(compact) }] };
         }
 
         // Formatted output
