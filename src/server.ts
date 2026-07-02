@@ -11,7 +11,7 @@ import { EnhancedZebrunnerClient } from "./api/enhanced-client.js";
 import { ZebrunnerReportingClient, type FieldsLayout } from "./api/reporting-client.js";
 import { ZebrunnerReportingToolHandlers } from "./handlers/reporting-tools.js";
 import { ReportHandler } from "./handlers/report-handler.js";
-import { FormatProcessor } from "./utils/formatter.js";
+import { FormatProcessor, projectTestCases, projectSuites, type DetailLevel } from "./utils/formatter.js";
 import { HierarchyProcessor } from "./utils/hierarchy.js";
 import { RulesParser } from "./utils/rules-parser.js";
 import { TestGenerator } from "./utils/test-generator.js";
@@ -1099,6 +1099,8 @@ function createConfiguredServer(): McpServer {
       project_key: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
       project_id: z.number().int().positive().optional().describe("Project ID (alternative to project_key)"),
       format: z.enum(['compact', 'dto', 'json', 'string']).default('compact').describe("Output format"),
+      detail: z.enum(['summary', 'full']).default('summary').describe("summary (default) trims each suite to id/title/name/parentSuiteId/rootSuiteId/testCasesCount; full returns every field."),
+      fields: z.array(z.string()).optional().describe("Explicit top-level field allowlist to project (wins over `detail`)."),
       include_hierarchy: z.boolean().default(false).describe("Include hierarchy information"),
       page: z.number().int().nonnegative().default(0).describe("Page number (0-based)"),
       size: z.number().int().positive().max(1000).default(50).describe("Page size (configurable via MAX_PAGE_SIZE env var)"),
@@ -1117,7 +1119,7 @@ function createConfiguredServer(): McpServer {
       },
     },
     async (args) => {
-      const { project_key, project_id, format, include_hierarchy, page, size, page_token, count_only, include_clickable_links } = args;
+      const { project_key, project_id, format, detail, fields, include_hierarchy, page, size, page_token, count_only, include_clickable_links } = args;
 
       try {
         if (!project_key && !project_id) {
@@ -1188,7 +1190,7 @@ function createConfiguredServer(): McpServer {
 
         // Prepare response with pagination metadata
         const response = {
-          items: enhancedSuites,
+          items: projectSuites(enhancedSuites, detail as DetailLevel, fields),
           _meta: suites._meta,
           pagination: {
             currentPage: page,
@@ -1230,6 +1232,8 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
       project_key: z.string().min(1).optional().describe("Project key (e.g., 'MCP', 'MCP'). Auto-detected from case_key if it contains a key pattern like 'MCP-29'. Required when case_key is a numeric ID."),
       case_key: z.string().min(1).describe("Test case key (e.g., 'MCP-29') OR numeric test case ID (e.g., '86280'). When providing a numeric ID, project_key is required."),
       format: z.enum(['compact', 'dto', 'json', 'string', 'markdown']).default('compact').describe("Output format"),
+      detail: z.enum(['summary', 'full']).default('full').describe("full (default for this deep-read tool) returns all raw fields — use it as a data source for create/update. summary trims to id/key/title/priority/automationState/deprecated."),
+      fields: z.array(z.string()).optional().describe("Explicit top-level field allowlist to project (wins over `detail`). e.g. ['key','title','automationState']."),
       include_debug: z.boolean().default(false).describe("Include debug information in markdown"),
       include_suite_hierarchy: z.boolean().default(false).describe("Include featureSuiteId and rootSuiteId with suite hierarchy path"),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI"),
@@ -1246,7 +1250,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
       },
     },
     async (args) => {
-      const { case_key, format, include_debug, include_suite_hierarchy, include_clickable_links, include_execution_history, include_history, history_filter, history_limit } = args;
+      const { case_key, format, detail, fields, include_debug, include_suite_hierarchy, include_clickable_links, include_execution_history, include_history, history_filter, history_limit } = args;
 
       const isNumericId = /^\d+$/.test(case_key.trim());
 
@@ -1356,8 +1360,9 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
         if (executionHistory) {
           (enhancedTestCase as any).executionHistory = executionHistory;
         }
+        const projected = projectTestCases(enhancedTestCase, detail as DetailLevel, fields);
         const fieldsLayout = await getFieldsLayoutForProject(project_key);
-        const formattedData = FormatProcessor.format(enhancedTestCase, format, fieldsLayout);
+        const formattedData = FormatProcessor.format(projected, format, fieldsLayout);
 
         return {
           content: [{
@@ -1523,6 +1528,8 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
       field_value: z.string().optional().describe("Value to match against the field. Required for 'exact', 'contains', and 'regex' modes. Not needed for 'exists' mode."),
       field_match: z.enum(["exact", "contains", "regex", "exists"]).default("exact").describe("Match mode: 'exact' (case-insensitive equality), 'contains' (substring), 'regex' (pattern), 'exists' (field is present and non-null)"),
       format: z.enum(['compact', 'dto', 'json', 'string', 'markdown']).default('compact').describe("Output format"),
+      detail: z.enum(['summary', 'full']).default('summary').describe("summary (default) returns id/key/title/priority/automationState/deprecated per case — enough to pick candidates, then get_test_case_by_key for full bodies. full returns every field."),
+      fields: z.array(z.string()).optional().describe("Explicit top-level field allowlist to project (wins over `detail`)."),
       page: z.number().int().nonnegative().default(0).describe("Page number (0-based)"),
       size: z.number().int().positive().max(100).default(100).describe("Page size (configurable via MAX_PAGE_SIZE env var)"),
       count_only: z.boolean().default(false).describe(
@@ -1559,6 +1566,8 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
         field_value,
         field_match,
         format,
+        detail,
+        fields,
         page,
         size,
         count_only,
@@ -1752,10 +1761,11 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
           }
         }
 
+        const projectedCases = projectTestCases(processedCases, detail as DetailLevel, fields);
         const hasMorePages = !!response._meta?.nextPageToken;
         const responseData: any = {
-          items: processedCases,
-          page_count: processedCases.length,
+          items: projectedCases,
+          page_count: projectedCases.length,
           has_more_pages: hasMorePages,
           _meta: {
             ...(response._meta || {}),
@@ -5754,6 +5764,8 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       suite_id: z.number().int().positive().describe("Suite ID to get test cases from"),
       include_steps: z.boolean().default(false).describe("Include detailed test steps for first few cases"),
       format: z.enum(['compact', 'dto', 'json', 'string', 'markdown']).default('compact').describe("Output format"),
+      detail: z.enum(['summary', 'full']).default('summary').describe("summary (default) trims each case to id/key/title/priority/automationState/deprecated; full returns every field. Use get_test_case_by_key for full bodies of the few you pick."),
+      fields: z.array(z.string()).optional().describe("Explicit top-level field allowlist to project (wins over `detail`)."),
       get_all: z.boolean().default(true).describe("Get all test cases (true) or paginated results (false)"),
       include_sub_suites: z.boolean().default(true).describe("Include test cases from sub-suites (if any)"),
       count_only: z.boolean().default(false).describe(
@@ -5775,7 +5787,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
     },
     async (args) => {
       try {
-        const { project_key, suite_id, include_steps, format, get_all, include_sub_suites, count_only, page, size, include_history, history_filter, history_limit } = args;
+        const { project_key, suite_id, include_steps, format, detail, fields, get_all, include_sub_suites, count_only, page, size, include_history, history_filter, history_limit } = args;
 
         debugLog("Smart test case retrieval by suite", { project_key, suite_id, include_steps, format, get_all, include_sub_suites, page, size });
 
@@ -6087,7 +6099,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
 
         const result = {
           metadata,
-          testCases
+          testCases: projectTestCases(testCases, detail as DetailLevel, fields)
         };
 
         const formattedData = FormatProcessor.format(result, format);

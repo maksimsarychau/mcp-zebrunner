@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { FormatProcessor } from '../../src/utils/formatter.js';
+import { FormatProcessor, projectTestCases, projectSuites } from '../../src/utils/formatter.js';
 
 describe('FormatProcessor', () => {
   describe('format method', () => {
@@ -242,5 +242,43 @@ describe('FormatProcessor', () => {
       const parsed = JSON.parse(result as string);
       assert.deepEqual(parsed, unknownObject);
     });
+  });
+});
+
+describe('projectTestCases / projectSuites', () => {
+  const tc = {
+    id: 1, key: 'ANDR-1', title: 'A case', priority: { name: 'High' },
+    automationState: { name: 'Automation Complete' }, deprecated: false,
+    description: '<p>huge body</p>', steps: [{ a: 1 }, { a: 2 }], customField: { x: 1 },
+  };
+
+  it('summary keeps only identifying/triage fields, drops steps/description', () => {
+    const out: any = projectTestCases(tc, 'summary');
+    assert.deepEqual(Object.keys(out).sort(), ['automationState', 'deprecated', 'id', 'key', 'priority', 'title']);
+    assert.equal(out.steps, undefined);
+    assert.equal(out.description, undefined);
+  });
+
+  it('full returns the object unchanged', () => {
+    const out: any = projectTestCases(tc, 'full');
+    assert.deepEqual(out, tc);
+  });
+
+  it('explicit fields wins over detail', () => {
+    const out: any = projectTestCases(tc, 'summary', ['key', 'title']);
+    assert.deepEqual(Object.keys(out).sort(), ['key', 'title']);
+  });
+
+  it('projects each element of an array', () => {
+    const out: any = projectTestCases([tc, tc], 'summary');
+    assert.equal(out.length, 2);
+    assert.equal(out[0].description, undefined);
+  });
+
+  it('projectSuites summary keeps suite identifying fields', () => {
+    const suite = { id: 9, title: 'Suite', name: 'Suite', parentSuiteId: 3, rootSuiteId: 1, testCasesCount: 12, extra: 'drop' };
+    const out: any = projectSuites(suite, 'summary');
+    assert.equal(out.extra, undefined);
+    assert.equal(out.testCasesCount, 12);
   });
 });

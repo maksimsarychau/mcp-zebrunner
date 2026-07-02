@@ -5,6 +5,62 @@ import type { FieldsLayout, FieldLayoutItem, TestCaseExecution } from "../api/re
 /**
  * Utility class for formatting output in different formats
  */
+/** Detail level for read-tool responses. */
+export type DetailLevel = 'summary' | 'full';
+
+/** Top-level fields kept by the test-case summary projection. */
+const SUMMARY_TESTCASE_FIELDS = [
+  'id',
+  'key',
+  'title',
+  'priority',
+  'automationState',
+  'deprecated',
+  'webUrl',
+] as const;
+
+/** Top-level fields kept by the suite summary projection. */
+const SUMMARY_SUITE_FIELDS = [
+  'id',
+  'title',
+  'name',
+  'parentSuiteId',
+  'rootSuiteId',
+  'testCasesCount',
+  'webUrl',
+] as const;
+
+function pickFields<T extends Record<string, any>>(obj: T, keys: readonly string[]): Partial<T> {
+  const out: Partial<T> = {};
+  for (const k of keys) {
+    if (obj != null && Object.prototype.hasOwnProperty.call(obj, k)) {
+      (out as any)[k] = obj[k];
+    }
+  }
+  return out;
+}
+
+/**
+ * Project a test case (or array of test cases) to a detail level / explicit field set.
+ * `fields` (when non-empty) wins over `detail`. `detail='summary'` keeps only identifying +
+ * triage fields (id/key/title/priority/automationState/deprecated/webUrl); `detail='full'`
+ * returns the object unchanged. Non-object inputs pass through untouched.
+ */
+export function projectTestCases<T>(data: T, detail: DetailLevel, fields?: string[]): T {
+  const keys = fields && fields.length > 0 ? fields : detail === 'summary' ? SUMMARY_TESTCASE_FIELDS : null;
+  if (!keys) return data;
+  const projectOne = (tc: any) => (tc && typeof tc === 'object' ? pickFields(tc, keys) : tc);
+  return (Array.isArray(data) ? data.map(projectOne) : projectOne(data)) as unknown as T;
+}
+
+/** Project a suite (or array of suites) — same contract as {@link projectTestCases}. */
+export function projectSuites<T>(data: T, detail: DetailLevel, fields?: string[]): T {
+  const keys = fields && fields.length > 0 ? fields : detail === 'summary' ? SUMMARY_SUITE_FIELDS : null;
+  if (!keys) return data;
+  const projectOne = (s: any) => (s && typeof s === 'object' ? pickFields(s, keys) : s);
+  return (Array.isArray(data) ? data.map(projectOne) : projectOne(data)) as unknown as T;
+}
+
 export class FormatProcessor {
   /**
    * Format data according to specified output format
