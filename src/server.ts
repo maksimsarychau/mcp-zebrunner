@@ -3565,6 +3565,8 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
         "When true, returns only the total count of suites without data. " +
         "Paginates internally to count all suites, but skips hierarchy processing and formatting."
       ),
+      detail: z.enum(['summary', 'full']).default('summary').describe("summary (default) trims each suite to id/title/name/parentSuiteId/rootSuiteId/testCasesCount; full returns every field."),
+      fields: z.array(z.string()).optional().describe("Explicit top-level field allowlist to project (wins over `detail`)."),
       format: z.enum(['compact', 'dto', 'json', 'string', 'markdown']).default('compact').describe("Output format")
     },
       annotations: {
@@ -3576,7 +3578,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
     },
     async (args) => {
       try {
-        const { project_key, include_hierarchy, count_only, format } = args;
+        const { project_key, include_hierarchy, count_only, detail, fields, format } = args;
 
         debugLog("Getting all TCM test case suites", { project_key, include_hierarchy, count_only });
 
@@ -3619,12 +3621,27 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
 
         console.error(`Found ${processedSuites.length} suites.`);
 
-        const formattedResult = FormatProcessor.format(processedSuites, format as any);
+        const projectedSuites = projectSuites(processedSuites, detail as DetailLevel, fields);
+        const formattedResult = FormatProcessor.format(projectedSuites, format as any);
+        const resultText = typeof formattedResult === 'string' ? formattedResult : JSON.stringify(formattedResult, null, 2);
+
+        const MAX_RESPONSE_BYTES = 900_000;
+        if (resultText.length > MAX_RESPONSE_BYTES) {
+          const arr = projectedSuites as any[];
+          const avgItemSize = resultText.length / Math.max(arr.length, 1);
+          const safeCount = Math.floor((MAX_RESPONSE_BYTES / avgItemSize) * 0.9);
+          const truncated = arr.slice(0, Math.max(safeCount, 1));
+          return { content: [{ type: "text" as const, text:
+            `Found ${arr.length} total suites for ${project_key}, returning first ${truncated.length} ` +
+            `(response truncated to stay under the MCP 1MB limit).\n` +
+            `Use count_only=true for just the count, or detail=summary (default) to shrink rows.\n\n${JSON.stringify(truncated)}`
+          }] };
+        }
 
         return {
           content: [{
             type: "text" as const,
-            text: typeof formattedResult === 'string' ? formattedResult : JSON.stringify(formattedResult, null, 2)
+            text: resultText
           }]
         };
 
@@ -5398,7 +5415,9 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       exclude_deprecated: z.boolean().default(false).describe("Exclude deprecated test cases from results"),
       exclude_draft: z.boolean().default(false).describe("Exclude draft test cases from results"),
       exclude_deleted: z.boolean().default(true).describe("Exclude deleted test cases from results (default: true)"),
-      max_results: z.number().int().positive().max(10000).default(5000).describe("Maximum number of results (configurable limit for performance)"),
+      max_results: z.number().int().positive().max(10000).default(200).describe("Maximum number of results (default 200; raise explicitly for full dumps — large values risk the MCP 1MB limit)."),
+      detail: z.enum(['summary', 'full']).default('summary').describe("summary (default) trims each case to id/key/title/priority/automationState/deprecated; full returns every field. Use count_only for metrics."),
+      fields: z.array(z.string()).optional().describe("Explicit top-level field allowlist to project (wins over `detail`)."),
       count_only: z.boolean().default(false).describe(
         "When true, returns only the total count without test case data. " +
         "Efficient for metrics collection -- avoids 1MB response limit on large projects."
@@ -5416,7 +5435,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
     },
     async (args) => {
       try {
-        const { project_key, format, include_clickable_links, exclude_deprecated, exclude_draft, exclude_deleted, max_results, count_only, include_history, history_filter, history_limit } = args;
+        const { project_key, format, include_clickable_links, exclude_deprecated, exclude_draft, exclude_deleted, max_results, detail, fields, count_only, include_history, history_filter, history_limit } = args;
 
         debugLog("Getting all TCM test cases", { project_key, include_clickable_links, max_results, count_only });
 
@@ -5532,7 +5551,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
             exclude_draft,
             exclude_deleted
           },
-          test_cases: enhancedTestCases
+          test_cases: projectTestCases(enhancedTestCases, detail as DetailLevel, fields)
         };
 
         if (include_history) {
@@ -5582,6 +5601,9 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
     inputSchema: {
       project_key: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
       format: z.enum(['compact', 'dto', 'json', 'string', 'markdown']).default('compact').describe("Output format"),
+      max_results: z.number().int().positive().max(10000).default(200).describe("Maximum number of results (default 200; raise explicitly for full dumps — large values risk the MCP 1MB limit)."),
+      detail: z.enum(['summary', 'full']).default('summary').describe("summary (default) trims each case to id/key/title/priority/automationState/deprecated (+ rootSuiteId); full returns every field."),
+      fields: z.array(z.string()).optional().describe("Explicit top-level field allowlist to project (wins over `detail`)."),
       count_only: z.boolean().default(false).describe(
         "When true, returns only the total count without test case data. " +
         "Skips hierarchy enrichment for maximum efficiency."
@@ -5596,9 +5618,9 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
     },
     async (args) => {
       try {
-        const { project_key, format, count_only } = args;
+        const { project_key, format, max_results, detail, fields, count_only } = args;
 
-        debugLog("Getting all TCM test cases with root suite ID", { project_key, count_only });
+        debugLog("Getting all TCM test cases with root suite ID", { project_key, count_only, max_results });
 
         if (count_only) {
           let totalCount = 0;
@@ -5637,6 +5659,10 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           pageToken = result._meta?.nextPageToken;
           pageCount++;
 
+          if (allTestCases.length >= max_results) {
+            allTestCases = allTestCases.slice(0, max_results);
+            break;
+          }
         } while (pageToken && pageCount < maxPages);
 
         // Get all suites for hierarchy processing using comprehensive method
@@ -5658,14 +5684,21 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
 
         console.error(`Added ${enrichedTestCases.length} test cases with root suite IDs.`);
 
-        const formattedResult = FormatProcessor.format(enrichedTestCases, format as any);
+        const summaryFields = ['id', 'key', 'title', 'priority', 'automationState', 'deprecated', 'webUrl', 'rootSuiteId'];
+        const projectedCases = projectTestCases(
+          enrichedTestCases,
+          detail as DetailLevel,
+          fields ?? (detail === 'summary' ? summaryFields : undefined),
+        );
+        const formattedResult = FormatProcessor.format(projectedCases, format as any);
         const resultText = typeof formattedResult === 'string' ? formattedResult : JSON.stringify(formattedResult, null, 2);
 
         const MAX_RESPONSE_BYTES = 900_000;
         if (resultText.length > MAX_RESPONSE_BYTES) {
-          const avgItemSize = resultText.length / enrichedTestCases.length;
+          const projectedArr = projectedCases as any[];
+          const avgItemSize = resultText.length / projectedArr.length;
           const safeCount = Math.floor(MAX_RESPONSE_BYTES / avgItemSize * 0.9);
-          const truncated = enrichedTestCases.slice(0, Math.max(safeCount, 1));
+          const truncated = projectedArr.slice(0, Math.max(safeCount, 1));
           const truncatedText = JSON.stringify(truncated);
           return { content: [{ type: "text" as const, text:
             `Found ${enrichedTestCases.length} total test cases with root suite IDs for ${project_key}, returning first ${truncated.length} ` +
@@ -5766,7 +5799,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       format: z.enum(['compact', 'dto', 'json', 'string', 'markdown']).default('compact').describe("Output format"),
       detail: z.enum(['summary', 'full']).default('summary').describe("summary (default) trims each case to id/key/title/priority/automationState/deprecated; full returns every field. Use get_test_case_by_key for full bodies of the few you pick."),
       fields: z.array(z.string()).optional().describe("Explicit top-level field allowlist to project (wins over `detail`)."),
-      get_all: z.boolean().default(true).describe("Get all test cases (true) or paginated results (false)"),
+      get_all: z.boolean().default(false).describe("Get all test cases across all pages (true) or a single paginated page (false, default — cheaper; raise page/size or set true for the full set)."),
       include_sub_suites: z.boolean().default(true).describe("Include test cases from sub-suites (if any)"),
       count_only: z.boolean().default(false).describe(
         "When true, returns only the total count of test cases in the suite without fetching data. " +
