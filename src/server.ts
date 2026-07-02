@@ -235,6 +235,59 @@ function debugLog(message: string, data?: unknown) {
   }
 }
 
+const DUP_CLUSTER_CAP = 20;
+const DUP_MATRIX_CAP = 20;
+
+/**
+ * Cap the JSON/dto payload of a duplicate-analysis result to match the markdown branch's
+ * limits: top-20 clusters, top-20 similarity pairs (and only when explicitly requested), and
+ * per-test-case `steps` bodies collapsed to a `stepCount`. Without this a single "successful"
+ * response could dump the full O(n^2) similarity matrix plus every step body (~225k tokens).
+ * Truncation markers (`<field>Truncated` / `similarityMatrixOmitted`) preserve the full counts.
+ */
+function capDuplicateAnalysisJson(result: any, includeSimilarityMatrix: boolean): any {
+  const capCluster = (c: any) => ({
+    ...c,
+    testCases: Array.isArray(c?.testCases)
+      ? c.testCases.map((tc: any) => {
+          if (tc && Array.isArray(tc.steps)) {
+            const { steps, ...rest } = tc;
+            return { ...rest, stepCount: steps.length };
+          }
+          return tc;
+        })
+      : c?.testCases,
+  });
+
+  const out: any = { ...result };
+  for (const key of ['clusters', 'semanticClusters', 'stepClusters']) {
+    if (Array.isArray(out[key])) {
+      const full = out[key];
+      out[key] = full.slice(0, DUP_CLUSTER_CAP).map(capCluster);
+      if (full.length > DUP_CLUSTER_CAP) {
+        out[`${key}Truncated`] = { shown: DUP_CLUSTER_CAP, total: full.length };
+      }
+    }
+  }
+
+  if (Array.isArray(out.similarityMatrix)) {
+    const total = out.similarityMatrix.length;
+    if (!includeSimilarityMatrix) {
+      delete out.similarityMatrix;
+      out.similarityMatrixOmitted = {
+        total,
+        hint: 'pass include_similarity_matrix=true to include (capped at top 20 pairs)',
+      };
+    } else {
+      out.similarityMatrix = out.similarityMatrix.slice(0, DUP_MATRIX_CAP);
+      if (total > DUP_MATRIX_CAP) {
+        out.similarityMatrixTruncated = { shown: DUP_MATRIX_CAP, total };
+      }
+    }
+  }
+  return out;
+}
+
 /** Enhanced error handling for experimental features */
 function handleExperimentalError(error: unknown, feature: string): string {
   const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -9493,7 +9546,7 @@ ${detailsInfo.map((detail, i) => {
           return {
             content: [{
               type: "text" as const,
-              text: JSON.stringify(enhancedResult)
+              text: JSON.stringify(capDuplicateAnalysisJson(enhancedResult, include_similarity_matrix))
             }]
           };
         }
@@ -9861,7 +9914,7 @@ ${detailsInfo.map((detail, i) => {
           return {
             content: [{
               type: "text" as const,
-              text: JSON.stringify(enhancedResult)
+              text: JSON.stringify(capDuplicateAnalysisJson(enhancedResult, include_similarity_matrix))
             }]
           };
         }
