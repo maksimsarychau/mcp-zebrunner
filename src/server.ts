@@ -7304,7 +7304,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         "When true, returns only the total count of matching launches without full data. " +
         "Uses API metadata for an efficient single-request count. Bypasses MCP response size limits."
       ),
-      format: z.enum(['raw', 'formatted']).default('formatted').describe("Output format - 'raw' for full API response, 'formatted' for user-friendly display"),
+      format: z.enum(['raw', 'formatted']).default('raw').describe("Output format - 'raw' (default) compact JSON, agent-facing; 'formatted' emoji-decorated human display"),
       chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
         "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
       ),
@@ -7626,7 +7626,7 @@ if (args.format === 'raw') {
         .describe("Override templateId if needed"),
       dashboardName: z.string().optional()
         .describe("Override dashboard title"),
-      format: z.enum(['raw', 'formatted']).default('formatted'),
+      format: z.enum(['raw', 'formatted']).default('raw'),
       chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
         "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
       ),
@@ -7766,7 +7766,7 @@ if (args.format === 'raw') {
       milestone: z.array(z.string())
         .default([])
         .describe("Optional MILESTONE filter, e.g., ['25.39.0'] for milestone filtering"),
-      format: z.enum(['raw', 'formatted']).default('formatted'),
+      format: z.enum(['raw', 'formatted']).default('raw'),
       chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
         "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
       ),
@@ -8517,7 +8517,7 @@ ${detailsInfo.map((detail, i) => {
         "When true, returns only the total count of milestones matching the status filter. " +
         "For 'all'/'completed' uses efficient API metadata; for 'incomplete'/'overdue' paginates to apply client-side filter."
       ),
-      format: z.enum(['raw', 'formatted']).default('formatted')
+      format: z.enum(['raw', 'formatted']).default('raw')
         .describe("Output format: raw API response or formatted data")
     },
       annotations: {
@@ -8688,7 +8688,7 @@ ${detailsInfo.map((detail, i) => {
         .describe("Filter by starred projects (true=only starred, false=only non-starred, undefined=all)"),
       publiclyAccessible: z.boolean().optional()
         .describe("Filter by public accessibility (true=only public, false=only private, undefined=all)"),
-      format: z.enum(['raw', 'formatted']).default('formatted')
+      format: z.enum(['raw', 'formatted']).default('raw')
         .describe("Output format: raw API response or formatted data"),
       includePaginationInfo: z.boolean().default(false)
         .describe("Include pagination metadata from projects-limit endpoint")
@@ -8913,7 +8913,7 @@ ${detailsInfo.map((detail, i) => {
         "When true, paginates through all pages and returns only the total count of test runs without data. " +
         "Useful for metrics and dashboards. Bypasses MCP response size limits."
       ),
-      format: z.enum(['raw', 'formatted']).default('formatted'),
+      format: z.enum(['raw', 'formatted']).default('raw'),
       chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
         "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
       ),
@@ -9116,7 +9116,7 @@ ${detailsInfo.map((detail, i) => {
       project: z.union([z.enum(["web","android","ios","api"]), z.string()])
         .default("web")
         .describe("Project alias ('web', 'android', 'ios', 'api') or project key"),
-      format: z.enum(['raw', 'formatted']).default('formatted'),
+      format: z.enum(['raw', 'formatted']).default('raw'),
       chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
         "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
       ),
@@ -9258,7 +9258,7 @@ ${detailsInfo.map((detail, i) => {
       project: z.union([z.enum(["web","android","ios","api"]), z.string()])
         .default("web")
         .describe("Project alias ('web', 'android', 'ios', 'api') or project key"),
-      format: z.enum(['raw', 'formatted']).default('formatted'),
+      format: z.enum(['raw', 'formatted']).default('raw'),
       chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
         "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
       ),
