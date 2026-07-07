@@ -11,6 +11,7 @@ const CLOUD_EVAL_PROMPT_IDS = [
   // v9.2 token-efficient reads — small models miss detail/format or pick list_test_suites
   "batch_get_test_cases.two_keys",
   "get_all_tcm_test_cases_by_project.compact_summary",
+  "get_all_tcm_test_cases_by_project.with_call_metrics",
   "get_test_cases_by_suite_smart.summary",
   "neg.confuse.batch_vs_single_fetch",
 
@@ -32,12 +33,14 @@ const CLOUD_EVAL_PROMPT_IDS = [
   "report.release_readiness",
   "neg.confuse.report_vs_launch",
   "get_platform_results_by_period.7days",
+  "get_platform_results_by_period.compact",
 
   // TCM hierarchy / root-suite routing
   "list_test_suites.hierarchy",
   "get_suite_hierarchy.full_tree",
   "get_suite_hierarchy.subtree",
   "get_root_suites.list",
+  "get_root_suites.compact",
   "get_all_tcm_test_cases_with_root_suite_id.enriched",
   "neg.confuse.suites_via_launch",
   "neg.confuse.single_suite_vs_report",

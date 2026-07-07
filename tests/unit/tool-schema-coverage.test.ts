@@ -143,5 +143,26 @@ describe("Tool Schema Coverage", () => {
     assert.ok(/include_examples\s*:/.test(aboutSchema), "about_mcp_tools should expose include_examples");
     assert.ok(/include_token_estimates\s*:/.test(aboutSchema), "about_mcp_tools should expose include_token_estimates");
     assert.ok(/include_role_benefits\s*:/.test(aboutSchema), "about_mcp_tools should expose include_role_benefits");
+    assert.ok(/metrics_breakdown\s*:/.test(aboutSchema), "about_mcp_tools should expose metrics_breakdown");
+    assert.ok(/metrics_reset\s*:/.test(aboutSchema), "about_mcp_tools should expose metrics_reset");
+  });
+
+  it("Tier 2 reporting tools expose compact in format enum", () => {
+    const source = readServerSource();
+    for (const toolName of [
+      "get_platform_results_by_period",
+      "get_top_bugs",
+      "get_project_milestones",
+      "get_available_projects",
+      "list_test_runs",
+      "get_test_run_by_id",
+      "list_test_run_test_cases",
+    ]) {
+      const schema = schemaBlockForTool(source, toolName);
+      assert.ok(
+        /format:\s*z\.enum\(\['raw',\s*'formatted',\s*'compact'\]/.test(schema ?? ""),
+        `${toolName} should include compact in format enum`,
+      );
+    }
   });
 });

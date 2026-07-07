@@ -9230,6 +9230,7 @@ ${detailsInfo.map((detail, i) => {
           };
         }
         if (args.format === 'raw') {
+          result = filteredMilestonesData;
         } else {
           // Format the data for better readability
           const milestones = filteredMilestonesData.items.map(milestone => {
@@ -9339,6 +9340,10 @@ ${detailsInfo.map((detail, i) => {
           };
         }
         if (args.format === 'raw') {
+          result = {
+            projects: projectsData,
+            ...(paginationInfo && { pagination: paginationInfo })
+          };
         } else {
           // Format the data for better readability
           const projects = projectsData.items.map(project => ({
@@ -9651,6 +9656,7 @@ ${detailsInfo.map((detail, i) => {
           };
         }
         if (args.format === 'raw') {
+          result = testRunsData;
         } else {
           // Formatted output
           const testRuns = testRunsData.items.map((run: any) => ({
@@ -9787,6 +9793,7 @@ ${detailsInfo.map((detail, i) => {
           };
         }
         if (args.format === 'raw') {
+          result = testRunData;
         } else {
           // Formatted output
           const run = testRunData.data;
@@ -9928,6 +9935,7 @@ ${detailsInfo.map((detail, i) => {
           };
         }
         if (args.format === 'raw') {
+          result = testCasesData;
         } else {
           // Formatted output
           const testCases = testCasesData.items.map((item: any) => ({

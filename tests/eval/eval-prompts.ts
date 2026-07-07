@@ -316,6 +316,17 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
     requiredContext: ["projectKey"],
   },
   {
+    id: "get_root_suites.compact",
+    toolSection: "1. TCM",
+    promptTemplate:
+      "List root test suites in the {{project_key}} project as minified compact JSON (format=compact). Do not use pretty-printed json.",
+    expectedTools: ["adv_get_root_suites"],
+    expectedArgKeys: ["project_key", "format"],
+    category: "tcm",
+    layer: 2,
+    requiredContext: ["projectKey"],
+  },
+  {
     id: "get_tcm_suite_by_id.find",
     toolSection: "1. TCM",
     promptTemplate:
@@ -388,6 +399,17 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
       "Use adv_get_all_tcm_test_cases_by_project for the {{project_key}} project. Set detail=summary (not full bodies) and format=compact for token-efficient JSON. Do not use adv_list_test_suites.",
     expectedTools: ["adv_get_all_tcm_test_cases_by_project"],
     expectedArgKeys: ["project_key", "detail", "format"],
+    category: "tcm",
+    layer: 2,
+    requiredContext: ["projectKey"],
+  },
+  {
+    id: "get_all_tcm_test_cases_by_project.with_call_metrics",
+    toolSection: "1. TCM",
+    promptTemplate:
+      "Use adv_get_all_tcm_test_cases_by_project for {{project_key}} with detail=summary, format=compact, and include_call_metrics=true so the response includes an _mcp_metrics footer.",
+    expectedTools: ["adv_get_all_tcm_test_cases_by_project"],
+    expectedArgKeys: ["project_key", "detail", "format", "include_call_metrics"],
     category: "tcm",
     layer: 2,
     requiredContext: ["projectKey"],
@@ -505,6 +527,17 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
     expectedArgKeys: ["project"],
     category: "launch",
     layer: 1,
+    requiredContext: ["projectKey"],
+  },
+  {
+    id: "get_platform_results_by_period.compact",
+    toolSection: "2. Launch",
+    promptTemplate:
+      "Use adv_get_platform_results_by_period for the {{project_key}} project over the last 7 days with format=compact (minified raw JSON, not formatted markdown).",
+    expectedTools: ["adv_get_platform_results_by_period"],
+    expectedArgKeys: ["project", "format"],
+    category: "launch",
+    layer: 2,
     requiredContext: ["projectKey"],
   },
   {
@@ -684,7 +717,7 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
     id: "about_mcp_tools.metrics",
     toolSection: "4. Utility",
     promptTemplate:
-      "Show me tool usage metrics for this MCP session — how many calls, durations, and errors per tool.",
+      "Show MCP session tool usage metrics with per-tool format and detail breakdown (adv_about_mcp_tools mode=metrics). Include call counts, avg durations, response sizes, and errors.",
     expectedTools: [ "adv_about_mcp_tools"],
     expectedArgKeys: ["mode"],
     category: "utility",

@@ -234,6 +234,26 @@ describe("wrapToolHandler()", () => {
     assert.equal(result.content[0].text, "only payload");
   });
 
+  it("should append footer when MCP_INLINE_METRICS env is true", async () => {
+    const prev = process.env.MCP_INLINE_METRICS;
+    process.env.MCP_INLINE_METRICS = "true";
+    try {
+      const metrics = new ToolMetrics();
+      const handler = async () => ({
+        content: [{ type: "text" as const, text: "env payload" }],
+      });
+
+      const wrapped = wrapToolHandler("env_footer_tool", handler, metrics);
+      const result = await wrapped({ format: "json" });
+
+      assert.ok(result.content[0].text.includes("env payload"));
+      assert.ok(result.content[0].text.includes("_mcp_metrics:"));
+    } finally {
+      if (prev === undefined) delete process.env.MCP_INLINE_METRICS;
+      else process.env.MCP_INLINE_METRICS = prev;
+    }
+  });
+
   it("should record format and detail dimensions", async () => {
     const metrics = new ToolMetrics();
     const handler = async () => ({
