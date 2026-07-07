@@ -40,8 +40,8 @@ Targets:
 - Web >= 65% (>= 95% excluding known issues)
 
 Steps:
-1. Use get_all_launches_with_filter to find launches by latest milestone for each platform
-2. Use get_launch_test_summary for each launch to collect pass/fail/known-issue counts
+1. Use adv_get_all_launches_with_filter to find launches by latest milestone for each platform
+2. Use adv_get_launch_test_summary for each launch to collect pass/fail/known-issue counts
 3. Calculate pass rates with and without known issues
 4. Compare against targets
 
@@ -64,7 +64,7 @@ For the latest milestone and the previous milestone, collect:
 Flag any suite where long-running tests degraded by more than 20%.
 
 Steps:
-1. Use analyze_regression_runtime for each platform with previous_milestone for baseline comparison
+1. Use adv_analyze_regression_runtime for each platform with previous_milestone for baseline comparison
 2. Aggregate and compare metrics
 
 Present results as a cross-platform comparison with trend indicators.`;
@@ -83,10 +83,10 @@ For each platform:
 7. Automation Intake Rate = (New Automated / New Total) x 100
 
 Steps:
-1. Use get_automation_states to discover state IDs for each platform
-2. Use get_test_cases_by_automation_state with get_all: true, count_only: true for efficient counts per state
-3. For total excluding deprecated/draft: use get_all_tcm_test_cases_by_project with exclude_deprecated: true, count_only: true
-4. For 30-day window: use get_test_case_by_filter with created_after (30 days ago), get_all: true, count_only: true
+1. Use adv_get_automation_states to discover state IDs for each platform
+2. Use adv_get_test_cases_by_automation_state with get_all: true, count_only: true for efficient counts per state
+3. For total excluding deprecated/draft: use adv_get_all_tcm_test_cases_by_project with exclude_deprecated: true, count_only: true
+4. For 30-day window: use adv_get_test_case_by_filter with created_after (30 days ago), get_all: true, count_only: true
 
 Present results with both "with manual/deprecated" and "without manual/deprecated" perspectives.
 Track coverage trend: is the automation intake rate keeping up with new test case creation?`;
@@ -103,11 +103,11 @@ Include these 5 sections:
 5. Flaky Tests — any tests that flip-flopped pass/fail in the latest launch
 
 Steps:
-1. Use get_launch_test_summary for pass rate data per platform
-2. Use analyze_regression_runtime for runtime metrics per platform
-3. Use get_top_bugs for defect patterns per platform
-4. Use get_automation_states + get_test_cases_by_automation_state with count_only: true for coverage
-5. Use find_flaky_tests for flaky test detection
+1. Use adv_get_launch_test_summary for pass rate data per platform
+2. Use adv_analyze_regression_runtime for runtime metrics per platform
+3. Use adv_get_top_bugs for defect patterns per platform
+4. Use adv_get_automation_states + adv_get_test_cases_by_automation_state with count_only: true for coverage
+5. Use adv_find_flaky_tests for flaky test detection
 
 Present as a single structured report suitable for a weekly standup.`;
 }
@@ -124,11 +124,11 @@ Check these 5 areas:
 5. Top defects — what are the most common failure patterns?
 
 Steps:
-1. Use get_all_launches_with_filter + get_launch_test_summary for pass rate
-2. Use detailed_analyze_launch_failures with filterType "without_issues" for unlinked failures
-3. Use analyze_regression_runtime with previous milestone for runtime delta
-4. Use get_test_cases_by_automation_state with count_only: true for coverage percentage
-5. Use get_top_bugs for defect patterns
+1. Use adv_get_all_launches_with_filter + adv_get_launch_test_summary for pass rate
+2. Use adv_detailed_analyze_launch_failures with filterType "without_issues" for unlinked failures
+3. Use adv_analyze_regression_runtime with previous milestone for runtime delta
+4. Use adv_get_test_cases_by_automation_state with count_only: true for coverage percentage
+5. Use adv_get_top_bugs for defect patterns
 
 Provide a Go / No-Go recommendation with supporting evidence for each check.`;
 }
@@ -142,8 +142,8 @@ For each platform:
 3. For each suite, collect counts using count_only: true, get_all: true:
    - Implemented: automation state = "Automated"
    - Manual Only:
-     * If "Manual Only" automation state exists: use get_test_cases_by_automation_state
-     * Otherwise: use get_test_cases_advanced with field_path "customField.manualOnly", field_value "Yes", field_match "exact"
+     * If "Manual Only" automation state exists: use adv_get_test_cases_by_automation_state
+     * Otherwise: use adv_get_test_cases_advanced with field_path "customField.manualOnly", field_value "Yes", field_match "exact"
    - Deprecated: filter deprecated = true
    - Total: all test cases in the suite
    - Coverage % = Implemented / (Total - Manual Only - Deprecated) x 100
@@ -161,10 +161,10 @@ Note: "Manual Only" may exist as an automation state on some projects and as a c
 export function buildReviewTestCasePrompt(caseKey: string): string {
   return `Review and improve test case ${caseKey}. Follow these steps:
 
-1. Use get_test_case_by_key to fetch the full test case details including suite hierarchy and custom fields with display names
-2. Use validate_test_case to check against quality standards and best practices
+1. Use adv_get_test_case_by_key to fetch the full test case details including suite hierarchy and custom fields with display names
+2. Use adv_validate_test_case to check against quality standards and best practices
 3. Analyze the validation results and identify improvement areas
-4. Use improve_test_case to generate specific improvement suggestions
+4. Use adv_improve_test_case to generate specific improvement suggestions
 
 Provide a structured report with:
 - Current quality score and validation results
@@ -177,10 +177,10 @@ export function buildLaunchTriagePrompt(project: string): string {
   return `Perform post-regression failure triage for the ${project} platform.
 
 Steps:
-1. Use get_all_launches_with_filter for ${project} to find the latest launch
-2. Use get_launch_test_summary to get overall pass/fail statistics
-3. Use detailed_analyze_launch_failures with filterType "without_issues" to find failures without linked Jira issues
-4. For the top 3-5 most impactful failures, use analyze_test_failure to get root cause analysis
+1. Use adv_get_all_launches_with_filter for ${project} to find the latest launch
+2. Use adv_get_launch_test_summary to get overall pass/fail statistics
+3. Use adv_detailed_analyze_launch_failures with filterType "without_issues" to find failures without linked Jira issues
+4. For the top 3-5 most impactful failures, use adv_analyze_test_failure to get root cause analysis
 
 Present a structured triage report with:
 - Launch summary (pass rate, total tests, duration)
@@ -193,9 +193,9 @@ export function buildFlakyReviewPrompt(project: string): string {
   return `Find and analyze flaky tests in the ${project} platform.
 
 Steps:
-1. Use find_flaky_tests for ${project} with period_days: 30, include_history: true
+1. Use adv_find_flaky_tests for ${project} with period_days: 30, include_history: true
 2. For the top flaky tests (highest flip count), review their execution history
-3. Use get_test_execution_history for the worst offenders to understand the pattern
+3. Use adv_get_test_execution_history for the worst offenders to understand the pattern
 
 Present a structured report with:
 - Total flaky tests found and severity distribution
@@ -211,8 +211,8 @@ export function buildFindDuplicatesPrompt(project: string, suiteId?: string): st
   return `Analyze test cases for duplicates ${scopeClause}.
 
 Steps:
-1. Use analyze_test_cases_duplicates with similarity_threshold: 80 to find structurally similar test cases
-2. If structural analysis finds potential duplicates, optionally use analyze_test_cases_duplicates_semantic for deeper analysis
+1. Use adv_analyze_test_cases_duplicates with similarity_threshold: 80 to find structurally similar test cases
+2. If structural analysis finds potential duplicates, optionally use adv_analyze_test_cases_duplicates_semantic for deeper analysis
 3. Review the duplicate groups
 
 Present a structured report with:
@@ -233,10 +233,10 @@ Collect and present concisely:
 4. Runtime trend: any degradation vs previous run?
 
 Steps:
-1. Use get_all_launches_with_filter for each platform to find the most recent launch
-2. Use get_launch_test_summary for pass/fail breakdown
-3. Use detailed_analyze_launch_failures with filterType "without_issues" if there are failures
-4. Use find_flaky_tests with period_days: 7 for recent flaky tests
+1. Use adv_get_all_launches_with_filter for each platform to find the most recent launch
+2. Use adv_get_launch_test_summary for pass/fail breakdown
+3. Use adv_detailed_analyze_launch_failures with filterType "without_issues" if there are failures
+4. Use adv_find_flaky_tests with period_days: 7 for recent flaky tests
 
 Present as a concise daily standup update:
 - Platform | Pass Rate | New Failures | Blockers
@@ -253,11 +253,11 @@ For each platform, analyze:
 4. Manual-only test cases that could be automated
 
 Steps:
-1. Use get_automation_states to discover state IDs
-2. Use get_test_cases_by_automation_state with count_only: true for per-state counts
-3. Use list_test_suites to get all suites
+1. Use adv_get_automation_states to discover state IDs
+2. Use adv_get_test_cases_by_automation_state with count_only: true for per-state counts
+3. Use adv_list_test_suites to get all suites
 4. For the 5 largest suites, check automation coverage per suite
-5. Use get_test_case_by_filter with created_after (30 days ago), count_only: true for recent manual test cases
+5. Use adv_get_test_case_by_filter with created_after (30 days ago), count_only: true for recent manual test cases
 
 Present a prioritized list of automation gaps:
 - Suites needing the most automation work
@@ -278,13 +278,13 @@ Collect:
 7. Recent flaky tests (last 14 days)
 
 Steps:
-1. Use get_available_projects to confirm project exists
-2. Use list_test_suites for suite overview
-3. Use get_automation_states + get_test_cases_by_automation_state with count_only: true for coverage
-4. Use get_all_launches_for_project with limit: 5 for recent launches
-5. Use get_project_milestones for active milestones
-6. Use get_automation_priorities for priority levels
-7. Use find_flaky_tests with period_days: 14, count_only: true for flaky test count
+1. Use adv_get_available_projects to confirm project exists
+2. Use adv_list_test_suites for suite overview
+3. Use adv_get_automation_states + adv_get_test_cases_by_automation_state with count_only: true for coverage
+4. Use adv_get_all_launches_for_project with limit: 5 for recent launches
+5. Use adv_get_project_milestones for active milestones
+6. Use adv_get_automation_priorities for priority levels
+7. Use adv_find_flaky_tests with period_days: 14, count_only: true for flaky test count
 
 Present as a structured project health card suitable for onboarding or project review.`;
 }
@@ -293,7 +293,7 @@ export function buildSessionMetricsPrompt(): string {
   return `Show current MCP session tool usage metrics and performance stats.
 
 Steps:
-1. Call about_mcp_tools with mode "metrics" to retrieve server-side session metrics
+1. Call adv_about_mcp_tools with mode "metrics" to retrieve server-side session metrics
 2. Present the results as a clear summary including:
    - Total tool calls made in this session
    - Per-tool breakdown: call count, avg/min/max duration, response size, errors
@@ -319,7 +319,7 @@ export function buildRegressionSummaryPrompt(project: string, milestone?: string
 
   return `Analyze regression test results for the ${project} platform (${filterDesc}).
 
-Use the regression_results_analyzer tool with:
+Use the adv_regression_results_analyzer tool with:
 - project: "${project}"${milestone ? `\n- milestone: "${milestone}"` : ""}${build ? `\n- build: "${build}"` : ""}${prevClause}
 - sections: ["overview", "new_bugs", "top_bugs", "bugs_per_suite", "slowest_tests"]
 - output_format: "markdown"${prevMilestoneInstruction}
@@ -572,7 +572,7 @@ If user declines a root suite, skip it and continue with others only if user ask
 Present Phase 1 discovery summary BEFORE any adv_start_launch preview.`;
 }
 
-// ── Prompt catalog (used by about_mcp_tools) ────────────────────────────────
+// ── Prompt catalog (used by adv_about_mcp_tools) ────────────────────────────────
 
 export type PromptMeta = {
   name: string;

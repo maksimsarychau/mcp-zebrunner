@@ -15,6 +15,13 @@ describe('FormatProcessor', () => {
       assert.deepEqual(result, testData);
     });
 
+    it('should return compact JSON string for compact format', () => {
+      const result = FormatProcessor.format(testData, 'compact');
+      assert.equal(typeof result, 'string');
+      assert.equal(result, JSON.stringify(testData));
+      assert.ok(!(result as string).includes('\n'));
+    });
+
     it('should return JSON string for json format', () => {
       const result = FormatProcessor.format(testData, 'json');
       assert.equal(typeof result, 'string');

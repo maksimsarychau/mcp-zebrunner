@@ -81,7 +81,7 @@ export function buildReportTypesContent(): object {
         sections: ["pass_rate", "runtime", "coverage", "bugs", "milestones", "flaky"],
         outputs: ["Markdown summary", "PNG charts per section", "Self-contained HTML dashboard"],
         optional_params: ["sections", "top_bugs_limit", "milestone", "targets"],
-        example: 'generate_report({ report_types: ["quality_dashboard"], projects: ["android", "ios"], period: "Last 30 Days" })',
+        example: 'adv_generate_report({ report_types: ["quality_dashboard"], projects: ["android", "ios"], period: "Last 30 Days" })',
       },
       {
         name: "coverage",
@@ -90,7 +90,7 @@ export function buildReportTypesContent(): object {
         outputs: ["Markdown table per project", "TOTAL and TOTAL REGRESSION summary rows"],
         optional_params: ["exclude_suite_patterns"],
         default_exclude_patterns: ["MA", "Minimal Acceptance", "Critical", "Performance"],
-        example: 'generate_report({ report_types: ["coverage"], projects: ["android", "ios", "web"] })',
+        example: 'adv_generate_report({ report_types: ["coverage"], projects: ["android", "ios", "web"] })',
       },
       {
         name: "pass_rate",
@@ -99,7 +99,7 @@ export function buildReportTypesContent(): object {
         outputs: ["Markdown table", "PNG chart", "Target status indicators"],
         optional_params: ["milestone", "targets"],
         default_targets: { android: 90, ios: 90, web: 65 },
-        example: 'generate_report({ report_types: ["pass_rate"], projects: ["android", "ios", "web"], milestone: "25.40.0" })',
+        example: 'adv_generate_report({ report_types: ["pass_rate"], projects: ["android", "ios", "web"], milestone: "25.40.0" })',
       },
       {
         name: "runtime_efficiency",
@@ -108,7 +108,7 @@ export function buildReportTypesContent(): object {
         outputs: ["Current metrics table", "Delta table (if previous_milestone set)", "Degradation alerts"],
         optional_params: ["milestone", "previous_milestone"],
         metrics: ["avg runtime per test", "avg runtime per test case", "WRI", "duration distribution (short/medium/long)"],
-        example: 'generate_report({ report_types: ["runtime_efficiency"], projects: ["android"], milestone: "25.40.0", previous_milestone: "25.39.0" })',
+        example: 'adv_generate_report({ report_types: ["runtime_efficiency"], projects: ["android"], milestone: "25.40.0", previous_milestone: "25.39.0" })',
       },
       {
         name: "executive_dashboard",
@@ -116,7 +116,7 @@ export function buildReportTypesContent(): object {
         description: "Standup-ready combined report with pass rate, runtime, top bugs, coverage, and flaky tests",
         outputs: ["Markdown summary", "PNG charts", "HTML dashboard"],
         optional_params: ["milestone", "top_bugs_limit", "targets"],
-        example: 'generate_report({ report_types: ["executive_dashboard"], projects: ["android", "ios", "web"] })',
+        example: 'adv_generate_report({ report_types: ["executive_dashboard"], projects: ["android", "ios", "web"] })',
       },
       {
         name: "release_readiness",
@@ -125,7 +125,7 @@ export function buildReportTypesContent(): object {
         checks: ["pass_rate vs target", "unresolved failures", "runtime degradation", "automation coverage", "defect density"],
         outputs: ["Per-check status table", "Go/No-Go recommendation with evidence"],
         optional_params: ["milestone", "previous_milestone", "targets"],
-        example: 'generate_report({ report_types: ["release_readiness"], projects: ["android"], milestone: "25.40.0", previous_milestone: "25.39.0" })',
+        example: 'adv_generate_report({ report_types: ["release_readiness"], projects: ["android"], milestone: "25.40.0", previous_milestone: "25.39.0" })',
       },
     ],
     shared_params: {
@@ -151,11 +151,11 @@ export function buildPeriodsContent(): object {
   return {
     periods,
     used_by: [
-      { tool: "generate_report", default: "Last 30 Days" },
-      { tool: "get_platform_results_by_period", default: "Last 7 Days" },
-      { tool: "get_top_bugs", default: "Last 7 Days" },
-      { tool: "get_bug_review", default: "Last 7 Days" },
-      { tool: "get_bug_failure_info", default: "Last 14 Days" },
+      { tool: "adv_generate_report", default: "Last 30 Days" },
+      { tool: "adv_get_platform_results_by_period", default: "Last 7 Days" },
+      { tool: "adv_get_top_bugs", default: "Last 7 Days" },
+      { tool: "adv_get_bug_review", default: "Last 7 Days" },
+      { tool: "adv_get_bug_failure_info", default: "Last 14 Days" },
     ],
     tips: [
       "Period values are case-sensitive — use 'Last 30 Days', not 'last 30 days'",
@@ -181,14 +181,14 @@ export function buildChartOptionsContent(): object {
       { value: "line", description: "Line chart — good for trends over time" },
     ],
     supported_tools: [
-      "get_launch_details", "get_launch_test_summary",
-      "generate_weekly_regression_stability_report", "get_launch_summary",
-      "analyze_regression_runtime", "find_flaky_tests",
-      "get_test_execution_history", "detailed_analyze_launch_failures",
-      "get_all_launches_for_project", "get_all_launches_with_filter",
-      "get_platform_results_by_period", "get_top_bugs", "get_bug_review",
-      "list_test_runs", "get_test_run_by_id", "list_test_run_test_cases",
-      "aggregate_test_cases_by_feature",
+      "adv_get_launch_details", "adv_get_launch_test_summary",
+      "adv_generate_weekly_regression_stability_report", "adv_get_launch_summary",
+      "adv_analyze_regression_runtime", "adv_find_flaky_tests",
+      "adv_get_test_execution_history", "adv_detailed_analyze_launch_failures",
+      "adv_get_all_launches_for_project", "adv_get_all_launches_with_filter",
+      "adv_get_platform_results_by_period", "adv_get_top_bugs", "adv_get_bug_review",
+      "adv_list_test_runs", "adv_get_test_run_by_id", "adv_list_test_run_test_cases",
+      "adv_aggregate_test_cases_by_feature",
     ],
     tips: [
       "Use chart: 'png' for inline images in Claude Desktop",
@@ -210,7 +210,7 @@ export function buildMcpRoutingContent(): object {
         url: "https://{workspace}.zebrunner.com/api/mcp",
         best_for: [
           "Standard TCM CRUD (test cases, suites, runs, shared steps)",
-          "Server-side `filter` DSL on list_test_cases / list_test_runs",
+          "Server-side `filter` DSL on list_test_cases / adv_list_test_runs",
           "File upload + download (upload_file, get_image_file_content, get_text_file_content)",
           "Bulk launch ops (add_comment_to_launches, assign_launches_to_milestone, etc.)",
           "Milestone create / list",
@@ -233,23 +233,23 @@ export function buildMcpRoutingContent(): object {
       },
     ],
     tool_name_collisions: [
-      "create_test_case",
-      "create_test_suite",
-      "update_test_suite",
-      "get_test_case_by_key",
-      "list_test_suites",
-      "list_test_runs",
-      "list_test_run_test_cases",
-      "get_test_execution_history",
+      "adv_create_test_case",
+      "adv_create_test_suite",
+      "adv_update_test_suite",
+      "adv_get_test_case_by_key",
+      "adv_list_test_suites",
+      "adv_list_test_runs",
+      "adv_list_test_run_test_cases",
+      "adv_get_test_execution_history",
     ],
     naming: {
-      primary_form: "adv_<name> (e.g. adv_create_test_case)",
-      legacy_alias: "<name> (kept as deprecated alias for backward compatibility)",
-      removal_target: "Aliases scheduled to be removed in the next major release.",
+      primary_form: "adv_<name> (e.g. adv_create_test_case) — always registered",
+      legacy_alias: "<name> — deprecated; only when ZEBRUNNER_REGISTER_LEGACY_ALIASES=true",
+      removal_target: "Legacy aliases scheduled for removal in a future major release.",
     },
     semantic_warnings: [
       {
-        tool: "get_test_execution_history",
+        tool: "adv_get_test_execution_history",
         official_meaning: "Historical executions of the same test method (Public API).",
         advanced_meaning: "Execution history of a Reporting test ID within a launch, including charts. Use adv_get_test_execution_history to make the choice explicit.",
       },
@@ -257,7 +257,7 @@ export function buildMcpRoutingContent(): object {
     helpful_resources: [
       "docs/OFFICIAL_MCP_PARITY.md — full tool-by-tool diff (regenerated by Phase A).",
       "docs/OFFICIAL_MCP_DIFF.json — machine-readable diff including descriptions.",
-      "about_mcp_tools tool with mode='routing' — same information surfaced inside chat.",
+      "adv_about_mcp_tools tool with mode='routing' — same information surfaced inside chat.",
     ],
   };
 }
@@ -267,11 +267,12 @@ export function buildFormatReferenceContent(): object {
     format_families: [
       {
         name: "data",
-        values: ["dto", "json", "string", "markdown"],
-        description: "Full data format for TCM tools (test cases, suites, hierarchy)",
-        tools_count: 18,
+        values: ["dto", "json", "compact", "string", "markdown"],
+        description: "Full data format for TCM tools (test cases, suites, hierarchy). compact = minified JSON.",
+        tools_count: 20,
         default: "json",
-        tips: "Use 'markdown' for human-readable output with clickable links",
+        env_flags: { MCP_COMPACT_DEFAULTS: "When true, default becomes compact instead of json" },
+        tips: "Use detail=summary with compact for token-efficient list/filter reads; adv_get_test_case_by_key for full body",
       },
       {
         name: "data_simple",
@@ -282,11 +283,12 @@ export function buildFormatReferenceContent(): object {
       },
       {
         name: "raw_formatted",
-        values: ["raw", "formatted"],
-        description: "API response vs formatted output for reporting/widget tools",
-        tools_count: 11,
+        values: ["raw", "formatted", "compact"],
+        description: "API response vs formatted output for launch listing tools. compact = minified JSON.",
+        tools_count: 2,
         default: "formatted",
-        tips: "Use 'raw' for unprocessed API responses when debugging",
+        env_flags: { MCP_COMPACT_DEFAULTS: "Future: may default launch reads to compact" },
+        tips: "Use 'raw' for pretty JSON API responses; 'compact' for minified JSON",
       },
       {
         name: "verbosity",
@@ -423,7 +425,7 @@ export function registerResources(server: McpServer, deps: ResourceDependencies)
     "report_types",
     "zebrunner://reports/types",
     {
-      description: "Available report types for the generate_report tool with descriptions, parameters, and examples",
+      description: "Available report types for the adv_generate_report tool with descriptions, parameters, and examples",
     },
     async () => ({
       contents: [{
@@ -793,7 +795,7 @@ export function registerResources(server: McpServer, deps: ResourceDependencies)
  */
 export { MAX_CACHE_ENTRIES };
 
-// ── Resource catalog (used by about_mcp_tools) ──────────────────────────────
+// ── Resource catalog (used by adv_about_mcp_tools) ──────────────────────────────
 
 export type ResourceMeta = {
   name: string;
@@ -805,7 +807,7 @@ export type ResourceMeta = {
 export function getResourcesCatalog(): ResourceMeta[] {
   return [
     { name: "available_projects", uri: "zebrunner://projects", description: "All projects accessible to the current user with keys, IDs, and metadata", type: "static" },
-    { name: "report_types", uri: "zebrunner://reports/types", description: "Available report types for generate_report with descriptions, parameters, and examples", type: "static" },
+    { name: "report_types", uri: "zebrunner://reports/types", description: "Available report types for adv_generate_report with descriptions, parameters, and examples", type: "static" },
     { name: "mcp_routing", uri: "zebrunner://mcp-routing", description: "Dual-MCP routing guide: when to prefer the official Zebrunner MCP vs the Advanced Zebrunner MCP Server", type: "static" },
     { name: "time_periods", uri: "zebrunner://periods", description: "Valid time period values accepted by reporting and widget tools", type: "static" },
     { name: "chart_options", uri: "zebrunner://charts", description: "Chart delivery formats (png, html, text) and chart types (pie, bar, line, etc.)", type: "static" },

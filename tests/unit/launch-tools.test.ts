@@ -250,10 +250,10 @@ describe('Launch Tools Unit Tests', () => {
     });
 
     it('should validate format parameter', () => {
-      const validFormats = ['raw', 'formatted'];
+      const validFormats = ['raw', 'formatted', 'compact'];
       
       validFormats.forEach(format => {
-        assert.ok(['raw', 'formatted'].includes(format), 
+        assert.ok(['raw', 'formatted', 'compact'].includes(format), 
           `Format ${format} should be valid`);
       });
     });

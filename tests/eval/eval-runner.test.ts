@@ -6,6 +6,7 @@ import {
   getEvalConfig,
   hasEvalLlmConfig,
   isLocalEvalEndpoint,
+  getEvalConfigWarnings,
   type EvalConfig,
 } from "./eval-config.js";
 import { discoverEvalContext, type EvalDiscoveryContext } from "./eval-discovery.js";
@@ -40,6 +41,11 @@ import {
 } from "./eval-judges.js";
 import { EvalReporter, type EvalResult } from "./eval-report.js";
 import { evalSafeStderr, redactSecretsInString } from "./eval-secrets.js";
+import {
+  resolveEvalSuite,
+  shouldIncludePromptInSuite,
+  cloudEvalPromptIds,
+} from "./eval-cloud-suite.js";
 
 // ── Preflight ──
 
@@ -66,11 +72,14 @@ const SYSTEM_PROMPT =
   "When the user asks a question, select the most appropriate tool and provide the required arguments. " +
   "Use exactly one tool per request unless the question clearly requires multiple tools.";
 
+const EVAL_SUITE = resolveEvalSuite();
+
 const EVAL_FILTER_PATTERNS = process.env.EVAL_FILTER
   ? process.env.EVAL_FILTER.split(",").map((s) => s.trim()).filter(Boolean)
   : [];
 
 function shouldRun(id: string): boolean {
+  if (!shouldIncludePromptInSuite(id, EVAL_SUITE)) return false;
   if (EVAL_FILTER_PATTERNS.length === 0) return true;
   return EVAL_FILTER_PATTERNS.some((f) => id === f || id.includes(f));
 }
@@ -99,7 +108,16 @@ describe("LLM Evaluation Tests", () => {
     const providerLabel = config.baseUrl
       ? `${config.provider} @ ${config.baseUrl}`
       : config.provider;
-    console.error(`\n🧪 LLM Eval — Layer ${config.layer} — Provider: ${providerLabel} — Model: ${config.model}`);
+    console.error(`\n🧪 LLM Eval — Layer ${config.layer} — Suite: ${config.suite} — Provider: ${providerLabel} — Model: ${config.model}`);
+    if (config.suite === "default") {
+      console.error(
+        `☁️  Cloud-only suite (${cloudEvalPromptIds().length} prompts) excluded — run npm run test:eval:cloud on a capable model`,
+      );
+    } else if (config.suite === "cloud") {
+      console.error(
+        `☁️  Cloud tricky suite only (${cloudEvalPromptIds().length} prompts) — strict per-prompt asserts recommended (EVAL_STRICT=true)`,
+      );
+    }
     console.error(
       `📊 Tool selection threshold: ${(config.thresholds.toolSelectionAccuracy * 100).toFixed(0)}%` +
         (process.env.EVAL_MIN_PASS_RATE
@@ -116,6 +134,9 @@ describe("LLM Evaluation Tests", () => {
     }
     if (EVAL_FILTER_PATTERNS.length > 0) {
       console.error(`🔍 Filter: ${EVAL_FILTER_PATTERNS.join(", ")}`);
+    }
+    for (const warning of getEvalConfigWarnings(config)) {
+      evalSafeStderr(`⚠️  ${warning}`);
     }
     console.error("");
 
@@ -280,7 +301,7 @@ describe("LLM Evaluation Tests", () => {
       it(`[${ep.id}] LLM correctly refuses`, async () => {
         const result = await runRefusalTest(ep);
         reporter.addResult(result);
-        assert.ok(result.negativePass, result.negativeReason || "LLM should have refused");
+        evalAssert(result.negativePass, result.negativeReason || "LLM should have refused");
       });
     }
   });
@@ -294,7 +315,7 @@ describe("LLM Evaluation Tests", () => {
       it(`[${ep.id}] LLM picks correct tool, avoids forbidden`, async () => {
         const result = await runToolConfusionTest(ep);
         reporter.addResult(result);
-        assert.ok(result.negativePass, result.negativeReason || "LLM used a forbidden tool");
+        evalAssert(result.negativePass, result.negativeReason || "LLM used a forbidden tool");
       });
     }
   });
@@ -313,7 +334,7 @@ describe("LLM Evaluation Tests", () => {
 
         const result = await runInvalidDataTest(ep);
         reporter.addResult(result);
-        assert.ok(result.negativePass, result.negativeReason || "Expected error output from MCP");
+        evalAssert(result.negativePass, result.negativeReason || "Expected error output from MCP");
       });
     }
   });

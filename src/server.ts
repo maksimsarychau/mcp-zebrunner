@@ -11,7 +11,11 @@ import { EnhancedZebrunnerClient } from "./api/enhanced-client.js";
 import { ZebrunnerReportingClient, type FieldsLayout } from "./api/reporting-client.js";
 import { ZebrunnerReportingToolHandlers } from "./handlers/reporting-tools.js";
 import { ReportHandler } from "./handlers/report-handler.js";
-import { FormatProcessor } from "./utils/formatter.js";
+import { FormatProcessor, projectTestCases, projectSuites } from "./utils/formatter.js";
+import { defaultDataFormat, defaultDetailLevel } from "./utils/mcp-output-flags.js";
+import { appendResponseSizeNotice } from "./utils/response-size.js";
+import { capDuplicateAnalysisJson } from "./utils/duplicate-json-cap.js";
+import { mapWithConcurrency } from "./utils/batch-concurrency.js";
 import { HierarchyProcessor } from "./utils/hierarchy.js";
 import { RulesParser } from "./utils/rules-parser.js";
 import { TestGenerator } from "./utils/test-generator.js";
@@ -341,8 +345,8 @@ async function resolveProjectId(project: string | number): Promise<{ projectId: 
 
       throw new Error(`Project "${project}" not found.${suggestionText}`);
     } catch (discoveryError) {
-      // If dynamic discovery also fails, throw original error with suggestion to use get_available_projects
-      throw new Error(`Project "${project}" not found. Use get_available_projects tool to see available projects.`);
+      // If dynamic discovery also fails, throw original error with suggestion to use adv_get_available_projects
+      throw new Error(`Project "${project}" not found. Use adv_get_available_projects tool to see available projects.`);
     }
   }
 }
@@ -1054,7 +1058,7 @@ function createConfiguredServer(): McpServer {
   // ── Tool prefix + alias rules for the Advanced Zebrunner MCP Server ──
   // Every tool is registered under the canonical `adv_<name>` form so it never
   // collides with the official Zebrunner MCP (some names are shared). As of
-  // v9.0.0, the legacy short names (`create_test_case`, etc.) are NOT
+  // v9.0.0, the legacy short names (`adv_create_test_case`, etc.) are NOT
   // registered by default — this is the breaking change announced in the
   // 9.0.0 release notes.
   //
@@ -1124,7 +1128,9 @@ function createConfiguredServer(): McpServer {
     inputSchema: {
       project_key: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
       project_id: z.number().int().positive().optional().describe("Project ID (alternative to project_key)"),
-      format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format"),
+      format: z.enum(['dto', 'json', 'compact', 'string']).default(defaultDataFormat()).describe("Output format"),
+      detail: z.enum(['summary', 'full']).default('full').describe("full returns all fields (default — use as data source for mutations). summary trims to id/key/title/priority/automationState/deprecated."),
+      fields: z.array(z.string()).optional().describe("Optional explicit field allow-list (overrides detail)."),
       include_hierarchy: z.boolean().default(false).describe("Include hierarchy information"),
       page: z.number().int().nonnegative().default(0).describe("Page number (0-based)"),
       size: z.number().int().positive().max(1000).default(50).describe("Page size (configurable via MAX_PAGE_SIZE env var)"),
@@ -1143,7 +1149,7 @@ function createConfiguredServer(): McpServer {
       },
     },
     async (args) => {
-      const { project_key, project_id, format, include_hierarchy, page, size, page_token, count_only, include_clickable_links } = args;
+      const { project_key, project_id, format, detail, fields, include_hierarchy, page, size, page_token, count_only, include_clickable_links } = args;
 
       try {
         if (!project_key && !project_id) {
@@ -1214,7 +1220,7 @@ function createConfiguredServer(): McpServer {
 
         // Prepare response with pagination metadata
         const response = {
-          items: enhancedSuites,
+          items: projectSuites(enhancedSuites, detail, fields),
           _meta: suites._meta,
           pagination: {
             currentPage: page,
@@ -1225,11 +1231,12 @@ function createConfiguredServer(): McpServer {
         };
 
         const formattedData = FormatProcessor.format(response, format);
+        const resultText = typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2);
 
         return {
           content: [{
             type: "text" as const,
-            text: typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2)
+            text: appendResponseSizeNotice(resultText, ['- detail: "summary" on adv_list_test_suites'])
           }]
         };
       } catch (error: any) {
@@ -1255,7 +1262,9 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
     inputSchema: {
       project_key: z.string().min(1).optional().describe("Project key (e.g., 'MCP', 'MCP'). Auto-detected from case_key if it contains a key pattern like 'MCP-29'. Required when case_key is a numeric ID."),
       case_key: z.string().min(1).describe("Test case key (e.g., 'MCP-29') OR numeric test case ID (e.g., '86280'). When providing a numeric ID, project_key is required."),
-      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
+      format: z.enum(['dto', 'json', 'compact', 'string', 'markdown']).default(defaultDataFormat()).describe("Output format"),
+      detail: z.enum(['summary', 'full']).default('full').describe("full (default) returns all raw fields — use as data source for create/update. summary trims identifying fields only."),
+      fields: z.array(z.string()).optional().describe("Optional explicit field allow-list (overrides detail)."),
       include_debug: z.boolean().default(false).describe("Include debug information in markdown"),
       include_suite_hierarchy: z.boolean().default(false).describe("Include featureSuiteId and rootSuiteId with suite hierarchy path"),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI"),
@@ -1272,7 +1281,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
       },
     },
     async (args) => {
-      const { case_key, format, include_debug, include_suite_hierarchy, include_clickable_links, include_execution_history, include_history, history_filter, history_limit } = args;
+      const { case_key, format, detail, fields, include_debug, include_suite_hierarchy, include_clickable_links, include_execution_history, include_history, history_filter, history_limit } = args;
 
       const isNumericId = /^\d+$/.test(case_key.trim());
 
@@ -1383,7 +1392,8 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
           (enhancedTestCase as any).executionHistory = executionHistory;
         }
         const fieldsLayout = await getFieldsLayoutForProject(project_key);
-        const formattedData = FormatProcessor.format(enhancedTestCase, format, fieldsLayout);
+        const projected = projectTestCases(enhancedTestCase, detail, fields);
+        const formattedData = FormatProcessor.format(projected, format, fieldsLayout);
 
         return {
           content: [{
@@ -1400,6 +1410,56 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
           }]
         };
       }
+    }
+  );
+
+  server.registerTool(
+    "batch_get_test_cases",
+    {
+      description:
+        "📦 Fetch multiple test cases by key in one call (partial success). " +
+        "Missing keys land in notFound[]. Use after a filter/list to read a shortlist without N round-trips.",
+      inputSchema: {
+        project_key: z.string().min(1).describe("Project key (e.g., 'MCP', 'android')"),
+        case_keys: z.array(z.string().min(1)).min(1).max(50).describe("Test case keys to fetch (max 50)"),
+        detail: z.enum(['summary', 'full']).default('summary').describe("summary (default) trims rows; full returns every field."),
+        fields: z.array(z.string()).optional().describe("Optional explicit field allow-list (overrides detail)."),
+        format: z.enum(['dto', 'json', 'compact', 'string']).default('compact').describe("Output format"),
+      },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async (args) => {
+      const { project_key, case_keys, detail, fields, format } = args;
+      const notFound: string[] = [];
+      const found: ZebrunnerTestCase[] = [];
+
+      const settled = await mapWithConcurrency(case_keys, 5, async (key) => {
+        const trimmed = key.trim();
+        try {
+          const tc = await client.getTestCaseByKey(project_key, trimmed, { includeSuiteHierarchy: false });
+          if (tc) found.push(tc);
+          else notFound.push(trimmed);
+        } catch {
+          notFound.push(trimmed);
+        }
+      });
+      void settled;
+
+      const projected = projectTestCases(found, detail, fields);
+      const payload = { requested: case_keys.length, found: found.length, notFound, results: projected };
+      const formatted = FormatProcessor.format(payload, format as any);
+
+      return {
+        content: [{
+          type: "text" as const,
+          text: typeof formatted === 'string' ? formatted : JSON.stringify(formatted, null, 2),
+        }],
+      };
     }
   );
 
@@ -1525,7 +1585,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
     {
       description: "📊 Advanced test case retrieval with filtering and pagination (✨ Enhanced with automation state and date filtering)\n" +
     "⚠️  IMPORTANT: Use 'suite_id' for direct parent suites, 'root_suite_id' for root suites that contain sub-suites.\n" +
-    "💡 TIP: Use 'get_test_cases_by_suite_smart' for automatic suite type detection!",
+    "💡 TIP: Use 'adv_get_test_cases_by_suite_smart' for automatic suite type detection!",
     inputSchema: {
       project_key: z.string().min(1).describe("Project key"),
       suite_id: z.number().int().positive().optional().describe("Filter by direct parent suite ID (for child suites)"),
@@ -1900,7 +1960,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
   server.registerTool(
     "get_test_cases_by_automation_state",
     {
-      description: "🤖 Get test cases filtered by automation state with token-based pagination (💡 Use get_automation_states to see available states). Call repeatedly with page_token to paginate through all results.",
+      description: "🤖 Get test cases filtered by automation state with token-based pagination (💡 Use adv_get_automation_states to see available states). Call repeatedly with page_token to paginate through all results.",
     inputSchema: {
       project_key: z.string().min(1).describe("Project key"),
       automation_states: z.union([
@@ -2270,7 +2330,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
           markdown += `\n## Usage Examples\n\n`;
           markdown += `### Filter by Name:\n`;
           markdown += `\`\`\`\n`;
-          markdown += `get_test_cases_by_automation_state(\n`;
+          markdown += `adv_get_test_cases_by_automation_state(\n`;
           markdown += `  project_key: "${typeof args.project === 'string' ? args.project : 'android'}",\n`;
           markdown += `  automation_states: "Not Automated"\n`;
           markdown += `)\n`;
@@ -2278,7 +2338,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
 
           markdown += `### Filter by ID:\n`;
           markdown += `\`\`\`\n`;
-          markdown += `get_test_cases_by_automation_state(\n`;
+          markdown += `adv_get_test_cases_by_automation_state(\n`;
           markdown += `  project_key: "${typeof args.project === 'string' ? args.project : 'android'}",\n`;
           markdown += `  automation_states: ${automationStates[0]?.id || 10}\n`;
           markdown += `)\n`;
@@ -2286,7 +2346,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
 
           markdown += `### Filter by Multiple States:\n`;
           markdown += `\`\`\`\n`;
-          markdown += `get_test_cases_by_automation_state(\n`;
+          markdown += `adv_get_test_cases_by_automation_state(\n`;
           markdown += `  project_key: "${typeof args.project === 'string' ? args.project : 'android'}",\n`;
           markdown += `  automation_states: ["Not Automated", "To Be Automated"]\n`;
           markdown += `)\n`;
@@ -2544,8 +2604,8 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
       created_before: z.string().optional().describe("Filter test cases created before this date (ISO format: '2025-12-31T23:59:59Z')"),
       last_modified_after: z.string().optional().describe("Filter test cases last modified after this date (ISO format: '2025-01-01T00:00:00Z')"),
       last_modified_before: z.string().optional().describe("Filter test cases last modified before this date (ISO format: '2025-12-31T23:59:59Z')"),
-      priority_id: z.number().int().positive().optional().describe("Filter by priority ID (use get_automation_priorities to see available priorities)"),
-      automation_state_id: z.number().int().positive().optional().describe("Filter by automation state ID (use get_automation_states to see available states)"),
+      priority_id: z.number().int().positive().optional().describe("Filter by priority ID (use adv_get_automation_priorities to see available priorities)"),
+      automation_state_id: z.number().int().positive().optional().describe("Filter by automation state ID (use adv_get_automation_states to see available states)"),
       exclude_deprecated: z.boolean().default(false).describe("Exclude deprecated test cases from results"),
       exclude_draft: z.boolean().default(false).describe("Exclude draft test cases from results"),
       exclude_deleted: z.boolean().default(true).describe("Exclude deleted test cases from results (default: true)"),
@@ -2953,7 +3013,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
           markdown += `\n## Usage Examples\n\n`;
           markdown += `### Filter by Priority ID:\n`;
           markdown += `\`\`\`\n`;
-          markdown += `get_test_case_by_filter(\n`;
+          markdown += `adv_get_test_case_by_filter(\n`;
           markdown += `  project_key: "${typeof args.project === 'string' ? args.project : 'android'}",\n`;
           markdown += `  priority_id: ${priorities[0]?.id || 15}\n`;
           markdown += `)\n`;
@@ -3002,8 +3062,8 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
   // Note: Experimental features have been removed as they relied on API endpoints
   // that are not available or working properly. Use the following alternatives:
   //
-  // Instead of get_test_suite_experimental -> use get_tcm_suite_by_id
-  // Instead of list_test_cases_by_suite_experimental -> use get_test_cases_advanced with suite_id
+  // Instead of get_test_suite_experimental -> use adv_get_tcm_suite_by_id
+  // Instead of list_test_cases_by_suite_experimental -> use adv_get_test_cases_advanced with suite_id
   // Instead of search_test_cases_experimental -> API endpoint not working
   //
   // This improves reliability and reduces maintenance overhead.
@@ -3559,7 +3619,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
         };
 
       } catch (error: any) {
-        debugLog("Error in get_tcm_test_suites_by_project", { error: error.message, args });
+        debugLog("Error in adv_get_tcm_test_suites_by_project", { error: error.message, args });
         return {
           content: [{
             type: "text" as const,
@@ -3645,7 +3705,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
         };
 
       } catch (error: any) {
-        debugLog("Error in get_all_tcm_test_case_suites_by_project", { error: error.message, args });
+        debugLog("Error in adv_get_all_tcm_test_case_suites_by_project", { error: error.message, args });
         return {
           content: [{
             type: "text" as const,
@@ -3696,7 +3756,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
         };
 
       } catch (error: any) {
-        debugLog("Error in get_root_suites", { error: error.message, args });
+        debugLog("Error in adv_get_root_suites", { error: error.message, args });
         return {
           content: [{
             type: "text" as const,
@@ -3817,7 +3877,7 @@ Supports two modes:
         }
 
       } catch (error: any) {
-        debugLog("Error in get_tcm_suite_by_id", { error: error.message, args });
+        debugLog("Error in adv_get_tcm_suite_by_id", { error: error.message, args });
         return {
           content: [{
             type: "text" as const,
@@ -3936,7 +3996,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         if (args.dry_run) {
           return {
             content: [{ type: "text" as const, text:
-              `DRY RUN — create_test_suite\nPOST ${url}\n\nPayload:\n${JSON.stringify(payload, null, 2)}`
+              `DRY RUN — adv_create_test_suite\nPOST ${url}\n\nPayload:\n${JSON.stringify(payload, null, 2)}`
             }]
           };
         }
@@ -3949,7 +4009,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           const token = generateConfirmationToken(JSON.stringify(args));
           return {
             content: [{ type: "text" as const, text:
-              `📋 Preview — create_test_suite\nPOST ${url}\n\n` +
+              `📋 Preview — adv_create_test_suite\nPOST ${url}\n\n` +
               `Title: ${args.title}\n` +
               `Parent: ${parentLabel}\n` +
               `Description: ${args.description || "(none)"}\n\n` +
@@ -3963,7 +4023,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         // Confirm — execute mutation
         writeAuditLog({
           timestamp: new Date().toISOString(),
-          tool: "create_test_suite",
+          tool: "adv_create_test_suite",
           method: "POST",
           url,
           projectKey,
@@ -3992,7 +4052,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           : "";
         return {
           content: [{ type: "text" as const, text:
-            `❌ Error in create_test_suite: ${error.message}${hint}`
+            `❌ Error in adv_create_test_suite: ${error.message}${hint}`
           }]
         };
       }
@@ -4059,7 +4119,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         if (args.dry_run) {
           return {
             content: [{ type: "text" as const, text:
-              `DRY RUN — update_test_suite\nPUT ${url}\n\nPayload:\n${JSON.stringify(payload, null, 2)}`
+              `DRY RUN — adv_update_test_suite\nPUT ${url}\n\nPayload:\n${JSON.stringify(payload, null, 2)}`
             }]
           };
         }
@@ -4081,7 +4141,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           const token = generateConfirmationToken(JSON.stringify(args));
           return {
             content: [{ type: "text" as const, text:
-              `📋 Preview — update_test_suite\nPUT ${url}\n\n` +
+              `📋 Preview — adv_update_test_suite\nPUT ${url}\n\n` +
               beforeText +
               `Proposed values:\n` +
               `  Title: ${args.title}\n` +
@@ -4105,7 +4165,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
 
         writeAuditLog({
           timestamp: new Date().toISOString(),
-          tool: "update_test_suite",
+          tool: "adv_update_test_suite",
           method: "PUT",
           url,
           projectKey,
@@ -4136,7 +4196,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           : "";
         return {
           content: [{ type: "text" as const, text:
-            `❌ Error in update_test_suite: ${error.message}${hint}`
+            `❌ Error in adv_update_test_suite: ${error.message}${hint}`
           }]
         };
       }
@@ -4148,7 +4208,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
     z.object({ name: z.string().min(1) }),
   ]);
 
-  // ========== manage_test_run (Beta) ==========
+  // ========== adv_manage_test_run (Beta) ==========
 
   const TestRunConfigurationSchema = z.object({
     group: IdOrName.describe("Configuration group — provide { id } or { name }"),
@@ -4214,7 +4274,7 @@ ACTIONS:
              WARNING: 'configurations' is atomic — providing it REPLACES ALL existing configs.
   add_cases — Add test cases to an existing test run by keys, suite IDs, or all project cases.
 
-Use 'get_test_run_configuration_groups' and 'get_test_run_result_statuses' to discover valid configuration values.
+Use 'adv_get_test_run_configuration_groups' and 'adv_get_test_run_result_statuses' to discover valid configuration values.
 
 TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + confirmation_token. 2) After user approval, call with ONLY confirm: true and the confirmation_token. The full payload is stored server-side — do NOT re-send other fields.`,
       inputSchema: ManageTestRunSchema,
@@ -4257,14 +4317,14 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
 
           if (args.dry_run) {
             return { content: [{ type: "text" as const, text:
-              `DRY RUN — manage_test_run (create)\nPOST ${url}\n\nPayload:\n${JSON.stringify(payload, null, 2)}`
+              `DRY RUN — adv_manage_test_run (create)\nPOST ${url}\n\nPayload:\n${JSON.stringify(payload, null, 2)}`
             }] };
           }
 
           if (!args.confirm) {
             const token = generateConfirmationToken(JSON.stringify(args));
             const lines = [
-              `📋 Preview — manage_test_run (create)`,
+              `📋 Preview — adv_manage_test_run (create)`,
               `POST ${url}\n`,
               `Fields to be set:`,
               `  title            → ${args.title}`,
@@ -4284,7 +4344,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
 
           writeAuditLog({
             timestamp: new Date().toISOString(),
-            tool: "manage_test_run",
+            tool: "adv_manage_test_run",
             method: "POST",
             url,
             projectKey,
@@ -4323,13 +4383,13 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
 
           if (args.dry_run) {
             return { content: [{ type: "text" as const, text:
-              `DRY RUN — manage_test_run (update)\nPATCH ${url}\n\nPayload:\n${JSON.stringify(payload, null, 2)}`
+              `DRY RUN — adv_manage_test_run (update)\nPATCH ${url}\n\nPayload:\n${JSON.stringify(payload, null, 2)}`
             }] };
           }
 
           if (!args.confirm) {
             const lines = [
-              `📋 Preview — manage_test_run (update)`,
+              `📋 Preview — adv_manage_test_run (update)`,
               `PATCH ${url}\n`,
               `Fields to be updated:`,
             ];
@@ -4353,7 +4413,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
 
           writeAuditLog({
             timestamp: new Date().toISOString(),
-            tool: "manage_test_run",
+            tool: "adv_manage_test_run",
             method: "PATCH",
             url,
             projectKey,
@@ -4397,13 +4457,13 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
 
           if (args.dry_run) {
             return { content: [{ type: "text" as const, text:
-              `DRY RUN — manage_test_run (add_cases)\nPOST ${url}\n\nPayload:\n${JSON.stringify(payload, null, 2)}`
+              `DRY RUN — adv_manage_test_run (add_cases)\nPOST ${url}\n\nPayload:\n${JSON.stringify(payload, null, 2)}`
             }] };
           }
 
           if (!args.confirm) {
             const lines = [
-              `📋 Preview — manage_test_run (add_cases)`,
+              `📋 Preview — adv_manage_test_run (add_cases)`,
               `POST ${url}\n`,
               `Test cases to add to run ${args.test_run_id}:`,
             ];
@@ -4426,7 +4486,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
 
           writeAuditLog({
             timestamp: new Date().toISOString(),
-            tool: "manage_test_run",
+            tool: "adv_manage_test_run",
             method: "POST",
             url,
             projectKey,
@@ -4462,13 +4522,13 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           ? "\nHint: Pre-condition failed (e.g., test run is closed)."
           : "";
         return { content: [{ type: "text" as const, text:
-          `❌ Error in manage_test_run (${args.action}): ${error.message}${hint}`
+          `❌ Error in adv_manage_test_run (${args.action}): ${error.message}${hint}`
         }] };
       }
     }
   );
 
-  // ========== import_launch_results_to_test_run (Beta) ==========
+  // ========== adv_import_launch_results_to_test_run (Beta) ==========
 
   const DEFAULT_STATUS_MAP: Record<string, string> = {
     PASSED: "Passed",
@@ -4671,13 +4731,13 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
 
         if (args.dry_run) {
           return { content: [{ type: "text" as const, text:
-            `DRY RUN — import_launch_results_to_test_run\nPOST ${url}\n\nPayload (${importItems.length} items):\n${JSON.stringify(importPayload, null, 2)}`
+            `DRY RUN — adv_import_launch_results_to_test_run\nPOST ${url}\n\nPayload (${importItems.length} items):\n${JSON.stringify(importPayload, null, 2)}`
           }] };
         }
 
         if (!args.confirm) {
           const lines = [
-            `📋 Preview — import_launch_results_to_test_run`,
+            `📋 Preview — adv_import_launch_results_to_test_run`,
             `POST ${url}\n`,
             `Launch ${args.launch_id} → Test Run ${args.test_run_id} (project: ${projectKey})\n`,
             `Status mapping: ${Object.entries(statusMap).map(([k, v]) => `${k}→${v}`).join(", ")}\n`,
@@ -4712,7 +4772,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         // Confirm — execute import
         writeAuditLog({
           timestamp: new Date().toISOString(),
-          tool: "import_launch_results_to_test_run",
+          tool: "adv_import_launch_results_to_test_run",
           method: "POST",
           url,
           projectKey,
@@ -4744,13 +4804,13 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         return { content: [{ type: "text" as const, text: lines.join("\n") + steeringHint("import_launch_results", { id: args.test_run_id }) }] };
       } catch (error: any) {
         return { content: [{ type: "text" as const, text:
-          `❌ Error in import_launch_results_to_test_run: ${error.message}`
+          `❌ Error in adv_import_launch_results_to_test_run: ${error.message}`
         }] };
       }
     }
   );
 
-  // ========== rerun_launch_failures (Beta) ==========
+  // ========== adv_rerun_launch_failures (Beta) ==========
 
   const RerunLaunchFailuresSchema = z.object({
     project: z.union([z.enum(["web", "android", "ios", "api"]), z.string(), z.number()])
@@ -4876,7 +4936,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
 
           if (previewTargets.length === 0) {
             const lines = [
-              "📋 Preview — rerun_launch_failures",
+              "📋 Preview — adv_rerun_launch_failures",
               `Project: ${projectKey} (ID ${projectId})`,
               "",
               "❌ No eligible launches found for failure rerun.",
@@ -4893,7 +4953,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
 
           const modeLabel = args.launch_id != null ? "single launch" : `batch (max ${args.max_launches ?? 10})`;
           const lines = [
-            "📋 Preview — rerun_launch_failures",
+            "📋 Preview — adv_rerun_launch_failures",
             `Project: ${projectKey} (ID ${projectId})`,
             `Mode: ${modeLabel}`,
             `Will rerun failures for ${previewTargets.length} launch(es):`,
@@ -4948,7 +5008,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           try {
             writeAuditLog({
               timestamp: new Date().toISOString(),
-              tool: "rerun_launch_failures",
+              tool: "adv_rerun_launch_failures",
               method: "POST",
               url,
               projectKey,
@@ -5013,14 +5073,14 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         return {
           content: [{
             type: "text" as const,
-            text: permMsg ?? `❌ Error in rerun_launch_failures: ${error.message}`,
+            text: permMsg ?? `❌ Error in adv_rerun_launch_failures: ${error.message}`,
           }],
         };
       }
     }
   );
 
-  // ========== start_launch (Beta) ==========
+  // ========== adv_start_launch (Beta) ==========
 
   const StartLaunchSchema = z.object({
     project: z.union([z.enum(["web", "android", "ios", "api"]), z.string(), z.number()])
@@ -5156,7 +5216,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           const diffLines = formatParameterDiff(template.jobParameters.items, mergedPayload);
 
           const lines = [
-            "📋 Preview — start_launch",
+            "📋 Preview — adv_start_launch",
             `⚠️ ${START_LAUNCH_JENKINS_ONLY_NOTE}`,
             `Project: ${projectKey} (ID ${projectId})`,
             "",
@@ -5200,7 +5260,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         const url = `/api/reporting/v1/launches/${template.launchId}/job:build?projectId=${projectId}`;
         writeAuditLog({
           timestamp: new Date().toISOString(),
-          tool: "start_launch",
+          tool: "adv_start_launch",
           method: "POST",
           url,
           projectKey,
@@ -5231,7 +5291,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         return {
           content: [{
             type: "text" as const,
-            text: permMsg ?? `❌ Error in start_launch: ${error.message}`,
+            text: permMsg ?? `❌ Error in adv_start_launch: ${error.message}`,
           }],
         };
       }
@@ -5272,7 +5332,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       .describe("Priority reference. Pass { id: N } or { name: '...' }. Validated against project priorities."),
     automation_state: IdOrName.optional()
       .describe("Automation state reference. Pass { id: N } or { name: '...' }. Validated against project automation states."),
-    draft: z.boolean().optional().describe("Ignored — always forced to true for safety. Use update_test_case to publish."),
+    draft: z.boolean().optional().describe("Ignored — always forced to true for safety. Use adv_update_test_case to publish."),
     deprecated: z.boolean().optional().describe("Mark test case as deprecated. Defaults to false."),
     pre_conditions: z.string().max(2000).optional().describe("Pre-conditions (setup instructions). Supports markdown."),
     post_conditions: z.string().max(2000).optional().describe("Post-conditions (cleanup instructions). Supports markdown."),
@@ -5321,7 +5381,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           if ("error" in restored) return { content: [{ type: "text" as const, text: restored.error }] };
         }
 
-        debugLog("create_test_case: handler entered", { confirm: args.confirm, dry_run: args.dry_run, review: args.review });
+        debugLog("adv_create_test_case: handler entered", { confirm: args.confirm, dry_run: args.dry_run, review: args.review });
         if (!args.project_key && !args.project_id) {
           return { content: [{ type: "text" as const, text: "❌ Either project_key or project_id must be provided" }] };
         }
@@ -5432,13 +5492,13 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         }
 
         const url = `/test-cases?projectKey=${encodeURIComponent(projectKey)}`;
-        debugLog("create_test_case: payload built", { elapsed: `${Date.now() - handlerStart}ms`, stepsCount: (eff.steps as unknown[] | undefined)?.length ?? 0 });
+        debugLog("adv_create_test_case: payload built", { elapsed: `${Date.now() - handlerStart}ms`, stepsCount: (eff.steps as unknown[] | undefined)?.length ?? 0 });
 
         // Branch A: dry_run
         if (args.dry_run) {
           return {
             content: [{ type: "text" as const, text:
-              `DRY RUN — create_test_case\nPOST ${url}\n\nPayload:\n${JSON.stringify(payload, null, 2)}`
+              `DRY RUN — adv_create_test_case\nPOST ${url}\n\nPayload:\n${JSON.stringify(payload, null, 2)}`
             }]
           };
         }
@@ -5452,7 +5512,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           if (eff.description !== undefined) fieldsToSet.push(`  description      → ${JSON.stringify(eff.description).slice(0, 80)}...`);
           if (eff.priority !== undefined) fieldsToSet.push(`  priority         → ${JSON.stringify(eff.priority)}`);
           if (eff.automation_state !== undefined) fieldsToSet.push(`  automation_state → ${JSON.stringify(eff.automation_state)}`);
-          fieldsToSet.push(`  draft            → true (forced for safety — use update_test_case to publish)`);
+          fieldsToSet.push(`  draft            → true (forced for safety — use adv_update_test_case to publish)`);
           if (eff.deprecated !== undefined) fieldsToSet.push(`  deprecated       → ${eff.deprecated}`);
           if (eff.pre_conditions !== undefined) fieldsToSet.push(`  pre_conditions   → ${JSON.stringify(eff.pre_conditions).slice(0, 80)}...`);
           if (eff.post_conditions !== undefined) fieldsToSet.push(`  post_conditions  → ${JSON.stringify(eff.post_conditions).slice(0, 80)}...`);
@@ -5483,7 +5543,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           if (eff.custom_field === undefined) nullDefaults.push(`  custom_field     → (none)`);
           if (eff.attachments === undefined) nullDefaults.push(`  attachments      → []`);
 
-          let previewText = `📋 Preview — create_test_case\nPOST ${url}\n`;
+          let previewText = `📋 Preview — adv_create_test_case\nPOST ${url}\n`;
           if (args.source_case_key) {
             previewText += `\nSource: ${args.source_case_key}${isCrossProject ? ` (cross-project → ${projectKey})` : ""}\n`;
           }
@@ -5511,7 +5571,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         }
 
         // Confirm — execute
-        debugLog("create_test_case: entering confirm branch", { elapsed: `${Date.now() - handlerStart}ms` });
+        debugLog("adv_create_test_case: entering confirm branch", { elapsed: `${Date.now() - handlerStart}ms` });
         const t0 = Date.now();
         const uploadReportLines: string[] = [];
         const uploadWarnings: string[] = [];
@@ -5543,11 +5603,11 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           uploadWarnings.push(`⚠️ File upload processing failed: ${msg}. Proceeding without file attachments.`);
           delete payload.attachments;
         }
-        debugLog("create_test_case: file uploads done", { elapsed: `${Date.now() - t0}ms` });
+        debugLog("adv_create_test_case: file uploads done", { elapsed: `${Date.now() - t0}ms` });
 
         writeAuditLog({
           timestamp: new Date().toISOString(),
-          tool: "create_test_case",
+          tool: "adv_create_test_case",
           method: "POST",
           url,
           projectKey,
@@ -5556,7 +5616,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         });
 
         const body = await mutationClient.createTestCase(projectKey, payload);
-        debugLog("create_test_case: API call done", { elapsed: `${Date.now() - t0}ms`, totalElapsed: `${Date.now() - handlerStart}ms` });
+        debugLog("adv_create_test_case: API call done", { elapsed: `${Date.now() - t0}ms`, totalElapsed: `${Date.now() - handlerStart}ms` });
         const tc = body.data;
 
         let resultText =
@@ -5578,7 +5638,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         // Optional quality review
         if (args.review && REVIEW_FILES_AVAILABLE && tc.key) {
           try {
-            debugLog("create_test_case: running quality review", { key: tc.key });
+            debugLog("adv_create_test_case: running quality review", { key: tc.key });
             const { ZebrunnerToolHandlers } = await import("./handlers/tools.js");
             const { ZebrunnerApiClient } = await import("./api/client.js");
             const basicClient = new ZebrunnerApiClient(config);
@@ -5592,7 +5652,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
               format: "markdown",
               improveIfPossible: false,
             }, fieldsLayout);
-            debugLog("create_test_case: review done", { elapsed: `${Date.now() - t0}ms` });
+            debugLog("adv_create_test_case: review done", { elapsed: `${Date.now() - t0}ms` });
             const reviewText = reviewResult?.content?.[0]?.text;
             if (reviewText) {
               resultText += `\n\n📝 Quality Review\n${"─".repeat(40)}\n${reviewText}`;
@@ -5616,7 +5676,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         const enriched = await enrichMutationError(error, args.project_key || String(args.project_id), mutationClient);
         return {
           content: [{ type: "text" as const, text:
-            `❌ Error in create_test_case: ${enriched}`
+            `❌ Error in adv_create_test_case: ${enriched}`
           }]
         };
       }
@@ -5685,7 +5745,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           if ("error" in restored) return { content: [{ type: "text" as const, text: restored.error }] };
         }
 
-        debugLog("update_test_case: handler entered", { confirm: args.confirm, dry_run: args.dry_run, review: args.review });
+        debugLog("adv_update_test_case: handler entered", { confirm: args.confirm, dry_run: args.dry_run, review: args.review });
         if (!args.project_key && !args.project_id) {
           return { content: [{ type: "text" as const, text: "❌ Either project_key or project_id must be provided" }] };
         }
@@ -5725,7 +5785,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         if (args.dry_run) {
           return {
             content: [{ type: "text" as const, text:
-              `DRY RUN — update_test_case (by ${identifierType})\nPATCH ${url}\n\nPayload:\n${JSON.stringify(payload, null, 2)}`
+              `DRY RUN — adv_update_test_case (by ${identifierType})\nPATCH ${url}\n\nPayload:\n${JSON.stringify(payload, null, 2)}`
             }]
           };
         }
@@ -5765,7 +5825,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           const token = generateConfirmationToken(JSON.stringify(args));
           return {
             content: [{ type: "text" as const, text:
-              `📋 Preview — update_test_case (by ${identifierType})\nPATCH ${url}\n\n` +
+              `📋 Preview — adv_update_test_case (by ${identifierType})\nPATCH ${url}\n\n` +
               `Current record:\n${JSON.stringify(beforeData, null, 2)}\n\n` +
               `Proposed changes:\n${JSON.stringify(payload, null, 2)}\n` +
               stepsWarning + reqsWarning + filePathSection + `\n` +
@@ -5776,7 +5836,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         }
 
         // Confirm — execute
-        debugLog("update_test_case: entering confirm branch", { elapsed: `${Date.now() - handlerStart}ms` });
+        debugLog("adv_update_test_case: entering confirm branch", { elapsed: `${Date.now() - handlerStart}ms` });
         const t0 = Date.now();
         const uploadReportLines: string[] = [];
         const uploadWarnings: string[] = [];
@@ -5808,11 +5868,11 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           uploadWarnings.push(`⚠️ File upload processing failed: ${msg}. Proceeding without file attachments.`);
           delete payload.attachments;
         }
-        debugLog("update_test_case: file uploads done", { elapsed: `${Date.now() - t0}ms` });
+        debugLog("adv_update_test_case: file uploads done", { elapsed: `${Date.now() - t0}ms` });
 
         writeAuditLog({
           timestamp: new Date().toISOString(),
-          tool: "update_test_case",
+          tool: "adv_update_test_case",
           method: "PATCH",
           url,
           projectKey,
@@ -5822,7 +5882,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         const body = isKeyIdentifier
           ? await mutationClient.updateTestCaseByKey(projectKey, args.identifier as string, payload)
           : await mutationClient.updateTestCaseById(projectKey, args.identifier as number, payload);
-        debugLog("update_test_case: API call done", { elapsed: `${Date.now() - t0}ms`, totalElapsed: `${Date.now() - handlerStart}ms` });
+        debugLog("adv_update_test_case: API call done", { elapsed: `${Date.now() - t0}ms`, totalElapsed: `${Date.now() - handlerStart}ms` });
 
         const afterData = body.data ?? {};
         const diffs = computeDiff(beforeData, afterData);
@@ -5839,7 +5899,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         const caseKey = afterData.key as string | undefined;
         if (args.review && REVIEW_FILES_AVAILABLE && caseKey) {
           try {
-            debugLog("update_test_case: running quality review", { key: caseKey });
+            debugLog("adv_update_test_case: running quality review", { key: caseKey });
             const { ZebrunnerToolHandlers } = await import("./handlers/tools.js");
             const { ZebrunnerApiClient } = await import("./api/client.js");
             const basicClient = new ZebrunnerApiClient(config);
@@ -5853,7 +5913,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
               format: "markdown",
               improveIfPossible: false,
             }, fieldsLayout);
-            debugLog("update_test_case: review done", { elapsed: `${Date.now() - t0}ms` });
+            debugLog("adv_update_test_case: review done", { elapsed: `${Date.now() - t0}ms` });
             const reviewText = reviewResult?.content?.[0]?.text;
             if (reviewText) {
               resultText += `\n\n📝 Quality Review\n${"─".repeat(40)}\n${reviewText}`;
@@ -5882,7 +5942,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         const enriched = await enrichMutationError(error, args.project_key || String(args.project_id), mutationClient);
         return {
           content: [{ type: "text" as const, text:
-            `❌ Error in update_test_case: ${enriched}${hint}`
+            `❌ Error in adv_update_test_case: ${enriched}${hint}`
           }]
         };
       }
@@ -5897,12 +5957,15 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       description: "📋 Get ALL TCM test cases by project using comprehensive pagination",
     inputSchema: {
       project_key: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
-      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
+      format: z.enum(['dto', 'json', 'compact', 'string', 'markdown']).default(defaultDataFormat()).describe("Output format"),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI"),
       exclude_deprecated: z.boolean().default(false).describe("Exclude deprecated test cases from results"),
       exclude_draft: z.boolean().default(false).describe("Exclude draft test cases from results"),
       exclude_deleted: z.boolean().default(true).describe("Exclude deleted test cases from results (default: true)"),
       max_results: z.number().int().positive().max(10000).default(5000).describe("Maximum number of results (configurable limit for performance)"),
+      detail: z.enum(['summary', 'full']).default(defaultDetailLevel()).describe("summary trims each case; full returns every field. Use count_only for metrics only."),
+      fields: z.array(z.string()).optional().describe("Optional explicit field allow-list per test case (overrides detail)."),
+      include_root_suite: z.boolean().default(false).describe("Enrich each case with rootSuiteId (suite hierarchy lookup)."),
       count_only: z.boolean().default(false).describe(
         "When true, returns only the total count without test case data. " +
         "Efficient for metrics collection -- avoids 1MB response limit on large projects."
@@ -5920,9 +5983,9 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
     },
     async (args) => {
       try {
-        const { project_key, format, include_clickable_links, exclude_deprecated, exclude_draft, exclude_deleted, max_results, count_only, include_history, history_filter, history_limit } = args;
+        const { project_key, format, include_clickable_links, exclude_deprecated, exclude_draft, exclude_deleted, max_results, detail, fields, include_root_suite, count_only, include_history, history_filter, history_limit } = args;
 
-        debugLog("Getting all TCM test cases", { project_key, include_clickable_links, max_results, count_only });
+        debugLog("Getting all TCM test cases", { project_key, include_clickable_links, max_results, count_only, include_root_suite });
 
         // Build RQL filter for status exclusions
         // Note: `deleted` is NOT supported in RQL — must be filtered client-side
@@ -6007,9 +6070,24 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         console.error(`Found ${allTestCases.length} testcases.`);
 
         // Add clickable links to test cases if enabled
-        const enhancedTestCases = allTestCases.map((tc: any) =>
+        let casesForOutput = allTestCases.map((tc: any) =>
           addTestCaseWebUrl(tc, project_key, clickableLinkConfig.baseWebUrl, clickableLinkConfig)
         );
+
+        if (include_root_suite && casesForOutput.length > 0) {
+          const allSuites = await client.getAllTestSuites(project_key);
+          const processedSuites = HierarchyProcessor.setRootParentsToSuites(allSuites);
+          casesForOutput = casesForOutput.map((testCase: any) => {
+            const foundSuiteId = testCase.testSuite?.id;
+            if (foundSuiteId) {
+              const rootId = HierarchyProcessor.getRootIdBySuiteId(processedSuites, foundSuiteId);
+              return { ...testCase, rootSuiteId: rootId };
+            }
+            return testCase;
+          });
+        }
+
+        const enhancedTestCases = casesForOutput;
 
         // Enrich with change history if requested
         if (include_history && enhancedTestCases.length > 0) {
@@ -6026,6 +6104,13 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           }
         }
 
+        const rootSummaryFields = ['id', 'key', 'title', 'priority', 'automationState', 'deprecated', 'webUrl', 'rootSuiteId'];
+        const projectedCases = projectTestCases(
+          enhancedTestCases,
+          detail,
+          fields ?? (include_root_suite && detail === 'summary' ? [...rootSummaryFields] : undefined),
+        );
+
         const resultPayload: any = {
           project_key,
           total_fetched: allTestCases.length,
@@ -6036,7 +6121,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
             exclude_draft,
             exclude_deleted
           },
-          test_cases: enhancedTestCases
+          test_cases: projectedCases
         };
 
         if (include_history) {
@@ -6045,13 +6130,18 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         }
 
         const formattedResult = FormatProcessor.format(resultPayload, format as any);
-        const resultText = typeof formattedResult === 'string' ? formattedResult : JSON.stringify(formattedResult, null, 2);
+        let resultText = typeof formattedResult === 'string' ? formattedResult : JSON.stringify(formattedResult, null, 2);
+        resultText = appendResponseSizeNotice(resultText, [
+          '- max_results: lower cap',
+          '- detail: "summary"',
+          '- count_only: true',
+        ]);
 
         const MAX_RESPONSE_BYTES = 900_000;
         if (resultText.length > MAX_RESPONSE_BYTES) {
-          const avgItemSize = resultText.length / enhancedTestCases.length;
+          const avgItemSize = resultText.length / projectedCases.length;
           const safeCount = Math.floor(MAX_RESPONSE_BYTES / avgItemSize * 0.9);
-          const truncated = enhancedTestCases.slice(0, Math.max(safeCount, 1));
+          const truncated = projectedCases.slice(0, Math.max(safeCount, 1));
           const truncatedText = JSON.stringify(truncated, null, 2);
           return { content: [{ type: "text" as const, text:
             `Found ${allTestCases.length} total test cases for ${project_key}, returning first ${truncated.length} ` +
@@ -6068,7 +6158,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         };
 
       } catch (error: any) {
-        debugLog("Error in get_all_tcm_test_cases_by_project", { error: error.message, args });
+        debugLog("Error in adv_get_all_tcm_test_cases_by_project", { error: error.message, args });
         return {
           content: [{
             type: "text" as const,
@@ -6186,7 +6276,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         };
 
       } catch (error: any) {
-        debugLog("Error in get_all_tcm_test_cases_with_root_suite_id", { error: error.message, args });
+        debugLog("Error in adv_get_all_tcm_test_cases_with_root_suite_id", { error: error.message, args });
         return {
           content: [{
             type: "text" as const,
@@ -6248,7 +6338,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         };
 
       } catch (error: any) {
-        debugLog("Error in get_root_id_by_suite_id", { error: error.message, args });
+        debugLog("Error in adv_get_root_id_by_suite_id", { error: error.message, args });
         return {
           content: [{
             type: "text" as const,
@@ -6267,7 +6357,9 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       project_key: z.string().min(1).describe("Project key (e.g., 'MCP')"),
       suite_id: z.number().int().positive().describe("Suite ID to get test cases from"),
       include_steps: z.boolean().default(false).describe("Include detailed test steps for first few cases"),
-      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
+      format: z.enum(['dto', 'json', 'compact', 'string', 'markdown']).default(defaultDataFormat()).describe("Output format"),
+      detail: z.enum(['summary', 'full']).default('full').describe("summary trims each case; full returns every field. Use adv_get_test_case_by_key for full body after filtering."),
+      fields: z.array(z.string()).optional().describe("Optional explicit field allow-list per test case (overrides detail)."),
       get_all: z.boolean().default(true).describe("Get all test cases (true) or paginated results (false)"),
       include_sub_suites: z.boolean().default(true).describe("Include test cases from sub-suites (if any)"),
       count_only: z.boolean().default(false).describe(
@@ -6289,7 +6381,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
     },
     async (args) => {
       try {
-        const { project_key, suite_id, include_steps, format, get_all, include_sub_suites, count_only, page, size, include_history, history_filter, history_limit } = args;
+        const { project_key, suite_id, include_steps, format, detail, fields, get_all, include_sub_suites, count_only, page, size, include_history, history_filter, history_limit } = args;
 
         debugLog("Smart test case retrieval by suite", { project_key, suite_id, include_steps, format, get_all, include_sub_suites, page, size });
 
@@ -6599,9 +6691,11 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           if (warning) metadata.history_warning = warning;
         }
 
+        const projectedCases = projectTestCases(testCases, detail, fields);
+
         const result = {
           metadata,
-          testCases
+          testCases: projectedCases
         };
 
         const formattedData = FormatProcessor.format(result, format);
@@ -6616,13 +6710,18 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           summaryMessage += `📝 Detailed steps included for first ${Math.min(5, testCases.length)} cases\n`;
         }
 
-        const resultText = typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2);
+        let resultText = typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2);
+        resultText = appendResponseSizeNotice(resultText, [
+          '- detail: "summary"',
+          '- count_only: true',
+          '- get_all: false with smaller page size',
+        ]);
 
         const MAX_RESPONSE_BYTES = 900_000;
         if (resultText.length > MAX_RESPONSE_BYTES) {
-          const avgItemSize = resultText.length / testCases.length;
+          const avgItemSize = resultText.length / projectedCases.length;
           const safeCount = Math.floor(MAX_RESPONSE_BYTES / avgItemSize * 0.9);
-          const truncated = testCases.slice(0, Math.max(safeCount, 1));
+          const truncated = projectedCases.slice(0, Math.max(safeCount, 1));
           const truncatedText = JSON.stringify(truncated, null, 2);
           return { content: [{ type: "text" as const, text:
             `Found ${testCases.length} total test cases in suite ${suite_id}, returning first ${truncated.length} ` +
@@ -6641,7 +6740,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         };
 
       } catch (error: any) {
-        debugLog("Error in get_test_cases_by_suite_smart", { error: error.message, args });
+        debugLog("Error in adv_get_test_cases_by_suite_smart", { error: error.message, args });
         return {
           content: [{
             type: "text" as const,
@@ -6685,7 +6784,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
     },
     async (args) => {
       try {
-        debugLog("get_launch_details called", args);
+        debugLog("adv_get_launch_details called", args);
         const result = await reportingHandlers.getLauncherDetails(args);
         if (args.chart && args.chart !== 'none') {
           const text = result?.content?.[0]?.text || '{}';
@@ -6706,7 +6805,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         }
         return result;
       } catch (error: any) {
-        debugLog("Error in get_launch_details", { error: error.message, args });
+        debugLog("Error in adv_get_launch_details", { error: error.message, args });
         return {
           content: [{
             type: "text" as const,
@@ -6756,10 +6855,10 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
     },
     async (args) => {
       try {
-        debugLog("get_launch_test_summary called", args);
+        debugLog("adv_get_launch_test_summary called", args);
         return await reportingHandlers.getLaunchTestSummary(args);
       } catch (error: any) {
-        debugLog("Error in get_launch_test_summary", { error: error.message, args });
+        debugLog("Error in adv_get_launch_test_summary", { error: error.message, args });
         return {
           content: [{
             type: "text" as const,
@@ -6821,7 +6920,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
     },
     async (args) => {
       try {
-        debugLog("regression_results_analyzer called", args);
+        debugLog("adv_regression_results_analyzer called", args);
 
         const { projectId } = await resolveProjectId(args.project);
         const projectKey = typeof args.project === 'string'
@@ -6878,7 +6977,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
 
         return await analyzeRegressionResults({ client, reportingClient }, input);
       } catch (error: any) {
-        debugLog("Error in regression_results_analyzer", { error: error.message, args });
+        debugLog("Error in adv_regression_results_analyzer", { error: error.message, args });
         return {
           content: [{
             type: "text" as const,
@@ -6941,7 +7040,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
     },
     async (args) => {
       try {
-        debugLog("generate_weekly_regression_stability_report called", args);
+        debugLog("adv_generate_weekly_regression_stability_report called", args);
         return await reportingHandlers.generateWeeklyRegressionStabilityReport({
           projectKey: args.project_key,
           suites: args.suites
@@ -6966,7 +7065,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           chart_type: args.chart_type,
         });
       } catch (error: any) {
-        debugLog("Error in generate_weekly_regression_stability_report", { error: error.message, args });
+        debugLog("Error in adv_generate_weekly_regression_stability_report", { error: error.message, args });
         return {
           content: [{
             type: "text" as const,
@@ -7003,10 +7102,10 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
     },
     async (args) => {
       try {
-        debugLog("get_launch_summary called", args);
+        debugLog("adv_get_launch_summary called", args);
         return await reportingHandlers.getLauncherSummary(args);
       } catch (error: any) {
-        debugLog("Error in get_launch_summary", { error: error.message, args });
+        debugLog("Error in adv_get_launch_summary", { error: error.message, args });
         return {
           content: [{
             type: "text" as const,
@@ -7051,7 +7150,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
     },
     async (args) => {
       try {
-        debugLog("analyze_regression_runtime called", args);
+        debugLog("adv_analyze_regression_runtime called", args);
 
         const { projectId } = await resolveProjectId(args.project);
         const resolvedKey = typeof args.project === 'string'
@@ -7077,7 +7176,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           chart_type: args.chart_type,
         });
       } catch (error: any) {
-        debugLog("Error in analyze_regression_runtime", { error: error.message, args });
+        debugLog("Error in adv_analyze_regression_runtime", { error: error.message, args });
         return {
           content: [{
             type: "text" as const,
@@ -7125,7 +7224,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
     },
     async (args) => {
       try {
-        debugLog("find_flaky_tests called", args);
+        debugLog("adv_find_flaky_tests called", args);
         const { projectId } = await resolveProjectId(args.project);
         const projectKey = typeof args.project === 'string'
           ? (getProjectAliases()[args.project] || args.project)
@@ -7149,7 +7248,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           chart_type: args.chart_type,
         });
       } catch (error: any) {
-        debugLog("Error in find_flaky_tests", { error: error.message, args });
+        debugLog("Error in adv_find_flaky_tests", { error: error.message, args });
         return {
           content: [{
             type: "text" as const,
@@ -7198,6 +7297,12 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       previous_milestone: z.string().optional().describe(
         "Baseline milestone for delta comparison (runtime_efficiency, release_readiness)"
       ),
+      inline: z.boolean().default(true).describe(
+        "When true (default), embed HTML dashboards and PNG charts in the response. When false, write artifacts to disk and return file paths."
+      ),
+      output_dir: z.string().optional().describe(
+        "Directory for report artifacts when inline=false. Defaults to <tmpdir>/zebrunner-reports/"
+      ),
     },
       annotations: {
         readOnlyHint: true,
@@ -7208,7 +7313,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
     },
     async (args) => {
       try {
-        debugLog("generate_report called", args);
+        debugLog("adv_generate_report called", args);
         return await reportHandler.generateReport({
           report_types: args.report_types,
           projects: args.projects,
@@ -7219,9 +7324,11 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           targets: args.targets,
           exclude_suite_patterns: args.exclude_suite_patterns,
           previous_milestone: args.previous_milestone,
+          inline: args.inline,
+          output_dir: args.output_dir,
         });
       } catch (error: any) {
-        debugLog("Error in generate_report", { error: error.message, args });
+        debugLog("Error in adv_generate_report", { error: error.message, args });
         return {
           content: [{
             type: "text" as const,
@@ -7269,10 +7376,10 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
     },
     async (args) => {
       try {
-        debugLog("analyze_test_failure called", args);
+        debugLog("adv_analyze_test_failure called", args);
         return await reportingHandlers.analyzeTestFailureById(args);
       } catch (error: any) {
-        debugLog("Error in analyze_test_failure", { error: error.message, args });
+        debugLog("Error in adv_analyze_test_failure", { error: error.message, args });
         return {
           content: [{
             type: "text" as const,
@@ -7314,10 +7421,10 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
     },
     async (args) => {
       try {
-        debugLog("get_test_execution_history called", args);
+        debugLog("adv_get_test_execution_history called", args);
         return await reportingHandlers.getTestExecutionHistory(args);
       } catch (error: any) {
-        debugLog("Error in get_test_execution_history", { error: error.message, args });
+        debugLog("Error in adv_get_test_execution_history", { error: error.message, args });
         return {
           content: [{
             type: "text" as const,
@@ -7348,10 +7455,10 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
     },
     async (args) => {
       try {
-        debugLog("download_test_screenshot called", args);
+        debugLog("adv_download_test_screenshot called", args);
         return await reportingHandlers.downloadTestScreenshot(args);
       } catch (error: any) {
-        debugLog("Error in download_test_screenshot", { error: error.message, args });
+        debugLog("Error in adv_download_test_screenshot", { error: error.message, args });
         return {
           content: [{
             type: "text" as const,
@@ -7383,10 +7490,10 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
     },
     async (args) => {
       try {
-        debugLog("analyze_screenshot called", args);
+        debugLog("adv_analyze_screenshot called", args);
         return await reportingHandlers.analyzeScreenshotTool(args);
       } catch (error: any) {
-        debugLog("Error in analyze_screenshot", { error: error.message, args });
+        debugLog("Error in adv_analyze_screenshot", { error: error.message, args });
         return {
           content: [{
             type: "text" as const,
@@ -7428,14 +7535,14 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
     },
     async (args) => {
       try {
-        console.error("[DEBUG] analyze_test_execution_video called", JSON.stringify(args));
-        debugLog("analyze_test_execution_video called", args);
+        console.error("[DEBUG] adv_analyze_test_execution_video called", JSON.stringify(args));
+        debugLog("adv_analyze_test_execution_video called", args);
         const result = await reportingHandlers.analyzeTestExecutionVideoTool(args);
-        console.error("[DEBUG] analyze_test_execution_video completed successfully");
+        console.error("[DEBUG] adv_analyze_test_execution_video completed successfully");
         return result;
       } catch (error: any) {
-        console.error("[DEBUG] Error in analyze_test_execution_video:", error.message, error.stack);
-        debugLog("Error in analyze_test_execution_video", { error: error.message, args });
+        console.error("[DEBUG] Error in adv_analyze_test_execution_video:", error.message, error.stack);
+        debugLog("Error in adv_analyze_test_execution_video", { error: error.message, args });
         return {
           content: [{
             type: "text" as const,
@@ -7500,7 +7607,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
   server.registerTool(
     "get_all_launches_for_project",
     {
-      description: "📋 List individual launch executions for a project with pagination. Returns launch names, statuses, and timestamps. Use this to browse or list launches, NOT for aggregated results/pass rates (use get_platform_results_by_period for that).",
+      description: "📋 List individual launch executions for a project with pagination. Returns launch names, statuses, and timestamps. Use this to browse or list launches, NOT for aggregated results/pass rates (use adv_get_platform_results_by_period for that).",
     inputSchema: {
       project: z.union([z.enum(["web","android","ios","api"]), z.string(), z.number()]).describe("Project alias (web/android/ios/api), project key, or project ID"),
       page: z.number().int().positive().default(1).describe("Page number (starts from 1)"),
@@ -7509,7 +7616,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         "When true, returns only the total count of launches without full data. " +
         "Uses API metadata for an efficient single-request count. Bypasses MCP response size limits."
       ),
-      format: z.enum(['raw', 'formatted']).default('formatted').describe("Output format - 'raw' for full API response, 'formatted' for user-friendly display"),
+      format: z.enum(['raw', 'formatted', 'compact']).default('formatted').describe("Output format - 'raw' for pretty JSON API response, 'compact' for minified JSON, 'formatted' for user-friendly display"),
       chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
         "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
       ),
@@ -7526,7 +7633,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
     },
     async (args) => {
       try {
-        debugLog("get_all_launches_for_project called", args);
+        debugLog("adv_get_all_launches_for_project called", args);
 
         // Resolve project ID using the same logic as other tools
         const { projectId } = await resolveProjectId(args.project);
@@ -7558,6 +7665,15 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
             ],
           };
           return buildChartResponse(chartConfig, args.chart as 'png' | 'html' | 'text', `Launch results for ${args.project}: ${launchesData._meta?.total || items.length} total launches`);
+        }
+
+        if (args.format === 'compact') {
+          return {
+            content: [{
+              type: "text" as const,
+              text: JSON.stringify(launchesData)
+            }]
+          };
         }
 
         if (args.format === 'raw') {
@@ -7631,7 +7747,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         };
 
       } catch (error: any) {
-        debugLog("Error in get_all_launches_for_project", { error: error.message, args });
+        debugLog("Error in adv_get_all_launches_for_project", { error: error.message, args });
         return {
           content: [{
             type: "text" as const,
@@ -7645,7 +7761,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
   server.registerTool(
     "get_all_launches_with_filter",
     {
-      description: "🔍 Search and filter individual launch executions by milestone, build number, or launch name. Returns matching launches with statuses. Use this to find specific launches, NOT for aggregated results/pass rates (use get_platform_results_by_period for that).",
+      description: "🔍 Search and filter individual launch executions by milestone, build number, or launch name. Returns matching launches with statuses. Use this to find specific launches, NOT for aggregated results/pass rates (use adv_get_platform_results_by_period for that).",
     inputSchema: {
       project: z.union([z.enum(["web","android","ios","api"]), z.string(), z.number()]).describe("Project alias (web/android/ios/api), project key, or project ID"),
       milestone: z.string().optional().describe("Filter by milestone name (e.g., '25.39.0')"),
@@ -7656,7 +7772,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         "When true, returns only the total count of matching launches without full data. " +
         "Uses API metadata for an efficient single-request count. Bypasses MCP response size limits."
       ),
-      format: z.enum(['raw', 'formatted']).default('formatted').describe("Output format - 'raw' for full API response, 'formatted' for user-friendly display"),
+      format: z.enum(['raw', 'formatted', 'compact']).default('formatted').describe("Output format - 'raw' for pretty JSON API response, 'compact' for minified JSON, 'formatted' for user-friendly display"),
       chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
         "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
       ),
@@ -7673,7 +7789,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
     },
     async (args) => {
       try {
-        debugLog("get_all_launches_with_filter called", args);
+        debugLog("adv_get_all_launches_with_filter called", args);
 
         // Validate that at least one filter is provided
         if (!args.milestone && !args.query) {
@@ -7728,7 +7844,16 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           return buildChartResponse(chartConfig, args.chart as 'png' | 'html' | 'text', `Filtered launches for ${args.project}: ${launchesData._meta?.total || items.length} total`);
         }
 
-if (args.format === 'raw') {
+        if (args.format === 'compact') {
+          return {
+            content: [{
+              type: "text" as const,
+              text: JSON.stringify(launchesData)
+            }]
+          };
+        }
+
+        if (args.format === 'raw') {
           return {
             content: [{
               type: "text" as const,
@@ -7810,7 +7935,7 @@ if (args.format === 'raw') {
         };
 
       } catch (error: any) {
-        debugLog("Error in get_all_launches_with_filter", { error: error.message, args });
+        debugLog("Error in adv_get_all_launches_with_filter", { error: error.message, args });
         return {
           content: [{
             type: "text" as const,
@@ -7834,7 +7959,7 @@ if (args.format === 'raw') {
     },
     async () => {
       try {
-        debugLog("test_reporting_connection called");
+        debugLog("adv_test_reporting_connection called");
         const result = await reportingClient.testConnection();
         return {
           content: [
@@ -7845,7 +7970,7 @@ if (args.format === 'raw') {
           ]
         };
       } catch (error: any) {
-        debugLog("Error in test_reporting_connection", { error: error.message });
+        debugLog("Error in adv_test_reporting_connection", { error: error.message });
         return {
           content: [
             {
@@ -7884,7 +8009,7 @@ if (args.format === 'raw') {
     },
     async (args) => {
       try {
-        debugLog("about_mcp_tools called", args);
+        debugLog("adv_about_mcp_tools called", args);
         const snapshot = loadToolIntelSnapshot();
 
         if (args.mode === "tool") {
@@ -8002,11 +8127,11 @@ if (args.format === 'raw') {
 
         return { content: [{ type: "text" as const, text: toolsSummary + capsSection }] };
       } catch (error: any) {
-        debugLog("Error in about_mcp_tools", { error: error.message, args });
+        debugLog("Error in adv_about_mcp_tools", { error: error.message, args });
         return {
           content: [{
             type: "text" as const,
-            text: `❌ Error in about_mcp_tools: ${error?.message || error}`
+            text: `❌ Error in adv_about_mcp_tools: ${error?.message || error}`
           }]
         };
       }
@@ -8058,7 +8183,7 @@ if (args.format === 'raw') {
     },
     async (args) => {
       try {
-        debugLog("get_platform_results_by_period called", args);
+        debugLog("adv_get_platform_results_by_period called", args);
 
         // Resolve project ID with enhanced discovery and suggestions
         const { projectId } = await resolveProjectId(args.project);
@@ -8074,7 +8199,7 @@ if (args.format === 'raw') {
         const data = await callWidgetSql(projectId, args.templateId, paramsConfig);
 
         if (DEBUG_MODE) {
-          console.error("get_platform_results_by_period ok", {
+          console.error("adv_get_platform_results_by_period ok", {
             projectId, templateId: args.templateId, period: args.period
           });
         }
@@ -8161,7 +8286,7 @@ if (args.format === 'raw') {
           content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }]
         };
       } catch (error: any) {
-        debugLog("Error in get_platform_results_by_period", { error: error.message, args });
+        debugLog("Error in adv_get_platform_results_by_period", { error: error.message, args });
         return {
           content: [{
             type: "text" as const,
@@ -8215,7 +8340,7 @@ if (args.format === 'raw') {
     },
     async (args) => {
       try {
-        debugLog("get_top_bugs called", args);
+        debugLog("adv_get_top_bugs called", args);
 
         // Resolve project ID with enhanced discovery and suggestions
         const { projectId } = await resolveProjectId(args.project);
@@ -8312,7 +8437,7 @@ if (args.format === 'raw') {
           .slice(0, args.limit);
 
         if (DEBUG_MODE) {
-          console.error("get_top_bugs ok", {
+          console.error("adv_get_top_bugs ok", {
             projectId, templateId: args.templateId, period: args.period, returned: top.length
           });
         }
@@ -8348,7 +8473,7 @@ if (args.format === 'raw') {
           content: [{ type: "text" as const, text: formatted }]
         };
       } catch (error: any) {
-        debugLog("Error in get_top_bugs", { error: error.message, args });
+        debugLog("Error in adv_get_top_bugs", { error: error.message, args });
         return {
           content: [{
             type: "text" as const,
@@ -8404,7 +8529,7 @@ if (args.format === 'raw') {
     },
     async (args) => {
       try {
-        debugLog("get_bug_review called", args);
+        debugLog("adv_get_bug_review called", args);
 
         // Resolve project ID with enhanced discovery and suggestions
         const { projectId } = await resolveProjectId(args.project);
@@ -8734,7 +8859,7 @@ ${priorityAnalysis.statistics.withoutDefects > 0 ? `- **Tracking Gap:** ${priori
           content: [{ type: "text" as const, text: detailed }]
         };
       } catch (error: any) {
-        debugLog("Error in get_bug_review", { error: error.message, args });
+        debugLog("Error in adv_get_bug_review", { error: error.message, args });
         return {
           content: [{
             type: "text" as const,
@@ -8773,7 +8898,7 @@ ${priorityAnalysis.statistics.withoutDefects > 0 ? `- **Tracking Gap:** ${priori
     },
     async (args) => {
       try {
-        debugLog("get_bug_failure_info called", args);
+        debugLog("adv_get_bug_failure_info called", args);
 
         // Resolve project ID with enhanced discovery and suggestions
         const { projectId } = await resolveProjectId(args.project);
@@ -8916,7 +9041,7 @@ ${detailsInfo.map((detail, i) => {
           content: [{ type: "text" as const, text: detailed }]
         };
       } catch (error: any) {
-        debugLog("Error in get_bug_failure_info", { error: error.message, args });
+        debugLog("Error in adv_get_bug_failure_info", { error: error.message, args });
         return {
           content: [{
             type: "text" as const,
@@ -8961,7 +9086,7 @@ ${detailsInfo.map((detail, i) => {
     },
     async (args) => {
       try {
-        debugLog("get_project_milestones called", args);
+        debugLog("adv_get_project_milestones called", args);
 
         // Resolve project ID with enhanced discovery and suggestions
         const { projectId } = await resolveProjectId(args.project);
@@ -9051,7 +9176,7 @@ ${detailsInfo.map((detail, i) => {
         };
 
         if (DEBUG_MODE) {
-          console.error("get_project_milestones ok", {
+          console.error("adv_get_project_milestones ok", {
             projectId,
             page: args.page,
             pageSize: args.pageSize,
@@ -9099,7 +9224,7 @@ ${detailsInfo.map((detail, i) => {
           content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }]
         };
       } catch (error: any) {
-        debugLog("Error in get_project_milestones", { error: error.message, args });
+        debugLog("Error in adv_get_project_milestones", { error: error.message, args });
         return {
           content: [{
             type: "text" as const,
@@ -9134,7 +9259,7 @@ ${detailsInfo.map((detail, i) => {
     },
     async (args) => {
       try {
-        debugLog("get_available_projects called", args);
+        debugLog("adv_get_available_projects called", args);
 
         // Get projects data
         const projectsData = await reportingClient.getAvailableProjects({
@@ -9154,7 +9279,7 @@ ${detailsInfo.map((detail, i) => {
         }
 
         if (DEBUG_MODE) {
-          console.error("get_available_projects ok", {
+          console.error("adv_get_available_projects ok", {
             totalProjects: projectsData.items.length,
             starred: args.starred,
             publiclyAccessible: args.publiclyAccessible,
@@ -9214,7 +9339,7 @@ ${detailsInfo.map((detail, i) => {
           content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }]
         };
       } catch (error: any) {
-        debugLog("Error in get_available_projects", { error: error.message, args });
+        debugLog("Error in adv_get_available_projects", { error: error.message, args });
         return {
           content: [{
             type: "text" as const,
@@ -9249,7 +9374,7 @@ ${detailsInfo.map((detail, i) => {
     },
     async (args) => {
       try {
-        debugLog("validate_test_case called", args);
+        debugLog("adv_validate_test_case called", args);
 
         // Import handlers here to avoid circular dependencies
         const { ZebrunnerToolHandlers } = await import("./handlers/tools.js");
@@ -9260,7 +9385,7 @@ ${detailsInfo.map((detail, i) => {
         const fieldsLayout = await getFieldsLayoutForProject(args.projectKey);
         return await toolHandlers.validateTestCase(args, fieldsLayout);
       } catch (error: any) {
-        debugLog("Error in validate_test_case", { error: error.message, args });
+        debugLog("Error in adv_validate_test_case", { error: error.message, args });
         return {
           content: [{
             type: "text" as const,
@@ -9293,7 +9418,7 @@ ${detailsInfo.map((detail, i) => {
     },
     async (args) => {
       try {
-        debugLog("improve_test_case called", args);
+        debugLog("adv_improve_test_case called", args);
 
         // Import handlers here to avoid circular dependencies
         const { ZebrunnerToolHandlers } = await import("./handlers/tools.js");
@@ -9304,7 +9429,7 @@ ${detailsInfo.map((detail, i) => {
         const fieldsLayout = await getFieldsLayoutForProject(args.projectKey);
         return await toolHandlers.improveTestCase(args, fieldsLayout);
       } catch (error: any) {
-        debugLog("Error in improve_test_case", { error: error.message, args });
+        debugLog("Error in adv_improve_test_case", { error: error.message, args });
         return {
           content: [{
             type: "text" as const,
@@ -9333,7 +9458,7 @@ ${detailsInfo.map((detail, i) => {
       nameFilter: z.string().optional()
         .describe("Filter by test run name (partial match)"),
       milestoneFilter: z.union([z.string(), z.number()]).optional()
-        .describe("Filter by milestone ID (use get_project_milestones to find ID) or milestone name (will be converted to ID)"),
+        .describe("Filter by milestone ID (use adv_get_project_milestones to find ID) or milestone name (will be converted to ID)"),
       buildNumberFilter: z.string().optional()
         .describe("Filter by build number (searches in configurations, title, and description)"),
       closedFilter: z.boolean().optional()
@@ -9362,7 +9487,7 @@ ${detailsInfo.map((detail, i) => {
     },
     async (args) => {
       try {
-        debugLog("list_test_runs called", args);
+        debugLog("adv_list_test_runs called", args);
 
         // Resolve project using dynamic resolution (same as Reporting API tools)
         const { projectId, suggestions } = await resolveProjectId(args.project);
@@ -9399,7 +9524,7 @@ ${detailsInfo.map((detail, i) => {
 
               const milestone = milestonesData.items.find((m: any) => m.name === args.milestoneFilter);
               if (!milestone) {
-                throw new Error(`Milestone '${args.milestoneFilter}' not found. Use get_project_milestones to see available milestones.`);
+                throw new Error(`Milestone '${args.milestoneFilter}' not found. Use adv_get_project_milestones to see available milestones.`);
               }
               milestoneId = milestone.id;
             } catch (error: any) {
@@ -9527,7 +9652,7 @@ ${detailsInfo.map((detail, i) => {
           content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }]
         };
       } catch (error: any) {
-        debugLog("Error in list_test_runs", { error: error.message, args });
+        debugLog("Error in adv_list_test_runs", { error: error.message, args });
         return {
           content: [{
             type: "text" as const,
@@ -9565,7 +9690,7 @@ ${detailsInfo.map((detail, i) => {
     },
     async (args) => {
       try {
-        debugLog("get_test_run_by_id called", args);
+        debugLog("adv_get_test_run_by_id called", args);
 
         // Resolve project using dynamic resolution (same as Reporting API tools)
         const { projectId, suggestions } = await resolveProjectId(args.project);
@@ -9661,7 +9786,7 @@ ${detailsInfo.map((detail, i) => {
               }
             },
             projectKey,
-            note: "Use 'list_test_run_test_cases' tool to get the test cases for this test run"
+            note: "Use 'adv_list_test_run_test_cases' tool to get the test cases for this test run"
           };
         }
 
@@ -9669,7 +9794,7 @@ ${detailsInfo.map((detail, i) => {
           content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }]
         };
       } catch (error: any) {
-        debugLog("Error in get_test_run_by_id", { error: error.message, args });
+        debugLog("Error in adv_get_test_run_by_id", { error: error.message, args });
         return {
           content: [{
             type: "text" as const,
@@ -9707,7 +9832,7 @@ ${detailsInfo.map((detail, i) => {
     },
     async (args) => {
       try {
-        debugLog("list_test_run_test_cases called", args);
+        debugLog("adv_list_test_run_test_cases called", args);
 
         // Resolve project using dynamic resolution (same as Reporting API tools)
         const { projectId, suggestions } = await resolveProjectId(args.project);
@@ -9803,7 +9928,7 @@ ${detailsInfo.map((detail, i) => {
           content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }]
         };
       } catch (error: any) {
-        debugLog("Error in list_test_run_test_cases", { error: error.message, args });
+        debugLog("Error in adv_list_test_run_test_cases", { error: error.message, args });
         return {
           content: [{
             type: "text" as const,
@@ -9833,7 +9958,7 @@ ${detailsInfo.map((detail, i) => {
       },
     },
     async (args) => {
-      debugLog("get_test_run_result_statuses called", args);
+      debugLog("adv_get_test_run_result_statuses called", args);
 
       try {
         // Resolve project using dynamic resolution (same as other tools)
@@ -9883,7 +10008,7 @@ ${detailsInfo.map((detail, i) => {
           content: [{ type: "text" as const, text: result }]
         };
       } catch (error: any) {
-        debugLog("Error in get_test_run_result_statuses", { error: error.message, args });
+        debugLog("Error in adv_get_test_run_result_statuses", { error: error.message, args });
         return {
           content: [{
             type: "text" as const,
@@ -9911,7 +10036,7 @@ ${detailsInfo.map((detail, i) => {
       },
     },
     async (args) => {
-      debugLog("get_test_run_configuration_groups called", args);
+      debugLog("adv_get_test_run_configuration_groups called", args);
 
       try {
         // Resolve project using dynamic resolution (same as other tools)
@@ -9961,7 +10086,7 @@ ${detailsInfo.map((detail, i) => {
           content: [{ type: "text" as const, text: result }]
         };
       } catch (error: any) {
-        debugLog("Error in get_test_run_configuration_groups", { error: error.message, args });
+        debugLog("Error in adv_get_test_run_configuration_groups", { error: error.message, args });
         return {
           content: [{
             type: "text" as const,
@@ -9998,7 +10123,7 @@ ${detailsInfo.map((detail, i) => {
       try {
         const { project_key, suite_id, test_case_keys, similarity_threshold, format, include_similarity_matrix, include_clickable_links } = args;
 
-        debugLog("analyze_test_cases_duplicates called", { args });
+        debugLog("adv_analyze_test_cases_duplicates called", { args });
 
         // Import the analyzer
         const { TestCaseDuplicateAnalyzer } = await import('./utils/duplicate-analyzer.js');
@@ -10131,7 +10256,7 @@ ${detailsInfo.map((detail, i) => {
         // Format output
         if (format === 'dto' || format === 'json') {
           // Add webUrl fields to test cases if clickable links are enabled
-          const enhancedResult = {
+          const enhancedResult = capDuplicateAnalysisJson({
             ...result,
             clusters: result.clusters.map((cluster: any) => ({
               ...cluster,
@@ -10139,7 +10264,7 @@ ${detailsInfo.map((detail, i) => {
                 addTestCaseWebUrl(tc, project_key, clickableLinkConfig.baseWebUrl, clickableLinkConfig)
               )
             }))
-          };
+          }, include_similarity_matrix);
 
           return {
             content: [{
@@ -10287,7 +10412,7 @@ ${detailsInfo.map((detail, i) => {
         };
 
       } catch (error: any) {
-        debugLog("Error in analyze_test_cases_duplicates", { error: error.message, args });
+        debugLog("Error in adv_analyze_test_cases_duplicates", { error: error.message, args });
         return {
           content: [{
             type: "text" as const,
@@ -10342,7 +10467,7 @@ ${detailsInfo.map((detail, i) => {
           include_clickable_links
         } = args;
 
-        debugLog("analyze_test_cases_duplicates_semantic called", { args });
+        debugLog("adv_analyze_test_cases_duplicates_semantic called", { args });
 
         // Import the semantic analyzer
         const { SemanticDuplicateAnalyzer } = await import('./utils/semantic-duplicate-analyzer.js');
@@ -10499,7 +10624,7 @@ ${detailsInfo.map((detail, i) => {
         // Format output
         if (format === 'dto' || format === 'json') {
           // Add webUrl fields to test cases if clickable links are enabled
-          const enhancedResult = {
+          const enhancedResult = capDuplicateAnalysisJson({
             ...result,
             semanticClusters: result.semanticClusters?.map((cluster: any) => ({
               ...cluster,
@@ -10507,7 +10632,7 @@ ${detailsInfo.map((detail, i) => {
                 addTestCaseWebUrl(tc, project_key, clickableLinkConfig.baseWebUrl, clickableLinkConfig)
               )
             }))
-          };
+          }, include_similarity_matrix);
 
           return {
             content: [{
@@ -10720,7 +10845,7 @@ ${detailsInfo.map((detail, i) => {
         };
 
       } catch (error: any) {
-        debugLog("Error in analyze_test_cases_duplicates_semantic", { error: error.message, args });
+        debugLog("Error in adv_analyze_test_cases_duplicates_semantic", { error: error.message, args });
         return {
           content: [{
             type: "text" as const,
@@ -11170,7 +11295,7 @@ ${detailsInfo.map((detail, i) => {
         };
 
       } catch (error: any) {
-        debugLog("Error in aggregate_test_cases_by_feature", { error: error.message, args });
+        debugLog("Error in adv_aggregate_test_cases_by_feature", { error: error.message, args });
         return {
           content: [{
             type: "text" as const,

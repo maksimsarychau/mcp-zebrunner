@@ -1,6 +1,6 @@
 # MCP Resources & Prompts Guide
 
-This guide covers two MCP features that complement the existing 63 tools:
+This guide covers two MCP features that complement the existing 64 tools:
 
 - **Resources** (`@` menu) — read-only reference data injected into the conversation context
 - **Prompts** (`/` commands) — pre-built, tested workflow instructions that guide the AI through multi-tool orchestrations
@@ -102,7 +102,7 @@ These resources are always available and require no parameters. They return hard
 
 #### `zebrunner://reports/types` — Report Types
 
-Lists the 6 report types available in the `generate_report` tool with descriptions, parameters, default values, and usage examples.
+Lists the 6 report types available in the `adv_generate_report` tool with descriptions, parameters, default values, and usage examples.
 
 **When to use:** Before generating a report, to see which types exist and what parameters they accept.
 
@@ -121,7 +121,7 @@ AI:   There are 6 report types available:
       6. release_readiness — Go/No-Go recommendation
       
       You can combine multiple types in one call, e.g.:
-      generate_report({ report_types: ["coverage", "pass_rate"], projects: ["android", "ios"] })
+      adv_generate_report({ report_types: ["coverage", "pass_rate"], projects: ["android", "ios"] })
 ```
 
 #### `zebrunner://periods` — Time Periods
@@ -144,9 +144,9 @@ Documents 5 format parameter families used across tools, with valid values per f
 
 | Family | Values | Used By |
 |--------|--------|---------|
-| data | `dto`, `json`, `string`, `markdown` | 18 TCM tools |
+| data | `dto`, `json`, `compact`, `string`, `markdown` | TCM tools (test cases, suites) |
 | data_simple | `dto`, `json`, `string` | 6 tools |
-| raw_formatted | `raw`, `formatted` | 11 reporting tools |
+| raw_formatted | `raw`, `formatted`, `compact` | Launch listing tools |
 | verbosity | `detailed`, `summary`, `jira` | 3 failure tools |
 | metadata | `json`, `markdown` | 2 tools |
 
@@ -411,7 +411,7 @@ Generates a comprehensive project health card: suite structure, coverage metrics
 
 **Parameters:** *(none)*
 
-Shows tool usage metrics for the current MCP session by calling `about_mcp_tools` with `mode: "metrics"`. Displays per-tool call counts, average/min/max durations, response sizes, and error counts.
+Shows tool usage metrics for the current MCP session by calling `adv_about_mcp_tools` with `mode: "metrics"`. Displays per-tool call counts, average/min/max durations, response sizes, and error counts.
 
 **Best for:** Debugging performance, understanding session activity, and verifying tool behavior.
 

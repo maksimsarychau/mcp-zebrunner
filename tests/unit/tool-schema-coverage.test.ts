@@ -105,7 +105,8 @@ describe("Tool Schema Coverage", () => {
     const source = readServerSource();
 
     for (const [toolName, requiredKeys] of Object.entries(TOOL_SCHEMA_REQUIRED_KEYS)) {
-      const schema = schemaBlockForTool(source, toolName);
+      const serverToolName = toolName.startsWith("adv_") ? toolName.slice("adv_".length) : toolName;
+      const schema = schemaBlockForTool(source, serverToolName);
       if (requiredKeys.length === 0) {
         assert.ok(schema !== null, `schema block should exist for ${toolName} (can be empty object)`);
         continue;

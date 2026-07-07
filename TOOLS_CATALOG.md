@@ -2,9 +2,11 @@
 
 Complete reference of all available tools with natural language usage examples.
 
-> **v9.1.0:** New launch mutation tools — [`rerun_launch_failures`](#rerun_launch_failures), [`start_launch`](#start_launch), and [`get_launch_details`](#get_launch_details) (`includeJobParameters`). See [GitHub Release v9.1.0](https://github.com/maksimsarychau/mcp-zebrunner/releases/tag/v9.1.0).
+> **v9.2.0:** Token/cost optimization — `adv_batch_get_test_cases`, `format:compact`, `detail:summary`, `adv_generate_report` `inline:false`. Defaults unchanged. See [docs/TOKEN_EFFICIENCY.md](docs/TOKEN_EFFICIENCY.md) and [change-logs.md](change-logs.md).
 
-> **Naming:** Every tool below is registered under two names — the canonical `adv_<name>` form (e.g. `adv_create_test_case`) and a deprecated legacy alias (`<name>`) kept for backward compatibility. Examples often use the legacy short form for readability; both forms behave identically. Prefer the `adv_` form when both this server and the official Zebrunner MCP are connected.
+> **v9.1.0:** New launch mutation tools — [`adv_rerun_launch_failures`](#adv_rerun_launch_failures), [`adv_start_launch`](#adv_start_launch), and [`adv_get_launch_details`](#adv_get_launch_details) (`includeJobParameters`). See [GitHub Release v9.1.0](https://github.com/maksimsarychau/mcp-zebrunner/releases/tag/v9.1.0).
+
+> **Naming:** Every tool below uses the canonical **`adv_<name>`** form (e.g. `adv_create_test_case`) — this is the name MCP clients see in `tools/list`. Legacy short names without `adv_` are **deprecated** and only registered when `ZEBRUNNER_REGISTER_LEGACY_ALIASES=true`. Prefer `adv_*` in all new prompts and scripts, especially when both this server and the official Zebrunner MCP are connected.
 
 ## 📑 Table of Contents
 
@@ -40,7 +42,7 @@ All tools marked with chart support accept these two parameters:
 
 ## Test Failure Analysis & Debugging
 
-### `analyze_test_failure`
+### `adv_analyze_test_failure`
 
 **Description:** Deep forensic analysis of failed tests including logs, screenshots, error classification, similar failures, and optionally comparison with last passed execution.
 
@@ -50,7 +52,7 @@ All tools marked with chart support accept these two parameters:
 - "Analyze test 5478492 and compare with the last time it passed"
 - "Deep dive into why test 5455325 failed in launch 120906, include video and compare with last successful run"
 
-### `detailed_analyze_launch_failures`
+### `adv_detailed_analyze_launch_failures`
 
 **Description:** Analyze ALL failures in a launch with intelligent grouping, executive summary, timeline analysis, and pattern detection. Automatically filters tests without linked issues by default.
 
@@ -64,7 +66,7 @@ All tools marked with chart support accept these two parameters:
 
 ## Test Execution History & Comparison
 
-### `get_test_execution_history`
+### `adv_get_test_execution_history`
 
 **Description:** Track test execution trends across multiple launches. Shows pass/fail history, last passed execution, pass rate, and highlights if test failed in all recent runs.
 
@@ -74,7 +76,7 @@ All tools marked with chart support accept these two parameters:
 - "Has test 5455325 been failing consistently?"
 - "When was the last time test 5478492 passed?"
 
-### Compare with Last Passed (parameter in `analyze_test_failure`)
+### Compare with Last Passed (parameter in `adv_analyze_test_failure`)
 
 **Description:** Compare current failure with last successful execution. Shows differences in logs, duration, environment, and screenshots.
 
@@ -88,7 +90,7 @@ All tools marked with chart support accept these two parameters:
 
 ## Launch Analysis & Reporting
 
-### `get_launch_details`
+### `adv_get_launch_details`
 
 **Description:** Get comprehensive information about a specific launch including test results, environment, build, and execution metadata. Set `includeJobParameters: true` to fetch CI job parameters from **Jenkins Build Now** (suite path, build, locale, test_run_rules, and full param schema). **Not available for Launch Launchers** — Jenkins integration only.
 
@@ -98,7 +100,7 @@ All tools marked with chart support accept these two parameters:
 - "Show job parameters for launch 132452 to plan a Build now"
 - "What happened in launch 120814?"
 
-### `get_launch_summary`
+### `adv_get_launch_summary`
 
 **Description:** Quick launch overview with key metrics and status.
 
@@ -108,7 +110,7 @@ All tools marked with chart support accept these two parameters:
 - "Summarize launch 121482 results"
 - "What's the overall status of launch 120814?"
 
-### `get_launch_test_summary`
+### `adv_get_launch_test_summary`
 
 **Description:** Lightweight aggregated test results with statistics, most unstable tests, and tests with issues. Optimized for large launches.
 
@@ -118,7 +120,7 @@ All tools marked with chart support accept these two parameters:
 - "Show me summary of launch 120906 - just failed tests"
 - "Get lightweight summary for launch 121482"
 
-### `regression_results_analyzer`
+### `adv_regression_results_analyzer`
 
 **Description:** Analyze regression test results for a milestone or build number. Produces a comprehensive report with summary table, test run overview with coverage status, new bugs with affected test case context, top bugs ranked by frequency, bugs per suite, and slowest tests. All data sourced from TCM Public API test runs.
 
@@ -177,7 +179,7 @@ A bug is considered "new" if:
 
 ---
 
-### `generate_weekly_regression_stability_report`
+### `adv_generate_weekly_regression_stability_report`
 
 **Description:** Generate a Jira-ready weekly regression stability report across multiple suites with pass rate, week-over-week delta, and stability classification.
 
@@ -309,9 +311,9 @@ Weekly stability report for project MCP using:
 }
 ```
 
-### `get_all_launches_for_project`
+### `adv_get_all_launches_for_project`
 
-**Description:** List individual launch executions for a project with pagination. Use to browse launches, NOT for aggregated results/pass rates (use `get_platform_results_by_period` for that).
+**Description:** List individual launch executions for a project with pagination. Use to browse launches, NOT for aggregated results/pass rates (use `adv_get_platform_results_by_period` for that).
 
 **Example Prompts:**
 
@@ -319,9 +321,9 @@ Weekly stability report for project MCP using:
 - "Show me recent launches for project MCP"
 - "Browse launches for MCP"
 
-### `get_all_launches_with_filter`
+### `adv_get_all_launches_with_filter`
 
-**Description:** Search and filter individual launch executions by milestone, build number, or name. NOT for aggregated results/pass rates (use `get_platform_results_by_period` for that).
+**Description:** Search and filter individual launch executions by milestone, build number, or name. NOT for aggregated results/pass rates (use `adv_get_platform_results_by_period` for that).
 
 **Example Prompts:**
 
@@ -329,7 +331,7 @@ Weekly stability report for project MCP using:
 - "Show me launches for build 'mcp-app-2.1.0'"
 - "Search launches for milestone 2.1.0 and build 'release-46975'"
 
-### `analyze_regression_runtime`
+### `adv_analyze_regression_runtime`
 
 **Description:** Comprehensive Regression Runtime Efficiency analysis. Collects per-launch elapsed time, attempt/re-run breakdown, per-test duration classification (Short / Medium / Long), and calculates metrics from both **test** and **test case** perspectives: Average Runtime, Weighted Runtime Index (WRI), and duration distribution. Supports configurable duration thresholds and optional baseline comparison with delta tracking.
 
@@ -370,7 +372,7 @@ Weekly stability report for project MCP using:
 - "Analyze regression runtime for the Web project with medium_threshold_seconds: 120 and long_threshold_seconds: 300. Show which tests fall into each bucket."
 - "Analyze regression runtime for the Android project on the latest milestone. What is the average time cost per test case in each duration bucket? Are long-running tests covering proportionally more test cases?"
 
-### `find_flaky_tests`
+### `adv_find_flaky_tests`
 
 **Description:** Find flaky tests across launches using a 3-phase approach: cross-launch flip-flop analysis for automated tests, manual test case scan via TCM execution history, and optional dual-perspective enrichment correlating both data sources.
 
@@ -403,7 +405,7 @@ Weekly stability report for project MCP using:
 
 ## Video & Screenshot Analysis
 
-### `analyze_test_execution_video`
+### `adv_analyze_test_execution_video`
 
 **Description:** Download and analyze test execution video with Claude Vision. Extracts frames, compares with test case steps, and predicts if failure is bug or test issue.
 
@@ -413,7 +415,7 @@ Weekly stability report for project MCP using:
 - "Download and analyze test execution video for test 5478492 with smart frame extraction"
 - "Analyze video for failed test 5451420 and compare with test case steps"
 
-### `download_test_screenshot`
+### `adv_download_test_screenshot`
 
 **Description:** Download protected screenshots from Zebrunner with authentication.
 
@@ -423,7 +425,7 @@ Weekly stability report for project MCP using:
 - "Download screenshot /files/xyz789 for test 5451420"
 - "Get screenshot from URL [https://your-workspace.zebrunner.com/files/screenshot123](https://your-workspace.zebrunner.com/files/screenshot123)"
 
-### `analyze_screenshot`
+### `adv_analyze_screenshot`
 
 **Description:** Visual analysis of screenshots with OCR, UI element detection, and Claude Vision analysis.
 
@@ -437,7 +439,18 @@ Weekly stability report for project MCP using:
 
 ## Test Case Management
 
-### `get_test_case_by_key`
+### `adv_batch_get_test_cases`
+
+**Description:** Fetch multiple test cases by key in one call. Missing keys appear in `notFound[]` (partial success). Defaults: `detail=summary`, `format=compact`, max 50 keys, concurrency 5.
+
+**Example Prompts:**
+
+- "Fetch test cases MCP-1, MCP-2, and MCP-3 in one call"
+- "Batch-get these keys with full detail: MCP-10, MCP-11"
+
+---
+
+### `adv_get_test_case_by_key`
 
 **Description:** Get detailed information for a specific test case by its key (e.g., MCP-123).
 
@@ -459,11 +472,11 @@ Weekly stability report for project MCP using:
 - "Get test case MCP-29 with change history"
 - "Show MCP-29 history, events only"
 
-### `get_test_case_by_title`
+### `adv_get_test_case_by_title`
 
 **Description:** Search for test cases by title (partial match supported).
 
-**Change History Parameters:** Same as `get_test_case_by_key` (`include_history`, `history_filter`, `history_limit`).
+**Change History Parameters:** Same as `adv_get_test_case_by_key` (`include_history`, `history_filter`, `history_limit`).
 
 **Example Prompts:**
 
@@ -471,7 +484,7 @@ Weekly stability report for project MCP using:
 - "Search for test cases containing 'diary'"
 - "Find test cases about 'food search'"
 
-### `get_test_cases_advanced`
+### `adv_get_test_cases_advanced`
 
 **Description:** Advanced filtering with automation states, dates, priority, and more. Supports **generic field-path filtering** via `field_path`, `field_value`, and `field_match` parameters for any field including custom fields.
 
@@ -485,7 +498,7 @@ Weekly stability report for project MCP using:
 | `field_match` | `exact` | `contains` | `regex` | `exists` | Match mode (default: `exact`)                                                             |
 
 
-**Change History Parameters:** Same as `get_test_case_by_key` (`include_history`, `history_filter`, `history_limit`). History is fetched in bulk with concurrency-limited parallel requests.
+**Change History Parameters:** Same as `adv_get_test_case_by_key` (`include_history`, `history_filter`, `history_limit`). History is fetched in bulk with concurrency-limited parallel requests.
 
 **Example Prompts:**
 
@@ -496,11 +509,11 @@ Weekly stability report for project MCP using:
 - "Find test cases whose priority.name contains 'High'"
 - "Get manual test cases from last month with their change history"
 
-### `get_test_cases_by_automation_state`
+### `adv_get_test_cases_by_automation_state`
 
 **Description:** Filter test cases by specific automation state (Manual, Automated, etc.).
 
-**Change History Parameters:** Same as `get_test_case_by_key` (`include_history`, `history_filter`, `history_limit`).
+**Change History Parameters:** Same as `adv_get_test_case_by_key` (`include_history`, `history_filter`, `history_limit`).
 
 **Example Prompts:**
 
@@ -509,11 +522,11 @@ Weekly stability report for project MCP using:
 - "Find test cases with automation state 'Automated'"
 - "Get all automated test cases with their last 5 changes"
 
-### `get_test_case_by_filter`
+### `adv_get_test_case_by_filter`
 
-**Description:** Advanced filtering by suite, dates, priority, automation state, and status. Also supports **generic field-path filtering** via `field_path`, `field_value`, and `field_match` (same parameters as `get_test_cases_advanced`).
+**Description:** Advanced filtering by suite, dates, priority, automation state, and status. Also supports **generic field-path filtering** via `field_path`, `field_value`, and `field_match` (same parameters as `adv_get_test_cases_advanced`).
 
-**Change History Parameters:** Same as `get_test_case_by_key` (`include_history`, `history_filter`, `history_limit`).
+**Change History Parameters:** Same as `adv_get_test_case_by_key` (`include_history`, `history_filter`, `history_limit`).
 
 **Example Prompts:**
 
@@ -522,7 +535,7 @@ Weekly stability report for project MCP using:
 - "Find test cases in suite 18697 that were updated last week"
 - "Find test cases in MCP where customField.caseStatus equals 'Active'"
 
-### `get_automation_states`
+### `adv_get_automation_states`
 
 **Description:** List all available automation states for a project.
 
@@ -532,7 +545,7 @@ Weekly stability report for project MCP using:
 - "Show me all automation states"
 - "List automation states for MCP"
 
-### `get_automation_priorities`
+### `adv_get_automation_priorities`
 
 **Description:** List all available priority levels with their IDs.
 
@@ -542,11 +555,11 @@ Weekly stability report for project MCP using:
 - "What priorities are available?"
 - "List all test case priorities"
 
-### `get_all_tcm_test_cases_by_project`
+### `adv_get_all_tcm_test_cases_by_project`
 
 **Description:** Get ALL test cases for a project with automatic pagination handling.
 
-**Change History Parameters:** Same as `get_test_case_by_key` (`include_history`, `history_filter`, `history_limit`).
+**Change History Parameters:** Same as `adv_get_test_case_by_key` (`include_history`, `history_filter`, `history_limit`).
 
 **Example Prompts:**
 
@@ -554,7 +567,7 @@ Weekly stability report for project MCP using:
 - "Show me every test case in the MCP project"
 - "Export all test cases from project MCP"
 
-### `get_all_tcm_test_cases_with_root_suite_id`
+### `adv_get_all_tcm_test_cases_with_root_suite_id`
 
 **Description:** Get all test cases with their root suite hierarchy information.
 
@@ -564,11 +577,11 @@ Weekly stability report for project MCP using:
 - "Show me test cases with hierarchy info"
 - "List all test cases with their parent suites"
 
-### `get_test_cases_by_suite_smart`
+### `adv_get_test_cases_by_suite_smart`
 
 **Description:** Smart suite-based test case retrieval. Automatically detects whether the suite is root or child and uses the right filtering strategy.
 
-**Change History Parameters:** Same as `get_test_case_by_key` (`include_history`, `history_filter`, `history_limit`).
+**Change History Parameters:** Same as `adv_get_test_case_by_key` (`include_history`, `history_filter`, `history_limit`).
 
 **Example Prompts:**
 
@@ -580,7 +593,7 @@ Weekly stability report for project MCP using:
 
 ## Test Suite Hierarchy
 
-### `list_test_suites`
+### `adv_list_test_suites`
 
 **Description:** List test suites with pagination.
 
@@ -590,7 +603,7 @@ Weekly stability report for project MCP using:
 - "Show me all test suites"
 - "Get first 50 test suites for project MCP"
 
-### `get_suite_hierarchy`
+### `adv_get_suite_hierarchy`
 
 **Description:** Get hierarchical tree view of test suites with configurable depth.
 
@@ -600,7 +613,7 @@ Weekly stability report for project MCP using:
 - "Get suite hierarchy for project MCP"
 - "Display test suite tree structure"
 
-### `get_root_suites`
+### `adv_get_root_suites`
 
 **Description:** Get all top-level (root) test suites.
 
@@ -610,7 +623,7 @@ Weekly stability report for project MCP using:
 - "Get top-level test suites"
 - "List root suites"
 
-### `get_all_subsuites`
+### `adv_get_all_subsuites`
 
 **Description:** Get all child suites recursively from a parent suite.
 
@@ -620,7 +633,7 @@ Weekly stability report for project MCP using:
 - "Show me all child suites under suite 17470"
 - "List all subsuites for suite 491"
 
-### `get_tcm_suite_by_id`
+### `adv_get_tcm_suite_by_id`
 
 **Description:** Get test suite by its numeric ID. This is the primary tool for any "show me suite", "get suite by ID", or "find suite" request.
 
@@ -636,7 +649,7 @@ Weekly stability report for project MCP using:
 - "Show me suite 18697 with full hierarchy"
 - "What's in test suite 491?"
 
-### `get_tcm_test_suites_by_project`
+### `adv_get_tcm_test_suites_by_project`
 
 **Description:** Get comprehensive list of all suites for a project with hierarchy information.
 
@@ -646,7 +659,7 @@ Weekly stability report for project MCP using:
 - "Show me all test suites in project MCP"
 - "List all suites for MCP"
 
-### `get_all_tcm_test_case_suites_by_project`
+### `adv_get_all_tcm_test_case_suites_by_project`
 
 **Description:** Retrieve all TCM test case suites in a project using comprehensive pagination, with optional hierarchy enrichment.
 
@@ -656,7 +669,7 @@ Weekly stability report for project MCP using:
 - "Export all suites for MCP in markdown format"
 - "List all suites for android with hierarchy enabled"
 
-### `get_root_id_by_suite_id`
+### `adv_get_root_id_by_suite_id`
 
 **Description:** Find the root suite for any given suite ID.
 
@@ -674,7 +687,7 @@ Weekly stability report for project MCP using:
 >
 > **Next-step guidance:** All mutation tool success responses include just-in-time steering hints that suggest logical follow-up actions (e.g., validate quality, publish a draft, populate a test run). Conditional hints are suppressed when redundant (e.g., quality check hint is skipped if `review: true` was already used).
 
-### `create_test_suite`
+### `adv_create_test_suite`
 
 **Description:** (Beta) Create a new Test Suite in a Zebrunner project. Requires Engineer role or higher.
 
@@ -697,7 +710,7 @@ Weekly stability report for project MCP using:
 - "Create a new root test suite called 'Payments' in project MCP"
 - "Create a child suite 'Edge Cases' under suite 18697 in project android"
 
-### `update_test_suite`
+### `adv_update_test_suite`
 
 **Description:** (Beta) Update an existing Test Suite by numeric ID (full PUT replacement). Requires Engineer role or higher.
 
@@ -721,7 +734,7 @@ Weekly stability report for project MCP using:
 - "Rename suite 18697 to 'Login & Registration' in project MCP"
 - "Move suite 491 under parent suite 18697 in project android"
 
-### `create_test_case`
+### `adv_create_test_case`
 
 **Description:** (Beta) Create a new Test Case in a Zebrunner project. Validates priority, automation state, and custom fields against project settings at runtime. Optionally accepts `source_case_key` to pre-populate fields from an existing test case.
 
@@ -762,7 +775,7 @@ Weekly stability report for project MCP using:
 - "Create a test case with priority High and 3 steps in suite 491"
 - "Create a test case in MCP suite 20421 using source_case_key MCP-123 but override priority to Low"
 
-### `update_test_case`
+### `adv_update_test_case`
 
 **Description:** (Beta) Partially update an existing Test Case by numeric ID or string key (PATCH). Only provided fields are updated. Accepts `{file_path}` in attachments for local file upload.
 
@@ -794,7 +807,7 @@ Weekly stability report for project MCP using:
 - "Move test case MCP-100 to suite 18824"
 - "Attach /Users/me/screenshot.png to test case MCP-42"
 
-### `manage_test_run`
+### `adv_manage_test_run`
 
 **Description:** (Beta) Create, update, or add test cases to a Zebrunner Test Run. Requires Engineer role or higher.
 
@@ -819,7 +832,7 @@ Weekly stability report for project MCP using:
 | `test_run_id`                   | number                                  | update/add_cases | Test Run ID. Required for update and add_cases.                                  |
 | `title`                         | string                                  | create           | Test run title (1-255 chars). Required for create.                               |
 | `description`                   | string                                  |                  | Test run description (max 10,000 chars).                                         |
-| `milestone`                     | `{id}` or `{name}`                      |                  | Milestone reference. Use `get_test_run_configuration_groups` to discover values. |
+| `milestone`                     | `{id}` or `{name}`                      |                  | Milestone reference. Use `adv_get_test_run_configuration_groups` to discover values. |
 | `environment`                   | `{key}`                                 |                  | Environment reference (e.g., `{ key: "pre-prod" }`).                             |
 | `configurations`                | array                                   |                  | Configuration group/option pairs. ATOMIC on update — replaces all. Max 100.      |
 | `requirements`                  | array                                   |                  | JIRA or AZURE_DEVOPS requirement references.                                     |
@@ -840,7 +853,7 @@ Weekly stability report for project MCP using:
 - "Add test cases MCP-1, MCP-2, MCP-3 to test run 123 in project MCP"
 - "Add all test cases from suite 456 to test run 123 in project MCP"
 
-### `import_launch_results_to_test_run`
+### `adv_import_launch_results_to_test_run`
 
 **Description:** (Beta) Import automation launch results into a TCM Test Run. Bridges the Reporting API (launches/tests) to the Public API (test runs/test cases). Reads test results from a launch, maps test case keys and statuses, and imports them via the `:import` endpoint.
 
@@ -877,8 +890,8 @@ Tools and prompts below honor optional blocks in **[zebrunner-config.json](zebru
 
 | Block | Tool / prompt | When it applies |
 |-------|---------------|-----------------|
-| `localeTestRunRules` | `start_launch` | Preview only; project in `projectKeys` and locale ≠ `en_US` |
-| `relaunchFailures` | `/relaunch-regression-failures`, `rerun_launch_failures` (via prompt) | Launch name exclusions + batch cap in prompt text |
+| `localeTestRunRules` | `adv_start_launch` | Preview only; project in `projectKeys` and locale ≠ `en_US` |
+| `relaunchFailures` | `/relaunch-regression-failures`, `adv_rerun_launch_failures` (via prompt) | Launch name exclusions + batch cap in prompt text |
 
 **Non-MFP deployments:** set `localeTestRunRules.enabled: false` and adjust `relaunchFailures.excludeLaunchNamePatterns`. `/feature-scoped-launch` resolves Jenkins `suite_path` from user input or recent launches — no config required.
 
@@ -886,7 +899,7 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 
 ---
 
-### `rerun_launch_failures`
+### `adv_rerun_launch_failures`
 
 **Description:** (Beta) Rerun failed/aborted tests for one or more automation launches via the Reporting API. Triggers real CI/automation reruns. Single mode: provide `launch_id`. Batch mode: omit `launch_id` and optionally filter by `milestone` or `query`; capped by `max_launches` (default 10).
 
@@ -917,7 +930,7 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 
 **Related MCP prompt:** Use `/relaunch-regression-failures` for full regression rerun workflows — discovers failed launches by milestone/build or last 7 days, applies `relaunchFailures.excludeLaunchNamePatterns` from zebrunner-config.json, and orchestrates preview/confirm batch reruns across platforms.
 
-### `start_launch`
+### `adv_start_launch`
 
 **Description:** (Beta) Trigger Zebrunner **Build Now** (Jenkins integration only) — start a new automation launch via Reporting API `job/parameters` + `job:build`. **Does NOT work with Launch Launchers.** Resolves a template launch by `launch_id`, launch name query, and/or `suite_path`; merges validated parameter overrides; preview/confirm before triggering CI.
 
@@ -951,13 +964,13 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 - "Start Minimal-Acceptance launch for latest build in project MFPAND"
 - "Build now Critical flow with build .* and locale en_US"
 - "Build now regression for locale de_DE when localeTestRunRules is enabled for the project (see zebrunner-config.json)"
-- "Preview start_launch for template launch 132452 with test_run_rules PRIORITY=>P0||P1;;"
+- "Preview adv_start_launch for template launch 132452 with test_run_rules PRIORITY=>P0||P1;;"
 
 ---
 
 ## Test Coverage & Validation
 
-### `get_test_coverage_by_test_case_steps_by_key`
+### `adv_get_test_coverage_by_test_case_steps_by_key`
 
 **Description:** Analyze how well automation code implements test case steps.
 
@@ -967,7 +980,7 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 - "Check if test case MCP-1921 is implemented correctly in this code"
 - "Validate coverage for MCP-88 with this automation code"
 
-### `get_enhanced_test_coverage_with_rules`
+### `adv_get_enhanced_test_coverage_with_rules`
 
 **Description:** Rules-based coverage analysis with framework detection and intelligent validation.
 
@@ -977,7 +990,7 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 - "Analyze MCP-1921 coverage with rules validation"
 - "Check test case MCP-88 implementation with enhanced rules"
 
-### `validate_test_case`
+### `adv_validate_test_case`
 
 **Description:** Quality validation with automated improvement suggestions using intelligent rules.
 
@@ -987,7 +1000,7 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 - "Check quality of test case MCP-1921"
 - "Validate MCP-88 and tell me what needs to be improved"
 
-### `improve_test_case`
+### `adv_improve_test_case`
 
 **Description:** Dedicated tool for improving test case quality with specific suggestions.
 
@@ -1001,7 +1014,7 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 
 ## Test Code Generation
 
-### `generate_draft_test_by_key`
+### `adv_generate_draft_test_by_key`
 
 **Description:** Generate test automation code with framework detection (Java/Carina, Python/Pytest, etc.).
 
@@ -1015,7 +1028,7 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 
 ## Duplicate Detection
 
-### `analyze_test_cases_duplicates`
+### `adv_analyze_test_cases_duplicates`
 
 **Description:** Find and group similar test cases by step similarity with configurable threshold.
 
@@ -1025,7 +1038,7 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 - "Find duplicate test cases in suite 18697"
 - "Check suite 491 for similar test cases"
 
-### `analyze_test_cases_duplicates_semantic`
+### `adv_analyze_test_cases_duplicates_semantic`
 
 **Description:** Advanced semantic analysis with LLM-powered step clustering and medoid selection.
 
@@ -1039,7 +1052,7 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 
 ## Feature-Based Test Case Aggregation
 
-### `aggregate_test_cases_by_feature`
+### `adv_aggregate_test_cases_by_feature`
 
 **Description:** Find ALL test cases related to a specific feature keyword across the entire project. Searches in title, description, preconditions, post-conditions, and test steps (case-insensitive, partial match). Groups results by Root Suite and Feature Suite hierarchy.
 
@@ -1087,7 +1100,7 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 
 ## Test Run Management
 
-### `list_test_runs`
+### `adv_list_test_runs`
 
 **Description:** Advanced filtering of test runs by date range, status, platform, and more.
 
@@ -1097,7 +1110,7 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 - "Show me test runs from last week for iOS platform"
 - "Find test runs from November 2025 that failed"
 
-### `get_test_run_by_id`
+### `adv_get_test_run_by_id`
 
 **Description:** Get detailed information for a specific test run.
 
@@ -1107,7 +1120,7 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 - "Show me test run 67890"
 - "What happened in test run 54321?"
 
-### `list_test_run_test_cases`
+### `adv_list_test_run_test_cases`
 
 **Description:** Get all test cases associated with a specific test run.
 
@@ -1117,7 +1130,7 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 - "List test cases for test run 67890"
 - "What test cases were in test run 54321?"
 
-### `get_test_run_result_statuses`
+### `adv_get_test_run_result_statuses`
 
 **Description:** Get available result statuses configured for a project.
 
@@ -1127,7 +1140,7 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 - "Show me available test run statuses"
 - "List result statuses for MCP"
 
-### `get_test_run_configuration_groups`
+### `adv_get_test_run_configuration_groups`
 
 **Description:** Get configuration options and groups for test runs.
 
@@ -1141,7 +1154,7 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 
 ## Platform & Results Analysis
 
-### `get_platform_results_by_period`
+### `adv_get_platform_results_by_period`
 
 **Description:** Get aggregated test results, pass rate, and statistics for a project over a time period (last 7 days, last 30 days, etc.). Returns total passed/failed/skipped/aborted counts and pass rate percentage. Use this when asked for "results", "pass rate", "test statistics", or "results for last N days". Accepts any Zebrunner project key (e.g. `DEF`, `MCP`) or aliases (`web`/`android`/`ios`/`api`).
 
@@ -1158,7 +1171,7 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 - "Show me Android test results from last week"
 - "Get platform results for last 30 days"
 
-### `get_top_bugs`
+### `adv_get_top_bugs`
 
 **Description:** Get most frequent defects/bugs from test executions.
 
@@ -1174,7 +1187,7 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 - "What are the most common bugs?"
 - "Get top bugs from last 30 days"
 
-### `get_bug_review`
+### `adv_get_bug_review`
 
 **Description:** Get comprehensive bug review with detailed failure information, defect tracking, reproduction dates, and **automatic failure detail fetching** for single-call analysis.
 
@@ -1206,7 +1219,7 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 - "Give me a comprehensive bug analysis for IOS with priority breakdown"
 - `{ project: "ios", period: "Last 7 Days", limit: 10, include_failure_details: true, failure_detail_level: "full" }`
 
-### `get_bug_failure_info`
+### `adv_get_bug_failure_info`
 
 **Description:** Get comprehensive failure information for a specific bug/hashcode, including high-level failure summary and detailed list of affected test runs. This tool combines data from multiple SQL widgets to provide complete failure analysis.
 
@@ -1228,9 +1241,9 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 - "Analyze failure information for hashcode X from last 14 days"
 - "Give me a summary of test runs affected by this failure"
 
-**Usage Note:** The dashboardId and hashcode can be obtained from the `get_bug_review` tool output. Each bug in the review includes these identifiers in the failure link.
+**Usage Note:** The dashboardId and hashcode can be obtained from the `adv_get_bug_review` tool output. Each bug in the review includes these identifiers in the failure link.
 
-### `get_project_milestones`
+### `adv_get_project_milestones`
 
 **Description:** Get all milestones configured for a project.
 
@@ -1244,7 +1257,7 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 
 ## Universal Report Generator
 
-### `generate_report`
+### `adv_generate_report`
 
 **Description:** Universal report generator that supports 6 report types. Can generate a single report or combine multiple in one call. Replaces the former `generate_quality_dashboard` tool (use `report_types: ["quality_dashboard"]` for equivalent behavior).
 
@@ -1287,7 +1300,7 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 
 ## Project Discovery
 
-### `get_available_projects`
+### `adv_get_available_projects`
 
 **Description:** Discover all projects you have access to in Zebrunner.
 
@@ -1297,7 +1310,7 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 - "Show me all available projects"
 - "List all projects I have access to"
 
-### `test_reporting_connection`
+### `adv_test_reporting_connection`
 
 **Description:** Test API connectivity and authentication with Zebrunner Reporting API.
 
@@ -1307,7 +1320,7 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 - "Check if I can connect to Zebrunner reporting"
 - "Verify my Zebrunner API access"
 
-### `about_mcp_tools`
+### `adv_about_mcp_tools`
 
 **Description:** Discover and understand Zebrunner MCP capabilities — tools, prompts, resources, and session metrics.
 
@@ -1331,8 +1344,8 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 **Example Prompts:**
 
 - "Using Zebrunner MCP make a summary of all tools with examples"
-- "Using Zebrunner MCP give info for tool analyze_test_execution_video with examples"
-- "Show detailed info for get_bug_review including token usage estimation"
+- "Using Zebrunner MCP give info for tool adv_analyze_test_execution_video with examples"
+- "Show detailed info for adv_get_bug_review including token usage estimation"
 - "What prompts are available in Zebrunner MCP?"
 - "What MCP resources are available?"
 - "Show me tool usage metrics for this session"
@@ -1359,8 +1372,8 @@ You can chain multiple tools in conversation:
 
 Claude will:
 
-1. Call `get_test_execution_history`
-2. Call `analyze_test_failure` with comparison enabled
+1. Call `adv_get_test_execution_history`
+2. Call `adv_analyze_test_failure` with comparison enabled
 3. Combine results into comprehensive analysis
 
 ### URL-Based Analysis
@@ -1468,6 +1481,6 @@ For large datasets, you can specify filters and limits:
 
 ---
 
-**Last Updated:** v9.1.0 - July 2026
+**Last Updated:** v9.2.0 - July 2026
 
 For the latest features and updates, see [change-logs.md](change-logs.md).

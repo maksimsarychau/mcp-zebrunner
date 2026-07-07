@@ -1,5 +1,77 @@
 # Change Logs
 
+## v9.2.0 — Token/cost optimization (opt-in)
+
+> Re-implements selected ideas from PR #84 on master without flipping defaults.  
+> **Compact mode guide:** [docs/TOKEN_EFFICIENCY.md](docs/TOKEN_EFFICIENCY.md)
+
+### Highlights
+
+- **`format: compact`** — minified JSON on TCM reads and launch listings (~15–25% smaller than pretty `json`).
+- **`detail: summary`** — bulk lists return id/key/title/priority/automationState/webUrl; fetch full bodies with `adv_get_test_case_by_key` before mutations.
+- **`adv_batch_get_test_cases`** — up to 50 keys/call, partial success (`notFound[]`), defaults `detail=summary` + `format=compact`.
+- **`adv_generate_report` `inline: false`** — write HTML/PNG to disk (`<tmpdir>/zebrunner-reports/` or `output_dir`).
+- **Defaults unchanged** — `format=json`, `detail=full`, `max_results=5000`, suite-smart `get_all=true`, reports `inline=true`.
+
+### Added
+
+- **`adv_batch_get_test_cases`** — Fetch up to 50 keys in one call with partial success (`notFound[]`), concurrency cap, default `detail=summary` + `format=compact`.
+- **`format: compact`** — Minified JSON on TCM read tools (`json` stays pretty-printed default).
+- **`detail` / `fields` projection** — Opt-in on `adv_list_test_suites`, `adv_get_test_case_by_key`, `adv_get_test_cases_by_suite_smart`, `adv_get_all_tcm_test_cases_by_project` (`include_root_suite` flag on bulk dump).
+- **`adv_generate_report` `inline` flag** — Default `true`; `inline=false` writes HTML/PNG to `<tmpdir>/zebrunner-reports/` (or `output_dir`).
+- **Launch listing `format: compact`** — Minified JSON on `adv_get_all_launches_for_project` / `adv_get_all_launches_with_filter`.
+- **Env flags (off by default):** `MCP_COMPACT_DEFAULTS`, `MCP_SUMMARY_DEFAULTS` — wired for future default flips after eval.
+- **Eval cloud suite** — `npm run test:eval:cloud` (32 tricky prompts, Claude gate); `EVAL_SUITE=default|cloud|all`.
+- **Docs:** [docs/TOKEN_EFFICIENCY.md](docs/TOKEN_EFFICIENCY.md).
+
+### Changed
+
+- **Duplicate analysis JSON caps** — `format=json|dto` caps clusters to top 20, replaces `steps` with `stepCount`, matrix opt-in.
+- **Soft response-size notices** — ~800 KB `_notice` on large bulk reads suggesting `detail=summary`, `count_only`, or lower `max_results`.
+- **stderr telemetry** — `[telemetry] tool=… responseBytes=… approxTokens=…` per tool call.
+- **`adv_*` canonical naming** — public docs, `tools.json`, resources, prompts; legacy short names deprecated (`ZEBRUNNER_REGISTER_LEGACY_ALIASES=true`).
+- **Eval config** — cloud API keys win over `EVAL_API_KEY=ollama`; Ollama model names ignored for `EVAL_PROVIDER=anthropic`.
+- Version **9.2.0** — **64 tools**, 14 resources, 17 prompts.
+
+### Intentionally unchanged (until eval)
+
+- `format` default remains `json`; `max_results` remains 5000; `get_all` remains `true` on suite smart; `adv_generate_report` inline default `true`.
+- No tool merges/deprecations (`adv_get_all_tcm_test_cases_with_root_suite_id`, `adv_get_test_cases_advanced`).
+
+### Upgrade checklist
+
+1. Pull / install `mcp-zebrunner@9.2.0` (npm, Docker, or `dist/` build).
+2. **No breaking changes** if you do nothing — defaults match v9.1.x.
+3. Teach assistants the compact workflow — [docs/TOKEN_EFFICIENCY.md](docs/TOKEN_EFFICIENCY.md).
+4. Use `adv_*` tool names when both official and Advanced MCP are connected.
+5. Optional: `EVAL_PROVIDER=anthropic npm run test:eval:cloud` before enabling `MCP_COMPACT_DEFAULTS` / `MCP_SUMMARY_DEFAULTS`.
+
+### Compact mode (quick examples)
+
+```text
+# Shortlist → full body
+adv_get_all_tcm_test_cases_by_project { project_key, detail: "summary", format: "compact" }
+adv_get_test_case_by_key { case_key }   # full steps before mutate
+
+# Batch keys
+adv_batch_get_test_cases { project_key, case_keys: ["MCP-1","MCP-2"], detail: "summary", format: "compact" }
+
+# Large dashboard off-chat
+adv_generate_report { report_types: ["executive_dashboard"], projects: [project_key], inline: false }
+```
+
+### Documentation
+
+- [docs/TOKEN_EFFICIENCY.md](docs/TOKEN_EFFICIENCY.md) — compact/summary/batch workflow and tool matrix.
+- [README.md](README.md) — token-efficient reads section + link to guide.
+- [TOOLS_CATALOG.md](TOOLS_CATALOG.md) — `adv_batch_get_test_cases`, compact/detail params.
+- [docs/EVALUATION_FRAMEWORK.md](docs/EVALUATION_FRAMEWORK.md) — cloud eval suite, token-efficient prompts.
+- [docs/RESOURCES_AND_PROMPTS.md](docs/RESOURCES_AND_PROMPTS.md) — `zebrunner://formats` (`compact` in data family).
+
+> Extended GitHub release draft: maintain locally under `docs/releases/` (gitignored).
+
+---
+
 ## v9.1.0 — Launch mutations (rerun failures + Build now)
 
 > Full release notes: [GitHub Release v9.1.0](https://github.com/maksimsarychau/mcp-zebrunner/releases/tag/v9.1.0)
@@ -34,7 +106,7 @@ Override via `ZEBRUNNER_CONFIG_JSON` or custom config path. Non-CUSTOMER: set `l
 
 - [GitHub Release v9.1.0](https://github.com/maksimsarychau/mcp-zebrunner/releases/tag/v9.1.0) — upgrade checklist, non-CUSTOMER guidance, quick examples.
 - [README.md](README.md) — launch mutation tools, 17 prompts, project-specific config section.
-- [TOOLS_CATALOG.md](TOOLS_CATALOG.md) — `rerun_launch_failures`, `start_launch`, config cross-links.
+- [TOOLS_CATALOG.md](TOOLS_CATALOG.md) — `adv_rerun_launch_failures`, `adv_start_launch`, config cross-links.
 - [docs/RESOURCES_AND_PROMPTS.md](docs/RESOURCES_AND_PROMPTS.md) — new prompts + project-specific automation configuration.
 - [docs/TEST_PROMPTS.md](docs/TEST_PROMPTS.md) — manual test scenarios for relaunch and feature-scoped launch.
 - [custom-catalog.yaml](custom-catalog.yaml), [mcp-catalog.yaml](mcp-catalog.yaml) — prompt counts updated.
@@ -115,9 +187,9 @@ Override via `ZEBRUNNER_CONFIG_JSON` or custom config path. Non-CUSTOMER: set `l
 
 ### ⚠️ Breaking changes
 
-- **Every tool is now exposed only under its `adv_<name>` form** (e.g. `adv_create_test_case`, `adv_list_test_runs`, `adv_get_test_execution_history`). Calls to the legacy short names (`create_test_case`, `list_test_runs`, etc.) will fail unless the rollback escape hatch below is enabled.
+- **Every tool is now exposed only under its `adv_<name>` form** (e.g. `adv_create_test_case`, `adv_list_test_runs`, `adv_get_test_execution_history`). Calls to the legacy short names (`adv_create_test_case`, `adv_list_test_runs`, etc.) will fail unless the rollback escape hatch below is enabled.
 - **Server rebranded to "Advanced Zebrunner MCP Server"**. The npm package name (`mcp-zebrunner`), MCP registry id (`io.github.maksimsarychau/mcp-zebrunner`), MCP protocol `name` and `.cursor/mcp.json` config key remain unchanged.
-- This release is **safe to run side-by-side with Zebrunner's official hosted MCP** (beta) at `https://{workspace}.zebrunner.com/api/mcp`. The 8 historical tool-name collisions (e.g. `create_test_case`, `list_test_runs`, `get_test_execution_history`) are eliminated because all of our tools are now `adv_*`.
+- This release is **safe to run side-by-side with Zebrunner's official hosted MCP** (beta) at `https://{workspace}.zebrunner.com/api/mcp`. The 8 historical tool-name collisions (e.g. `adv_create_test_case`, `adv_list_test_runs`, `adv_get_test_execution_history`) are eliminated because all of our tools are now `adv_*`.
 
 ### 🛟 Rollback escape hatch
 
@@ -131,15 +203,15 @@ Every legacy short name will be re-registered as a deprecated alias that routes 
 
 ### ✨ New
 
-- New static MCP resource `zebrunner://mcp-routing` and new `about_mcp_tools` mode `routing` — both surface the dual-MCP decision table (when to use official `zebrunner` vs this server).
+- New static MCP resource `zebrunner://mcp-routing` and new `adv_about_mcp_tools` mode `routing` — both surface the dual-MCP decision table (when to use official `zebrunner` vs this server).
 - Dual-MCP parity and routing (via MCP surfaces in the public repo):
   - `zebrunner://mcp-routing` resource — human-readable tool-by-tool diff and routing table
-  - `about_mcp_tools` with `mode='routing'` — same guidance inside chat
+  - `adv_about_mcp_tools` with `mode='routing'` — same guidance inside chat
 
 ### 🔧 Changed
 
 - Every tool description now starts with the `[Advanced Zebrunner MCP]` prefix to help LLMs disambiguate when both MCPs are connected.
-- Fixed pre-existing description bugs in `create_test_case` / `update_test_case` / `get_test_case_by_key` that referenced non-existent tools (`list_automation_states`, `list_priorities`, `list_custom_fields`). They now point to the actual `adv_get_automation_states` / `adv_get_automation_priorities` / `project_fields_layout` resource (and recommend the official MCP's `list_custom_fields` in dual-MCP setups).
+- Fixed pre-existing description bugs in `adv_create_test_case` / `adv_update_test_case` / `adv_get_test_case_by_key` that referenced non-existent tools (`list_automation_states`, `list_priorities`, `list_custom_fields`). They now point to the actual `adv_get_automation_states` / `adv_get_automation_priorities` / `project_fields_layout` resource (and recommend the official MCP's `list_custom_fields` in dual-MCP setups).
 - Steering hints emitted by mutation tools ([src/helpers/steering.ts](src/helpers/steering.ts)) updated to the `adv_*` form.
 - Rebrand sweep across [README.md](README.md) (with new "Dual-MCP setup" section), [INSTALL-GUIDE.md](INSTALL-GUIDE.md), [MCP_NPM_INSTALLATION_GUIDE.md](MCP_NPM_INSTALLATION_GUIDE.md), [docs/EXECUTIVE_SUMMARY.md](docs/EXECUTIVE_SUMMARY.md), [TOOLS_CATALOG.md](TOOLS_CATALOG.md), [server.json](server.json), [server.yaml](server.yaml), [package.json](package.json) description, OAuth resource name in [src/http/server.ts](src/http/server.ts), HTTP UI titles in `src/http/{login,settings,reset}-routes.ts`, and the startup log in [src/config/manager.ts](src/config/manager.ts).
 
@@ -158,19 +230,19 @@ Every legacy short name will be re-registered as a deprecated alias that routes 
 ### 🔮 Compatibility notes
 
 - Single-server users (no official MCP loaded) who relied on legacy tool names must either (a) migrate their prompts/scripts to `adv_<name>`, or (b) set `ZEBRUNNER_REGISTER_LEGACY_ALIASES=true` until they have migrated.
-- Dual-MCP users gain disambiguation automatically: every advanced tool starts with `adv_`, every description starts with `[Advanced Zebrunner MCP]`, and `@zebrunner://mcp-routing` / `about_mcp_tools mode='routing'` provide the decision table.
+- Dual-MCP users gain disambiguation automatically: every advanced tool starts with `adv_`, every description starts with `[Advanced Zebrunner MCP]`, and `@zebrunner://mcp-routing` / `adv_about_mcp_tools mode='routing'` provide the decision table.
 
 ## v8.3.0
 
 ### New: Regression Results Analyzer
 
-Added `regression_results_analyzer` — a comprehensive tool that generates a complete regression testing summary for a milestone and/or build number, with all data sourced from TCM Public API.
+Added `adv_regression_results_analyzer` — a comprehensive tool that generates a complete regression testing summary for a milestone and/or build number, with all data sourced from TCM Public API.
 
 **New file:**
 - `src/handlers/regression-results-analyzer.ts` — Full analysis pipeline: milestone resolution, test run fetching, test case aggregation, new-bug detection, and formatted output generation.
 
 **New tool registered in `src/server.ts`:**
-- `regression_results_analyzer` — Accepts milestone name, build number, project alias, and optional previous milestone. Produces a multi-section report.
+- `adv_regression_results_analyzer` — Accepts milestone name, build number, project alias, and optional previous milestone. Produces a multi-section report.
 
 **Report sections:**
 
@@ -194,7 +266,7 @@ Added `regression_results_analyzer` — a comprehensive tool that generates a co
 - **Performance optimizations** — Milestone list caching, higher parallelism (batch size 10) for previous milestone fetch, early-exit in new-bug detection loop.
 
 **New MCP prompt (`src/prompts.ts`):**
-- `regression-summary` — Guides the LLM to call `regression_results_analyzer` with correct parameters. Instructs to always determine `previous_milestone` for new-bugs detection.
+- `regression-summary` — Guides the LLM to call `adv_regression_results_analyzer` with correct parameters. Instructs to always determine `previous_milestone` for new-bugs detection.
 
 ## v8.2.0
 ### Dynamic Configuration & Hardcoding Removal
@@ -207,7 +279,7 @@ Introduced `zebrunner-config.json` — an instance-specific configuration file t
 
 **Modified files:**
 - `src/utils/widget-sql.ts` — `TEMPLATE`, `PLATFORM_MAP`, and default `dashboardName` now read from `getConfig()` via new `getTemplate()` and `getPlatformMap()` accessors. Old constants kept as deprecated exports for backward compatibility.
-- `src/server.ts` — `PROJECT_ALIASES` replaced with `getProjectAliases()` reading from config. `resolveProjectId()` logs a warning when an alias is resolved, suggesting customization. All `TEMPLATE.*` references replaced with `getTemplate().*`. Import tool (`import_launch_results_to_test_run`) now dynamically fetches TCM result statuses via `client.listResultStatuses()` and builds a mapping by case-insensitive name matching, falling back to `DEFAULT_STATUS_MAP` on failure.
+- `src/server.ts` — `PROJECT_ALIASES` replaced with `getProjectAliases()` reading from config. `resolveProjectId()` logs a warning when an alias is resolved, suggesting customization. All `TEMPLATE.*` references replaced with `getTemplate().*`. Import tool (`adv_import_launch_results_to_test_run`) now dynamically fetches TCM result statuses via `client.listResultStatuses()` and builds a mapping by case-insensitive name matching, falling back to `DEFAULT_STATUS_MAP` on failure.
 - `src/api/enhanced-client.ts` — `testConnection()` uses `getConfig().testConnectionProjectKey` instead of hardcoded `'MCP'`.
 - `src/handlers/report-handler.ts` — `fetchBugs()` uses `getConfig().dashboardNames.bugsReproRate`. `fetchCoverage()` now fetches ALL automation states dynamically and counts test cases per state, instead of hardcoding three state names. Widget template IDs read from config.
 - `src/handlers/reports/types.ts` — `CoverageData` extended with `states: Record<string, number>` for dynamic per-state counts (backward-compat fields `automated/manual/notAutomated` kept).
@@ -247,13 +319,13 @@ Added the ability to fetch and display the **change history** (audit log) for te
 | `history_limit` | number (1–100) | `20` | Max history entries per test case |
 
 **Tools with history support:**
-- `get_test_case_by_key` — Single test case (also renders Change History section in markdown format)
-- `get_test_cases_advanced` — Advanced filtering with bulk history enrichment
-- `get_test_cases_by_automation_state` — State-based filtering with bulk history
-- `get_test_case_by_title` — Title search with bulk history
-- `get_test_case_by_filter` — Filter-based search with bulk history
-- `get_all_tcm_test_cases_by_project` — Full project export with bulk history
-- `get_test_cases_by_suite_smart` — Suite-based retrieval with bulk history
+- `adv_get_test_case_by_key` — Single test case (also renders Change History section in markdown format)
+- `adv_get_test_cases_advanced` — Advanced filtering with bulk history enrichment
+- `adv_get_test_cases_by_automation_state` — State-based filtering with bulk history
+- `adv_get_test_case_by_title` — Title search with bulk history
+- `adv_get_test_case_by_filter` — Filter-based search with bulk history
+- `adv_get_all_tcm_test_cases_by_project` — Full project export with bulk history
+- `adv_get_test_cases_by_suite_smart` — Suite-based retrieval with bulk history
 
 **Detected lifecycle events:**
 - `became_automated`, `became_manual`, `became_not_automated`, etc. — Dynamically generated from project automation states via `became_<state_name>` pattern
@@ -272,7 +344,7 @@ Added the ability to fetch and display the **change history** (audit log) for te
 - `events_only` — Only entries with lifecycle events (automation state changes, deprecation)
 - `all` — All change entries including metadata changes
 
-**Markdown rendering** (on `get_test_case_by_key` with `format='markdown'`):
+**Markdown rendering** (on `adv_get_test_case_by_key` with `format='markdown'`):
 - Appends a "Change History" section with timestamped entries grouped by author
 - Shows events and truncated before/after values for each field change
 
@@ -291,11 +363,11 @@ Added the ability to fetch and display the **change history** (audit log) for te
 
 ### Improved Tool Routing for LLM Clients
 
-Improved tool descriptions to fix LLM routing issues where prompts like "get results for MCP during last 7 days" would incorrectly route to `get_all_launches_for_project` instead of `get_platform_results_by_period`.
+Improved tool descriptions to fix LLM routing issues where prompts like "get results for MCP during last 7 days" would incorrectly route to `adv_get_all_launches_for_project` instead of `adv_get_platform_results_by_period`.
 
-- `get_platform_results_by_period` — description now explicitly mentions trigger phrases: "results", "pass rate", "test statistics", "results for last N days", "how many passed/failed". Added concrete project key examples (`DEF`, `MCP`).
-- `get_all_launches_for_project` — description changed from "Get all launches" to "List individual launch executions" with explicit negative guidance: "NOT for aggregated results/pass rates".
-- `get_all_launches_with_filter` — same negative guidance added: "NOT for aggregated results/pass rates".
+- `adv_get_platform_results_by_period` — description now explicitly mentions trigger phrases: "results", "pass rate", "test statistics", "results for last N days", "how many passed/failed". Added concrete project key examples (`DEF`, `MCP`).
+- `adv_get_all_launches_for_project` — description changed from "Get all launches" to "List individual launch executions" with explicit negative guidance: "NOT for aggregated results/pass rates".
+- `adv_get_all_launches_with_filter` — same negative guidance added: "NOT for aggregated results/pass rates".
 - Updated descriptions in `tools.json`, `README.md`, and `TOOLS_CATALOG.md` to match.
 
 ---
@@ -490,17 +562,17 @@ LLM evaluation tests now capture Anthropic API token usage and estimate costs.
 - **Cost estimation** — `estimateCost()` in `tests/eval/eval-report.ts` uses hardcoded Anthropic pricing (Claude 4 Opus/Sonnet/Haiku) to calculate `$input + $output = $total`.
 - **Report integration** — console scorecard and markdown/JSON reports now include "Token Usage" sections with totals, judge breakdown, and estimated cost.
 
-### Extended `about_mcp_tools` — Metrics Mode
+### Extended `adv_about_mcp_tools` — Metrics Mode
 
 - New `mode: "metrics"` — returns a markdown table of per-tool session stats (calls, durations, response sizes, errors), or "No tool calls recorded" for empty sessions.
 - All modes now display `MCP version: X.Y.Z` in their output header.
-- Removed standalone `get_tool_metrics` tool — functionality fully integrated into `about_mcp_tools` (tool count remains at 60).
+- Removed standalone `get_tool_metrics` tool — functionality fully integrated into `adv_about_mcp_tools` (tool count remains at 60).
 
 ### New `/session-metrics` Prompt
 
 Added a 14th MCP prompt accessible via `/session-metrics` in Claude Desktop/Code.
 
-- No arguments required — instructs the LLM to call `about_mcp_tools` with `mode: "metrics"` and present a session usage summary.
+- No arguments required — instructs the LLM to call `adv_about_mcp_tools` with `mode: "metrics"` and present a session usage summary.
 - Category: Utility.
 - Prompt count updated from 13 → 14 across all files.
 
@@ -519,12 +591,12 @@ Three issues identified during code review, all fixed:
 - **New:** `tests/unit/tool-metrics.test.ts` — 10 tests for `ToolMetrics.record()`, `getSummaryMarkdown()`, `reset()`, and `wrapToolHandler()` (success, error, exception, arg passthrough).
 - **New:** `tests/unit/eval-token-tracking.test.ts` — 5 tests for `estimateCost()` across Claude models, zero tokens, and interface structure validation.
 - **Updated:** `tests/unit/prompt-registry.test.ts` — prompt count assertions 13 → 14.
-- **Updated:** `tests/unit/tool-schema-coverage.test.ts` — `about_mcp_tools` mode enum now includes `"metrics"`.
-- **New eval prompt:** `about_mcp_tools.metrics` in `tests/eval/eval-prompts.ts`.
+- **Updated:** `tests/unit/tool-schema-coverage.test.ts` — `adv_about_mcp_tools` mode enum now includes `"metrics"`.
+- **New eval prompt:** `adv_about_mcp_tools.metrics` in `tests/eval/eval-prompts.ts`.
 
 ### Documentation
 
-- **Updated:** `docs/TEST_PROMPTS.md` — added Section 17 (Tool Metrics & Token Tracking) with 7 test scenarios covering empty sessions, multi-tool metrics, error tracking, MCP Inspector verification, eval token reports, and JSON/markdown report validation. Added `about_mcp_tools` prompts 5–6 for metrics mode. Updated Section 15 with `/session-metrics` prompt test.
+- **Updated:** `docs/TEST_PROMPTS.md` — added Section 17 (Tool Metrics & Token Tracking) with 7 test scenarios covering empty sessions, multi-tool metrics, error tracking, MCP Inspector verification, eval token reports, and JSON/markdown report validation. Added `adv_about_mcp_tools` prompts 5–6 for metrics mode. Updated Section 15 with `/session-metrics` prompt test.
 - **Updated:** `docs/RESOURCES_AND_PROMPTS.md` — prompt count 13 → 14, added `/session-metrics` row to prompt reference table.
 - **Updated:** `README.md` — prompt count 13 → 14.
 - **Updated:** `change-logs.md`, `server.json`, `custom-catalog.yaml`, `mcp-catalog.yaml` — prompt count 13 → 14.
@@ -539,7 +611,7 @@ Three issues identified during code review, all fixed:
 Added read-only reference data accessible via the `@` menu in MCP clients (Claude Desktop, Claude Code). Resources are fetched on demand and cached for 20 minutes.
 
 **Static resources (no API calls):**
-- `zebrunner://reports/types` — 6 report types for `generate_report` with descriptions, parameters, and examples.
+- `zebrunner://reports/types` — 6 report types for `adv_generate_report` with descriptions, parameters, and examples.
 - `zebrunner://periods` — 12 valid time period values (e.g., "Last 30 Days", "Week") with day equivalents and which tools accept them.
 - `zebrunner://charts` — Chart delivery formats (png, html, text) and chart types (pie, bar, line, etc.) for 17 tools.
 - `zebrunner://formats` — 5 output format parameter families used across tools.
@@ -558,7 +630,7 @@ Added read-only reference data accessible via the `@` menu in MCP clients (Claud
 **Implementation:**
 - `src/resources.ts` — `ResourceCache` class with configurable TTL (default 20 min), LRU eviction (max 200 entries), and `registerResources()` function.
 - `resourceTrace()` debug logging for all template resource handlers to diagnose Inspector routing issues.
-- `getResourcesCatalog()` export for use by `about_mcp_tools`.
+- `getResourcesCatalog()` export for use by `adv_about_mcp_tools`.
 
 ### MCP Prompts (14 prompts)
 
@@ -586,7 +658,7 @@ Added pre-built workflow instructions accessible via the `/` command in MCP clie
 
 **Implementation:**
 - `src/prompts.ts` — 14 builder functions (exported for unit testing) and `registerPrompts()`.
-- `getPromptsCatalog()` export for use by `about_mcp_tools`.
+- `getPromptsCatalog()` export for use by `adv_about_mcp_tools`.
 
 ### Tool Annotations (all 60 tools)
 
@@ -594,13 +666,13 @@ Added MCP Tool Annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`,
 
 - 54 read-only tools: `readOnlyHint: true`, `destructiveHint: false`, `idempotentHint: true`.
 - 6 mutation tools: `readOnlyHint: false` with per-tool flags:
-  - `update_test_suite`, `update_test_case`: `idempotentHint: true` (PUT/PATCH).
-  - `create_test_suite`, `create_test_case`, `manage_test_run`: `idempotentHint: false`.
-  - `import_launch_results_to_test_run`: `destructiveHint: true`, `idempotentHint: true`.
+  - `adv_update_test_suite`, `adv_update_test_case`: `idempotentHint: true` (PUT/PATCH).
+  - `adv_create_test_suite`, `adv_create_test_case`, `adv_manage_test_run`: `idempotentHint: false`.
+  - `adv_import_launch_results_to_test_run`: `destructiveHint: true`, `idempotentHint: true`.
 
-### Extended `about_mcp_tools`
+### Extended `adv_about_mcp_tools`
 
-The `about_mcp_tools` tool now discovers all MCP capabilities, not just tools.
+The `adv_about_mcp_tools` tool now discovers all MCP capabilities, not just tools.
 
 - New `mode: "prompts"` — returns a formatted catalog of all 13 `/prompts` grouped by category with titles, descriptions, and arguments.
 - New `mode: "resources"` — returns a formatted catalog of all 13 `@resources` split into static and template with URIs and descriptions.
@@ -651,9 +723,9 @@ All dependencies reviewed and updated to latest stable versions. `npm audit` rep
 
 1047 total tests, 0 failures (up from ~990 in v7.1.0).
 
-- 31 new unit tests: tool annotation coverage (6 tests), catalog exports for prompts and resources (13 tests), `markdownForPrompts`/`markdownForResources` formatting (10 tests), `about_mcp_tools` extended modes (2 tests).
+- 31 new unit tests: tool annotation coverage (6 tests), catalog exports for prompts and resources (13 tests), `markdownForPrompts`/`markdownForResources` formatting (10 tests), `adv_about_mcp_tools` extended modes (2 tests).
 - 25 new unit tests for steering hints.
-- 8 new eval prompts: `about_mcp_tools.prompts`, `about_mcp_tools.resources`, 4 resource-aware prompts, 2 mutation eval prompts.
+- 8 new eval prompts: `adv_about_mcp_tools.prompts`, `adv_about_mcp_tools.resources`, 4 resource-aware prompts, 2 mutation eval prompts.
 - 10 mutation eval prompts extended with `expectedOutputPatterns` for steering hint markers.
 
 ### Documentation
@@ -670,13 +742,13 @@ All dependencies reviewed and updated to latest stable versions. `npm audit` rep
 
 ### New Tools: Test Run Management & Launch Results Import
 
-**`manage_test_run` (Beta)** — Unified tool for creating, updating, and adding test cases to Zebrunner Test Runs.
+**`adv_manage_test_run` (Beta)** — Unified tool for creating, updating, and adding test cases to Zebrunner Test Runs.
 - **create**: `POST /test-runs` (201). Supports title, description, milestone, environment, configurations (up to 100 group/option pairs), and requirements.
 - **update**: `PATCH /test-runs/{id}` (200). Partial update — only provided fields change. WARNING: `configurations` is atomic (replaces all).
 - **add_cases**: `POST /test-runs/{id}/test-cases` (204 No Content). Supports adding by test case keys, suite selectors (IMMEDIATE/ALL_DESCENDANTS), or all project test cases. Follow-up GET verifies the updated count.
 - Two-step confirmation, audit logging, `skip_errors: true` by default.
 
-**`import_launch_results_to_test_run` (Beta)** — Cross-API bridge that imports automation launch results into a TCM Test Run.
+**`adv_import_launch_results_to_test_run` (Beta)** — Cross-API bridge that imports automation launch results into a TCM Test Run.
 - Reads tests from a Reporting API launch, extracts linked test case keys and statuses, maps them to TCM result statuses, and imports via `POST /test-runs/{id}/test-cases:import`.
 - Default status mapping: PASSED→Passed, FAILED→Failed, SKIPPED→Skipped, ABORTED→Blocked. Custom overrides via `status_mapping`.
 - Pre-flight validation shows matched, not-in-run, and no-launch-data test cases.
@@ -689,19 +761,19 @@ All dependencies reviewed and updated to latest stable versions. `npm audit` rep
 
 All mutation tool success responses now include just-in-time guidance that steers the LLM toward logical follow-up actions, inspired by the Strands Agents steering pattern. Hints use plain text `Tip:` / `Note:` markers (no emoji).
 
-- **`create_test_suite`** — suggests `create_test_case` or sub-suite creation with the new suite ID.
-- **`create_test_case`** — always reminds that the case is draft and suggests `update_test_case` to publish. If `review` was not used, also suggests `validate_test_case`.
-- **`update_test_case`** — suggests `validate_test_case` (skipped if `review: true` was already used).
-- **`manage_test_run` create** — suggests populating the run via `add_cases` or importing launch results.
-- **`manage_test_run` update** — suggests `list_test_run_test_cases` to view assignments.
-- **`manage_test_run` add_cases** — suggests importing results or viewing cases.
-- **`import_launch_results_to_test_run`** — suggests viewing updated statuses or run summary.
-- **`create_test_case` preview** — reinforces the `draft=true` safety rule before confirmation.
+- **`adv_create_test_suite`** — suggests `adv_create_test_case` or sub-suite creation with the new suite ID.
+- **`adv_create_test_case`** — always reminds that the case is draft and suggests `adv_update_test_case` to publish. If `review` was not used, also suggests `adv_validate_test_case`.
+- **`adv_update_test_case`** — suggests `adv_validate_test_case` (skipped if `review: true` was already used).
+- **`adv_manage_test_run` create** — suggests populating the run via `add_cases` or importing launch results.
+- **`adv_manage_test_run` update** — suggests `adv_list_test_run_test_cases` to view assignments.
+- **`adv_manage_test_run` add_cases** — suggests importing results or viewing cases.
+- **`adv_import_launch_results_to_test_run`** — suggests viewing updated statuses or run summary.
+- **`adv_create_test_case` preview** — reinforces the `draft=true` safety rule before confirmation.
 
 ### Tool & Test Registry Updates
 
 - Tool count updated from 58 to 60 in registry coverage tests.
-- `tools.json` updated with `manage_test_run` and `import_launch_results_to_test_run` entries.
+- `tools.json` updated with `adv_manage_test_run` and `adv_import_launch_results_to_test_run` entries.
 - Smoke coverage matrix extended with new tool entries.
 - 7 new unit tests for mutation client test run methods.
 - 5 new eval prompts for test run management and launch import.
@@ -728,7 +800,7 @@ Moved ASCII-safe encoding from the instance-level `transformRequest` (which inco
 **Custom field file reference scanning.**
 `collectAllFileUuids`, `applyUuidMapping`, and `stripFailedFileRefs` now scan `customField` TEXT values for markdown file references (`[name](/files/uuid)`, `![alt](/files/uuid)`) in addition to the existing root and step-level scanning.
 
-**`generate_report` marked Beta.**
+**`adv_generate_report` marked Beta.**
 Tool description now starts with `(Beta)`.
 
 **Updated tool descriptions.**
@@ -744,11 +816,11 @@ All entry points (`server.ts`, `index.ts`, `index-enhanced.ts`, `index-working-e
 When using `source_case_key` to copy a test case, the source test case URL is now automatically prepended to the description (e.g. `**Source:** [MCP-29](https://...)`). This applies in all cases — whether the description is inherited from the source or explicitly provided.
 
 **Forced draft on create.**
-`create_test_case` now always sets `draft: true` regardless of the provided value or the source test case's draft status. This safety measure ensures AI-generated test cases are clearly identifiable. Use `update_test_case` to publish when ready.
+`adv_create_test_case` now always sets `draft: true` regardless of the provided value or the source test case's draft status. This safety measure ensures AI-generated test cases are clearly identifiable. Use `adv_update_test_case` to publish when ready.
 
 ### Documentation Overhaul
 
-- **`TEST_PROMPTS.md`** — Added section 13 "Mutation Tools (Beta)" with 14 new test prompts covering `create_test_case`, `update_test_case`, `create_test_suite`, `update_test_suite`, and 2 negative safety prompts. Fixed tool count (52 → 55+) and `get_test_suites` → `list_test_suites` naming. Updated version to 7.0.1.
+- **`TEST_PROMPTS.md`** — Added section 13 "Mutation Tools (Beta)" with 14 new test prompts covering `adv_create_test_case`, `adv_update_test_case`, `adv_create_test_suite`, `adv_update_test_suite`, and 2 negative safety prompts. Fixed tool count (52 → 55+) and `get_test_suites` → `adv_list_test_suites` naming. Updated version to 7.0.1.
 - **`EXECUTIVE_SUMMARY.md`** — Added mutation safety section, v7.x timeline entry, updated tool count (40+ → 55+), added mutation example to comparison table.
 - **`AI_MCP_BENEFITS.md`** — Added "Safe Test Case Authoring" section, updated tool count (40+ → 55+), added mutation domain.
 - **`EVALUATION_FRAMEWORK.md`** — Updated tool counts (52 → 58), prompt counts (74 → 100), total assertions (102 → 154).
@@ -770,10 +842,10 @@ Introduces write-capable MCP tools for creating and updating Test Suites and Tes
 
 | Tool | Method | Description |
 |------|--------|-------------|
-| `create_test_suite` | POST | Create a new Test Suite (root or nested). |
-| `update_test_suite` | PUT | Full replacement update of an existing Test Suite. |
-| `create_test_case` | POST | Create a new Test Case with runtime validation. Supports `{file_path}` attachments and optional `source_case_key` to pre-populate from an existing test case. |
-| `update_test_case` | PATCH | Partial update of a Test Case by numeric ID or string key. Supports `{file_path}` attachments. |
+| `adv_create_test_suite` | POST | Create a new Test Suite (root or nested). |
+| `adv_update_test_suite` | PUT | Full replacement update of an existing Test Suite. |
+| `adv_create_test_case` | POST | Create a new Test Case with runtime validation. Supports `{file_path}` attachments and optional `source_case_key` to pre-populate from an existing test case. |
+| `adv_update_test_case` | PATCH | Partial update of a Test Case by numeric ID or string key. Supports `{file_path}` attachments. |
 
 **Safety Features:**
 - **Two-call confirmation gate:** Preview → user approval → execute with `confirm: true`.
@@ -781,7 +853,7 @@ Introduces write-capable MCP tools for creating and updating Test Suites and Tes
 - **Read-back verification:** After mutations, the server fetches the updated record and computes a field-by-field diff.
 - **Runtime validation:** Priorities, automation states, and custom fields are validated against project settings before execution.
 - **Dry-run mode:** `dry_run: true` returns the raw payload without any validation or execution.
-- **Atomic update warnings:** `steps` and `requirements` in `update_test_case` warn that they replace all existing items.
+- **Atomic update warnings:** `steps` and `requirements` in `adv_update_test_case` warn that they replace all existing items.
 - **MCP annotations:** All tools declare `readOnlyHint: false` with appropriate `destructiveHint` and `idempotentHint` values.
 - **Resilient file handling:** All file download/upload operations are wrapped in try-catch — failures are reported as warnings without blocking the tool.
 
@@ -790,14 +862,14 @@ Introduces write-capable MCP tools for creating and updating Test Suites and Tes
 - Both root-level and step-level attachments support `{file_path}`.
 - Internal `uploadFile` and `downloadFile` methods on the mutation client (not exposed as public tools).
 
-**`create_test_case` enhancements:**
+**`adv_create_test_case` enhancements:**
 - **Enhanced preview:** Shows both "Fields to be set" and "Fields that will be null/default (not provided)" for full visibility of omissions.
 - **Optional `source_case_key`:** Pre-populate fields from an existing test case by key. Explicitly passed fields override source values. Priority and automation state are resolved by name for cross-project compatibility.
 - **Cross-project file re-upload:** When using `source_case_key` across projects, file attachments are automatically downloaded and re-uploaded to the target project, with fallback to stripping and a warning on failure.
 
 **Enhanced Tools:**
-- `get_tcm_suite_by_id` — Added `mode` parameter (`simple`/`full`) with direct Public API lookup for simple mode.
-- `get_test_case_by_key` — Updated description to recommend `json` format as data source for mutation tools.
+- `adv_get_tcm_suite_by_id` — Added `mode` parameter (`simple`/`full`) with direct Public API lookup for simple mode.
+- `adv_get_test_case_by_key` — Updated description to recommend `json` format as data source for mutation tools.
 
 **New Files:**
 - `src/api/mutation-client.ts` — Dedicated axios wrapper for POST/PUT/PATCH, file upload/download, and settings GETs on the Public API.
@@ -810,9 +882,9 @@ Introduces write-capable MCP tools for creating and updating Test Suites and Tes
 
 ## v6.7.0 (2026-03-28)
 
-### Universal Report Generator — `generate_report`
+### Universal Report Generator — `adv_generate_report`
 
-Replaces `generate_quality_dashboard` with a universal `generate_report` tool supporting 6 report types. Accepts single or multiple report types per call.
+Replaces `generate_quality_dashboard` with a universal `adv_generate_report` tool supporting 6 report types. Accepts single or multiple report types per call.
 
 **Report Types:**
 
@@ -827,7 +899,7 @@ Replaces `generate_quality_dashboard` with a universal `generate_report` tool su
 
 **Architecture:** Modular design with shared fetch methods in `ReportHandler` and individual report generators in `src/handlers/reports/`. Each report module is independent and reuses shared data fetching.
 
-**Breaking Change:** `generate_quality_dashboard` is removed. Use `generate_report` with `report_types: ["quality_dashboard"]` for equivalent behavior.
+**Breaking Change:** `generate_quality_dashboard` is removed. Use `adv_generate_report` with `report_types: ["quality_dashboard"]` for equivalent behavior.
 
 ---
 
@@ -873,7 +945,7 @@ The default HTTP request timeout for all API clients has been increased from 30 
 
 ### Generic Field-Path Filtering for Test Cases
 
-#### New: `field_path` / `field_value` / `field_match` parameters on `get_test_cases_advanced` and `get_test_case_by_filter`
+#### New: `field_path` / `field_value` / `field_match` parameters on `adv_get_test_cases_advanced` and `adv_get_test_case_by_filter`
 
 Added the ability to filter test cases by **any field** — including custom fields, nested objects, and top-level properties — using dot-notation paths. The Zebrunner Public API does not support RQL filtering on `customField` or many nested fields, so this feature paginates all server-side results and applies client-side matching.
 
@@ -906,7 +978,7 @@ Added the ability to filter test cases by **any field** — including custom fie
 
 ### Flaky Test Detection Tool
 
-#### New: `find_flaky_tests` — cross-launch flaky test analysis with 3-phase detection
+#### New: `adv_find_flaky_tests` — cross-launch flaky test analysis with 3-phase detection
 
 Identifies flaky tests across multiple launches using a comprehensive 3-phase approach:
 
@@ -951,14 +1023,14 @@ Added `chart` (output format) and `chart_type` (chart shape override) to 17 tool
 
 | Chart Type | Tools |
 |------------|-------|
-| **Pie** | `get_launch_test_summary`, `get_launch_summary`, `get_test_run_by_id`, `list_test_run_test_cases`, `get_bug_review` |
-| **Bar** | `generate_weekly_regression_stability_report`, `detailed_analyze_launch_failures`, `find_flaky_tests`, `get_top_bugs`, `analyze_regression_runtime`, `aggregate_test_cases_by_feature` |
-| **Line** | `get_test_execution_history` |
-| **Stacked Bar** | `get_all_launches_for_project`, `get_all_launches_with_filter`, `list_test_runs`, `get_launch_details`, `get_platform_results_by_period` |
+| **Pie** | `adv_get_launch_test_summary`, `adv_get_launch_summary`, `adv_get_test_run_by_id`, `adv_list_test_run_test_cases`, `adv_get_bug_review` |
+| **Bar** | `adv_generate_weekly_regression_stability_report`, `adv_detailed_analyze_launch_failures`, `adv_find_flaky_tests`, `adv_get_top_bugs`, `adv_analyze_regression_runtime`, `adv_aggregate_test_cases_by_feature` |
+| **Line** | `adv_get_test_execution_history` |
+| **Stacked Bar** | `adv_get_all_launches_for_project`, `adv_get_all_launches_with_filter`, `adv_list_test_runs`, `adv_get_launch_details`, `adv_get_platform_results_by_period` |
 
-Any `chart_type` can be used with any tool — e.g., `get_platform_results_by_period` with `chart_type: 'pie'` renders a pie chart instead of its default stacked bar.
+Any `chart_type` can be used with any tool — e.g., `adv_get_platform_results_by_period` with `chart_type: 'pie'` renders a pie chart instead of its default stacked bar.
 
-**Additional fix:** `get_platform_results_by_period` chart rendering now auto-discovers column names from the SQL widget response instead of hardcoding `PLATFORM`/`PASSED`/`FAILED` — fixes "Unknown" label bug.
+**Additional fix:** `adv_get_platform_results_by_period` chart rendering now auto-discovers column names from the SQL widget response instead of hardcoding `PLATFORM`/`PASSED`/`FAILED` — fixes "Unknown" label bug.
 
 **Implementation:** Pure TypeScript SVG generation + `sharp` PNG rasterization (no new dependencies). Chart.js loaded from CDN only in HTML output.
 
@@ -1050,30 +1122,30 @@ Added `count_only: z.boolean().default(false)` to all tools that return potentia
 
 | Tool | Trigger | Notes |
 |---|---|---|
-| `get_test_cases_by_automation_state` | `get_all: true, count_only: true` | Counts by automation state |
-| `get_test_case_by_title` | `get_all: true, count_only: true` | Counts title matches |
-| `get_test_case_by_filter` | `get_all: true, count_only: true` | Counts with RQL filters |
-| `get_test_cases_advanced` | `count_only: true` | Counts with advanced filters (page-based tool) |
-| `get_all_tcm_test_cases_by_project` | `count_only: true` | Counts all project test cases |
-| `get_all_tcm_test_cases_with_root_suite_id` | `count_only: true` | Counts all, skips hierarchy enrichment |
-| `get_test_cases_by_suite_smart` | `count_only: true` | Auto-detects suite type, then counts |
+| `adv_get_test_cases_by_automation_state` | `get_all: true, count_only: true` | Counts by automation state |
+| `adv_get_test_case_by_title` | `get_all: true, count_only: true` | Counts title matches |
+| `adv_get_test_case_by_filter` | `get_all: true, count_only: true` | Counts with RQL filters |
+| `adv_get_test_cases_advanced` | `count_only: true` | Counts with advanced filters (page-based tool) |
+| `adv_get_all_tcm_test_cases_by_project` | `count_only: true` | Counts all project test cases |
+| `adv_get_all_tcm_test_cases_with_root_suite_id` | `count_only: true` | Counts all, skips hierarchy enrichment |
+| `adv_get_test_cases_by_suite_smart` | `count_only: true` | Auto-detects suite type, then counts |
 
 **Suite, launch, milestone, test run, and analytical tools (11 — new batch):**
 
 | Tool | Trigger | Pattern | Notes |
 |---|---|---|---|
-| `list_test_suites` | `count_only: true` | Pagination loop | Counts all suites via pageToken loop |
-| `get_all_subsuites` | `count_only: true` | In-memory count | Loads all, returns descendant count |
-| `get_tcm_test_suites_by_project` | `count_only: true` | Pagination loop | Counts suites via pageToken loop |
-| `get_all_tcm_test_case_suites_by_project` | `count_only: true` | In-memory count | Counts all suites, skips hierarchy |
-| `get_all_launches_for_project` | `count_only: true` | API `_meta.total` | Single cheap API call |
-| `get_all_launches_with_filter` | `count_only: true` | API `_meta.total` | Single cheap API call with filters |
-| `get_project_milestones` | `count_only: true` | API `_meta.total` / pagination | Uses API total for all/completed; paginates for incomplete/overdue |
-| `list_test_runs` | `count_only: true` | Pagination loop | Counts test runs via pageToken loop with filters |
-| `get_launch_test_summary` | `count_only: true` | Handler early-return | Returns total + per-status counts, skips session/JIRA resolution |
-| `get_test_execution_history` | `count_only: true` | Handler early-return | Returns execution count + pass rate without formatting |
-| `detailed_analyze_launch_failures` | `count_only: true` | Handler early-return | Returns failed test count, skips expensive analysis |
-| `generate_weekly_regression_stability_report` | `count_only: true` | Handler early-return | Resolves builds, returns matched suite count without full report |
+| `adv_list_test_suites` | `count_only: true` | Pagination loop | Counts all suites via pageToken loop |
+| `adv_get_all_subsuites` | `count_only: true` | In-memory count | Loads all, returns descendant count |
+| `adv_get_tcm_test_suites_by_project` | `count_only: true` | Pagination loop | Counts suites via pageToken loop |
+| `adv_get_all_tcm_test_case_suites_by_project` | `count_only: true` | In-memory count | Counts all suites, skips hierarchy |
+| `adv_get_all_launches_for_project` | `count_only: true` | API `_meta.total` | Single cheap API call |
+| `adv_get_all_launches_with_filter` | `count_only: true` | API `_meta.total` | Single cheap API call with filters |
+| `adv_get_project_milestones` | `count_only: true` | API `_meta.total` / pagination | Uses API total for all/completed; paginates for incomplete/overdue |
+| `adv_list_test_runs` | `count_only: true` | Pagination loop | Counts test runs via pageToken loop with filters |
+| `adv_get_launch_test_summary` | `count_only: true` | Handler early-return | Returns total + per-status counts, skips session/JIRA resolution |
+| `adv_get_test_execution_history` | `count_only: true` | Handler early-return | Returns execution count + pass rate without formatting |
+| `adv_detailed_analyze_launch_failures` | `count_only: true` | Handler early-return | Returns failed test count, skips expensive analysis |
+| `adv_generate_weekly_regression_stability_report` | `count_only: true` | Handler early-return | Resolves builds, returns matched suite count without full report |
 
 **Why:** The Zebrunner Public API is cursor-based with no total count endpoint. E2E Prompt 3 (Automation Coverage Sustainability) needs **counts** across thousands of test cases, but `get_all=true` with `format=json` produces payloads exceeding the ~1MB MCP host limit. `count_only` solves this. The 11 new tools extend this to suites, launches, milestones, test runs, and analytical tools — enabling questions like "how many suites in MY_PROJECT?" without fetching all 1,189 suite objects.
 
@@ -1097,9 +1169,9 @@ This prevents OOM and MCP 1MB errors even when the LLM forgets to use `count_onl
 
 ### TCM Execution History & Test Infrastructure
 
-#### New: TCM execution history on `get_test_case_by_key`
+#### New: TCM execution history on `adv_get_test_case_by_key`
 
-- **New parameter:** `include_execution_history` (boolean, default `false`) on the `get_test_case_by_key` tool. When enabled, fetches the last 10 TCM executions (manual + automated) via the Reporting API endpoint `GET /api/tcm/v1/test-cases/{id}/executions?projectId={projectId}`.
+- **New parameter:** `include_execution_history` (boolean, default `false`) on the `adv_get_test_case_by_key` tool. When enabled, fetches the last 10 TCM executions (manual + automated) via the Reporting API endpoint `GET /api/tcm/v1/test-cases/{id}/executions?projectId={projectId}`.
 - **Per execution:** Shows date, status (Passed/Failed/etc.), type (MANUAL/AUTOMATED), environment, and configurations (Platform, Build). Markdown format renders a summary table with pass rate.
 - **For json/dto formats:** Adds an `executionHistory` array to the response object.
 - **New client method:** `reportingClient.getTestCaseExecutions(testCaseId, projectId, limit)` with `TestCaseExecution` type.
@@ -1124,7 +1196,7 @@ This prevents OOM and MCP 1MB errors even when the LLM forgets to use `count_onl
   - Show **display names** instead of raw API keys for custom fields (e.g., "Manual Only" instead of `manualOnly`)
   - **Order custom fields** by their configured `relativePosition` from the Zebrunner UI
 - **Validator upgrade:** `validateTestCase()` no longer hardcodes `testCase.customField?.manualOnly`. It dynamically discovers the "Manual Only" field from the fields layout metadata, with fallback to common key variants.
-- **Wired into tools:** `get_test_case_by_key`, `validate_test_case`, and `improve_test_case` all automatically fetch and pass fields layout.
+- **Wired into tools:** `adv_get_test_case_by_key`, `adv_validate_test_case`, and `adv_improve_test_case` all automatically fetch and pass fields layout.
 - **New types:** Exported `FieldsLayout` and `FieldLayoutItem` interfaces from `reporting-client.ts`.
 - **Files:** `src/api/reporting-client.ts`, `src/utils/formatter.ts`, `src/utils/test-case-validator.ts`, `src/server.ts`, `src/handlers/tools.ts`
 
@@ -1143,7 +1215,7 @@ This prevents OOM and MCP 1MB errors even when the LLM forgets to use `count_onl
 
 ### Get Test Case by ID & Tool Enhancements
 
-#### Extended `get_test_case_by_key` — now accepts numeric IDs and Zebrunner URLs
+#### Extended `adv_get_test_case_by_key` — now accepts numeric IDs and Zebrunner URLs
 
 - **New capability:** The `case_key` parameter now accepts both test case keys (`PROJECT-29`) and numeric IDs (`86280`). Auto-detects format and routes to the correct API endpoint (`/test-cases/key:{key}` or `/test-cases/{id}`).
 - **URL parsing hints:** Tool description now guides the LLM to extract `project_key` and `caseId` from Zebrunner URLs like `https://example.zebrunner.com/projects/MY_PROJECT/test-cases?caseId=86280`.
@@ -1189,22 +1261,22 @@ This release fixes 7 reported limitations and 1 newly discovered bug in TCM (Tes
 
 - **Problem:** No way to exclude deprecated, draft, or deleted test cases via server-side filtering. Client-side filtering after fetching wasted the 1000-item cap.
 - **Fix:** Added `exclude_deprecated`, `exclude_draft`, `exclude_deleted` parameters to 4 tools. These generate RQL conditions (`deprecated = false`, `draft = false`, `deleted = false`) confirmed working by API testing.
-- **Affected tools:** `get_all_tcm_test_cases_by_project`, `get_test_cases_advanced`, `get_test_cases_by_automation_state`, `get_test_case_by_filter`
+- **Affected tools:** `adv_get_all_tcm_test_cases_by_project`, `adv_get_test_cases_advanced`, `adv_get_test_cases_by_automation_state`, `adv_get_test_case_by_filter`
 - **Defaults:** `exclude_deleted` defaults to `true` (deleted TCs rarely wanted). Others default to `false` for backward compatibility.
 
 ### Remove 1000 Hard Cap (Fix 1)
 
-- **Problem:** `get_all_tcm_test_cases_by_project` enforced `.max(1000)` in schema, silently truncating results for large projects.
+- **Problem:** `adv_get_all_tcm_test_cases_by_project` enforced `.max(1000)` in schema, silently truncating results for large projects.
 - **Fix:** Raised max to 10,000 and default to 5,000. Added `was_truncated` and `has_more_pages` fields to response for transparency. Response now includes `total_fetched`, `filters_applied` metadata.
 
 ### Fix total_found and Add Pagination Support (Fix 3)
 
-- **Problem:** `get_test_cases_by_automation_state` reported `total_found: processedCases.length` (current page length), misleading users into thinking it was the total.
+- **Problem:** `adv_get_test_cases_by_automation_state` reported `total_found: processedCases.length` (current page length), misleading users into thinking it was the total.
 - **Fix:** Renamed to `page_count`, added `has_more_pages: boolean`, and added `get_all: boolean` parameter for auto-pagination through all pages.
 
 ### Improve Pagination Metadata (Fix 6)
 
-- **Problem:** `get_test_cases_advanced` response had no indication of whether more pages were available.
+- **Problem:** `adv_get_test_cases_advanced` response had no indication of whether more pages were available.
 - **Fix:** Added `page_count`, `has_more_pages`, and advisory `_notice` when more pages exist. Passes through `nextPageToken` for manual pagination.
 
 ### Date Filters Now Work (Fix 4) — Auto-resolved
@@ -1215,18 +1287,18 @@ This release fixes 7 reported limitations and 1 newly discovered bug in TCM (Tes
 
 | Tool | New Parameters |
 |------|----------------|
-| `get_all_tcm_test_cases_by_project` | `exclude_deprecated`, `exclude_draft`, `exclude_deleted`, raised `max_results` to 10000 |
-| `get_test_cases_advanced` | `exclude_deprecated`, `exclude_draft`, `exclude_deleted` |
-| `get_test_cases_by_automation_state` | `exclude_deprecated`, `exclude_draft`, `exclude_deleted`, `get_all` |
-| `get_test_case_by_filter` | `exclude_deprecated`, `exclude_draft`, `exclude_deleted` |
+| `adv_get_all_tcm_test_cases_by_project` | `exclude_deprecated`, `exclude_draft`, `exclude_deleted`, raised `max_results` to 10000 |
+| `adv_get_test_cases_advanced` | `exclude_deprecated`, `exclude_draft`, `exclude_deleted` |
+| `adv_get_test_cases_by_automation_state` | `exclude_deprecated`, `exclude_draft`, `exclude_deleted`, `get_all` |
+| `adv_get_test_case_by_filter` | `exclude_deprecated`, `exclude_draft`, `exclude_deleted` |
 
 ### Response Schema Additions (non-breaking)
 
 | Tool | New Response Fields |
 |------|---------------------|
-| `get_all_tcm_test_cases_by_project` | `total_fetched`, `was_truncated`, `has_more_pages`, `filters_applied` |
-| `get_test_cases_by_automation_state` | `page_count`, `has_more_pages` (replaces misleading `total_found`) |
-| `get_test_cases_advanced` | `page_count`, `has_more_pages`, `_notice` |
+| `adv_get_all_tcm_test_cases_by_project` | `total_fetched`, `was_truncated`, `has_more_pages`, `filters_applied` |
+| `adv_get_test_cases_by_automation_state` | `page_count`, `has_more_pages` (replaces misleading `total_found`) |
+| `adv_get_test_cases_advanced` | `page_count`, `has_more_pages`, `_notice` |
 | All bulk list tools | `createdAt`, `createdBy`, `lastModifiedAt`, `lastModifiedBy`, `customField` on test case objects |
 
 ---
@@ -1235,7 +1307,7 @@ This release fixes 7 reported limitations and 1 newly discovered bug in TCM (Tes
 
 ### Configurable Duration Thresholds & Full Test Case Metrics
 
-This release improves the `analyze_regression_runtime` tool with configurable duration classification thresholds and comprehensive test case metrics alongside test metrics at every level.
+This release improves the `adv_analyze_regression_runtime` tool with configurable duration classification thresholds and comprehensive test case metrics alongside test metrics at every level.
 
 ### Configurable Test Duration Classification
 
@@ -1357,9 +1429,9 @@ When a test retries across devices (CI `retry > 0` or launch re-runs), the wall-
 
 #### Updated Tools (5 tools)
 
-- **`get_launch_test_summary`** — uses effective duration; adds `wallClockDurationSeconds`, `longestSessionDurationSeconds`, `sessionCount`, `sessions` breakdown per test
-- **`analyze_regression_runtime`** — classifies tests by effective duration (not wall-clock); tracks `testsWithRetries` and `totalRetryOverheadSeconds`
-- **`analyze_test_failure`** — shows "Effective Duration" vs "Total with N retries" with per-session device/platform info
+- **`adv_get_launch_test_summary`** — uses effective duration; adds `wallClockDurationSeconds`, `longestSessionDurationSeconds`, `sessionCount`, `sessions` breakdown per test
+- **`adv_analyze_regression_runtime`** — classifies tests by effective duration (not wall-clock); tracks `testsWithRetries` and `totalRetryOverheadSeconds`
+- **`adv_analyze_test_failure`** — shows "Effective Duration" vs "Total with N retries" with per-session device/platform info
 - **Jira ticket generation** — uses effective duration in Duration row; adds "Retries" row with session count and total cost
 - **Last-passed comparison** — compares using effective duration instead of inflated wall-clock span
 
@@ -1377,11 +1449,11 @@ When a test retries across devices (CI `retry > 0` or launch re-runs), the wall-
 
 ### Test Suite Updates & Documentation
 
-Comprehensive test and documentation refresh for v6.3.0 features, including the new `analyze_regression_runtime` tool and the Test vs Test Case distinction across all reporting tools.
+Comprehensive test and documentation refresh for v6.3.0 features, including the new `adv_analyze_regression_runtime` tool and the Test vs Test Case distinction across all reporting tools.
 
 #### Updated Tests
 
-- **`tests/helpers/tool-coverage-matrix.ts`** — Added `analyze_regression_runtime` to `TOOL_SMOKE_INPUTS` (52 tools total)
+- **`tests/helpers/tool-coverage-matrix.ts`** — Added `adv_analyze_regression_runtime` to `TOOL_SMOKE_INPUTS` (52 tools total)
 - **`tests/unit/tool-registry-coverage.test.ts`** — Updated tool count assertions from 51 → 52
 - **`tests/unit/launch-tools.test.ts`** — Added 3 new test suites:
   - **Launch Attempts Schema** — `LaunchAttemptItemSchema` and `LaunchAttemptsResponseSchema` validation (full, minimal, multi-attempt, empty)
@@ -1398,7 +1470,7 @@ Comprehensive test and documentation refresh for v6.3.0 features, including the 
 
 #### Documentation Updates
 
-- **`tools.json`** — Added `analyze_regression_runtime` entry (52 tools)
+- **`tools.json`** — Added `adv_analyze_regression_runtime` entry (52 tools)
 - **`TOOLS_CATALOG.md`** — Full tool documentation: description, terminology note, parameters, key metrics, 6 example prompts
 - **`README.md`** — Added tool to Launches/Reporting table; added `docs/TERMINOLOGY.md` reference in Feature Documentation
 - **`docs/TERMINOLOGY.md`** (new) — Comprehensive glossary:
@@ -1417,7 +1489,7 @@ Comprehensive test and documentation refresh for v6.3.0 features, including the 
 
 ## v6.3.0 (2026-03-24)
 
-### New Tool: `analyze_regression_runtime`
+### New Tool: `adv_analyze_regression_runtime`
 
 Comprehensive Regression Runtime Efficiency analysis tool for tracking test execution performance across teams (Android, iOS, Web).
 
@@ -1451,7 +1523,7 @@ Comprehensive Regression Runtime Efficiency analysis tool for tracking test exec
 ```
 
 ## v6.2.0 (2026-03-11)
-- Added new `about_mcp_tools` tool for all-tools summary and per-tool details with examples
+- Added new `adv_about_mcp_tools` tool for all-tools summary and per-tool details with examples
 - Added static approximate token usage estimation per tool in tool intelligence output
 - Added full 51-tool registry coverage tests (registration, schema key checks, and constraints)
 - Synced `tools.json`, `README.md`, and `TOOLS_CATALOG.md` with actual registered tools
@@ -1485,7 +1557,7 @@ Comprehensive Regression Runtime Efficiency analysis tool for tracking test exec
 
 ## v5.16.0 (2026-02-04) - Weekly Stability Report Enhancements
 
-### 🚀 Enhanced Tool: `generate_weekly_regression_stability_report`
+### 🚀 Enhanced Tool: `adv_generate_weekly_regression_stability_report`
 
 **Added linked issues section grouped by suite.**
 
@@ -1527,7 +1599,7 @@ The weekly stability report now includes linked issue keys from the current laun
 
 ## v5.15.1 (2026-02-04) - Weekly Regression Stability Report
 
-### 🚀 New Tool: `generate_weekly_regression_stability_report`
+### 🚀 New Tool: `adv_generate_weekly_regression_stability_report`
 
 **Generate a Jira-ready weekly stability snapshot across suites.**
 
@@ -1573,7 +1645,7 @@ This tool provides a high-level weekly regression report with pass rate, week-ov
 
 ## v5.15.0 (2025-12-08) - NEW TOOL: Feature-Based Test Case Aggregation
 
-### 🚀 New Tool: `aggregate_test_cases_by_feature`
+### 🚀 New Tool: `adv_aggregate_test_cases_by_feature`
 
 **Find ALL test cases related to a specific feature across the entire project.**
 
@@ -1731,7 +1803,7 @@ TAGS=>featureSuiteId=456||featureSuiteId=789||featureSuiteId=1011
 
 ### 🚀 Performance Enhancement: Single-Call Bug Analysis
 
-- **ENHANCED: `get_bug_review` - Automatic Failure Detail Fetching**
+- **ENHANCED: `adv_get_bug_review` - Automatic Failure Detail Fetching**
   - **Problem**: Previously required 10+ separate tool calls with manual approval for each bug
   - **Solution**: New `include_failure_details` parameter fetches all details in a single call
 
@@ -1769,7 +1841,7 @@ TAGS=>featureSuiteId=456||featureSuiteId=789||featureSuiteId=1011
 
 ### 🐞 New Bug Analysis Tools
 
-- **📊 NEW TOOL: `get_bug_review`** - Comprehensive bug review with detailed failure analysis
+- **📊 NEW TOOL: `adv_get_bug_review`** - Comprehensive bug review with detailed failure analysis
   - View all bugs affecting the project with failure counts, defect links, and reproduction dates
   - Track bug history: first seen date and last reproduction date
   - Support for multiple time periods: Last 7/14/30/90 Days, Week, Month, Quarter
@@ -1779,7 +1851,7 @@ TAGS=>featureSuiteId=456||featureSuiteId=789||featureSuiteId=1011
   - Extracts and parses dashboard IDs and hashcodes for drill-down analysis
   - **SQL Widget**: Uses templateId 9 (Bug Review widget)
 
-- **🔬 NEW TOOL: `get_bug_failure_info`** - Deep dive into specific failure patterns
+- **🔬 NEW TOOL: `adv_get_bug_failure_info`** - Deep dive into specific failure patterns
   - Combines two SQL widgets for comprehensive failure analysis:
     - templateId 6 (Failure Info) - High-level summary with error/stability information
     - templateId 10 (Failure Details) - Individual test runs affected by the failure
@@ -1827,8 +1899,8 @@ TAGS=>featureSuiteId=456||featureSuiteId=789||featureSuiteId=1011
 ### 🔗 Workflow Integration
 
 These tools work together for comprehensive bug analysis:
-1. Use `get_bug_review` to get overview of all bugs with their hashcodes
-2. Use `get_bug_failure_info` with specific hashcode to drill down into failure details
+1. Use `adv_get_bug_review` to get overview of all bugs with their hashcodes
+2. Use `adv_get_bug_failure_info` with specific hashcode to drill down into failure details
 3. Both tools automatically convert HTML links to markdown for easy navigation
 
 ### ✅ Testing
@@ -1892,7 +1964,7 @@ https://s3.amazonaws.com/video.mp4 (existing pattern)
 ---
 
 ## v5.11.0 - NEW FEATURES: Test Execution History & Comparison with Last Passed
-- **📊 NEW TOOL: `get_test_execution_history`** - Track test execution trends across launches
+- **📊 NEW TOOL: `adv_get_test_execution_history`** - Track test execution trends across launches
   - View pass/fail history for any test
   - Identify when test started failing
   - Calculate pass rate and stability metrics
@@ -1900,7 +1972,7 @@ https://s3.amazonaws.com/video.mp4 (existing pattern)
   - **Special Detection**: Highlights when all recent executions failed (e.g., "Failed in all last 10 runs")
   - Output formats: Markdown table, JSON, or structured DTO
 
-- **🔄 ENHANCED: `analyze_test_failure` with Comparison Feature** - Compare current failure with last passed execution
+- **🔄 ENHANCED: `adv_analyze_test_failure` with Comparison Feature** - Compare current failure with last passed execution
   - **New Parameter**: `compareWithLastPassed` with granular control
     - Compare logs (error count, new errors detected)
     - Compare screenshots (count, availability for visual analysis)
@@ -2091,7 +2163,7 @@ compareWithLastPassed: {
 ### 🎓 Example Workflows
 
 **Workflow 1: Investigating New Failure**
-1. Get execution history: `get_test_execution_history`
+1. Get execution history: `adv_get_test_execution_history`
 2. If last passed execution exists → Analyze with comparison
 3. Review differences (logs, duration, environment)
 4. Determine if regression or environment issue
@@ -2703,21 +2775,21 @@ DEBUG=true                                    # Default: (not set) - use true fo
 
 ## v5.6.4
 - **🔥 CRITICAL FIX: URL Regression** - Fixed all incorrect test URLs from old pattern (`/tests/runs/.../results/...`) to correct pattern (`/projects/{projectKey}/automation-launches/{launchId}/tests/{testId}`)
-- **📊 NEW: Quick Reference Tables** - Added feature-grouped tables for critical and medium failures in `detailed_analyze_launch_failures`
+- **📊 NEW: Quick Reference Tables** - Added feature-grouped tables for critical and medium failures in `adv_detailed_analyze_launch_failures`
   - Tests automatically grouped by feature area (Search & Quick Log, Notifications, Meal Management, etc.)
   - Clean markdown tables with: Test (clickable), Stability %, Issue description, Evidence (video link)
   - Priority-based sections: 🔴 Critical (0-30%), 🟡 Medium (31-70%)
   - Perfect for sharing in Slack or team communications
 - **🔧 Fixed URLs in All Formats**:
-  - ✅ Individual test analysis (`analyze_test_failure`)
-  - ✅ Launch-wide analysis (`detailed_analyze_launch_failures`)
+  - ✅ Individual test analysis (`adv_analyze_test_failure`)
+  - ✅ Launch-wide analysis (`adv_detailed_analyze_launch_failures`)
   - ✅ JIRA format tickets
   - ✅ Summary reports
   - ✅ All links, recommendations, and similar failures sections
 
 ## v5.6.3
 - **🔥 MAJOR: Fixed Session Handling & Clickable Links in All Formats**
-- Enhanced `detailed_analyze_launch_failures` with comprehensive improvements:
+- Enhanced `adv_detailed_analyze_launch_failures` with comprehensive improvements:
   - **Session Sorting:** Failed sessions now display first, followed by successful ones (newest first within each status)
   - **Accurate Session Matching:** Videos and screenshots are correctly matched per session, not mixed between different executions
   - **Suite Information:** Test suite/test class now displayed in all formats (detailed, summary, jira)
@@ -2725,7 +2797,7 @@ DEBUG=true                                    # Default: (not set) - use true fo
   - **Clickable URLs:** All test names, test IDs, videos, screenshots, test cases, and launch links are now clickable
   - **Build Links:** If build field contains a URL, it's now clickable
   - **Enhanced Launch Header:** Displays test suite, collected devices from actual executions, and all metadata
-- Updated `analyze_test_failure` tool:
+- Updated `adv_analyze_test_failure` tool:
   - Sessions displayed with status indicators (❌ FAILED, ✅ PASSED, ⚠️ OTHER)
   - Multiple test execution sessions shown with proper status grouping
   - Suite/test class information added to executive summary
@@ -2747,7 +2819,7 @@ DEBUG=true                                    # Default: (not set) - use true fo
 
 ## v5.6.1
 - **🔗 Clickable URLs in Summary Reports** - All launch, test, and JIRA issue references now include clickable URLs
-- **📊 Enhanced Launch Test Summary** - Added launch details and URLs to `get_launch_test_summary` output
+- **📊 Enhanced Launch Test Summary** - Added launch details and URLs to `adv_get_launch_test_summary` output
 - **✨ Smart JIRA URL Resolution** - JIRA tickets in summaries now link to actual JIRA instances
 
 **What Changed:**
@@ -3053,7 +3125,7 @@ private async getAllSessionsWithArtifacts(
 1. **AI-Level URL Detection** ✅
    - **Pattern Recognition**: Claude automatically detects Zebrunner test and launch URLs
    - **Auto-Extraction**: Parses `projectKey`, `testRunId`, and `testId` from URLs
-   - **Smart Routing**: Calls `analyze_test_failure` for test URLs, `detailed_analyze_launch_failures` for launch URLs
+   - **Smart Routing**: Calls `adv_analyze_test_failure` for test URLs, `adv_detailed_analyze_launch_failures` for launch URLs
    - **No Manual Setup**: Works out of the box with existing MCP configuration
 
 2. **Supported URL Patterns** ✅
@@ -3062,7 +3134,7 @@ private async getAllSessionsWithArtifacts(
    ```
    https://workspace.zebrunner.com/projects/PROJECT/automation-launches/LAUNCH_ID/tests/TEST_ID
    ```
-   - Automatically calls `analyze_test_failure`
+   - Automatically calls `adv_analyze_test_failure`
    - Extracts: `projectKey`, `testRunId`, `testId`
    - Default params: All diagnostics enabled, videos, screenshots, AI analysis
 
@@ -3070,7 +3142,7 @@ private async getAllSessionsWithArtifacts(
    ```
    https://workspace.zebrunner.com/projects/PROJECT/automation-launches/LAUNCH_ID
    ```
-   - Automatically calls `detailed_analyze_launch_failures`
+   - Automatically calls `adv_detailed_analyze_launch_failures`
    - Extracts: `projectKey`, `testRunId`
    - Default params: Screenshot analysis enabled, comprehensive reporting
 
@@ -3100,7 +3172,7 @@ User: "Analyze https://your-workspace.zebrunner.com/projects/MCP/automation-laun
 Claude automatically:
 - Detects test URL pattern
 - Extracts: projectKey=MCP, testRunId=120911, testId=5455386
-- Calls analyze_test_failure with all defaults enabled
+- Calls adv_analyze_test_failure with all defaults enabled
 - Returns comprehensive failure analysis with videos and screenshots
 
 # Launch Analysis
@@ -3109,7 +3181,7 @@ User: "Check https://your-workspace.zebrunner.com/projects/MCP/automation-launch
 Claude automatically:
 - Detects launch URL pattern  
 - Extracts: projectKey=MCP, testRunId=120911
-- Calls detailed_analyze_launch_failures
+- Calls adv_detailed_analyze_launch_failures
 - Returns analysis of all failed tests without linked issues
 
 # With Overrides
@@ -3135,7 +3207,7 @@ Claude:
 
 When Claude detects a URL, these parameters are automatically used:
 
-**For Test URLs** (`analyze_test_failure`):
+**For Test URLs** (`adv_analyze_test_failure`):
 ```typescript
 {
   projectKey: "<extracted>",
@@ -3152,7 +3224,7 @@ When Claude detects a URL, these parameters are automatically used:
 }
 ```
 
-**For Launch URLs** (`detailed_analyze_launch_failures`):
+**For Launch URLs** (`adv_detailed_analyze_launch_failures`):
 ```typescript
 {
   projectKey: "<extracted>",
@@ -3184,8 +3256,8 @@ https://your-workspace.zebrunner.com/projects/MCP/automation-launches/120911/tes
   - Table of Contents updated
 
 ✅ **Tool Descriptions**
-  - `analyze_test_failure` - Added URL hint
-  - `detailed_analyze_launch_failures` - Added URL hint
+  - `adv_analyze_test_failure` - Added URL hint
+  - `adv_detailed_analyze_launch_failures` - Added URL hint
   - Both tools now mention auto-invocation capability
 
 **Files Modified:**
@@ -3238,7 +3310,7 @@ https://your-workspace.zebrunner.com/projects/MCP/automation-launches/120911/tes
    - **Fallback**: If URL resolution fails, leaves as plain text
 
 4. **Applied to Launch Analysis** ✅
-   - Integrated into `detailed_analyze_launch_failures` tool
+   - Integrated into `adv_detailed_analyze_launch_failures` tool
    - Test names with embedded IDs now automatically display clickable links
    - Works for both detailed and summary formats
 
@@ -3754,7 +3826,7 @@ h3. Links
 **Critical Fixes:**
 
 1. **Jira Format Now Works Properly** ✅
-   - **Problem**: `format: 'jira'` in `detailed_analyze_launch_failures` was producing empty "Unknown" results
+   - **Problem**: `format: 'jira'` in `adv_detailed_analyze_launch_failures` was producing empty "Unknown" results
    - **Root Cause**: Tool was not calling `analyzeTestFailureById` with deep analysis
    - **Solution**: New `generateJiraTicketsForLaunch` method that:
      - Calls `analyzeTestFailureById` with `format: 'jira'` for EACH test
@@ -3906,7 +3978,7 @@ getTestSessionsForTest(launchId, testId, projectId)
 - **Removed** placeholder text `'YOUR_PROJECT'` from pagination instructions
 - **Fixed** launch URLs to use proper format: `/projects/{projectKey}/automation-launches/{testRunId}`
 - **Added** `getProjectKey(projectId)` method to resolve project key from ID
-- **Enhanced** both `analyze_test_failure` and `detailed_analyze_launch_failures` to automatically resolve projectKey when only projectId is provided
+- **Enhanced** both `adv_analyze_test_failure` and `adv_detailed_analyze_launch_failures` to automatically resolve projectKey when only projectId is provided
 - **Updated** all test session URLs to: `/tests/runs/{testRunId}/results/{testId}`
 
 **Before:**
@@ -3930,7 +4002,7 @@ getTestSessionsForTest(launchId, testId, projectId)
 
 ## v5.2.2
 - **🎥 Video URL Resolution Fix** - Direct S3 URLs instead of proxy URLs
-- **🎫 Jira-Ready Ticket Format** for `analyze_test_failure` and `detailed_analyze_launch_failures`
+- **🎫 Jira-Ready Ticket Format** for `adv_analyze_test_failure` and `adv_detailed_analyze_launch_failures`
 
 **Video Link Fix**:
 - **Problem**: Video links were showing Zebrunner proxy URLs (`https://your-workspace.zebrunner.com/artifacts/esg-test-sessions/.../video?projectId=7`) instead of direct S3 URLs
@@ -3987,7 +4059,7 @@ getTestSessionsForTest(launchId, testId, projectId)
 
 ```typescript
 // Single test - Jira format
-analyze_test_failure({
+adv_analyze_test_failure({
   testId: 5451420,
   testRunId: 120806,
   projectKey: "MCP",
@@ -3995,7 +4067,7 @@ analyze_test_failure({
 })
 
 // Launch failures - Jira format
-detailed_analyze_launch_failures({
+adv_detailed_analyze_launch_failures({
   testRunId: 120814,
   projectKey: "MCP",
   format: "jira"
@@ -4020,7 +4092,7 @@ detailed_analyze_launch_failures({
 
 
 ## v5.1.1
-- **🧠 Intelligent Deep Analysis Enhancement** for `detailed_analyze_launch_failures`
+- **🧠 Intelligent Deep Analysis Enhancement** for `adv_detailed_analyze_launch_failures`
 
 **Problem Solved**: Tool provided basic summary requiring manual follow-up questions and multiple tool calls to get comprehensive analysis.
 
@@ -4128,16 +4200,16 @@ detailed_analyze_launch_failures({
 
 **Enhanced Tools:**
 
-1. **`analyze_test_failure`** - Enhanced with integrated screenshot analysis
+1. **`adv_analyze_test_failure`** - Enhanced with integrated screenshot analysis
    - **New Parameter**: `analyzeScreenshotsWithAI: boolean` - Automatically download and analyze screenshots
    - **New Parameter**: `screenshotAnalysisType: 'basic' | 'detailed'` - Control analysis depth
    - Screenshots now analyzed inline with expandable details
    - Claude Vision analysis embedded directly in failure reports
-   - No need to manually call `analyze_screenshot` separately
+   - No need to manually call `adv_analyze_screenshot` separately
 
 **New Tools:**
 
-2. **`detailed_analyze_launch_failures`** - 🆕 Intelligent launch-wide failure analysis
+2. **`adv_detailed_analyze_launch_failures`** - 🆕 Intelligent launch-wide failure analysis
    - **Smart Filtering by Default**: Analyzes only tests WITHOUT linked Jira issues (use `filterType: 'all'` to include all)
    - **Smart Default Behavior**: Analyzes ALL tests if ≤10, otherwise first 10 automatically
    - **No Confirmation Interrupts**: Starts analysis immediately
@@ -4149,24 +4221,24 @@ detailed_analyze_launch_failures({
    - **Optional Screenshot Analysis**: Apply AI analysis to all test failures
    - **Flexible Output**: Detailed (full reports) or summary (key info only)
 
-**Key Features of `detailed_analyze_launch_failures`:**
+**Key Features of `adv_detailed_analyze_launch_failures`:**
 ```typescript
 // Simple call - analyzes tests WITHOUT linked issues (default)
 // Analyzes first 10 if > 10 tests, all if ≤ 10
-detailed_analyze_launch_failures({
+adv_detailed_analyze_launch_failures({
   testRunId: 120806,
   projectKey: "MCP"
 })
 
 // To analyze ALL failed tests (including those with linked issues)
-detailed_analyze_launch_failures({
+adv_detailed_analyze_launch_failures({
   testRunId: 120806,
   projectKey: "MCP",
   filterType: "all"  // Include tests with Jira tickets
 })
 
 // With other options
-detailed_analyze_launch_failures({
+adv_detailed_analyze_launch_failures({
   testRunId: 120806,
   projectKey: "MCP",
   filterType: "without_issues",  // Explicit (this is default)
@@ -4223,13 +4295,13 @@ detailed_analyze_launch_failures({
 
 **New Tools:**
 
-1. **`download_test_screenshot`** - Download protected screenshots with authentication
+1. **`adv_download_test_screenshot`** - Download protected screenshots with authentication
    - Automatic authentication using existing Zebrunner token
    - Supports both full URLs and relative `/files/` paths
    - Returns image metadata (dimensions, format, size)
    - Optional base64 encoding
 
-2. **`analyze_screenshot`** - Comprehensive visual analysis
+2. **`adv_analyze_screenshot`** - Comprehensive visual analysis
    - **Basic Analysis**: Image metadata, dimensions, device detection
    - **OCR Text Extraction**: Extract visible text using Tesseract.js (optional)
    - **UI Element Detection**: Empty states, loading indicators, error dialogs, navigation
@@ -4237,7 +4309,7 @@ detailed_analyze_launch_failures({
    - No separate Anthropic API key required (uses Claude Desktop/Code)
 
 **Enhanced Tools:**
-- **`analyze_test_failure`** - Now includes screenshot analysis suggestions
+- **`adv_analyze_test_failure`** - Now includes screenshot analysis suggestions
 
 **Technical Implementation:**
 - Added `sharp` for fast image processing
@@ -4274,7 +4346,7 @@ detailed_analyze_launch_failures({
 
 
 ## v4.9.1
-- Added `analyze_test_failure` tool to main server.ts (was only in server-with-reporting.ts)
+- Added `adv_analyze_test_failure` tool to main server.ts (was only in server-with-reporting.ts)
 - Fixed missing tool registration ensuring all users can access deep test failure analysis
 - Added automation priorities management tools with improved error handling, enhanced async operations, better logging
 
@@ -4282,7 +4354,7 @@ detailed_analyze_launch_failures({
 ## v4.9.0
 - Added Deep Test Failure Analysis Tool (2025-11-03)
 
-**New Feature**: `analyze_test_failure` - Comprehensive forensic analysis of failed tests
+**New Feature**: `adv_analyze_test_failure` - Comprehensive forensic analysis of failed tests
 
 **Problem Solved**: Manual test failure investigation taking 15-20 minutes per failure, requiring multiple clicks through UI, log files, and screenshots.
 
@@ -4311,14 +4383,14 @@ detailed_analyze_launch_failures({
 **Usage Examples:**
 ```typescript
 // Detailed analysis (default)
-analyze_test_failure({
+adv_analyze_test_failure({
   testId: 5451420,
   testRunId: 120806,
   projectKey: "MCP"
 })
 
 // Quick summary
-analyze_test_failure({
+adv_analyze_test_failure({
   testId: 5451420,
   testRunId: 120806,
   projectKey: "MCP",
@@ -4326,7 +4398,7 @@ analyze_test_failure({
 })
 
 // Analysis without similar failures
-analyze_test_failure({
+adv_analyze_test_failure({
   testId: 5451420,
   testRunId: 120806,
   projectKey: "MCP",
@@ -4356,9 +4428,9 @@ analyze_test_failure({
 ## v4.8.188
 - Added Lightweight Launch Test Summary Tool (2025-10-15)
 
-**New Feature**: `get_launch_test_summary` - Token-optimized launch test analysis
+**New Feature**: `adv_get_launch_test_summary` - Token-optimized launch test analysis
 
-**Problem Solved**: `get_launch_details` was returning 185K tokens, exceeding 25K limit
+**Problem Solved**: `adv_get_launch_details` was returning 185K tokens, exceeding 25K limit
 
 **Solution**: Flexible tool with multiple modes:
 - **Summary-only mode**: ~1-2K tokens (statistics + top 20 unstable + issues)
@@ -4377,13 +4449,13 @@ analyze_test_failure({
 **Usage Examples:**
 ```typescript
 // Recommended: Get first 10 tests (~3K tokens)
-get_launch_test_summary({ projectKey: "MCP", launchId: 119783, limit: 10 })
+adv_get_launch_test_summary({ projectKey: "MCP", launchId: 119783, limit: 10 })
 
 // Ultra lightweight: Summary only (~1K tokens)
-get_launch_test_summary({ projectKey: "MCP", launchId: 119783, summaryOnly: true })
+adv_get_launch_test_summary({ projectKey: "MCP", launchId: 119783, summaryOnly: true })
 
 // Get first 5 with full details
-get_launch_test_summary({
+adv_get_launch_test_summary({
   projectKey: "MCP",
   launchId: 119783,
   limit: 5,
@@ -4395,12 +4467,12 @@ get_launch_test_summary({
 **Files Modified:**
 - `src/api/reporting-client.ts` - Added `getAllTestRuns()`
 - `src/handlers/reporting-tools.ts` - Added configurable `getLaunchTestSummary()`
-- `src/server.ts` - Registered `get_launch_test_summary` tool with new parameters
+- `src/server.ts` - Registered `adv_get_launch_test_summary` tool with new parameters
 - `docs/LAUNCH_TEST_SUMMARY_TOOL.md` - Updated documentation
 
 ## v4.7.185 - Fixed Get Launch Details Feature (2025-10-15)
 
-**Issue:** The `get_launch_details` tool was failing due to API data type mismatches in Zod schemas.
+**Issue:** The `adv_get_launch_details` tool was failing due to API data type mismatches in Zod schemas.
 
 **Root Cause:**
 - API sometimes returns numeric fields (timestamps, test counts) as strings instead of numbers

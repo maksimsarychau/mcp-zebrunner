@@ -112,6 +112,10 @@ export interface ReportInput {
   targets?: PassRateTargets;
   exclude_suite_patterns?: string[];
   previous_milestone?: string;
+  /** When false, write HTML/PNG to disk instead of embedding in MCP response. Default true. */
+  inline?: boolean;
+  /** Output directory for artifacts when inline=false. */
+  output_dir?: string;
 }
 
 export interface ReportOutput {

@@ -19,8 +19,8 @@ The Advanced Zebrunner MCP Server includes a sophisticated **3-tier intelligent 
 - **Visual Documentation**: Proper use of images and annotations
 
 **Used by**: 
-- `validate_test_case` - Core validation engine
-- `improve_test_case` - Improvement suggestions
+- `adv_validate_test_case` - Core validation engine
+- `adv_improve_test_case` - Improvement suggestions
 
 **Example rules**:
 ```markdown
@@ -49,7 +49,7 @@ The Advanced Zebrunner MCP Server includes a sophisticated **3-tier intelligent 
 - **Completeness Validation**: End-to-end coverage, edge cases, error handling
 
 **Used by**:
-- `validate_test_case` - Detailed scoring and issue categorization
+- `adv_validate_test_case` - Detailed scoring and issue categorization
 - Quality assessment algorithms
 
 **Example checkpoints**:
@@ -78,8 +78,8 @@ The Advanced Zebrunner MCP Server includes a sophisticated **3-tier intelligent 
 - **Code Patterns**: Common patterns for login, navigation, form interactions
 
 **Used by**:
-- `generate_draft_test_by_key` - Test code generation
-- `get_enhanced_test_coverage_with_rules` - Coverage analysis with rules validation
+- `adv_generate_draft_test_by_key` - Test code generation
+- `adv_get_enhanced_test_coverage_with_rules` - Coverage analysis with rules validation
 - Framework detection algorithms
 
 **Example configuration**:
@@ -110,7 +110,7 @@ public void {{TEST_METHOD_NAME}}() {
 
 ```mermaid
 graph TB
-    A[Test Case Input] --> B[validate_test_case Tool]
+    A[Test Case Input] --> B[adv_validate_test_case Tool]
     
     B --> C[Tier 1: Review Rules]
     B --> D[Tier 2: Analysis Checkpoints]
@@ -121,15 +121,15 @@ graph TB
     E --> G[Validation Result]
     F --> G
     
-    G --> H[improve_test_case Tool]
+    G --> H[adv_improve_test_case Tool]
     H --> I[AI-Powered Improvements]
     
-    A --> J[generate_draft_test_by_key Tool]
+    A --> J[adv_generate_draft_test_by_key Tool]
     J --> K[Tier 3: Technical Rules]
     K --> L[Framework Detection]
     K --> M[Code Generation]
     
-    A --> N[get_enhanced_test_coverage_with_rules Tool]
+    A --> N[adv_get_enhanced_test_coverage_with_rules Tool]
     N --> K
     N --> O[Coverage Analysis + Rules Validation]
     

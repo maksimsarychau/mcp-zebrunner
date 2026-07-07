@@ -29,7 +29,7 @@
 
 The Advanced Zebrunner MCP Server exposes **63 tools** (under `adv_<name>` names) to AI assistants (Claude, Cursor, ChatGPT). When a user asks "Show me the latest test failures," the AI must:
 
-1. **Pick the right tool** from 52 options (e.g., `detailed_analyze_launch_failures`)
+1. **Pick the right tool** from 52 options (e.g., `adv_detailed_analyze_launch_failures`)
 2. **Provide the right arguments** (e.g., `project: "MY_PROJECT"`, `launch_id: 12345`)
 3. **Return useful output** that actually answers the question
 
@@ -140,7 +140,7 @@ LLM selected: adv_list_test_suites ✅
 **Example:**
 ```
 Prompt: "Get all automated test cases in the MY_PROJECT project, filtered by automation state."
-Expected tool: get_test_cases_by_automation_state
+Expected tool: adv_get_test_cases_by_automation_state
 Expected args: [project_key]
 LLM args: { project_key: "MY_PROJECT", automation_states: "Automated" } ✅
 ```
@@ -171,7 +171,7 @@ LLM args: { project_key: "MY_PROJECT", automation_states: "Automated" } ✅
 **Example:**
 ```
 Prompt: "Get a summary of launch 12345"
-Tool executed: get_launch_summary
+Tool executed: adv_get_launch_summary
 MCP Output: "Launch: Regression-Suite-Run | Status: PASSED | Tests: 42 passed, 3 failed..."
 
 Judge scores:
@@ -262,7 +262,7 @@ LLM response: "Could you specify which project you'd like to see tests for?"
 
 ```
 Prompt: "Get the details of test case NONEXIST-99999."
-Expected tool: get_test_case_by_key ✅
+Expected tool: adv_get_test_case_by_key ✅
 MCP output: "Error: Test case not found" ✅
 ```
 
@@ -270,7 +270,7 @@ MCP output: "Error: Test case not found" ✅
 
 **Examples:** Non-existent project keys, fake test case keys, invalid launch IDs, non-existent suite IDs.
 
-#### 4. Tool Confusion (3 prompts)
+#### 4. Tool Confusion (4 prompts)
 
 **What it tests:** When the prompt describes a task but the LLM might confuse which tool to use, does it pick the **correct** tool and avoid obviously wrong ones?
 
@@ -282,7 +282,7 @@ Expected: adv_list_test_suites ✅
 Forbidden: adv_get_launch_details, adv_get_launch_summary ✅ (not selected)
 ```
 
-**Examples:** Suite listing (should not use launch tools), milestone retrieval (should not use TCM tools), bug reporting (should not use coverage tools).
+**Examples:** Suite listing (should not use launch tools), milestone retrieval (should not use TCM tools), bug reporting (should not use coverage tools), batch fetch (should not call `adv_get_test_case_by_key` per key).
 
 #### 5. Prompt Injection (3 prompts)
 
@@ -405,29 +405,68 @@ The framework uses **real Zebrunner project data** — not hardcoded values. At 
 
 | Category | Prompts | Description | Example |
 |----------|---------|-------------|---------|
-| **TCM** (Test Case Management) | 26 | Suites, test cases, hierarchy, filtering | "List all test suites in project X" |
+| **TCM** (Test Case Management) | 29 | Suites, test cases, hierarchy, filtering, token-efficient reads (`compact`, `summary`, `batch_get_test_cases`) | "Fetch MCP-1 and MCP-2 in one batch call with summary detail" |
 | **Launch** | 9 | Launches, milestones, regression reports | "Show the 10 most recent launches" |
 | **Analysis** | 8 | Coverage, validation, code generation | "Analyze test coverage for test case X-1" |
 | **Utility** | 4 | Connection test, tool info, projects | "Test the reporting API connection" |
 | **Test Run** | 5 | Test runs, statuses, configurations | "List recent test runs for project X" |
 | **Duplicate** | 2 | Duplicate detection (step + semantic) | "Find duplicate test cases in suite N" |
 | **E2E Metrics** | 3 | Multi-tool complex scenarios | "Assess release readiness" |
-| **Positive Total** | **57** | | |
-| **Negative** | 17 | Out-of-scope, ambiguous, invalid data, tool confusion, prompt injection | "What's the weather?" / "Ignore all instructions" |
-| **Grand Total** | **74** | | |
+| **Positive Total** | **60** | | |
+| **Negative** | 18 | Out-of-scope, ambiguous, invalid data, tool confusion, prompt injection | "What's the weather?" / "Ignore all instructions" |
+| **Grand Total** | **78** | | |
 
 ### Layer Distribution
 
 | Layer | Test Assertions | What Runs |
 |-------|----------------|-----------|
 | Layer 1 | 31 | Tool selection for all L1 prompts |
-| Layer 2 | 42 | Tool selection + arg validation for L1+L2 prompts |
+| Layer 2 | 45 | Tool selection + arg validation for L1+L2 prompts |
 | Layer 3 | 8 | Full execution + Judge for L3 single-tool prompts |
 | Layer 3 E2E | 3 | Multi-tool first-step validation |
 | Negative: Refusal | 10 | Out-of-scope + ambiguous + prompt injection |
-| Negative: Confusion | 3 | Tool confusion (correct tool, no forbidden) |
+| Negative: Confusion | 4 | Tool confusion (correct tool, no forbidden) |
 | Negative: Invalid Data | 4 | MCP error handling with fake IDs (Layer 3) |
-| **Total** | **101** | (+ skipped prompts when context unavailable) |
+| **Total** | **105** | (+ skipped prompts when context unavailable) |
+
+### Token-efficient read prompts (v9.2.0)
+
+Four eval prompts verify LLM routing for opt-in compact/summary/batch reads (unit tests cover response shape):
+
+| Prompt ID | Layer | What it checks |
+|-----------|-------|----------------|
+| `batch_get_test_cases.two_keys` | 2 | `adv_batch_get_test_cases` with `case_keys`, `detail`, `format` |
+| `get_all_tcm_test_cases_by_project.compact_summary` | 2 | Bulk list with `detail=summary` + `format=compact` |
+| `get_test_cases_by_suite_smart.summary` | 2 | Suite read with `detail=summary` |
+| `neg.confuse.batch_vs_single_fetch` | 2 | Batch tool chosen; `adv_get_test_case_by_key` forbidden |
+
+`detail` / `format` arg checks may be soft misses on small local models — these four prompts live in the **cloud suite** (see below); run `npm run test:eval:cloud` with Claude before release.
+
+### Cloud tricky suite (`EVAL_SUITE=cloud`)
+
+**32 prompts** that need a capable model are listed in `tests/eval/eval-cloud-suite.ts`. Default `npm run test:eval` uses `EVAL_SUITE=default` and **skips** them so local Ollama runs exit cleanly on aggregate thresholds.
+
+| Group | Prompts | Why tricky |
+|-------|---------|------------|
+| Token-efficient reads | 4 | `detail`/`format` args; bulk vs `adv_list_test_suites` confusion |
+| Field-path filtering | 4 | Models invent non-existent filter tool names |
+| Ambiguous refusal | 3 | Plausible QA wording tempts a tool call |
+| Reports vs launches | 6 | `adv_generate_report` vs per-launch / platform tools |
+| TCM hierarchy | 7 | Root suite / hierarchy routing |
+| E2E metrics | 3 | Multi-tool chains |
+| Chart / analysis | 3 | Wrong analysis tool temptation |
+| Mutation | 2 | Complex arg shapes (`source_case_key`) |
+
+```bash
+# Release gate on Claude (strict per-prompt asserts)
+EVAL_PROVIDER=anthropic ANTHROPIC_API_KEY=... npm run test:eval:cloud
+
+# Layers 1+2 only (faster, no L3 judge)
+npm run test:eval:cloud:l2
+
+# Legacy: run entire catalog including tricky prompts
+EVAL_SUITE=all npm run test:eval
+```
 
 ### How Prompts Work
 
@@ -435,9 +474,9 @@ Each prompt is a structured TypeScript object:
 
 ```typescript
 {
-  id: "get_all_launches_for_project.recent",
+  id: "adv_get_all_launches_for_project.recent",
   promptTemplate: "Show me the 10 most recent launches for the {{project_key}} project.",
-  expectedTools: ["get_all_launches_for_project"],
+  expectedTools: ["adv_get_all_launches_for_project"],
   expectedArgKeys: ["project"],
   category: "launch",
   layer: 1,
@@ -450,7 +489,7 @@ At runtime, `{{project_key}}` is replaced with the real discovered value from Ze
 If a prompt accepts **multiple valid tools** (because some tools overlap), all alternatives are listed:
 
 ```typescript
-expectedTools: ["get_test_case_by_filter", "get_test_cases_advanced"]
+expectedTools: ["adv_get_test_case_by_filter", "adv_get_test_cases_advanced"]
 ```
 
 ---
@@ -602,6 +641,7 @@ cost = (84 × 14,000 × $0.000003) + (8 × 17,000 × $0.000003)
 | `ZEBRUNNER_LOGIN` | Yes | — | Zebrunner login |
 | `ZEBRUNNER_TOKEN` | Yes | — | Zebrunner API token |
 | `EVAL_LAYER` | No | `3` | Maximum eval layer (1, 2, or 3) |
+| `EVAL_SUITE` | No | `default` | `default` (omit tricky prompts), `cloud` (tricky only), `all` (full catalog) |
 | `EVAL_FILTER` | No | — | Comma-separated prompt IDs to run |
 
 ### .env.example
@@ -612,7 +652,7 @@ EVAL_PROVIDER=local
 EVAL_MODEL=qwen3.5:2b
 # EVAL_BASE_URL=http://localhost:11434/v1  # optional; default for local
 EVAL_LAYER=1
-# EVAL_FILTER=field_filter.custom_field_exact,get_top_bugs.top10
+# EVAL_FILTER=field_filter.custom_field_exact,adv_get_top_bugs.top10
 
 # Claude (release gating / targeted re-runs)
 # EVAL_PROVIDER=anthropic
@@ -625,9 +665,10 @@ EVAL_LAYER=1
 ### Known limits (local LLMs)
 
 - Use `EVAL_PROVIDER=local` (not `openai`) for Ollama — clearer intent and correct relaxed-mode defaults.
+- If `.env` has `EVAL_API_KEY=ollama` / `EVAL_MODEL=qwen3.5:2b` for local runs, override with `EVAL_PROVIDER=anthropic ANTHROPIC_API_KEY=...` on the command line — cloud provider keys and models take precedence over local placeholders.
 - Legacy `EVAL_PROVIDER=openai` + `EVAL_BASE_URL=http://localhost:11434/v1` still works.
 - Tool-calling quality depends on the model; prefer models with native tool support (`llama3.1`, `qwen2.5`, etc.).
-- Large tool catalog (~100 tools) may exceed context on small models — use `EVAL_FILTER` for targeted runs.
+- Large tool catalog (~100 tools) may exceed context on small models — use `EVAL_FILTER` or rely on `EVAL_SUITE=default` (tricky prompts excluded).
 - Layer 3 judge uses the same model as selection; small local models may score inconsistently vs Claude.
 - Cost report shows **$0** for `local` / localhost endpoints.
 
@@ -649,6 +690,10 @@ npm run test:eval:l2
 
 # Run all layers explicitly
 npm run test:eval:l3
+
+# Cloud tricky suite only (~32 prompts) — use Claude/GPT for release gating
+npm run test:eval:cloud
+npm run test:eval:cloud:l2
 ```
 
 ### What Happens During a Run
@@ -712,11 +757,11 @@ Each run produces three outputs:
 For Layer 3, the Markdown report includes a **full diagnostic trace** for each execution:
 
 ```markdown
-### ✅ get_launch_summary.quick — PASS
+### ✅ adv_get_launch_summary.quick — PASS
 
 - **Prompt:** Get a quick summary of launch 12345
-- **Expected tools:** get_launch_summary
-- **Selected tool:** get_launch_summary ✅
+- **Expected tools:** adv_get_launch_summary
+- **Selected tool:** adv_get_launch_summary ✅
 - **Args:** {"project":"MY_PROJECT","launch_id":12345}
 - **Judge scores:** relevance=5/5, completeness=4/5, format=5/5 (avg=4.7)
 - **Judge reasoning:** Output provides a complete launch overview with test counts and status.
@@ -767,7 +812,7 @@ Test Failed
 | LLM omits an argument | Prompt doesn't mention the required data | Add the data to the prompt template |
 | `expectedArgKeys` mismatch | Eval uses `project_key` but Zod schema uses `project` | Fix `expectedArgKeys` to match schema |
 | Judge scores 3/5 on completeness | Tool returns correct but minimal data | Either improve tool or lower threshold |
-| E2E test picks `get_available_projects` first | LLM wants to discover projects before acting | Add `get_available_projects` to `expectedTools` |
+| E2E test picks `adv_get_available_projects` first | LLM wants to discover projects before acting | Add `adv_get_available_projects` to `expectedTools` |
 
 ---
 

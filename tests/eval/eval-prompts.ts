@@ -341,7 +341,7 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
     id: "get_all_tcm_test_cases_with_root_suite_id.enriched",
     toolSection: "1. TCM",
     promptTemplate:
-      "Get all test cases in the {{project_key}} project, and for each one, include which root suite it belongs to.",
+      "Use adv_get_all_tcm_test_cases_with_root_suite_id for the {{project_key}} project. Each test case must include rootSuiteId (root suite hierarchy). Do not use adv_get_all_tcm_test_cases_by_project.",
     expectedTools: [ "adv_get_all_tcm_test_cases_with_root_suite_id"],
     expectedArgKeys: ["project_key"],
     category: "tcm",
@@ -366,6 +366,39 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
       "Get all test cases in suite {{suite_id}} of the {{project_key}} project, including sub-suites.",
     expectedTools: [ "adv_get_test_cases_by_suite_smart"],
     expectedArgKeys: ["project_key", "suite_id"],
+    category: "tcm",
+    layer: 2,
+    requiredContext: ["projectKey", "suiteId"],
+  },
+  {
+    id: "batch_get_test_cases.two_keys",
+    toolSection: "1. TCM",
+    promptTemplate:
+      "Fetch test cases {{test_case_key}} and {{second_test_case_key}} from the {{project_key}} project in a single MCP call. Use summary detail and compact JSON to save tokens.",
+    expectedTools: ["adv_batch_get_test_cases"],
+    expectedArgKeys: ["project_key", "case_keys", "detail", "format"],
+    category: "tcm",
+    layer: 2,
+    requiredContext: ["projectKey", "testCaseKey", "secondTestCaseKey"],
+  },
+  {
+    id: "get_all_tcm_test_cases_by_project.compact_summary",
+    toolSection: "1. TCM",
+    promptTemplate:
+      "Use adv_get_all_tcm_test_cases_by_project for the {{project_key}} project. Set detail=summary (not full bodies) and format=compact for token-efficient JSON. Do not use adv_list_test_suites.",
+    expectedTools: ["adv_get_all_tcm_test_cases_by_project"],
+    expectedArgKeys: ["project_key", "detail", "format"],
+    category: "tcm",
+    layer: 2,
+    requiredContext: ["projectKey"],
+  },
+  {
+    id: "get_test_cases_by_suite_smart.summary",
+    toolSection: "1. TCM",
+    promptTemplate:
+      "Use adv_get_test_cases_by_suite_smart for suite {{suite_id}} in {{project_key}} with detail=summary (shortlist only, no full step bodies).",
+    expectedTools: ["adv_get_test_cases_by_suite_smart"],
+    expectedArgKeys: ["project_key", "suite_id", "detail"],
     category: "tcm",
     layer: 2,
     requiredContext: ["projectKey", "suiteId"],
@@ -1176,7 +1209,8 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
   {
     id: "neg.ambig.fix_failures",
     toolSection: "Negative",
-    promptTemplate: "Delete all the failing tests and redeploy the application to staging.",
+    promptTemplate:
+      "You only have Zebrunner MCP tools (test management). Delete all failing tests from our repo and redeploy the app to staging — neither is possible via MCP. Do not call any tool; say what is missing.",
     expectedTools: [],
     category: "negative",
     layer: 1,
@@ -1305,6 +1339,21 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
     negativeCategory: "tool_confusion",
     expectedBehavior: "should_select_tool",
     requiredContext: ["projectKey"],
+  },
+  {
+    id: "neg.confuse.batch_vs_single_fetch",
+    toolSection: "Negative",
+    promptTemplate:
+      "Fetch test cases {{test_case_key}} and {{second_test_case_key}} from {{project_key}} in one batch call. Do NOT call adv_get_test_case_by_key separately for each key.",
+    expectedTools: ["adv_batch_get_test_cases"],
+    forbiddenTools: ["adv_get_test_case_by_key"],
+    expectedArgKeys: ["project_key", "case_keys"],
+    category: "negative",
+    layer: 2,
+    isNegative: true,
+    negativeCategory: "tool_confusion",
+    expectedBehavior: "should_select_tool",
+    requiredContext: ["projectKey", "testCaseKey", "secondTestCaseKey"],
   },
 
   {
