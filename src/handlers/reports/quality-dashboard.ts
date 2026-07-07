@@ -33,6 +33,7 @@ import {
   type DashboardData,
   type DashboardSection,
 } from "../../utils/dashboard-template.js";
+import { writeReportArtifacts } from "./artifact-writer.js";
 
 interface ProjectDashboardData {
   passRate?: PassRateData;
@@ -54,6 +55,8 @@ export async function generateQualityDashboardReport(
     top_bugs_limit = 10,
     sections = ALL_DASHBOARD_SECTIONS,
     targets,
+    inline = true,
+    output_dir,
   } = input;
 
   const mergedTargets: PassRateTargets = { ...DEFAULT_TARGETS, ...(targets ?? {}) };
@@ -123,25 +126,39 @@ export async function generateQualityDashboardReport(
     text: buildMarkdownSummary(dashboardData, allData, mergedTargets, ctx),
   });
 
+  const pngBuffers: Buffer[] = [];
   for (const section of dashboardSections) {
     if (section.chartType === 'table') continue;
     try {
       const chartConfig = sectionToChartConfig(section);
       const pngBuffer = await generatePngChart(chartConfig);
-      contentBlocks.push({
-        type: "image" as const,
-        data: pngBuffer.toString('base64'),
-        mimeType: "image/png",
-      });
+      if (inline) {
+        contentBlocks.push({
+          type: "image" as const,
+          data: pngBuffer.toString('base64'),
+          mimeType: "image/png",
+        });
+      } else {
+        pngBuffers.push(pngBuffer);
+      }
     } catch {
       // PNG generation failed — markdown text is still there
     }
   }
 
-  contentBlocks.push({
-    type: "text" as const,
-    text: `\n\n---\n\n[HTML_DASHBOARD]\nThe self-contained HTML dashboard is attached below. Save it as a .html file and open in a browser for interactive charts.\n\n\`\`\`html\n${htmlDashboard}\n\`\`\``,
-  });
+  if (inline) {
+    contentBlocks.push({
+      type: "text" as const,
+      text: `\n\n---\n\n[HTML_DASHBOARD]\nThe self-contained HTML dashboard is attached below. Save it as a .html file and open in a browser for interactive charts.\n\n\`\`\`html\n${htmlDashboard}\n\`\`\``,
+    });
+  } else {
+    const written = writeReportArtifacts('quality-dashboard', htmlDashboard, pngBuffers, period, output_dir);
+    const chartLines = written.chartPaths.map(p => `- Chart: ${p}`).join('\n');
+    contentBlocks.push({
+      type: "text" as const,
+      text: `### Report artifacts (inline=false)\n\n- HTML: ${written.htmlPath}\n${chartLines || '- (no chart PNGs generated)'}\n\nOpen the HTML file in a browser for interactive charts.`,
+    });
+  }
 
   return { content: contentBlocks };
 }

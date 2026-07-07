@@ -3,7 +3,7 @@ import { z } from "zod";
 /** API-related types and interfaces */
 
 // Output format options
-export type OutputFormat = 'dto' | 'json' | 'string' | 'markdown';
+export type OutputFormat = 'dto' | 'json' | 'compact' | 'string' | 'markdown';
 
 // Pagination options
 export interface PaginationOptions {

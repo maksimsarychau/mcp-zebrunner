@@ -154,11 +154,11 @@ Given 4 tests in a launch:
 
 | Tool | Relevant Metrics |
 |------|-----------------|
-| `analyze_regression_runtime` | Avg Runtime per Test, Avg Runtime per Test Case, WRI (per Test), WRI (per Test Case), Duration Classification (configurable thresholds), Duration Distribution (tests and test cases), Attempt Breakdown, Test Case Coverage Breakdown, Baseline Comparison (deltas for all metrics) |
-| `get_launch_details` | Test counts, test case coverage statistics |
-| `get_launch_test_summary` | Per-test details with linked test case keys |
-| `generate_weekly_regression_stability_report` | Pass rates, total test cases covered |
-| `get_launch_summary` | Lightweight overview with test/test-case note |
+| `adv_analyze_regression_runtime` | Avg Runtime per Test, Avg Runtime per Test Case, WRI (per Test), WRI (per Test Case), Duration Classification (configurable thresholds), Duration Distribution (tests and test cases), Attempt Breakdown, Test Case Coverage Breakdown, Baseline Comparison (deltas for all metrics) |
+| `adv_get_launch_details` | Test counts, test case coverage statistics |
+| `adv_get_launch_test_summary` | Per-test details with linked test case keys |
+| `adv_generate_weekly_regression_stability_report` | Pass rates, total test cases covered |
+| `adv_get_launch_summary` | Lightweight overview with test/test-case note |
 
 ---
 

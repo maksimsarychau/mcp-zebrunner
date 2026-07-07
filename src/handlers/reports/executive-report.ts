@@ -31,6 +31,7 @@ import {
   type DashboardData,
   type DashboardSection,
 } from "../../utils/dashboard-template.js";
+import { writeReportArtifacts } from "./artifact-writer.js";
 
 interface ExecutiveData {
   passRate?: PassRateData;
@@ -44,7 +45,7 @@ export async function generateExecutiveReport(
   ctx: ReportContext,
   input: ReportInput,
 ): Promise<ReportOutput> {
-  const { projects, period, milestone, targets, top_bugs_limit = 5 } = input;
+  const { projects, period, milestone, targets, top_bugs_limit = 5, inline = true, output_dir } = input;
   const mergedTargets: PassRateTargets = { ...DEFAULT_TARGETS, ...(targets ?? {}) };
   const periodDays = ctx.periodToDays(period);
 
@@ -59,6 +60,7 @@ export async function generateExecutiveReport(
 
   const sections = buildDashboardSections(allData, mergedTargets, top_bugs_limit, ctx);
 
+  const pngBuffers: Buffer[] = [];
   for (const section of sections) {
     if (section.chartType === 'table') continue;
     try {
@@ -75,7 +77,11 @@ export async function generateExecutiveReport(
         height: 400,
       };
       const pngBuffer = await generatePngChart(chartConfig);
-      contentBlocks.push({ type: "image" as const, data: pngBuffer.toString('base64'), mimeType: "image/png" });
+      if (inline) {
+        contentBlocks.push({ type: "image" as const, data: pngBuffer.toString('base64'), mimeType: "image/png" });
+      } else {
+        pngBuffers.push(pngBuffer);
+      }
     } catch {
       // PNG generation failed
     }
@@ -91,10 +97,19 @@ export async function generateExecutiveReport(
   };
   const htmlDashboard = generateDashboardHtml(dashboardData);
 
-  contentBlocks.push({
-    type: "text" as const,
-    text: `\n\n---\n\n[HTML_DASHBOARD]\nSave as .html and open in a browser for interactive charts.\n\n\`\`\`html\n${htmlDashboard}\n\`\`\``,
-  });
+  if (inline) {
+    contentBlocks.push({
+      type: "text" as const,
+      text: `\n\n---\n\n[HTML_DASHBOARD]\nSave as .html and open in a browser for interactive charts.\n\n\`\`\`html\n${htmlDashboard}\n\`\`\``,
+    });
+  } else {
+    const written = writeReportArtifacts('executive-dashboard', htmlDashboard, pngBuffers, period, output_dir);
+    const chartLines = written.chartPaths.map(p => `- Chart: ${p}`).join('\n');
+    contentBlocks.push({
+      type: "text" as const,
+      text: `### Report artifacts (inline=false)\n\n- HTML: ${written.htmlPath}\n${chartLines || '- (no chart PNGs generated)'}\n\nOpen the HTML file in a browser for interactive charts.`,
+    });
+  }
 
   return { content: contentBlocks };
 }

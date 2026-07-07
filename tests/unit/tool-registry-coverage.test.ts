@@ -28,36 +28,37 @@ function extractServerTools(serverSource: string): string[] {
   return tools;
 }
 
-describe("Tool Registry Coverage (63 tools)", () => {
+describe("Tool Registry Coverage (64 tools)", () => {
   it("ensures every registered server tool has smoke coverage metadata", () => {
     const root = getProjectRoot();
     const serverSource = fs.readFileSync(path.join(root, "src", "server.ts"), "utf-8");
     const serverTools = extractServerTools(serverSource);
 
-    assert.equal(serverTools.length, 63, "server.ts should register exactly 63 tools");
-    assert.equal(new Set(serverTools).size, 63, "all registered tools should be unique");
+    assert.equal(serverTools.length, 64, "server.ts should register exactly 64 tools");
+    assert.equal(new Set(serverTools).size, 64, "all registered tools should be unique");
 
     const coverageKeys = Object.keys(TOOL_SMOKE_INPUTS);
-    assert.equal(coverageKeys.length, 63, "smoke coverage map should include 63 tools");
+    assert.equal(coverageKeys.length, 64, "smoke coverage map should include 64 tools");
 
-    const missingCoverage = serverTools.filter(tool => !(tool in TOOL_SMOKE_INPUTS));
+    const missingCoverage = serverTools.filter(tool => !( `adv_${tool}` in TOOL_SMOKE_INPUTS));
     assert.deepEqual(missingCoverage, [], `missing smoke coverage for: ${missingCoverage.join(", ")}`);
 
-    const extraCoverage = coverageKeys.filter(tool => !serverTools.includes(tool));
+    const advServerTools = serverTools.map(t => `adv_${t}`);
+    const extraCoverage = coverageKeys.filter(tool => !advServerTools.includes(tool));
     assert.deepEqual(extraCoverage, [], `coverage has unknown tools: ${extraCoverage.join(", ")}`);
   });
 
   it("ensures tools.json stays in sync with server registrations", () => {
     const root = getProjectRoot();
     const serverSource = fs.readFileSync(path.join(root, "src", "server.ts"), "utf-8");
-    const serverTools = extractServerTools(serverSource).sort();
+    const serverTools = extractServerTools(serverSource).map((t) => `adv_${t}`).sort();
     const toolsCatalog = JSON.parse(fs.readFileSync(path.join(root, "tools.json"), "utf-8")) as Array<{ name: string }>;
     const toolsJsonNames = toolsCatalog.map(t => t.name).sort();
 
     assert.deepEqual(
       toolsJsonNames,
       serverTools,
-      "tools.json names must exactly match server.tool registrations"
+      "tools.json names must match adv_<server registration> names"
     );
   });
 });
@@ -127,7 +128,7 @@ describe("Critical Tool Intelligence Checks", () => {
 
 // ── Tool Annotations Coverage ─────────────────────────────────────────────────
 
-describe("Tool Annotations Coverage (63 tools)", () => {
+describe("Tool Annotations Coverage (64 tools)", () => {
   const root = getProjectRoot();
   const serverSource = fs.readFileSync(path.join(root, "src", "server.ts"), "utf-8");
 
@@ -163,7 +164,7 @@ describe("Tool Annotations Coverage (63 tools)", () => {
     while ((match = toolsRegex.exec(serverSource)) !== null) {
       allTools.push(match[1]);
     }
-    assert.equal(allTools.length, 63, "should have 63 registered tools");
+    assert.equal(allTools.length, 64, "should have 64 registered tools");
 
     const missing: string[] = [];
     for (const tool of allTools) {

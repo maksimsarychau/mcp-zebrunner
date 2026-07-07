@@ -29,7 +29,7 @@
 
 The Advanced Zebrunner MCP Server exposes **63 tools** (under `adv_<name>` names) to AI assistants (Claude, Cursor, ChatGPT). When a user asks "Show me the latest test failures," the AI must:
 
-1. **Pick the right tool** from 52 options (e.g., `detailed_analyze_launch_failures`)
+1. **Pick the right tool** from 52 options (e.g., `adv_detailed_analyze_launch_failures`)
 2. **Provide the right arguments** (e.g., `project: "MY_PROJECT"`, `launch_id: 12345`)
 3. **Return useful output** that actually answers the question
 
@@ -140,7 +140,7 @@ LLM selected: adv_list_test_suites ✅
 **Example:**
 ```
 Prompt: "Get all automated test cases in the MY_PROJECT project, filtered by automation state."
-Expected tool: get_test_cases_by_automation_state
+Expected tool: adv_get_test_cases_by_automation_state
 Expected args: [project_key]
 LLM args: { project_key: "MY_PROJECT", automation_states: "Automated" } ✅
 ```
@@ -171,7 +171,7 @@ LLM args: { project_key: "MY_PROJECT", automation_states: "Automated" } ✅
 **Example:**
 ```
 Prompt: "Get a summary of launch 12345"
-Tool executed: get_launch_summary
+Tool executed: adv_get_launch_summary
 MCP Output: "Launch: Regression-Suite-Run | Status: PASSED | Tests: 42 passed, 3 failed..."
 
 Judge scores:
@@ -262,7 +262,7 @@ LLM response: "Could you specify which project you'd like to see tests for?"
 
 ```
 Prompt: "Get the details of test case NONEXIST-99999."
-Expected tool: get_test_case_by_key ✅
+Expected tool: adv_get_test_case_by_key ✅
 MCP output: "Error: Test case not found" ✅
 ```
 
@@ -435,9 +435,9 @@ Each prompt is a structured TypeScript object:
 
 ```typescript
 {
-  id: "get_all_launches_for_project.recent",
+  id: "adv_get_all_launches_for_project.recent",
   promptTemplate: "Show me the 10 most recent launches for the {{project_key}} project.",
-  expectedTools: ["get_all_launches_for_project"],
+  expectedTools: ["adv_get_all_launches_for_project"],
   expectedArgKeys: ["project"],
   category: "launch",
   layer: 1,
@@ -450,7 +450,7 @@ At runtime, `{{project_key}}` is replaced with the real discovered value from Ze
 If a prompt accepts **multiple valid tools** (because some tools overlap), all alternatives are listed:
 
 ```typescript
-expectedTools: ["get_test_case_by_filter", "get_test_cases_advanced"]
+expectedTools: ["adv_get_test_case_by_filter", "adv_get_test_cases_advanced"]
 ```
 
 ---
@@ -612,7 +612,7 @@ EVAL_PROVIDER=local
 EVAL_MODEL=qwen3.5:2b
 # EVAL_BASE_URL=http://localhost:11434/v1  # optional; default for local
 EVAL_LAYER=1
-# EVAL_FILTER=field_filter.custom_field_exact,get_top_bugs.top10
+# EVAL_FILTER=field_filter.custom_field_exact,adv_get_top_bugs.top10
 
 # Claude (release gating / targeted re-runs)
 # EVAL_PROVIDER=anthropic
@@ -712,11 +712,11 @@ Each run produces three outputs:
 For Layer 3, the Markdown report includes a **full diagnostic trace** for each execution:
 
 ```markdown
-### ✅ get_launch_summary.quick — PASS
+### ✅ adv_get_launch_summary.quick — PASS
 
 - **Prompt:** Get a quick summary of launch 12345
-- **Expected tools:** get_launch_summary
-- **Selected tool:** get_launch_summary ✅
+- **Expected tools:** adv_get_launch_summary
+- **Selected tool:** adv_get_launch_summary ✅
 - **Args:** {"project":"MY_PROJECT","launch_id":12345}
 - **Judge scores:** relevance=5/5, completeness=4/5, format=5/5 (avg=4.7)
 - **Judge reasoning:** Output provides a complete launch overview with test counts and status.
@@ -767,7 +767,7 @@ Test Failed
 | LLM omits an argument | Prompt doesn't mention the required data | Add the data to the prompt template |
 | `expectedArgKeys` mismatch | Eval uses `project_key` but Zod schema uses `project` | Fix `expectedArgKeys` to match schema |
 | Judge scores 3/5 on completeness | Tool returns correct but minimal data | Either improve tool or lower threshold |
-| E2E test picks `get_available_projects` first | LLM wants to discover projects before acting | Add `get_available_projects` to `expectedTools` |
+| E2E test picks `adv_get_available_projects` first | LLM wants to discover projects before acting | Add `adv_get_available_projects` to `expectedTools` |
 
 ---
 

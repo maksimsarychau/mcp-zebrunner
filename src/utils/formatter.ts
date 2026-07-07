@@ -2,6 +2,60 @@ import { OutputFormat } from "../types/api.js";
 import { ZebrunnerTestCase, ZebrunnerTestSuite, ZebrunnerTestRun, ZebrunnerTestResultResponse } from "../types/core.js";
 import type { FieldsLayout, FieldLayoutItem, TestCaseExecution } from "../api/reporting-client.js";
 
+/** Detail level for read-tool responses. */
+export type DetailLevel = 'summary' | 'full';
+
+/** Top-level fields kept by the test-case summary projection. */
+const SUMMARY_TESTCASE_FIELDS = [
+  'id',
+  'key',
+  'title',
+  'priority',
+  'automationState',
+  'deprecated',
+  'webUrl',
+] as const;
+
+/** Top-level fields kept by the suite summary projection. */
+const SUMMARY_SUITE_FIELDS = [
+  'id',
+  'title',
+  'name',
+  'parentSuiteId',
+  'rootSuiteId',
+  'testCasesCount',
+  'webUrl',
+] as const;
+
+function pickFields<T extends Record<string, unknown>>(obj: T, keys: readonly string[]): Partial<T> {
+  const out: Partial<T> = {};
+  for (const k of keys) {
+    if (obj != null && Object.prototype.hasOwnProperty.call(obj, k)) {
+      (out as Record<string, unknown>)[k] = obj[k];
+    }
+  }
+  return out;
+}
+
+/**
+ * Project a test case (or array) to a detail level / explicit field set.
+ * `fields` (when non-empty) wins over `detail`.
+ */
+export function projectTestCases<T>(data: T, detail: DetailLevel, fields?: string[]): T {
+  const keys = fields && fields.length > 0 ? fields : detail === 'summary' ? SUMMARY_TESTCASE_FIELDS : null;
+  if (!keys) return data;
+  const projectOne = (tc: unknown) => (tc && typeof tc === 'object' ? pickFields(tc as Record<string, unknown>, keys) : tc);
+  return (Array.isArray(data) ? data.map(projectOne) : projectOne(data)) as T;
+}
+
+/** Project a suite (or array) — same contract as {@link projectTestCases}. */
+export function projectSuites<T>(data: T, detail: DetailLevel, fields?: string[]): T {
+  const keys = fields && fields.length > 0 ? fields : detail === 'summary' ? SUMMARY_SUITE_FIELDS : null;
+  if (!keys) return data;
+  const projectOne = (s: unknown) => (s && typeof s === 'object' ? pickFields(s as Record<string, unknown>, keys) : s);
+  return (Array.isArray(data) ? data.map(projectOne) : projectOne(data)) as T;
+}
+
 /**
  * Utility class for formatting output in different formats
  */
@@ -13,10 +67,12 @@ export class FormatProcessor {
     switch (format) {
       case 'dto':
         return data;
+      case 'compact':
+        return JSON.stringify(data) as T & string;
       case 'json':
-        return JSON.stringify(data, null, 2) as any;
+        return JSON.stringify(data, null, 2) as T & string;
       case 'string':
-        return this.convertToReadableString(data, fieldsLayout) as any;
+        return this.convertToReadableString(data, fieldsLayout) as T & string;
       default:
         return data;
     }

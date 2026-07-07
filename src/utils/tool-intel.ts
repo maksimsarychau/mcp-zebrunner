@@ -20,23 +20,23 @@ export type ToolIntelSnapshot = {
 const TOKEN_RANGE_DEFAULT = "Low (<=1k tokens)";
 
 const TOKEN_RANGE_BY_TOOL: Record<string, string> = {
-  analyze_test_failure: "High (6k-12k tokens)",
-  detailed_analyze_launch_failures: "Very High (12k+ tokens)",
-  analyze_test_execution_video: "Very High (12k+ tokens)",
-  analyze_screenshot: "High (6k-12k tokens)",
-  generate_weekly_regression_stability_report: "High (6k-12k tokens)",
-  regression_results_analyzer: "High (6k-12k tokens)",
-  get_bug_review: "High (6k-12k tokens)",
-  get_bug_failure_info: "Medium (3k-6k tokens)",
-  analyze_test_cases_duplicates: "Medium (3k-6k tokens)",
-  analyze_test_cases_duplicates_semantic: "High (6k-12k tokens)",
-  aggregate_test_cases_by_feature: "High (6k-12k tokens)",
-  get_all_tcm_test_cases_by_project: "High (6k-12k tokens)",
-  get_all_tcm_test_cases_with_root_suite_id: "High (6k-12k tokens)",
-  get_all_launches_for_project: "Medium (3k-6k tokens)",
-  get_all_launches_with_filter: "Medium (3k-6k tokens)",
-  list_test_runs: "Medium (3k-6k tokens)",
-  list_test_run_test_cases: "Medium (3k-6k tokens)"
+  adv_analyze_test_failure: "High (6k-12k tokens)",
+  adv_detailed_analyze_launch_failures: "Very High (12k+ tokens)",
+  adv_analyze_test_execution_video: "Very High (12k+ tokens)",
+  adv_analyze_screenshot: "High (6k-12k tokens)",
+  adv_generate_weekly_regression_stability_report: "High (6k-12k tokens)",
+  adv_regression_results_analyzer: "High (6k-12k tokens)",
+  adv_get_bug_review: "High (6k-12k tokens)",
+  adv_get_bug_failure_info: "Medium (3k-6k tokens)",
+  adv_analyze_test_cases_duplicates: "Medium (3k-6k tokens)",
+  adv_analyze_test_cases_duplicates_semantic: "High (6k-12k tokens)",
+  adv_aggregate_test_cases_by_feature: "High (6k-12k tokens)",
+  adv_get_all_tcm_test_cases_by_project: "High (6k-12k tokens)",
+  adv_get_all_tcm_test_cases_with_root_suite_id: "High (6k-12k tokens)",
+  adv_get_all_launches_for_project: "Medium (3k-6k tokens)",
+  adv_get_all_launches_with_filter: "Medium (3k-6k tokens)",
+  adv_list_test_runs: "Medium (3k-6k tokens)",
+  adv_list_test_run_test_cases: "Medium (3k-6k tokens)"
 };
 
 function projectRoot(): string {
@@ -166,14 +166,8 @@ export function loadToolIntelSnapshot(): ToolIntelSnapshot {
     // keep "unknown"
   }
 
-  // Expand the canonical tools.json list (still keyed by legacy names) into
-  // the dual-name registry the server actually exposes at runtime:
-  //   - "adv_<name>"  — primary / canonical (description carries the
-  //                     [Advanced Zebrunner MCP] prefix).
-  //   - "<name>"      — deprecated alias, included ONLY when the legacy-alias
-  //                     env var is set (matches src/server.ts behaviour).
-  // The TOOLS_CATALOG.md is keyed by legacy names; the catalog entry is shared
-  // by both rows so descriptions and examples stay consistent.
+  // tools.json lists canonical adv_<name> entries. TOOLS_CATALOG.md uses the same
+  // names. Optionally duplicate legacy short names when ZEBRUNNER_REGISTER_LEGACY_ALIASES=true.
   const ADV_PREFIX = "adv_";
   const ADV_DESC_PREFIX = "[Advanced Zebrunner MCP] ";
   const LEGACY_ALIAS_TRUTHY = ["1", "true", "yes", "on"];
@@ -182,23 +176,25 @@ export function loadToolIntelSnapshot(): ToolIntelSnapshot {
   );
   const expanded: ToolCatalogEntry[] = [];
   for (const tool of tools) {
-    const legacyName = tool.name;
-    const advName = `${ADV_PREFIX}${legacyName}`;
-    const catalog = catalogByTool.get(legacyName);
+    const advName = tool.name.startsWith(ADV_PREFIX) ? tool.name : `${ADV_PREFIX}${tool.name}`;
+    const legacyName = advName.slice(ADV_PREFIX.length);
+    const catalog = catalogByTool.get(advName) ?? catalogByTool.get(legacyName);
     const baseDescription = catalog?.description || tool.description || "";
     const category = catalog?.category ?? null;
     const examples = catalog?.examples ?? [];
 
     expanded.push({
       name: advName,
-      description: `${ADV_DESC_PREFIX}${baseDescription}`,
+      description: baseDescription.startsWith(ADV_DESC_PREFIX)
+        ? baseDescription
+        : `${ADV_DESC_PREFIX}${baseDescription}`,
       category,
       examples
     });
     if (registerLegacyAliases) {
       expanded.push({
         name: legacyName,
-        description: `[deprecated alias — use ${advName}] ${baseDescription}`,
+        description: `[deprecated alias — use ${advName}] ${baseDescription.replace(ADV_DESC_PREFIX, "")}`,
         category,
         examples
       });
@@ -227,7 +223,7 @@ export function markdownForAllTools(snapshot: ToolIntelSnapshot, options: {
   const lines: string[] = [];
   lines.push("# Using the Advanced Zebrunner MCP Server: Tools Summary");
   lines.push("");
-  lines.push("Tools are registered under two names: the recommended `adv_<name>` form (e.g. `adv_create_test_case`) and a deprecated legacy alias (`<name>`) kept for backward compatibility. Prefer the `adv_` form in new prompts and scripts.");
+  lines.push("All tools are registered under the canonical **`adv_<name>`** form (e.g. `adv_create_test_case`). Legacy short names without the `adv_` prefix are deprecated and only available when `ZEBRUNNER_REGISTER_LEGACY_ALIASES=true`.");
   lines.push("");
   lines.push(`MCP version: ${snapshot.mcpVersion}`);
   lines.push("");
