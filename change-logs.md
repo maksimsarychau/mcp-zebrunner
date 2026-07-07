@@ -1,5 +1,31 @@
 # Change Logs
 
+## v9.2.1 — LLM-visible metrics + compact expansion
+
+> **Metrics guide:** [docs/TOKEN_EFFICIENCY.md](docs/TOKEN_EFFICIENCY.md#observing-metrics-in-the-llm)
+
+### Highlights
+
+- **Session metrics breakdown** — `adv_about_mcp_tools` `mode=metrics` includes per-tool **format + detail** table; optional `metrics_reset`.
+- **Per-call `_mcp_metrics` footer** — opt-in via `include_call_metrics: true` on any tool or `MCP_INLINE_METRICS=true` server env.
+- **`format: compact` Tier 1** — 11 additional TCM data-family bulk reads (`adv_get_test_cases_advanced`, `adv_get_root_suites`, etc.).
+- **`format: compact` Tier 2** — 7 reporting/public-API tools (`adv_get_platform_results_by_period`, `adv_list_test_runs`, etc.).
+
+### Added
+
+- `getBreakdownMarkdown()` / `getFullMetricsMarkdown()` in `src/utils/tool-metrics.ts`.
+- `src/utils/response-metrics.ts` — footer builder and `include_call_metrics` stripping.
+- `include_call_metrics` injected on all tool schemas via `registerTool` wrapper (`src/utils/tool-schema-helpers.ts`).
+- Env flag `MCP_INLINE_METRICS` (default off).
+
+### Changed
+
+- stderr `[telemetry]` lines include `format` and `detail` dimensions.
+- `zebrunner://formats` `raw_formatted` family documents 9 tools with `compact`.
+- `/session-metrics` prompt documents breakdown, reset, and per-call footer.
+
+---
+
 ## v9.2.0 — Token/cost optimization (opt-in)
 
 > Re-implements selected ideas from PR #84 on master without flipping defaults.  

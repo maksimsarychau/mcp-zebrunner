@@ -20,3 +20,8 @@ export function defaultDataFormat(): 'json' | 'compact' {
 export function defaultDetailLevel(): 'summary' | 'full' {
   return isSummaryDefaultsEnabled() ? 'summary' : 'full';
 }
+
+/** Append per-call _mcp_metrics footer to tool responses when true. */
+export function isInlineMetricsEnabled(): boolean {
+  return process.env.MCP_INLINE_METRICS === 'true';
+}

@@ -57,6 +57,7 @@ import {
   markdownForResources,
 } from "./utils/tool-intel.js";
 import { ToolMetrics, wrapToolHandler } from "./utils/tool-metrics.js";
+import { withCallMetricsSchema } from "./utils/tool-schema-helpers.js";
 import { enrichTestCasesWithHistory, getHistoryBulkWarning, type HistoryFilter, type AutomationStatesMap } from "./utils/testCaseHistory.js";
 import { analyzeRegressionResults, type RegressionAnalyzerInput } from "./handlers/regression-results-analyzer.js";
 
@@ -1094,6 +1095,9 @@ function createConfiguredServer(): McpServer {
     const advancedConfig = {
       ...config,
       description: `${ADV_DESC_PREFIX}${baseDescription}`,
+      inputSchema: config.inputSchema
+        ? withCallMetricsSchema(config.inputSchema)
+        : config.inputSchema,
     };
 
     const primaryResult = origRegisterTool(
@@ -1109,6 +1113,9 @@ function createConfiguredServer(): McpServer {
     const legacyConfig = {
       ...config,
       description: `[deprecated alias — use ${advName}] ${baseDescription}`,
+      inputSchema: config.inputSchema
+        ? withCallMetricsSchema(config.inputSchema)
+        : config.inputSchema,
     };
     return origRegisterTool(name, legacyConfig, wrapToolHandler(advName, handler, toolMetrics));
   }) as typeof server.registerTool;
@@ -1473,7 +1480,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
       project_key: z.string().min(1).describe("Project key"),
       root_suite_id: z.number().int().positive().describe("Root suite ID to get all subsuites from"),
       include_root: z.boolean().default(true).describe("Include the root suite in results"),
-      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
+      format: z.enum(['dto', 'json', 'compact', 'string', 'markdown']).default('json').describe("Output format"),
       page: z.number().int().nonnegative().default(0).describe("Page number (0-based)"),
       size: z.number().int().positive().max(1000).default(50).describe("Page size (configurable via MAX_PAGE_SIZE env var)"),
       count_only: z.boolean().default(false).describe(
@@ -1608,7 +1615,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
       field_path: z.string().optional().describe("Filter by any field using dot-notation path. Top-level: 'title', 'key', 'deprecated'. Nested: 'priority.name', 'automationState.name', 'testSuite.id', 'createdBy.username'. Custom fields: 'customField.manualOnly', 'customField.caseStatus'. Triggers client-side filtering (paginates all pages)."),
       field_value: z.string().optional().describe("Value to match against the field. Required for 'exact', 'contains', and 'regex' modes. Not needed for 'exists' mode."),
       field_match: z.enum(["exact", "contains", "regex", "exists"]).default("exact").describe("Match mode: 'exact' (case-insensitive equality), 'contains' (substring), 'regex' (pattern), 'exists' (field is present and non-null)"),
-      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
+      format: z.enum(['dto', 'json', 'compact', 'string', 'markdown']).default('json').describe("Output format"),
       page: z.number().int().nonnegative().default(0).describe("Page number (0-based)"),
       size: z.number().int().positive().max(100).default(100).describe("Page size (configurable via MAX_PAGE_SIZE env var)"),
       count_only: z.boolean().default(false).describe(
@@ -1885,7 +1892,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
       project_key: z.string().min(1).describe("Project key"),
       root_suite_id: z.number().int().positive().optional().describe("Start from specific root suite"),
       max_depth: z.number().int().positive().max(10).default(5).describe("Maximum tree depth"),
-      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
+      format: z.enum(['dto', 'json', 'compact', 'string', 'markdown']).default('json').describe("Output format"),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI")
     },
       annotations: {
@@ -1980,7 +1987,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
         "When true with get_all, returns only the total count without test case data. " +
         "Efficient for metrics collection -- avoids 1MB response limit on large projects."
       ),
-      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
+      format: z.enum(['dto', 'json', 'compact', 'string', 'markdown']).default('json').describe("Output format"),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI"),
       include_history: z.boolean().default(false).describe("When true, each test case includes a 'history' array of change log entries. Filtered to steps, preconditions, expected results, and lifecycle events (automation state changes, deprecation) by default."),
       history_filter: z.enum(['steps_only', 'events_only', 'all']).default('steps_only').describe("What to include in history. 'steps_only': step/precondition/expectedResult diffs only. 'events_only': lifecycle events only (automated, deprecated, etc.). 'all': everything. Only used when include_history=true."),
@@ -2405,7 +2412,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
         "When true with get_all, returns only the total count without test case data. " +
         "Efficient for metrics collection -- avoids 1MB response limit on large projects."
       ),
-      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
+      format: z.enum(['dto', 'json', 'compact', 'string', 'markdown']).default('json').describe("Output format"),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI"),
       include_history: z.boolean().default(false).describe("When true, each test case includes a 'history' array of change log entries. Filtered to steps, preconditions, expected results, and lifecycle events (automation state changes, deprecation) by default."),
       history_filter: z.enum(['steps_only', 'events_only', 'all']).default('steps_only').describe("What to include in history. 'steps_only': step/precondition/expectedResult diffs only. 'events_only': lifecycle events only (automated, deprecated, etc.). 'all': everything. Only used when include_history=true."),
@@ -2619,7 +2626,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
         "When true with get_all, returns only the total count without test case data. " +
         "Efficient for metrics collection -- avoids 1MB response limit on large projects."
       ),
-      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
+      format: z.enum(['dto', 'json', 'compact', 'string', 'markdown']).default('json').describe("Output format"),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI"),
       include_history: z.boolean().default(false).describe("When true, each test case includes a 'history' array of change log entries. Filtered to steps, preconditions, expected results, and lifecycle events (automation state changes, deprecation) by default."),
       history_filter: z.enum(['steps_only', 'events_only', 'all']).default('steps_only').describe("What to include in history. 'steps_only': step/precondition/expectedResult diffs only. 'events_only': lifecycle events only (automated, deprecated, etc.). 'all': everything. Only used when include_history=true."),
@@ -3557,7 +3564,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
         "When true, paginates through all pages and returns only the total count of suites without data. " +
         "Useful for metrics and dashboards. Bypasses MCP response size limits."
       ),
-      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format")
+      format: z.enum(['dto', 'json', 'compact', 'string', 'markdown']).default('json').describe("Output format")
     },
       annotations: {
         readOnlyHint: true,
@@ -3641,7 +3648,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
         "When true, returns only the total count of suites without data. " +
         "Paginates internally to count all suites, but skips hierarchy processing and formatting."
       ),
-      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format")
+      format: z.enum(['dto', 'json', 'compact', 'string', 'markdown']).default('json').describe("Output format")
     },
       annotations: {
         readOnlyHint: true,
@@ -3722,7 +3729,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
       description: "🌳 Get root suites (suites with no parent) from project",
     inputSchema: {
       project_key: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
-      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format")
+      format: z.enum(['dto', 'json', 'compact', 'string', 'markdown']).default('json').describe("Output format")
     },
       annotations: {
         readOnlyHint: true,
@@ -3780,7 +3787,7 @@ Supports two modes:
       suite_id: z.number().int().positive().describe("Suite ID to find"),
       mode: z.enum(['simple', 'full']).default('simple').describe("'simple' = fast direct API call (default). 'full' = hierarchy-enriched with root suite chain and clickable links."),
       only_root_suites: z.boolean().default(false).describe("(full mode only) Search only in root suites"),
-      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
+      format: z.enum(['dto', 'json', 'compact', 'string', 'markdown']).default('json').describe("Output format"),
       include_clickable_links: z.boolean().default(false).describe("(full mode only) Include clickable links to Zebrunner web UI")
     },
       annotations: {
@@ -6175,7 +6182,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       description: "🌳 Get ALL TCM test cases enriched with root suite ID information",
     inputSchema: {
       project_key: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
-      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
+      format: z.enum(['dto', 'json', 'compact', 'string', 'markdown']).default('json').describe("Output format"),
       count_only: z.boolean().default(false).describe(
         "When true, returns only the total count without test case data. " +
         "Skips hierarchy enrichment for maximum efficiency."
@@ -6294,7 +6301,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
     inputSchema: {
       project_key: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
       suite_id: z.number().int().positive().describe("Suite ID to find root for"),
-      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format")
+      format: z.enum(['dto', 'json', 'compact', 'string', 'markdown']).default('json').describe("Output format")
     },
       annotations: {
         readOnlyHint: true,
@@ -7998,7 +8005,11 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         include_token_estimates: z.boolean().default(true)
           .describe("Include approximate token usage ranges (applies to summary and tool modes)"),
         include_role_benefits: z.boolean().default(true)
-          .describe("Include role-based value summary (applies to summary and tool modes)")
+          .describe("Include role-based value summary (applies to summary and tool modes)"),
+        metrics_breakdown: z.boolean().default(true)
+          .describe("When mode=metrics: include per-tool format/detail breakdown table"),
+        metrics_reset: z.boolean().default(false)
+          .describe("When mode=metrics: clear session metrics after returning the report"),
       },
       annotations: {
         readOnlyHint: true,
@@ -8043,7 +8054,11 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
 
         if (args.mode === "metrics") {
           const header = `MCP version: ${snapshot.mcpVersion}\n\n`;
-          return { content: [{ type: "text" as const, text: header + toolMetrics.getSummaryMarkdown() }] };
+          const body = toolMetrics.getFullMetricsMarkdown(args.metrics_breakdown !== false);
+          if (args.metrics_reset) {
+            toolMetrics.reset();
+          }
+          return { content: [{ type: "text" as const, text: header + body }] };
         }
 
         if (args.mode === "routing") {
@@ -8166,7 +8181,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         .describe("Override templateId if needed"),
       dashboardName: z.string().optional()
         .describe("Override dashboard title"),
-      format: z.enum(['raw', 'formatted']).default('formatted'),
+      format: z.enum(['raw', 'formatted', 'compact']).default('formatted'),
       chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
         "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
       ),
@@ -8266,6 +8281,11 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         }
 
         let result;
+        if (args.format === 'compact') {
+          return {
+            content: [{ type: "text" as const, text: JSON.stringify(data) }]
+          };
+        }
         if (args.format === 'raw') {
           result = data;
         } else {
@@ -8323,7 +8343,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       milestone: z.array(z.string())
         .default([])
         .describe("Optional MILESTONE filter, e.g., ['25.39.0'] for milestone filtering"),
-      format: z.enum(['raw', 'formatted']).default('formatted'),
+      format: z.enum(['raw', 'formatted', 'compact']).default('formatted'),
       chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
         "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
       ),
@@ -8355,6 +8375,12 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
 
         const raw = await callWidgetSql(projectId, args.templateId, paramsConfig);
 
+        if (args.format === 'compact') {
+          return {
+            content: [{ type: "text" as const, text: JSON.stringify(raw) }]
+          };
+        }
+
         if (args.format === 'raw') {
           return {
             content: [{ type: "text" as const, text: JSON.stringify(raw, null, 2) }]
@@ -8365,9 +8391,15 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         const rows: any[] = Array.isArray(raw) ? raw : [];
 
         if (rows.length === 0) {
-          const formatValue = args.format as 'raw' | 'formatted';
+          const formatValue = args.format as 'raw' | 'formatted' | 'compact';
+          const emptyText =
+            formatValue === 'formatted'
+              ? "No bug data found"
+              : formatValue === 'compact'
+                ? JSON.stringify(raw)
+                : JSON.stringify(raw, null, 2);
           return {
-            content: [{ type: "text" as const, text: formatValue === 'raw' ? JSON.stringify(raw, null, 2) : "No bug data found" }]
+            content: [{ type: "text" as const, text: emptyText }]
           };
         }
 
@@ -8453,7 +8485,12 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         }
 
         // Return formatted or raw output based on format parameter
-        const formatValue = args.format as 'raw' | 'formatted';
+        const formatValue = args.format as 'raw' | 'formatted' | 'compact';
+        if (formatValue === 'compact') {
+          return {
+            content: [{ type: "text" as const, text: JSON.stringify(top) }]
+          };
+        }
         if (formatValue === 'raw') {
           return {
             content: [{ type: "text" as const, text: JSON.stringify(top, null, 2) }]
@@ -9074,7 +9111,7 @@ ${detailsInfo.map((detail, i) => {
         "When true, returns only the total count of milestones matching the status filter. " +
         "For 'all'/'completed' uses efficient API metadata; for 'incomplete'/'overdue' paginates to apply client-side filter."
       ),
-      format: z.enum(['raw', 'formatted']).default('formatted')
+      format: z.enum(['raw', 'formatted', 'compact']).default('formatted')
         .describe("Output format: raw API response or formatted data")
     },
       annotations: {
@@ -9187,8 +9224,12 @@ ${detailsInfo.map((detail, i) => {
         }
 
         let result;
+        if (args.format === 'compact') {
+          return {
+            content: [{ type: "text" as const, text: JSON.stringify(filteredMilestonesData) }]
+          };
+        }
         if (args.format === 'raw') {
-          result = filteredMilestonesData;
         } else {
           // Format the data for better readability
           const milestones = filteredMilestonesData.items.map(milestone => {
@@ -9245,7 +9286,7 @@ ${detailsInfo.map((detail, i) => {
         .describe("Filter by starred projects (true=only starred, false=only non-starred, undefined=all)"),
       publiclyAccessible: z.boolean().optional()
         .describe("Filter by public accessibility (true=only public, false=only private, undefined=all)"),
-      format: z.enum(['raw', 'formatted']).default('formatted')
+      format: z.enum(['raw', 'formatted', 'compact']).default('formatted')
         .describe("Output format: raw API response or formatted data"),
       includePaginationInfo: z.boolean().default(false)
         .describe("Include pagination metadata from projects-limit endpoint")
@@ -9288,11 +9329,16 @@ ${detailsInfo.map((detail, i) => {
         }
 
         let result;
-        if (args.format === 'raw') {
-          result = {
+        if (args.format === 'compact') {
+          const compactResult = {
             projects: projectsData,
             ...(paginationInfo && { pagination: paginationInfo })
           };
+          return {
+            content: [{ type: "text" as const, text: JSON.stringify(compactResult) }]
+          };
+        }
+        if (args.format === 'raw') {
         } else {
           // Format the data for better readability
           const projects = projectsData.items.map(project => ({
@@ -9470,7 +9516,7 @@ ${detailsInfo.map((detail, i) => {
         "When true, paginates through all pages and returns only the total count of test runs without data. " +
         "Useful for metrics and dashboards. Bypasses MCP response size limits."
       ),
-      format: z.enum(['raw', 'formatted']).default('formatted'),
+      format: z.enum(['raw', 'formatted', 'compact']).default('formatted'),
       chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
         "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
       ),
@@ -9599,8 +9645,12 @@ ${detailsInfo.map((detail, i) => {
         }
 
         let result: any;
+        if (args.format === 'compact') {
+          return {
+            content: [{ type: "text" as const, text: JSON.stringify(testRunsData) }]
+          };
+        }
         if (args.format === 'raw') {
-          result = testRunsData;
         } else {
           // Formatted output
           const testRuns = testRunsData.items.map((run: any) => ({
@@ -9673,7 +9723,7 @@ ${detailsInfo.map((detail, i) => {
       project: z.union([z.enum(["web","android","ios","api"]), z.string()])
         .default("web")
         .describe("Project alias ('web', 'android', 'ios', 'api') or project key"),
-      format: z.enum(['raw', 'formatted']).default('formatted'),
+      format: z.enum(['raw', 'formatted', 'compact']).default('formatted'),
       chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
         "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
       ),
@@ -9731,8 +9781,12 @@ ${detailsInfo.map((detail, i) => {
         }
 
         let result: any;
+        if (args.format === 'compact') {
+          return {
+            content: [{ type: "text" as const, text: JSON.stringify(testRunData) }]
+          };
+        }
         if (args.format === 'raw') {
-          result = testRunData;
         } else {
           // Formatted output
           const run = testRunData.data;
@@ -9815,7 +9869,7 @@ ${detailsInfo.map((detail, i) => {
       project: z.union([z.enum(["web","android","ios","api"]), z.string()])
         .default("web")
         .describe("Project alias ('web', 'android', 'ios', 'api') or project key"),
-      format: z.enum(['raw', 'formatted']).default('formatted'),
+      format: z.enum(['raw', 'formatted', 'compact']).default('formatted'),
       chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
         "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
       ),
@@ -9868,8 +9922,12 @@ ${detailsInfo.map((detail, i) => {
         }
 
         let result: any;
+        if (args.format === 'compact') {
+          return {
+            content: [{ type: "text" as const, text: JSON.stringify(testCasesData) }]
+          };
+        }
         if (args.format === 'raw') {
-          result = testCasesData;
         } else {
           // Formatted output
           const testCases = testCasesData.items.map((item: any) => ({

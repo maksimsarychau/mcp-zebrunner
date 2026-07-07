@@ -44,13 +44,30 @@ Large Zebrunner exports (thousands of test cases with steps, preconditions, and 
 | `adv_get_test_cases_by_suite_smart` | Best with `detail=summary` |
 | `adv_batch_get_test_cases` | **Defaults** to `format=compact` |
 | `adv_get_all_tcm_test_cases_with_root_suite_id` | Large — prefer `count_only=true` first |
+| `adv_get_test_cases_advanced` | Filtered bulk lists |
+| `adv_get_test_cases_by_automation_state` | Bulk by automation state |
+| `adv_get_test_case_by_filter` | Filtered bulk |
+| `adv_get_test_case_by_title` | Search results |
+| `adv_get_all_subsuites` | Suite tree payloads |
+| `adv_get_suite_hierarchy` | Hierarchy JSON |
+| `adv_get_root_suites` | Root suite lists |
+| `adv_get_tcm_test_suites_by_project` | Paginated suite dump |
+| `adv_get_all_tcm_test_case_suites_by_project` | Full suite catalog |
+| `adv_get_tcm_suite_by_id` | Single suite lookup |
 
-### Launch listing (`raw` / `formatted` / `compact`)
+### Launch / reporting (`raw` / `formatted` / `compact`)
 
 | Tool | `compact` meaning |
 |------|-------------------|
 | `adv_get_all_launches_for_project` | Minified JSON launch list |
 | `adv_get_all_launches_with_filter` | Same |
+| `adv_get_platform_results_by_period` | Minified widget SQL payload |
+| `adv_get_top_bugs` | Minified widget rows |
+| `adv_get_project_milestones` | Minified milestones API response |
+| `adv_get_available_projects` | Minified projects list |
+| `adv_list_test_runs` | Minified test runs API response |
+| `adv_get_test_run_by_id` | Minified test run API response |
+| `adv_list_test_run_test_cases` | Minified test run cases API response |
 
 ---
 
@@ -141,8 +158,37 @@ Fetch up to **50** test cases in one call with **partial success** (`notFound[]`
 Bulk reads near ~800 KB may include a `_notice` field suggesting `detail=summary`, `count_only`, or lower `max_results`. stderr also logs per-tool telemetry:
 
 ```text
-[telemetry] tool=adv_get_all_tcm_test_cases_by_project responseBytes=… approxTokens=…
+[telemetry] tool=adv_get_all_tcm_test_cases_by_project format=compact detail=summary responseBytes=… approxTokens=…
 ```
+
+---
+
+## Observing metrics in the LLM
+
+Two ways to see session and per-call metrics in chat (default: **off** for per-call footers — no extra tokens on every response).
+
+### Session report
+
+Call `adv_about_mcp_tools` with `mode: "metrics"` (or use the `/session-metrics` prompt). Returns:
+
+- Per-tool call counts, durations, response sizes, errors
+- **Format/detail breakdown** table (`metrics_breakdown: true` by default)
+- Optional `metrics_reset: true` to clear stats after read (measure one workflow only)
+
+### Per-call footer (opt-in)
+
+When enabled, the last text block includes a one-line `_mcp_metrics` JSON footer:
+
+```json
+_mcp_metrics: {"tool":"adv_get_all_tcm_test_cases_by_project","durationMs":842,"responseChars":42100,"approxTokens":10525,"format":"compact","detail":"summary"}
+```
+
+| Switch | Scope |
+|--------|--------|
+| `MCP_INLINE_METRICS=true` | Server env — all tool responses |
+| `include_call_metrics: true` | Per-request arg on any tool (injected on all schemas) |
+
+Example prompt: *"List MCP test cases with compact JSON and **include call metrics** on this response."*
 
 ---
 
@@ -154,6 +200,7 @@ Set on the **MCP server** process (not eval-only):
 |-----|-------------------|
 | `MCP_COMPACT_DEFAULTS` | Default `format` becomes `compact` instead of `json` |
 | `MCP_SUMMARY_DEFAULTS` | Default `detail` becomes `summary` on supported bulk reads |
+| `MCP_INLINE_METRICS` | Append `_mcp_metrics` footer to every tool response |
 
 **Off by default** until cloud eval gates pass. Prefer explicit args in prompts for predictable assistant behavior.
 

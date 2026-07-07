@@ -411,7 +411,7 @@ Generates a comprehensive project health card: suite structure, coverage metrics
 
 **Parameters:** *(none)*
 
-Shows tool usage metrics for the current MCP session by calling `adv_about_mcp_tools` with `mode: "metrics"`. Displays per-tool call counts, average/min/max durations, response sizes, and error counts.
+Shows tool usage metrics for the current MCP session by calling `adv_about_mcp_tools` with `mode: "metrics"`. Displays per-tool call counts, average/min/max durations, response sizes, error counts, and a **format/detail breakdown** (which `format` and `detail` combinations drove response size). Optional `metrics_reset: true` clears stats after the report. For per-call timing on a single response, pass `include_call_metrics: true` on that tool or set `MCP_INLINE_METRICS=true` on the server.
 
 **Best for:** Debugging performance, understanding session activity, and verifying tool behavior.
 

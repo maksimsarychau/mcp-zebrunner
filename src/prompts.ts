@@ -294,13 +294,17 @@ export function buildSessionMetricsPrompt(): string {
 
 Steps:
 1. Call adv_about_mcp_tools with mode "metrics" to retrieve server-side session metrics
+   - Optional: metrics_breakdown=true (default) includes per-tool format/detail breakdown
+   - Optional: metrics_reset=true clears stats after read (useful to measure one workflow only)
 2. Present the results as a clear summary including:
    - Total tool calls made in this session
    - Per-tool breakdown: call count, avg/min/max duration, response size, errors
+   - Format/detail breakdown table (tool + format + detail dimensions) when included
    - Highlight any tools with errors or unusually high durations
-3. If no tools have been called yet, report that the session has no recorded calls
+3. For per-call size/timing on a single tool response, pass include_call_metrics=true on that tool (or enable MCP_INLINE_METRICS on the server)
+4. If no tools have been called yet, report that the session has no recorded calls
 
-This is useful for understanding which tools were used, how they performed, and whether any errors occurred during the current MCP session.`;
+This is useful for understanding which tools were used, how they performed, token-heavy format/detail combinations, and whether any errors occurred during the current MCP session.`;
 }
 
 export function buildRegressionSummaryPrompt(project: string, milestone?: string, build?: string, previous_milestone?: string): string {
