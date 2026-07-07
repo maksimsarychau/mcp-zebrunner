@@ -348,7 +348,7 @@ export function getEvalConfigWarnings(config: EvalConfig): string[] {
         ? "OPENAI_API_KEY"
         : "GEMINI_API_KEY";
     warnings.push(
-      `EVAL_API_KEY=${rawApiKey} is for local Ollama only — using ${used} for EVAL_PROVIDER=${config.provider}.`,
+      `EVAL_API_KEY=[REDACTED] is for local Ollama only — using ${used} for EVAL_PROVIDER=${config.provider}.`,
     );
   }
 

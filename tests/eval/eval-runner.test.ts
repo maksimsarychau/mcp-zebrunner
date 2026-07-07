@@ -136,7 +136,7 @@ describe("LLM Evaluation Tests", () => {
       console.error(`🔍 Filter: ${EVAL_FILTER_PATTERNS.join(", ")}`);
     }
     for (const warning of getEvalConfigWarnings(config)) {
-      console.error(`⚠️  ${warning}`);
+      evalSafeStderr(`⚠️  ${warning}`);
     }
     console.error("");
 
