@@ -24,4 +24,16 @@ describe("eval-arg-aliases", () => {
       { pass: false, missing: ["title"] },
     );
   });
+
+  it("checkArgKeys accepts token-efficient read aliases", () => {
+    assert.deepEqual(
+      checkArgKeys(
+        { project_key: "DEMO", case_keys: ["A-1", "A-2"], detail: "summary", format: "compact" },
+        ["project_key", "case_keys", "detail", "format"],
+      ),
+      { pass: true, missing: [] },
+    );
+    assert.equal(argKeyPresent({ detaillevel: "summary" }, "detail"), true);
+    assert.equal(argKeyPresent({ outputformat: "compact" }, "format"), true);
+  });
 });

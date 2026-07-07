@@ -270,7 +270,7 @@ MCP output: "Error: Test case not found" ✅
 
 **Examples:** Non-existent project keys, fake test case keys, invalid launch IDs, non-existent suite IDs.
 
-#### 4. Tool Confusion (3 prompts)
+#### 4. Tool Confusion (4 prompts)
 
 **What it tests:** When the prompt describes a task but the LLM might confuse which tool to use, does it pick the **correct** tool and avoid obviously wrong ones?
 
@@ -282,7 +282,7 @@ Expected: adv_list_test_suites ✅
 Forbidden: adv_get_launch_details, adv_get_launch_summary ✅ (not selected)
 ```
 
-**Examples:** Suite listing (should not use launch tools), milestone retrieval (should not use TCM tools), bug reporting (should not use coverage tools).
+**Examples:** Suite listing (should not use launch tools), milestone retrieval (should not use TCM tools), bug reporting (should not use coverage tools), batch fetch (should not call `adv_get_test_case_by_key` per key).
 
 #### 5. Prompt Injection (3 prompts)
 
@@ -405,29 +405,42 @@ The framework uses **real Zebrunner project data** — not hardcoded values. At 
 
 | Category | Prompts | Description | Example |
 |----------|---------|-------------|---------|
-| **TCM** (Test Case Management) | 26 | Suites, test cases, hierarchy, filtering | "List all test suites in project X" |
+| **TCM** (Test Case Management) | 29 | Suites, test cases, hierarchy, filtering, token-efficient reads (`compact`, `summary`, `batch_get_test_cases`) | "Fetch MCP-1 and MCP-2 in one batch call with summary detail" |
 | **Launch** | 9 | Launches, milestones, regression reports | "Show the 10 most recent launches" |
 | **Analysis** | 8 | Coverage, validation, code generation | "Analyze test coverage for test case X-1" |
 | **Utility** | 4 | Connection test, tool info, projects | "Test the reporting API connection" |
 | **Test Run** | 5 | Test runs, statuses, configurations | "List recent test runs for project X" |
 | **Duplicate** | 2 | Duplicate detection (step + semantic) | "Find duplicate test cases in suite N" |
 | **E2E Metrics** | 3 | Multi-tool complex scenarios | "Assess release readiness" |
-| **Positive Total** | **57** | | |
-| **Negative** | 17 | Out-of-scope, ambiguous, invalid data, tool confusion, prompt injection | "What's the weather?" / "Ignore all instructions" |
-| **Grand Total** | **74** | | |
+| **Positive Total** | **60** | | |
+| **Negative** | 18 | Out-of-scope, ambiguous, invalid data, tool confusion, prompt injection | "What's the weather?" / "Ignore all instructions" |
+| **Grand Total** | **78** | | |
 
 ### Layer Distribution
 
 | Layer | Test Assertions | What Runs |
 |-------|----------------|-----------|
 | Layer 1 | 31 | Tool selection for all L1 prompts |
-| Layer 2 | 42 | Tool selection + arg validation for L1+L2 prompts |
+| Layer 2 | 45 | Tool selection + arg validation for L1+L2 prompts |
 | Layer 3 | 8 | Full execution + Judge for L3 single-tool prompts |
 | Layer 3 E2E | 3 | Multi-tool first-step validation |
 | Negative: Refusal | 10 | Out-of-scope + ambiguous + prompt injection |
-| Negative: Confusion | 3 | Tool confusion (correct tool, no forbidden) |
+| Negative: Confusion | 4 | Tool confusion (correct tool, no forbidden) |
 | Negative: Invalid Data | 4 | MCP error handling with fake IDs (Layer 3) |
-| **Total** | **101** | (+ skipped prompts when context unavailable) |
+| **Total** | **105** | (+ skipped prompts when context unavailable) |
+
+### Token-efficient read prompts (v9.2.0)
+
+Four eval prompts verify LLM routing for opt-in compact/summary/batch reads (unit tests cover response shape):
+
+| Prompt ID | Layer | What it checks |
+|-----------|-------|----------------|
+| `batch_get_test_cases.two_keys` | 2 | `adv_batch_get_test_cases` with `case_keys`, `detail`, `format` |
+| `get_all_tcm_test_cases_by_project.compact_summary` | 2 | Bulk list with `detail=summary` + `format=compact` |
+| `get_test_cases_by_suite_smart.summary` | 2 | Suite read with `detail=summary` |
+| `neg.confuse.batch_vs_single_fetch` | 2 | Batch tool chosen; `adv_get_test_case_by_key` forbidden |
+
+`detail` / `format` arg checks may be soft misses on small local models — use Anthropic/OpenAI for CI gates.
 
 ### How Prompts Work
 

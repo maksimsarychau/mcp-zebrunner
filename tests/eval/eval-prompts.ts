@@ -371,6 +371,39 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
     requiredContext: ["projectKey", "suiteId"],
   },
   {
+    id: "batch_get_test_cases.two_keys",
+    toolSection: "1. TCM",
+    promptTemplate:
+      "Fetch test cases {{test_case_key}} and {{second_test_case_key}} from the {{project_key}} project in a single MCP call. Use summary detail and compact JSON to save tokens.",
+    expectedTools: ["adv_batch_get_test_cases"],
+    expectedArgKeys: ["project_key", "case_keys", "detail", "format"],
+    category: "tcm",
+    layer: 2,
+    requiredContext: ["projectKey", "testCaseKey", "secondTestCaseKey"],
+  },
+  {
+    id: "get_all_tcm_test_cases_by_project.compact_summary",
+    toolSection: "1. TCM",
+    promptTemplate:
+      "List test cases in the {{project_key}} project with summary fields only (not full bodies). Use compact JSON format.",
+    expectedTools: ["adv_get_all_tcm_test_cases_by_project"],
+    expectedArgKeys: ["project_key", "detail", "format"],
+    category: "tcm",
+    layer: 2,
+    requiredContext: ["projectKey"],
+  },
+  {
+    id: "get_test_cases_by_suite_smart.summary",
+    toolSection: "1. TCM",
+    promptTemplate:
+      "Get test cases in suite {{suite_id}} of the {{project_key}} project as a shortlist with summary detail only — I will fetch full bodies later for selected keys.",
+    expectedTools: ["adv_get_test_cases_by_suite_smart"],
+    expectedArgKeys: ["project_key", "suite_id", "detail"],
+    category: "tcm",
+    layer: 2,
+    requiredContext: ["projectKey", "suiteId"],
+  },
+  {
     id: "validate_test_case.quality",
     toolSection: "1. TCM",
     promptTemplate:
@@ -1305,6 +1338,21 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
     negativeCategory: "tool_confusion",
     expectedBehavior: "should_select_tool",
     requiredContext: ["projectKey"],
+  },
+  {
+    id: "neg.confuse.batch_vs_single_fetch",
+    toolSection: "Negative",
+    promptTemplate:
+      "Fetch test cases {{test_case_key}} and {{second_test_case_key}} from {{project_key}} in one batch call. Do NOT call adv_get_test_case_by_key separately for each key.",
+    expectedTools: ["adv_batch_get_test_cases"],
+    forbiddenTools: ["adv_get_test_case_by_key"],
+    expectedArgKeys: ["project_key", "case_keys"],
+    category: "negative",
+    layer: 2,
+    isNegative: true,
+    negativeCategory: "tool_confusion",
+    expectedBehavior: "should_select_tool",
+    requiredContext: ["projectKey", "testCaseKey", "secondTestCaseKey"],
   },
 
   {
