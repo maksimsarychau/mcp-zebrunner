@@ -5,7 +5,7 @@ A **Model Context Protocol (MCP)** server that brings advanced analytics, report
 
 > Tool naming: every tool on this server is registered under the canonical `adv_<name>` form (e.g. `adv_create_test_case`, `adv_list_test_runs`) so it never collides with the official Zebrunner MCP. The legacy names are kept as **deprecated aliases** so prompts/scripts that called the old names continue to work for now; aliases will be removed in the next major release. 
 
-> 🆕 **v9.2.0** — Opt-in token/cost optimizations: `format:'compact'`, `detail:'summary'`, `adv_batch_get_test_cases`, report `inline:false`. Defaults unchanged. See [change-logs.md](change-logs.md#v920--tokencost-optimization-opt-in).
+> 🆕 **v9.2.0** — Opt-in token/cost optimizations: `format:'compact'`, `detail:'summary'`, `adv_batch_get_test_cases`, report `inline:false`. Defaults unchanged. See **[Token efficiency guide](docs/TOKEN_EFFICIENCY.md)** and [change-logs.md](change-logs.md#v920--tokencost-optimization-opt-in).
 
 > **v9.1.0** — Launch mutations: `adv_rerun_launch_failures`, `adv_start_launch` (Jenkins Build Now), plus `/relaunch-regression-failures` and `/feature-scoped-launch` prompts. See [GitHub Release v9.1.0](https://github.com/maksimsarychau/mcp-zebrunner/releases/tag/v9.1.0).
 >
@@ -17,7 +17,7 @@ A **Model Context Protocol (MCP)** server that brings advanced analytics, report
 
 ## 🔥 Why This Server
 
-This is the **Advanced Zebrunner MCP Server** — built to go well beyond basic test case management and help QA teams work smarter and faster with AI. Compared to the official Zebrunner MCP (beta, ~70 tools spanning Public REST + Reporting/TAM/Launcher), this server provides **63 analytics-focused tools** (`adv_*` prefix) and is safe to run side-by-side with the official server:
+This is the **Advanced Zebrunner MCP Server** — built to go well beyond basic test case management and help QA teams work smarter and faster with AI. Compared to the official Zebrunner MCP (beta, ~70 tools spanning Public REST + Reporting/TAM/Launcher), this server provides **64 analytics-focused tools** (`adv_*` prefix) and is safe to run side-by-side with the official server:
 
 - **[Reporting & Analytics](#-reporting--analytics)** — dashboards, pass-rate trends, regression stability reports, runtime efficiency analysis, bug reviews, and weekly delta tracking
 - **[Test Coverage & Analysis](#-test-coverage--analysis)** — coverage gaps, automation readiness scoring, and cross-suite analysis
@@ -549,7 +549,7 @@ Once connected, you can use these tools through natural language in your AI assi
 
 ### Token-efficient reads
 
-Large TCM exports can consume significant context. Use these **opt-in** parameters (defaults stay backward-compatible):
+Large TCM exports can consume significant context. Use these **opt-in** parameters (defaults stay backward-compatible). **Full guide:** [docs/TOKEN_EFFICIENCY.md](docs/TOKEN_EFFICIENCY.md).
 
 | Technique | Example | When to use |
 |-----------|---------|-------------|
@@ -557,9 +557,16 @@ Large TCM exports can consume significant context. Use these **opt-in** paramete
 | `detail: 'summary'` | `adv_get_test_cases_by_suite_smart` with `detail:'summary'` | After filtering — returns id, key, title, priority, automationState, webUrl only |
 | `adv_batch_get_test_cases` | `{ case_keys: ["MCP-1","MCP-2"], detail:"summary", format:"compact" }` | Fetch a shortlist without N round-trips |
 | `adv_generate_report` `inline: false` | Writes HTML/PNG to disk, returns paths | Huge dashboards in chat clients |
-| Env flags (off) | `MCP_COMPACT_DEFAULTS=true`, `MCP_SUMMARY_DEFAULTS=true` | Future default flips after eval passes |
+| `count_only: true` | Any bulk TCM/suite read | Metrics without payload |
+| Env flags (off) | `MCP_COMPACT_DEFAULTS=true`, `MCP_SUMMARY_DEFAULTS=true` | Server-wide default flips after eval passes |
 
-Workflow: list/filter with `detail:'summary'` → `adv_get_test_case_by_key` for full body (steps, preconditions) before create/update.
+**Workflow:** list/filter with `detail:'summary'` + `format:'compact'` → `adv_get_test_case_by_key` for full body (steps, preconditions) before create/update.
+
+**Example prompts for your assistant:**
+
+- *"List test cases in project MCP with summary detail and compact JSON."*
+- *"Fetch MCP-1 and MCP-2 in one batch call with summary and compact format."*
+- *"Generate a quality dashboard for MCP with inline false — save to disk."*
 
 > **Tool naming:** All tools are exposed as **`adv_<name>`** (e.g. `adv_get_test_case_by_key`). Use these names in prompts, scripts, and when both the official and Advanced MCP are connected. Legacy short names (`get_test_case_by_key`, etc.) are **deprecated** and only registered when `ZEBRUNNER_REGISTER_LEGACY_ALIASES=true`.
 

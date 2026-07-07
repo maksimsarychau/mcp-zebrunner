@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { resolveEvalSuite, type EvalSuite } from "./eval-cloud-suite.js";
 
 export type EvalLayer = 1 | 2 | 3;
 export type EvalProvider = "anthropic" | "openai" | "gemini" | "local";
@@ -27,6 +28,7 @@ export interface EvalConfig {
   resultsDir: string;
   concurrency: number;
   filter: string[];
+  suite: EvalSuite;
 }
 
 const DEFAULT_MODELS: Record<EvalProvider, string> = {
@@ -56,10 +58,12 @@ function readEnv(name: string): string | undefined {
   return val || undefined;
 }
 
-function resolveApiKey(provider: EvalProvider): string | undefined {
-  const unified = readEnv("EVAL_API_KEY");
-  if (unified) return unified;
+function isLocalPlaceholderApiKey(key: string): boolean {
+  const lower = key.toLowerCase();
+  return lower === "ollama" || lower === "local" || lower === "lm-studio";
+}
 
+function readProviderApiKey(provider: EvalProvider): string | undefined {
   switch (provider) {
     case "anthropic":
       return readEnv("ANTHROPIC_API_KEY");
@@ -68,8 +72,55 @@ function resolveApiKey(provider: EvalProvider): string | undefined {
     case "gemini":
       return readEnv("GEMINI_API_KEY") ?? readEnv("GOOGLE_API_KEY");
     case "local":
-      return "ollama";
+      return undefined;
   }
+}
+
+function resolveApiKey(provider: EvalProvider): string | undefined {
+  if (provider === "local") {
+    return readEnv("EVAL_API_KEY") ?? "ollama";
+  }
+
+  const providerKey = readProviderApiKey(provider);
+  const unified = readEnv("EVAL_API_KEY");
+
+  // Provider-specific cloud key wins over EVAL_API_KEY=ollama left in .env for local runs.
+  if (providerKey) return providerKey;
+  if (unified && !isLocalPlaceholderApiKey(unified)) return unified;
+  return undefined;
+}
+
+/** Ollama model tags use name:quant (e.g. qwen3.5:2b); cloud APIs use different IDs. */
+export function isLikelyOllamaModelName(model: string): boolean {
+  if (model.includes(":")) return true;
+  const lower = model.toLowerCase();
+  return /^(qwen|llama|mistral|phi|gemma|deepseek|codellama)/.test(lower);
+}
+
+function resolveEvalModel(provider: EvalProvider, baseUrl?: string): string {
+  const explicit = readEnv("EVAL_MODEL");
+  const defaultModel = DEFAULT_MODELS[provider];
+  if (!explicit) return defaultModel;
+  if (provider === "local" || isLocalEvalProvider(provider, baseUrl)) {
+    return explicit;
+  }
+  if (isLikelyOllamaModelName(explicit)) return defaultModel;
+  return explicit;
+}
+
+function resolveEvalBaseUrl(provider: EvalProvider): string | undefined {
+  const raw = readEnv("EVAL_BASE_URL");
+  if (provider === "local") {
+    return raw ?? DEFAULT_LOCAL_EVAL_BASE_URL;
+  }
+  // Anthropic/Gemini ignore base URL; OpenAI cloud only when not localhost.
+  if (provider === "anthropic" || provider === "gemini") {
+    return undefined;
+  }
+  if (raw && isLocalOpenAiBaseUrl(raw)) {
+    return raw;
+  }
+  return raw;
 }
 
 function isLocalOpenAiBaseUrl(baseUrl?: string): boolean {
@@ -172,12 +223,8 @@ export function getEvalConfig(): EvalConfig {
     ? process.env.EVAL_FILTER.split(",").map((s) => s.trim()).filter(Boolean)
     : [];
 
-  const defaultModel = DEFAULT_MODELS[provider];
-  const model = readEnv("EVAL_MODEL") || defaultModel;
-  const baseUrl =
-    provider === "local"
-      ? readEnv("EVAL_BASE_URL") ?? DEFAULT_LOCAL_EVAL_BASE_URL
-      : readEnv("EVAL_BASE_URL");
+  const baseUrl = resolveEvalBaseUrl(provider);
+  const model = resolveEvalModel(provider, baseUrl);
 
   return {
     provider,
@@ -197,6 +244,7 @@ export function getEvalConfig(): EvalConfig {
     resultsDir: new URL("./results", import.meta.url).pathname,
     concurrency: 3,
     filter,
+    suite: resolveEvalSuite(),
   };
 }
 
@@ -266,4 +314,49 @@ export function resolveRelaxedMode(provider: EvalProvider, baseUrl?: string): bo
   if (strict === "true" || strict === "1" || strict === "yes") return false;
   if (strict === "false" || strict === "0" || strict === "no") return true;
   return isLocalEvalProvider(provider, baseUrl);
+}
+
+/**
+ * Warn when .env still has local Ollama settings but a cloud provider was selected.
+ */
+export function getEvalConfigWarnings(config: EvalConfig): string[] {
+  const warnings: string[] = [];
+  const rawBase = readEnv("EVAL_BASE_URL");
+  const rawModel = readEnv("EVAL_MODEL");
+  const rawApiKey = readEnv("EVAL_API_KEY");
+
+  if (
+    (config.provider === "anthropic" || config.provider === "gemini") &&
+    rawBase &&
+    isLocalOpenAiBaseUrl(rawBase)
+  ) {
+    warnings.push(
+      `EVAL_BASE_URL=${rawBase} is ignored for EVAL_PROVIDER=${config.provider}. ` +
+        "Unset it in .env or use EVAL_PROVIDER=local for Ollama.",
+    );
+  }
+
+  if (
+    rawApiKey &&
+    isLocalPlaceholderApiKey(rawApiKey) &&
+    config.provider !== "local" &&
+    !isLocalEvalProvider(config.provider, rawBase)
+  ) {
+    const used = config.provider === "anthropic"
+      ? "ANTHROPIC_API_KEY"
+      : config.provider === "openai"
+        ? "OPENAI_API_KEY"
+        : "GEMINI_API_KEY";
+    warnings.push(
+      `EVAL_API_KEY=${rawApiKey} is for local Ollama only — using ${used} for EVAL_PROVIDER=${config.provider}.`,
+    );
+  }
+
+  if (rawModel && rawModel !== config.model && config.provider !== "local") {
+    warnings.push(
+      `EVAL_MODEL=${rawModel} looks like a local model — using ${config.model} for EVAL_PROVIDER=${config.provider}.`,
+    );
+  }
+
+  return warnings;
 }

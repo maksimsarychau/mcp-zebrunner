@@ -440,7 +440,33 @@ Four eval prompts verify LLM routing for opt-in compact/summary/batch reads (uni
 | `get_test_cases_by_suite_smart.summary` | 2 | Suite read with `detail=summary` |
 | `neg.confuse.batch_vs_single_fetch` | 2 | Batch tool chosen; `adv_get_test_case_by_key` forbidden |
 
-`detail` / `format` arg checks may be soft misses on small local models — use Anthropic/OpenAI for CI gates.
+`detail` / `format` arg checks may be soft misses on small local models — these four prompts live in the **cloud suite** (see below); run `npm run test:eval:cloud` with Claude before release.
+
+### Cloud tricky suite (`EVAL_SUITE=cloud`)
+
+**32 prompts** that need a capable model are listed in `tests/eval/eval-cloud-suite.ts`. Default `npm run test:eval` uses `EVAL_SUITE=default` and **skips** them so local Ollama runs exit cleanly on aggregate thresholds.
+
+| Group | Prompts | Why tricky |
+|-------|---------|------------|
+| Token-efficient reads | 4 | `detail`/`format` args; bulk vs `adv_list_test_suites` confusion |
+| Field-path filtering | 4 | Models invent non-existent filter tool names |
+| Ambiguous refusal | 3 | Plausible QA wording tempts a tool call |
+| Reports vs launches | 6 | `adv_generate_report` vs per-launch / platform tools |
+| TCM hierarchy | 7 | Root suite / hierarchy routing |
+| E2E metrics | 3 | Multi-tool chains |
+| Chart / analysis | 3 | Wrong analysis tool temptation |
+| Mutation | 2 | Complex arg shapes (`source_case_key`) |
+
+```bash
+# Release gate on Claude (strict per-prompt asserts)
+EVAL_PROVIDER=anthropic ANTHROPIC_API_KEY=... npm run test:eval:cloud
+
+# Layers 1+2 only (faster, no L3 judge)
+npm run test:eval:cloud:l2
+
+# Legacy: run entire catalog including tricky prompts
+EVAL_SUITE=all npm run test:eval
+```
 
 ### How Prompts Work
 
@@ -615,6 +641,7 @@ cost = (84 × 14,000 × $0.000003) + (8 × 17,000 × $0.000003)
 | `ZEBRUNNER_LOGIN` | Yes | — | Zebrunner login |
 | `ZEBRUNNER_TOKEN` | Yes | — | Zebrunner API token |
 | `EVAL_LAYER` | No | `3` | Maximum eval layer (1, 2, or 3) |
+| `EVAL_SUITE` | No | `default` | `default` (omit tricky prompts), `cloud` (tricky only), `all` (full catalog) |
 | `EVAL_FILTER` | No | — | Comma-separated prompt IDs to run |
 
 ### .env.example
@@ -638,9 +665,10 @@ EVAL_LAYER=1
 ### Known limits (local LLMs)
 
 - Use `EVAL_PROVIDER=local` (not `openai`) for Ollama — clearer intent and correct relaxed-mode defaults.
+- If `.env` has `EVAL_API_KEY=ollama` / `EVAL_MODEL=qwen3.5:2b` for local runs, override with `EVAL_PROVIDER=anthropic ANTHROPIC_API_KEY=...` on the command line — cloud provider keys and models take precedence over local placeholders.
 - Legacy `EVAL_PROVIDER=openai` + `EVAL_BASE_URL=http://localhost:11434/v1` still works.
 - Tool-calling quality depends on the model; prefer models with native tool support (`llama3.1`, `qwen2.5`, etc.).
-- Large tool catalog (~100 tools) may exceed context on small models — use `EVAL_FILTER` for targeted runs.
+- Large tool catalog (~100 tools) may exceed context on small models — use `EVAL_FILTER` or rely on `EVAL_SUITE=default` (tricky prompts excluded).
 - Layer 3 judge uses the same model as selection; small local models may score inconsistently vs Claude.
 - Cost report shows **$0** for `local` / localhost endpoints.
 
@@ -662,6 +690,10 @@ npm run test:eval:l2
 
 # Run all layers explicitly
 npm run test:eval:l3
+
+# Cloud tricky suite only (~32 prompts) — use Claude/GPT for release gating
+npm run test:eval:cloud
+npm run test:eval:cloud:l2
 ```
 
 ### What Happens During a Run

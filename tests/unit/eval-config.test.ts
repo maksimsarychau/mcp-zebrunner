@@ -137,4 +137,25 @@ describe("eval-config", () => {
     const { getEvalConfig } = await import("../eval/eval-config.js");
     assert.equal(getEvalConfig().relaxedMode, false);
   });
+
+  it("anthropic ignores EVAL_API_KEY=ollama when ANTHROPIC_API_KEY is set", async () => {
+    process.env.EVAL_PROVIDER = "anthropic";
+    process.env.EVAL_API_KEY = "ollama";
+    process.env.ANTHROPIC_API_KEY = "sk-ant-test";
+    process.env.EVAL_MODEL = "qwen3.5:2b";
+    process.env.EVAL_BASE_URL = "http://localhost:11434/v1";
+
+    const { getEvalConfig, getEvalConfigWarnings } = await import("../eval/eval-config.js");
+    const config = getEvalConfig();
+    assert.equal(config.apiKey, "sk-ant-test");
+    assert.equal(config.model, "claude-sonnet-4-6");
+    assert.equal(config.baseUrl, undefined);
+    assert.ok(getEvalConfigWarnings(config).length >= 2);
+  });
+
+  it("isLikelyOllamaModelName detects tagged local models", async () => {
+    const { isLikelyOllamaModelName } = await import("../eval/eval-config.js");
+    assert.equal(isLikelyOllamaModelName("qwen3.5:2b"), true);
+    assert.equal(isLikelyOllamaModelName("claude-sonnet-4-6"), false);
+  });
 });

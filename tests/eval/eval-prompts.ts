@@ -341,7 +341,7 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
     id: "get_all_tcm_test_cases_with_root_suite_id.enriched",
     toolSection: "1. TCM",
     promptTemplate:
-      "Get all test cases in the {{project_key}} project, and for each one, include which root suite it belongs to.",
+      "Use adv_get_all_tcm_test_cases_with_root_suite_id for the {{project_key}} project. Each test case must include rootSuiteId (root suite hierarchy). Do not use adv_get_all_tcm_test_cases_by_project.",
     expectedTools: [ "adv_get_all_tcm_test_cases_with_root_suite_id"],
     expectedArgKeys: ["project_key"],
     category: "tcm",
@@ -385,7 +385,7 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
     id: "get_all_tcm_test_cases_by_project.compact_summary",
     toolSection: "1. TCM",
     promptTemplate:
-      "List test cases in the {{project_key}} project with summary fields only (not full bodies). Use compact JSON format.",
+      "Use adv_get_all_tcm_test_cases_by_project for the {{project_key}} project. Set detail=summary (not full bodies) and format=compact for token-efficient JSON. Do not use adv_list_test_suites.",
     expectedTools: ["adv_get_all_tcm_test_cases_by_project"],
     expectedArgKeys: ["project_key", "detail", "format"],
     category: "tcm",
@@ -396,7 +396,7 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
     id: "get_test_cases_by_suite_smart.summary",
     toolSection: "1. TCM",
     promptTemplate:
-      "Get test cases in suite {{suite_id}} of the {{project_key}} project as a shortlist with summary detail only — I will fetch full bodies later for selected keys.",
+      "Use adv_get_test_cases_by_suite_smart for suite {{suite_id}} in {{project_key}} with detail=summary (shortlist only, no full step bodies).",
     expectedTools: ["adv_get_test_cases_by_suite_smart"],
     expectedArgKeys: ["project_key", "suite_id", "detail"],
     category: "tcm",
@@ -1209,7 +1209,8 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
   {
     id: "neg.ambig.fix_failures",
     toolSection: "Negative",
-    promptTemplate: "Delete all the failing tests and redeploy the application to staging.",
+    promptTemplate:
+      "You only have Zebrunner MCP tools (test management). Delete all failing tests from our repo and redeploy the app to staging — neither is possible via MCP. Do not call any tool; say what is missing.",
     expectedTools: [],
     category: "negative",
     layer: 1,

@@ -2,28 +2,73 @@
 
 ## v9.2.0 — Token/cost optimization (opt-in)
 
-> Re-implements selected ideas from PR #84 on master without flipping defaults.
+> Re-implements selected ideas from PR #84 on master without flipping defaults.  
+> **Compact mode guide:** [docs/TOKEN_EFFICIENCY.md](docs/TOKEN_EFFICIENCY.md)
+
+### Highlights
+
+- **`format: compact`** — minified JSON on TCM reads and launch listings (~15–25% smaller than pretty `json`).
+- **`detail: summary`** — bulk lists return id/key/title/priority/automationState/webUrl; fetch full bodies with `adv_get_test_case_by_key` before mutations.
+- **`adv_batch_get_test_cases`** — up to 50 keys/call, partial success (`notFound[]`), defaults `detail=summary` + `format=compact`.
+- **`adv_generate_report` `inline: false`** — write HTML/PNG to disk (`<tmpdir>/zebrunner-reports/` or `output_dir`).
+- **Defaults unchanged** — `format=json`, `detail=full`, `max_results=5000`, suite-smart `get_all=true`, reports `inline=true`.
 
 ### Added
 
 - **`adv_batch_get_test_cases`** — Fetch up to 50 keys in one call with partial success (`notFound[]`), concurrency cap, default `detail=summary` + `format=compact`.
-- **`format: compact`** — Minified JSON on TCM read tools (`json` stays pretty-printed).
+- **`format: compact`** — Minified JSON on TCM read tools (`json` stays pretty-printed default).
 - **`detail` / `fields` projection** — Opt-in on `adv_list_test_suites`, `adv_get_test_case_by_key`, `adv_get_test_cases_by_suite_smart`, `adv_get_all_tcm_test_cases_by_project` (`include_root_suite` flag on bulk dump).
 - **`adv_generate_report` `inline` flag** — Default `true`; `inline=false` writes HTML/PNG to `<tmpdir>/zebrunner-reports/` (or `output_dir`).
 - **Launch listing `format: compact`** — Minified JSON on `adv_get_all_launches_for_project` / `adv_get_all_launches_with_filter`.
 - **Env flags (off by default):** `MCP_COMPACT_DEFAULTS`, `MCP_SUMMARY_DEFAULTS` — wired for future default flips after eval.
+- **Eval cloud suite** — `npm run test:eval:cloud` (32 tricky prompts, Claude gate); `EVAL_SUITE=default|cloud|all`.
+- **Docs:** [docs/TOKEN_EFFICIENCY.md](docs/TOKEN_EFFICIENCY.md).
 
 ### Changed
 
 - **Duplicate analysis JSON caps** — `format=json|dto` caps clusters to top 20, replaces `steps` with `stepCount`, matrix opt-in.
 - **Soft response-size notices** — ~800 KB `_notice` on large bulk reads suggesting `detail=summary`, `count_only`, or lower `max_results`.
 - **stderr telemetry** — `[telemetry] tool=… responseBytes=… approxTokens=…` per tool call.
-- Version **9.2.0** — **64 tools**, 14 resources, 17 prompts (unchanged resource/prompt counts).
+- **`adv_*` canonical naming** — public docs, `tools.json`, resources, prompts; legacy short names deprecated (`ZEBRUNNER_REGISTER_LEGACY_ALIASES=true`).
+- **Eval config** — cloud API keys win over `EVAL_API_KEY=ollama`; Ollama model names ignored for `EVAL_PROVIDER=anthropic`.
+- Version **9.2.0** — **64 tools**, 14 resources, 17 prompts.
 
 ### Intentionally unchanged (until eval)
 
 - `format` default remains `json`; `max_results` remains 5000; `get_all` remains `true` on suite smart; `adv_generate_report` inline default `true`.
 - No tool merges/deprecations (`adv_get_all_tcm_test_cases_with_root_suite_id`, `adv_get_test_cases_advanced`).
+
+### Upgrade checklist
+
+1. Pull / install `mcp-zebrunner@9.2.0` (npm, Docker, or `dist/` build).
+2. **No breaking changes** if you do nothing — defaults match v9.1.x.
+3. Teach assistants the compact workflow — [docs/TOKEN_EFFICIENCY.md](docs/TOKEN_EFFICIENCY.md).
+4. Use `adv_*` tool names when both official and Advanced MCP are connected.
+5. Optional: `EVAL_PROVIDER=anthropic npm run test:eval:cloud` before enabling `MCP_COMPACT_DEFAULTS` / `MCP_SUMMARY_DEFAULTS`.
+
+### Compact mode (quick examples)
+
+```text
+# Shortlist → full body
+adv_get_all_tcm_test_cases_by_project { project_key, detail: "summary", format: "compact" }
+adv_get_test_case_by_key { case_key }   # full steps before mutate
+
+# Batch keys
+adv_batch_get_test_cases { project_key, case_keys: ["MCP-1","MCP-2"], detail: "summary", format: "compact" }
+
+# Large dashboard off-chat
+adv_generate_report { report_types: ["executive_dashboard"], projects: [project_key], inline: false }
+```
+
+### Documentation
+
+- [docs/TOKEN_EFFICIENCY.md](docs/TOKEN_EFFICIENCY.md) — compact/summary/batch workflow and tool matrix.
+- [README.md](README.md) — token-efficient reads section + link to guide.
+- [TOOLS_CATALOG.md](TOOLS_CATALOG.md) — `adv_batch_get_test_cases`, compact/detail params.
+- [docs/EVALUATION_FRAMEWORK.md](docs/EVALUATION_FRAMEWORK.md) — cloud eval suite, token-efficient prompts.
+- [docs/RESOURCES_AND_PROMPTS.md](docs/RESOURCES_AND_PROMPTS.md) — `zebrunner://formats` (`compact` in data family).
+
+> Extended GitHub release draft: maintain locally under `docs/releases/` (gitignored).
 
 ---
 

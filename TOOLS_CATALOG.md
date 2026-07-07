@@ -2,7 +2,7 @@
 
 Complete reference of all available tools with natural language usage examples.
 
-> **v9.2.0:** Token/cost optimization — `adv_batch_get_test_cases`, `format:compact`, `detail:summary`, `adv_generate_report` `inline:false`. Defaults unchanged; see [change-logs.md](change-logs.md).
+> **v9.2.0:** Token/cost optimization — `adv_batch_get_test_cases`, `format:compact`, `detail:summary`, `adv_generate_report` `inline:false`. Defaults unchanged. See [docs/TOKEN_EFFICIENCY.md](docs/TOKEN_EFFICIENCY.md) and [change-logs.md](change-logs.md).
 
 > **v9.1.0:** New launch mutation tools — [`adv_rerun_launch_failures`](#adv_rerun_launch_failures), [`adv_start_launch`](#adv_start_launch), and [`adv_get_launch_details`](#adv_get_launch_details) (`includeJobParameters`). See [GitHub Release v9.1.0](https://github.com/maksimsarychau/mcp-zebrunner/releases/tag/v9.1.0).
 

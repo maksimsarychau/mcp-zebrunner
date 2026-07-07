@@ -89,7 +89,7 @@
   },
   {
     "name": "adv_get_all_tcm_test_cases_with_root_suite_id",
-    "description": "Get all test cases under a specific root suite"
+    "description": "Get all test cases for a project, enriched with rootSuiteId per case (hierarchy). Not the same as adv_get_all_tcm_test_cases_by_project."
   },
   {
     "name": "adv_get_automation_priorities",
