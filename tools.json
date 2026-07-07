@@ -1,7 +1,7 @@
 [
   {
     "name": "adv_about_mcp_tools",
-    "description": "Summarize all MCP tools or show detailed info for a specific tool with examples and approximate token usage"
+    "description": "Discover Zebrunner MCP capabilities — tools, prompts, resources, routing diff, and session metrics (format/detail breakdown, optional metrics_reset). Per-call timing via include_call_metrics on any tool."
   },
   {
     "name": "adv_aggregate_test_cases_by_feature",

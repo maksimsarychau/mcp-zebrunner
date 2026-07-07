@@ -145,7 +145,7 @@ Documents 5 format parameter families used across tools, with valid values per f
 | Family | Values | Used By |
 |--------|--------|---------|
 | data | `dto`, `json`, `compact`, `string`, `markdown` | TCM tools (test cases, suites) |
-| data_simple | `dto`, `json`, `string` | 6 tools |
+| data_simple | `dto`, `json`, `string` | 5 tools |
 | raw_formatted | `raw`, `formatted`, `compact` | Launch listing tools |
 | verbosity | `detailed`, `summary`, `jira` | 3 failure tools |
 | metadata | `json`, `markdown` | 2 tools |

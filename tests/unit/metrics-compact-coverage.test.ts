@@ -21,9 +21,9 @@ describe("metrics and compact handler coverage", () => {
   const source = readServerSource();
 
   it("registerTool wrapper injects include_call_metrics on all tools", () => {
-    assert.match(source, /withCallMetricsSchema\(config\.inputSchema\)/);
+    assert.match(source, /withCallMetricsSchema\(config\.inputSchema \?\? \{\}\)/);
     const registerCalls = source.match(/server\.registerTool\(/g)?.length ?? 0;
-    const withMetricsCalls = source.match(/withCallMetricsSchema\(config\.inputSchema\)/g)?.length ?? 0;
+    const withMetricsCalls = source.match(/withCallMetricsSchema\(config\.inputSchema \?\? \{\}\)/g)?.length ?? 0;
     assert.ok(registerCalls >= 64, "expected at least 64 registerTool calls");
     assert.equal(withMetricsCalls, 2, "advanced + legacy registerTool wrappers should each call withCallMetricsSchema");
   });

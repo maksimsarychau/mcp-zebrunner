@@ -254,18 +254,20 @@ describe("wrapToolHandler()", () => {
     }
   });
 
-  it("should record format and detail dimensions", async () => {
+  it("should append footer with bulk row metrics from _mcpBulkMetrics", async () => {
     const metrics = new ToolMetrics();
     const handler = async () => ({
-      content: [{ type: "text" as const, text: "x" }],
+      content: [{ type: "text" as const, text: "payload" }],
+      _mcpBulkMetrics: { rowsReturned: 150, wasTruncated: true },
     });
 
-    const wrapped = wrapToolHandler("dim_tool", handler, metrics);
-    await wrapped({ format: "compact", detail: "summary" });
+    const wrapped = wrapToolHandler("bulk_tool", handler, metrics);
+    const result = await wrapped({ include_call_metrics: true, format: "compact", detail: "summary" });
 
-    const row = metrics.getBreakdownStats()[0];
-    assert.equal(row.tool, "dim_tool");
-    assert.equal(row.format, "compact");
-    assert.equal(row.detail, "summary");
+    assert.ok(result.content[0].text.includes("_mcp_metrics:"));
+    assert.ok(result.content[0].text.includes('"rowsReturned":150'));
+    assert.ok(result.content[0].text.includes('"wasTruncated":true'));
+    assert.ok(result.content[0].text.includes('"bytesPerRow"'));
+    assert.equal((result as { _mcpBulkMetrics?: unknown })._mcpBulkMetrics, undefined);
   });
 });

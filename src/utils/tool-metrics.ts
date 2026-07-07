@@ -226,8 +226,23 @@ export function wrapToolHandler<T extends (...args: any[]) => any>(
       /* telemetry must never break a response */
     }
 
+    const bulkMetrics = result?._mcpBulkMetrics as
+      | { rowsReturned: number; wasTruncated: boolean }
+      | undefined;
+    if (bulkMetrics && result && typeof result === "object") {
+      const { _mcpBulkMetrics: _, ...rest } = result;
+      result = rest;
+    }
+
     if (includeCallMetrics && result) {
-      const payload = buildCallMetricsPayload(name, durationMs, responseChars, format, detail);
+      const payload = buildCallMetricsPayload(
+        name,
+        durationMs,
+        responseChars,
+        format,
+        detail,
+        bulkMetrics,
+      );
       const footer = formatCallMetricsFooter(payload);
       result = appendCallMetricsFooter(result, footer);
     }

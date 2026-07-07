@@ -269,7 +269,7 @@ export function buildFormatReferenceContent(): object {
         name: "data",
         values: ["dto", "json", "compact", "string", "markdown"],
         description: "Full data format for TCM tools (test cases, suites, hierarchy). compact = minified JSON.",
-        tools_count: 31,
+        tools_count: 21,
         default: "json",
         env_flags: { MCP_COMPACT_DEFAULTS: "When true, default becomes compact instead of json" },
         tips: "Use detail=summary with compact for token-efficient list/filter reads; adv_get_test_case_by_key for full body",
@@ -278,7 +278,7 @@ export function buildFormatReferenceContent(): object {
         name: "data_simple",
         values: ["dto", "json", "string"],
         description: "Data format without markdown option (execution history, test run cases)",
-        tools_count: 6,
+        tools_count: 5,
         default: "json",
       },
       {

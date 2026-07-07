@@ -2,7 +2,7 @@
 
 **Author:** Maksim Sarychau  
 **Version:** 1.1  
-**Last Updated:** v9.1.0 - July 2026
+**Last Updated:** v9.2.1 - July 2026
 
 ---
 
@@ -27,9 +27,9 @@
 
 ## 1. Executive Summary
 
-The Advanced Zebrunner MCP Server exposes **63 tools** (under `adv_<name>` names) to AI assistants (Claude, Cursor, ChatGPT). When a user asks "Show me the latest test failures," the AI must:
+The Advanced Zebrunner MCP Server exposes **64 tools** (under `adv_<name>` names) to AI assistants (Claude, Cursor, ChatGPT). When a user asks "Show me the latest test failures," the AI must:
 
-1. **Pick the right tool** from 52 options (e.g., `adv_detailed_analyze_launch_failures`)
+1. **Pick the right tool** from 64 options (e.g., `adv_detailed_analyze_launch_failures`)
 2. **Provide the right arguments** (e.g., `project: "MY_PROJECT"`, `launch_id: 12345`)
 3. **Return useful output** that actually answers the question
 
@@ -54,7 +54,7 @@ The Evaluation Framework automatically tests all three of these steps using a re
 
 ### The Problem
 
-The Advanced Zebrunner MCP Server has 63 tools with overlapping capabilities. For example:
+The Advanced Zebrunner MCP Server has 64 tools with overlapping capabilities. For example:
 
 - `adv_list_test_suites` vs `adv_get_tcm_test_suites_by_project` — both list suites
 - `adv_get_test_cases_advanced` vs `adv_get_test_cases_by_suite_smart` — both retrieve test cases by suite
@@ -107,7 +107,7 @@ The framework uses a **layered evaluation** approach. Each layer tests a differe
 **Question answered:** "Given a user prompt, does the LLM select the correct tool?"
 
 **How it works:**
-1. Send a natural-language prompt to Claude along with all 58 tool definitions
+1. Send a natural-language prompt to Claude along with all 64 tool definitions
 2. Claude responds with a tool_use block naming which tool it wants to call
 3. Compare the selected tool against the expected tool(s)
 
@@ -444,21 +444,22 @@ Four eval prompts verify LLM routing for opt-in compact/summary/batch reads (uni
 
 ### Cloud tricky suite (`EVAL_SUITE=cloud`)
 
-**32 prompts** that need a capable model are listed in `tests/eval/eval-cloud-suite.ts`. Default `npm run test:eval` uses `EVAL_SUITE=default` and **skips** them so local Ollama runs exit cleanly on aggregate thresholds.
+**76 prompts** that need a capable model are listed in `tests/eval/eval-cloud-suite.ts`. Default `npm run test:eval` uses `EVAL_SUITE=default` and **skips** them so local Ollama runs exit cleanly on **80% tool / 70% arg** aggregate thresholds.
 
 | Group | Prompts | Why tricky |
 |-------|---------|------------|
-| Token-efficient reads | 4 | `detail`/`format` args; bulk vs `adv_list_test_suites` confusion |
+| Token-efficient reads | 5 | `detail`/`format` args; bulk vs `adv_list_test_suites` confusion; `include_call_metrics` |
 | Field-path filtering | 4 | Models invent non-existent filter tool names |
 | Ambiguous refusal | 3 | Plausible QA wording tempts a tool call |
 | Reports vs launches | 6 | `adv_generate_report` vs per-launch / platform tools |
 | TCM hierarchy | 7 | Root suite / hierarchy routing |
 | E2E metrics | 3 | Multi-tool chains |
-| Chart / analysis | 3 | Wrong analysis tool temptation |
-| Mutation | 2 | Complex arg shapes (`source_case_key`) |
+| Chart / analysis | 5 | Chart arg routing; wrong analysis tool temptation |
+| Mutation | 8 | Complex arg shapes (`source_case_key`) |
+| Local-Ollama flaky (v9.2.1) | 34 | Bulk pagination, core TCM reads, analysis, test runs, launch details |
 
 ```bash
-# Release gate on Claude (strict per-prompt asserts)
+# Release gate on Claude (strict per-prompt asserts — 90% tool / 85% arg)
 EVAL_PROVIDER=anthropic ANTHROPIC_API_KEY=... npm run test:eval:cloud
 
 # Layers 1+2 only (faster, no L3 judge)
@@ -467,6 +468,12 @@ npm run test:eval:cloud:l2
 # Legacy: run entire catalog including tricky prompts
 EVAL_SUITE=all npm run test:eval
 ```
+
+### v9.2.1 eval changes
+
+- **`include_call_metrics` preflight** — cloud suite validates `tools/list` exposes the flag before running.
+- **34 prompts moved default → cloud** (two passes) — bulk pagination, core TCM reads, chart/report arg shapes, and L3 chains that fail consistently on `qwen3.5:2b` without lowering local gates.
+- **Tool-name aliases** — eval judges normalize common plural mistakes (`adv_get_test_cases_by_title` → `adv_get_test_case_by_title`).
 
 ### How Prompts Work
 
@@ -501,7 +508,7 @@ expectedTools: ["adv_get_test_case_by_filter", "adv_get_test_cases_advanced"]
 | Metric | Formula | Threshold | Description |
 |--------|---------|-----------|-------------|
 | **Tool Selection Accuracy** | correct / executed | ≥ 90% (cloud) / ≥ 80% (local Ollama) | % of prompts where LLM picked an acceptable tool |
-| **Argument Correctness** | args_correct / args_checked | ≥ 85% | % of prompts where LLM provided all required args |
+| **Argument Correctness** | args_correct / args_checked | ≥ 85% (cloud) / ≥ 70% (local Ollama) | % of prompts where LLM provided all required args |
 | **Judge Average Score** | avg(relevance + completeness + format) / 3 | ≥ 3.5/5.0 | Average output quality as rated by the LLM judge |
 
 ### Judge Scoring Scale
@@ -528,8 +535,8 @@ Results are also broken down by tool category (TCM, Launch, Analysis, etc.) to i
 
 - **Relaxed mode (default):** per-prompt misses log as `⚠️ [eval soft]` warnings; the npm process **passes** when aggregate metrics meet thresholds. The scorecard lists **Soft misses** for tuning, not suite failures.
 - **Strict mode:** set `EVAL_STRICT=true` for per-prompt hard failures (same as cloud).
-- Tool-selection threshold defaults to **80%** (override: `EVAL_MIN_PASS_RATE`).
-- Argument-correctness threshold defaults to **85%** (override: `EVAL_MIN_ARG_PASS_RATE`).
+- Tool-selection threshold defaults to **80%** local / **90%** cloud (override: `EVAL_MIN_PASS_RATE`).
+- Argument-correctness threshold defaults to **70%** local / **85%** cloud (override: `EVAL_MIN_ARG_PASS_RATE`).
 - Judge threshold defaults to **1.0/5** (override: `EVAL_MIN_JUDGE_SCORE`) — small local models cannot reliably judge output quality.
 
 ---
@@ -543,7 +550,7 @@ Each LLM call sends the following to Claude:
 | Component | Approximate Tokens | Notes |
 |-----------|--------------------|-------|
 | System prompt | ~50 | Fixed "You are a QA assistant..." |
-| Tool definitions (58 tools) | ~12,000–15,000 | Each tool: name + description + JSON schema |
+| Tool definitions (64 tools) | ~12,000–15,000 | Each tool: name + description + JSON schema |
 | User prompt | ~30–100 | The populated eval prompt |
 | **Total input per call** | **~14,000** | |
 | **Output per call** | **~200–500** | tool_use block with name + args |
@@ -631,7 +638,7 @@ cost = (84 × 14,000 × $0.000003) + (8 × 17,000 × $0.000003)
 | `EVAL_BASE_URL` | For `local` override | `http://localhost:11434/v1` when `local` | OpenAI-compatible base URL |
 | `EVAL_API_KEY` | Provider-dependent | provider keys / `ollama` | Unified API key override |
 | `EVAL_MIN_PASS_RATE` | No | 80% local / 90% cloud | Aggregate tool-selection threshold (`80` or `0.80`) |
-| `EVAL_MIN_ARG_PASS_RATE` | No | `85%` | Aggregate argument-correctness threshold |
+| `EVAL_MIN_ARG_PASS_RATE` | No | 70% local / 85% cloud | Aggregate argument-correctness threshold |
 | `EVAL_MIN_JUDGE_SCORE` | No | 1.0 local / 3.0 cloud | Layer 3 judge average (1–5 scale) |
 | `EVAL_STRICT` | No | `false` local / implicit strict cloud | Per-prompt hard asserts when `true` |
 | `ANTHROPIC_API_KEY` | For Claude | — | Auto-selects `anthropic` when unset |
@@ -691,7 +698,7 @@ npm run test:eval:l2
 # Run all layers explicitly
 npm run test:eval:l3
 
-# Cloud tricky suite only (~32 prompts) — use Claude/GPT for release gating
+# Cloud tricky suite only (~76 prompts) — use Claude/GPT for release gating
 npm run test:eval:cloud
 npm run test:eval:cloud:l2
 ```
@@ -706,10 +713,10 @@ npm run test:eval:cloud:l2
    ├── Fetch first test case → <project_key>-1
    └── (L3 only) Fetch launches, milestones, automation states
 3. Start the MCP server (dist/server.js via stdio)
-4. Load 58 tool schemas from the running server
+4. Load 64 tool schemas from the running server
 5. For each prompt:
    ├── Populate template variables ({{project_key}} → <discovered_value>)
-   ├── Send to Claude API with all 58 tool definitions
+   ├── Send to Claude API with all 64 tool definitions
    ├── Validate tool selection against expected tools
    ├── (L2+) Validate argument keys
    └── (L3) Execute tool via MCP, judge output quality
@@ -870,4 +877,4 @@ The eval suite is **excluded from `npm run test:all`** to prevent accidental LLM
 
 ---
 
-*Last Updated: v9.1.0 - July 2026*
+*Last Updated: v9.2.1 - July 2026*

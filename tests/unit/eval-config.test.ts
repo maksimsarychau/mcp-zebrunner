@@ -91,7 +91,7 @@ describe("eval-config", () => {
     assert.equal(isLocalEvalEndpoint(config), true);
   });
 
-  it("uses 80% tool-selection threshold for local Ollama by default", async () => {
+  it("uses 80% tool-selection and 70% arg thresholds for local Ollama by default", async () => {
     process.env.EVAL_PROVIDER = "openai";
     process.env.EVAL_BASE_URL = "http://localhost:11434/v1";
     process.env.EVAL_MODEL = "qwen3.5:2b";
@@ -99,6 +99,7 @@ describe("eval-config", () => {
     const { getEvalConfig } = await import("../eval/eval-config.js");
     const config = getEvalConfig();
     assert.equal(config.thresholds.toolSelectionAccuracy, 0.8);
+    assert.equal(config.thresholds.argCorrectness, 0.7);
   });
 
   it("EVAL_MIN_PASS_RATE overrides local and cloud defaults", async () => {

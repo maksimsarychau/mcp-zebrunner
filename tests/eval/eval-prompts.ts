@@ -407,7 +407,9 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
     id: "get_all_tcm_test_cases_by_project.with_call_metrics",
     toolSection: "1. TCM",
     promptTemplate:
-      "Use adv_get_all_tcm_test_cases_by_project for {{project_key}} with detail=summary, format=compact, and include_call_metrics=true so the response includes an _mcp_metrics footer.",
+      "Call adv_get_all_tcm_test_cases_by_project for the {{project_key}} project with these tool arguments: " +
+      "detail=\"summary\", format=\"compact\", and include_call_metrics=true (required boolean — appends _mcp_metrics footer). " +
+      "Do not omit include_call_metrics.",
     expectedTools: ["adv_get_all_tcm_test_cases_by_project"],
     expectedArgKeys: ["project_key", "detail", "format", "include_call_metrics"],
     category: "tcm",

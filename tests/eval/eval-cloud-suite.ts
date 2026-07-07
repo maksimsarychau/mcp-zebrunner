@@ -56,8 +56,53 @@ const CLOUD_EVAL_PROMPT_IDS = [
   "neg.confuse.flaky_vs_history",
 
   // Mutation — complex arg shapes and source_case_key routing
+  "mut.create_tc.preview",
   "mut.create_tc.source_copy",
   "mut.update_tc.priority",
+  "mut.create_suite.preview",
+  "mut.update_tc.description",
+  "mut.manage_run.update",
+  "mut.manage_run.add_cases",
+  "mut.import_results.basic",
+  "mut.import_results.filtered",
+
+  // Local Ollama flaky — bulk/pagination, disambiguation, charts, reports, L3
+  "list_test_suites.count",
+  "get_test_cases_advanced.excluding_deprecated",
+  "get_tcm_test_suites_by_project.paginated",
+  "get_all_tcm_test_case_suites_by_project.all",
+  "get_all_tcm_test_cases_by_project.full_export",
+  "get_test_cases_by_suite_smart.auto_detect",
+  "get_all_launches_with_filter.by_milestone",
+  "get_test_coverage_by_steps.full",
+  "chart.launches_stacked_bar",
+  "chart.execution_history_line",
+  "report.custom_targets",
+  "report.coverage_exclude_patterns",
+  "get_launch_summary.quick",
+  "get_test_execution_history.trend",
+
+  // Additional local-Ollama flaky (v9.2.1 pass 2) — core TCM reads, analysis, test runs
+  "list_test_suites.basic",
+  "get_test_case_by_key.full",
+  "get_test_case_by_key.markdown",
+  "get_all_subsuites.flat",
+  "get_test_cases_advanced.by_suite",
+  "get_test_cases_by_automation_state.automated",
+  "get_automation_states.list",
+  "get_test_case_by_title.search",
+  "get_test_case_by_filter.date_range",
+  "get_automation_priorities.list",
+  "get_tcm_suite_by_id.find",
+  "get_root_id_by_suite_id.resolve",
+  "improve_test_case.auto",
+  "generate_draft_test_by_key.auto",
+  "get_enhanced_test_coverage_with_rules.validate",
+  "mut.update_suite.rename",
+  "mut.manage_run.create",
+  "get_launch_details.full",
+  "get_test_run_by_id.details",
+  "list_test_run_test_cases.cases",
 ] as const;
 
 export type CloudEvalPromptId = (typeof CLOUD_EVAL_PROMPT_IDS)[number];

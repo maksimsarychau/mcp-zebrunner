@@ -166,6 +166,14 @@ describe("Format Reference Resource Content", () => {
     assert.equal(content.format_families.length, 5);
   });
 
+  it("format family tools_count matches server format enums", () => {
+    const byName = Object.fromEntries(content.format_families.map((f: any) => [f.name, f]));
+    assert.equal(byName.data.tools_count, 21);
+    assert.equal(byName.data_simple.tools_count, 5);
+    assert.equal(byName.raw_formatted.tools_count, 9);
+    assert.equal(byName.metadata.tools_count, 2);
+  });
+
   it("each family has required fields", () => {
     for (const family of content.format_families) {
       assert.ok(family.name, "family missing name");

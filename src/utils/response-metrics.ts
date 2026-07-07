@@ -7,11 +7,20 @@ export interface CallMetricsPayload {
   approxTokens: number;
   format: string;
   detail: string;
+  /** Present when bulk handler attached _mcpBulkMetrics (include_call_metrics). */
+  rowsReturned?: number;
+  wasTruncated?: boolean;
+  bytesPerRow?: number;
 }
 
 export function normalizeMetricDimension(value: unknown): string {
   if (value === undefined || value === null || value === "") return "-";
   return String(value);
+}
+
+export interface BulkMetricsExtras {
+  rowsReturned?: number;
+  wasTruncated?: boolean;
 }
 
 export function buildCallMetricsPayload(
@@ -20,8 +29,9 @@ export function buildCallMetricsPayload(
   responseChars: number,
   format?: unknown,
   detail?: unknown,
+  bulk?: BulkMetricsExtras,
 ): CallMetricsPayload {
-  return {
+  const payload: CallMetricsPayload = {
     tool,
     durationMs,
     responseChars,
@@ -29,6 +39,14 @@ export function buildCallMetricsPayload(
     format: normalizeMetricDimension(format),
     detail: normalizeMetricDimension(detail),
   };
+  if (bulk?.rowsReturned !== undefined) {
+    payload.rowsReturned = bulk.rowsReturned;
+    payload.wasTruncated = bulk.wasTruncated ?? false;
+    if (bulk.rowsReturned > 0) {
+      payload.bytesPerRow = Math.round(responseChars / bulk.rowsReturned);
+    }
+  }
+  return payload;
 }
 
 export function formatCallMetricsFooter(payload: CallMetricsPayload): string {

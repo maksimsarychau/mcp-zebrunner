@@ -36,6 +36,20 @@ describe("response-metrics", () => {
         detail: "summary",
       });
     });
+
+    it("should add bulk row metrics when provided", () => {
+      const payload = buildCallMetricsPayload(
+        "adv_get_all_tcm_test_cases_by_project",
+        500,
+        8000,
+        "compact",
+        "summary",
+        { rowsReturned: 200, wasTruncated: true },
+      );
+      assert.equal(payload.rowsReturned, 200);
+      assert.equal(payload.wasTruncated, true);
+      assert.equal(payload.bytesPerRow, 40);
+    });
   });
 
   describe("formatCallMetricsFooter()", () => {

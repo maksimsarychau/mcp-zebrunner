@@ -5,6 +5,7 @@ import {
   isCompactDefaultsEnabled,
   isInlineMetricsEnabled,
   isSummaryDefaultsEnabled,
+  defaultMaxResults,
 } from "../../src/utils/mcp-output-flags.js";
 
 describe("mcp-output-flags", () => {
@@ -12,12 +13,14 @@ describe("mcp-output-flags", () => {
     compact: process.env.MCP_COMPACT_DEFAULTS,
     summary: process.env.MCP_SUMMARY_DEFAULTS,
     inline: process.env.MCP_INLINE_METRICS,
+    maxResults: process.env.MCP_MAX_RESULTS,
   };
 
   beforeEach(() => {
     delete process.env.MCP_COMPACT_DEFAULTS;
     delete process.env.MCP_SUMMARY_DEFAULTS;
     delete process.env.MCP_INLINE_METRICS;
+    delete process.env.MCP_MAX_RESULTS;
   });
 
   afterEach(() => {
@@ -27,6 +30,8 @@ describe("mcp-output-flags", () => {
     else process.env.MCP_SUMMARY_DEFAULTS = prev.summary;
     if (prev.inline === undefined) delete process.env.MCP_INLINE_METRICS;
     else process.env.MCP_INLINE_METRICS = prev.inline;
+    if (prev.maxResults === undefined) delete process.env.MCP_MAX_RESULTS;
+    else process.env.MCP_MAX_RESULTS = prev.maxResults;
   });
 
   it("isInlineMetricsEnabled is false by default", () => {
@@ -53,5 +58,25 @@ describe("mcp-output-flags", () => {
     assert.equal(isSummaryDefaultsEnabled(), false);
     process.env.MCP_SUMMARY_DEFAULTS = "true";
     assert.equal(isSummaryDefaultsEnabled(), true);
+  });
+
+  describe("defaultMaxResults()", () => {
+    it("returns schema fallback when MCP_MAX_RESULTS unset", () => {
+      assert.equal(defaultMaxResults(5000), 5000);
+      assert.equal(defaultMaxResults(500), 500);
+    });
+
+    it("returns env value when positive integer", () => {
+      process.env.MCP_MAX_RESULTS = "200";
+      assert.equal(defaultMaxResults(5000), 200);
+      assert.equal(defaultMaxResults(500), 200);
+    });
+
+    it("falls back on invalid env", () => {
+      process.env.MCP_MAX_RESULTS = "0";
+      assert.equal(defaultMaxResults(5000), 5000);
+      process.env.MCP_MAX_RESULTS = "nope";
+      assert.equal(defaultMaxResults(500), 500);
+    });
   });
 });

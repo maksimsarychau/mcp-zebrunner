@@ -11,8 +11,13 @@ import { EnhancedZebrunnerClient } from "./api/enhanced-client.js";
 import { ZebrunnerReportingClient, type FieldsLayout } from "./api/reporting-client.js";
 import { ZebrunnerReportingToolHandlers } from "./handlers/reporting-tools.js";
 import { ReportHandler } from "./handlers/report-handler.js";
-import { FormatProcessor, projectTestCases, projectSuites } from "./utils/formatter.js";
-import { defaultDataFormat, defaultDetailLevel } from "./utils/mcp-output-flags.js";
+import { FormatProcessor, projectTestCases, projectSuites, serializeFormattedOutput } from "./utils/formatter.js";
+import { defaultDataFormat, defaultDetailLevel, defaultMaxResults } from "./utils/mcp-output-flags.js";
+import {
+  MAX_RESPONSE_BYTES,
+  attachBulkMetrics,
+  truncateBulkItems,
+} from "./utils/bulk-truncation.js";
 import { appendResponseSizeNotice } from "./utils/response-size.js";
 import { capDuplicateAnalysisJson } from "./utils/duplicate-json-cap.js";
 import { mapWithConcurrency } from "./utils/batch-concurrency.js";
@@ -1095,9 +1100,7 @@ function createConfiguredServer(): McpServer {
     const advancedConfig = {
       ...config,
       description: `${ADV_DESC_PREFIX}${baseDescription}`,
-      inputSchema: config.inputSchema
-        ? withCallMetricsSchema(config.inputSchema)
-        : config.inputSchema,
+      inputSchema: withCallMetricsSchema(config.inputSchema ?? {}),
     };
 
     const primaryResult = origRegisterTool(
@@ -1113,9 +1116,7 @@ function createConfiguredServer(): McpServer {
     const legacyConfig = {
       ...config,
       description: `[deprecated alias — use ${advName}] ${baseDescription}`,
-      inputSchema: config.inputSchema
-        ? withCallMetricsSchema(config.inputSchema)
-        : config.inputSchema,
+      inputSchema: withCallMetricsSchema(config.inputSchema ?? {}),
     };
     return origRegisterTool(name, legacyConfig, wrapToolHandler(advName, handler, toolMetrics));
   }) as typeof server.registerTool;
@@ -2092,17 +2093,32 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
           const formattedData = FormatProcessor.format(processedCases, format);
           const resultText = typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2);
 
-          const MAX_RESPONSE_BYTES = 900_000;
           if (resultText.length > MAX_RESPONSE_BYTES) {
-            const avgItemSize = resultText.length / processedCases.length;
-            const safeCount = Math.floor(MAX_RESPONSE_BYTES / avgItemSize * 0.9);
-            const truncated = processedCases.slice(0, Math.max(safeCount, 1));
-            const truncatedText = JSON.stringify(truncated, null, 2);
-            return { content: [{ type: "text" as const, text:
-              `Found ${processedCases.length} total for automation state(s): ${automationStateInfo}, returning first ${truncated.length} ` +
-              `(response truncated to stay under MCP 1MB limit).\n` +
-              `Use count_only=true with get_all=true to get just the count without data.\n\n${truncatedText}`
-            }] };
+            const { slice, bodyText, wasTruncated } = truncateBulkItems(
+              processedCases,
+              resultText.length,
+              format,
+              (s) => ({
+                project_key,
+                automation_states: automationStateInfo,
+                total_count: processedCases.length,
+                was_truncated: true,
+                test_cases: s,
+              }),
+            );
+            return attachBulkMetrics(
+              {
+                content: [{
+                  type: "text" as const,
+                  text:
+                    `Found ${processedCases.length} total for automation state(s): ${automationStateInfo}, returning first ${slice.length} ` +
+                    `(response truncated to stay under MCP 1MB limit).\n` +
+                    `Use count_only=true with get_all=true to get just the count without data.\n\n${bodyText}`,
+                }],
+              },
+              slice.length,
+              wasTruncated,
+            );
           }
 
           let summary = `Found ${processedCases.length} test case(s) total for automation state(s): ${automationStateInfo}`;
@@ -2278,10 +2294,12 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
           };
         }
 
+        const formatted = FormatProcessor.format(result, format);
+        const text = typeof formatted === 'string' ? formatted : JSON.stringify(formatted, null, 2);
         return {
           content: [{
             type: "text" as const,
-            text: JSON.stringify(result, null, 2)
+            text
           }]
         };
 
@@ -2506,17 +2524,32 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
           const formattedData = FormatProcessor.format(processedCases, format);
           const resultText = typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2);
 
-          const MAX_RESPONSE_BYTES = 900_000;
           if (resultText.length > MAX_RESPONSE_BYTES) {
-            const avgItemSize = resultText.length / processedCases.length;
-            const safeCount = Math.floor(MAX_RESPONSE_BYTES / avgItemSize * 0.9);
-            const truncated = processedCases.slice(0, Math.max(safeCount, 1));
-            const truncatedText = JSON.stringify(truncated, null, 2);
-            return { content: [{ type: "text" as const, text:
-              `Found ${processedCases.length} total matching title "${title}", returning first ${truncated.length} ` +
-              `(response truncated to stay under MCP 1MB limit).\n` +
-              `Use count_only=true with get_all=true to get just the count without data.\n\n${truncatedText}`
-            }] };
+            const { slice, bodyText, wasTruncated } = truncateBulkItems(
+              processedCases,
+              resultText.length,
+              format,
+              (s) => ({
+                project_key,
+                title,
+                total_count: processedCases.length,
+                was_truncated: true,
+                test_cases: s,
+              }),
+            );
+            return attachBulkMetrics(
+              {
+                content: [{
+                  type: "text" as const,
+                  text:
+                    `Found ${processedCases.length} total matching title "${title}", returning first ${slice.length} ` +
+                    `(response truncated to stay under MCP 1MB limit).\n` +
+                    `Use count_only=true with get_all=true to get just the count without data.\n\n${bodyText}`,
+                }],
+              },
+              slice.length,
+              wasTruncated,
+            );
           }
 
           let summary = `Found ${processedCases.length} test case(s) total matching title "${title}"`;
@@ -2785,19 +2818,40 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
           const formattedData = FormatProcessor.format(limited, format);
           const resultText = typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2);
 
-          const MAX_RESPONSE_BYTES = 900_000;
           if (resultText.length > MAX_RESPONSE_BYTES) {
-            const avgItemSize = resultText.length / limited.length;
-            const safeCount = Math.floor(MAX_RESPONSE_BYTES / avgItemSize * 0.9);
-            const truncated = limited.slice(0, Math.max(safeCount, 1));
-            const truncatedText = JSON.stringify(truncated, null, 2);
-            return { content: [{ type: "text" as const, text:
-              `Found ${matched.length} matching field filter (${allCases.length} total before filter), returning first ${truncated.length} ` +
-              `(response truncated to stay under MCP 1MB limit).\n` +
-              `Use count_only=true to get just the count.\n` +
-              `Field filter: ${fFilter!.fieldPath} ${fFilter!.matchMode} ${fFilter!.fieldValue || ''}\n` +
-              (filter ? `RQL filters: ${filter}\n` : '') + `\n${truncatedText}`
-            }] };
+            const { slice, bodyText, wasTruncated } = truncateBulkItems(
+              limited,
+              resultText.length,
+              format,
+              (s) => ({
+                project_key,
+                total_matched: matched.length,
+                total_scanned: allCases.length,
+                was_truncated: true,
+                field_filter: {
+                  fieldPath: fFilter!.fieldPath,
+                  matchMode: fFilter!.matchMode,
+                  fieldValue: fFilter!.fieldValue ?? null,
+                },
+                rql_filter: filter ?? null,
+                test_cases: s,
+              }),
+            );
+            return attachBulkMetrics(
+              {
+                content: [{
+                  type: "text" as const,
+                  text:
+                    `Found ${matched.length} matching field filter (${allCases.length} total before filter), returning first ${slice.length} ` +
+                    `(response truncated to stay under MCP 1MB limit).\n` +
+                    `Use count_only=true to get just the count.\n` +
+                    `Field filter: ${fFilter!.fieldPath} ${fFilter!.matchMode} ${fFilter!.fieldValue || ''}\n` +
+                    (filter ? `RQL filters: ${filter}\n` : '') + `\n${bodyText}`,
+                }],
+              },
+              slice.length,
+              wasTruncated,
+            );
           }
 
           const filterDesc = `Field filter: ${fFilter!.fieldPath} ${fFilter!.matchMode} ${fFilter!.fieldValue ?? '(any)'}`;
@@ -2880,18 +2934,33 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
           const formattedData = FormatProcessor.format(processedCases, format);
           const resultText = typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2);
 
-          const MAX_RESPONSE_BYTES = 900_000;
           if (resultText.length > MAX_RESPONSE_BYTES) {
-            const avgItemSize = resultText.length / processedCases.length;
-            const safeCount = Math.floor(MAX_RESPONSE_BYTES / avgItemSize * 0.9);
-            const truncated = processedCases.slice(0, Math.max(safeCount, 1));
-            const truncatedText = JSON.stringify(truncated, null, 2);
-            return { content: [{ type: "text" as const, text:
-              `Found ${processedCases.length} total matching filters, returning first ${truncated.length} ` +
-              `(response truncated to stay under MCP 1MB limit).\n` +
-              `Use count_only=true with get_all=true to get just the count without data.\n` +
-              `Applied filters: ${filter}\n\n${truncatedText}`
-            }] };
+            const { slice, bodyText, wasTruncated } = truncateBulkItems(
+              processedCases,
+              resultText.length,
+              format,
+              (s) => ({
+                project_key,
+                total_count: processedCases.length,
+                was_truncated: true,
+                filters_applied: filter,
+                test_cases: s,
+              }),
+            );
+            return attachBulkMetrics(
+              {
+                content: [{
+                  type: "text" as const,
+                  text:
+                    `Found ${processedCases.length} total matching filters, returning first ${slice.length} ` +
+                    `(response truncated to stay under MCP 1MB limit).\n` +
+                    `Use count_only=true with get_all=true to get just the count without data.\n` +
+                    `Applied filters: ${filter}\n\n${bodyText}`,
+                }],
+              },
+              slice.length,
+              wasTruncated,
+            );
           }
 
           let summary = `Found ${processedCases.length} test case(s) total matching the specified filters`;
@@ -5969,7 +6038,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       exclude_deprecated: z.boolean().default(false).describe("Exclude deprecated test cases from results"),
       exclude_draft: z.boolean().default(false).describe("Exclude draft test cases from results"),
       exclude_deleted: z.boolean().default(true).describe("Exclude deleted test cases from results (default: true)"),
-      max_results: z.number().int().positive().max(10000).default(5000).describe("Maximum number of results (configurable limit for performance)"),
+      max_results: z.number().int().positive().max(10000).default(defaultMaxResults(5000)).describe("Maximum number of results (configurable limit for performance)"),
       detail: z.enum(['summary', 'full']).default(defaultDetailLevel()).describe("summary trims each case; full returns every field. Use count_only for metrics only."),
       fields: z.array(z.string()).optional().describe("Optional explicit field allow-list per test case (overrides detail)."),
       include_root_suite: z.boolean().default(false).describe("Enrich each case with rootSuiteId (suite hierarchy lookup)."),
@@ -6144,25 +6213,43 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           '- count_only: true',
         ]);
 
-        const MAX_RESPONSE_BYTES = 900_000;
         if (resultText.length > MAX_RESPONSE_BYTES) {
-          const avgItemSize = resultText.length / projectedCases.length;
-          const safeCount = Math.floor(MAX_RESPONSE_BYTES / avgItemSize * 0.9);
-          const truncated = projectedCases.slice(0, Math.max(safeCount, 1));
-          const truncatedText = JSON.stringify(truncated, null, 2);
-          return { content: [{ type: "text" as const, text:
-            `Found ${allTestCases.length} total test cases for ${project_key}, returning first ${truncated.length} ` +
-            `(response truncated to stay under MCP 1MB limit).\n` +
-            `Use count_only=true to get just the count without data.\n\n${truncatedText}`
-          }] };
+          const { slice, bodyText, wasTruncated } = truncateBulkItems(
+            projectedCases,
+            resultText.length,
+            format as any,
+            (s) => ({
+              ...resultPayload,
+              test_cases: s,
+              was_truncated: true,
+              total_fetched: allTestCases.length,
+            }),
+          );
+          return attachBulkMetrics(
+            {
+              content: [{
+                type: "text" as const,
+                text:
+                  `Found ${allTestCases.length} total test cases for ${project_key}, returning first ${slice.length} ` +
+                  `(response truncated to stay under MCP 1MB limit).\n` +
+                  `Use count_only=true to get just the count without data.\n\n${bodyText}`,
+              }],
+            },
+            slice.length,
+            wasTruncated,
+          );
         }
 
-        return {
-          content: [{
-            type: "text" as const,
-            text: resultText
-          }]
-        };
+        return attachBulkMetrics(
+          {
+            content: [{
+              type: "text" as const,
+              text: resultText,
+            }],
+          },
+          projectedCases.length,
+          wasTruncated,
+        );
 
       } catch (error: any) {
         debugLog("Error in adv_get_all_tcm_test_cases_by_project", { error: error.message, args });
@@ -6262,17 +6349,31 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         const formattedResult = FormatProcessor.format(enrichedTestCases, format as any);
         const resultText = typeof formattedResult === 'string' ? formattedResult : JSON.stringify(formattedResult, null, 2);
 
-        const MAX_RESPONSE_BYTES = 900_000;
         if (resultText.length > MAX_RESPONSE_BYTES) {
-          const avgItemSize = resultText.length / enrichedTestCases.length;
-          const safeCount = Math.floor(MAX_RESPONSE_BYTES / avgItemSize * 0.9);
-          const truncated = enrichedTestCases.slice(0, Math.max(safeCount, 1));
-          const truncatedText = JSON.stringify(truncated, null, 2);
-          return { content: [{ type: "text" as const, text:
-            `Found ${enrichedTestCases.length} total test cases with root suite IDs for ${project_key}, returning first ${truncated.length} ` +
-            `(response truncated to stay under MCP 1MB limit).\n` +
-            `Use count_only=true to get just the count without data.\n\n${truncatedText}`
-          }] };
+          const { slice, bodyText, wasTruncated } = truncateBulkItems(
+            enrichedTestCases,
+            resultText.length,
+            format as any,
+            (s) => ({
+              project_key,
+              total_fetched: enrichedTestCases.length,
+              was_truncated: true,
+              test_cases: s,
+            }),
+          );
+          return attachBulkMetrics(
+            {
+              content: [{
+                type: "text" as const,
+                text:
+                  `Found ${enrichedTestCases.length} total test cases with root suite IDs for ${project_key}, returning first ${slice.length} ` +
+                  `(response truncated to stay under MCP 1MB limit).\n` +
+                  `Use count_only=true to get just the count without data.\n\n${bodyText}`,
+              }],
+            },
+            slice.length,
+            wasTruncated,
+          );
         }
 
         return {
@@ -6724,17 +6825,29 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           '- get_all: false with smaller page size',
         ]);
 
-        const MAX_RESPONSE_BYTES = 900_000;
         if (resultText.length > MAX_RESPONSE_BYTES) {
-          const avgItemSize = resultText.length / projectedCases.length;
-          const safeCount = Math.floor(MAX_RESPONSE_BYTES / avgItemSize * 0.9);
-          const truncated = projectedCases.slice(0, Math.max(safeCount, 1));
-          const truncatedText = JSON.stringify(truncated, null, 2);
-          return { content: [{ type: "text" as const, text:
-            `Found ${testCases.length} total test cases in suite ${suite_id}, returning first ${truncated.length} ` +
-            `(response truncated to stay under MCP 1MB limit).\n` +
-            `Use count_only=true to get just the count without data.\n\n${truncatedText}`
-          }] };
+          const { slice, bodyText, wasTruncated } = truncateBulkItems(
+            projectedCases,
+            resultText.length,
+            format,
+            (s) => ({
+              metadata: { ...metadata, was_truncated: true },
+              testCases: s,
+            }),
+          );
+          return attachBulkMetrics(
+            {
+              content: [{
+                type: "text" as const,
+                text:
+                  `Found ${testCases.length} total test cases in suite ${suite_id}, returning first ${slice.length} ` +
+                  `(response truncated to stay under MCP 1MB limit).\n` +
+                  `Use count_only=true to get just the count without data.\n\n${bodyText}`,
+              }],
+            },
+            slice.length,
+            wasTruncated,
+          );
         }
 
         summaryMessage += `\n${resultText}`;
@@ -8391,15 +8504,8 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         const rows: any[] = Array.isArray(raw) ? raw : [];
 
         if (rows.length === 0) {
-          const formatValue = args.format as 'raw' | 'formatted' | 'compact';
-          const emptyText =
-            formatValue === 'formatted'
-              ? "No bug data found"
-              : formatValue === 'compact'
-                ? JSON.stringify(raw)
-                : JSON.stringify(raw, null, 2);
           return {
-            content: [{ type: "text" as const, text: emptyText }]
+            content: [{ type: "text" as const, text: "No bug data found" }]
           };
         }
 
@@ -8484,20 +8590,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           return buildChartResponse(chartConfig, args.chart as 'png' | 'html' | 'text', `Top ${top.length} bugs for ${args.period}`);
         }
 
-        // Return formatted or raw output based on format parameter
-        const formatValue = args.format as 'raw' | 'formatted' | 'compact';
-        if (formatValue === 'compact') {
-          return {
-            content: [{ type: "text" as const, text: JSON.stringify(top) }]
-          };
-        }
-        if (formatValue === 'raw') {
-          return {
-            content: [{ type: "text" as const, text: JSON.stringify(top, null, 2) }]
-          };
-        }
-
-        // Return formatted output
+        // Return formatted output (compact/raw handled above on raw widget payload)
         const formatted = `📊 **Top ${top.length} Most Frequent Bugs** (${args.period})\n\n` +
           top.map((bug, i) => {
             const rank = i + 1;
@@ -10940,7 +11033,7 @@ ${detailsInfo.map((detail, i) => {
       tags_format: z.enum(['by_root_suite', 'single_line']).default('by_root_suite').describe(
         "TAGS output format: by_root_suite (separate TAGS line per root suite, default) or single_line (all combined on one line)"
       ),
-      max_results: z.number().int().positive().max(2000).default(500).describe("Maximum test cases to process"),
+      max_results: z.number().int().positive().max(2000).default(defaultMaxResults(500)).describe("Maximum test cases to process"),
       chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
         "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
       ),

@@ -1,6 +1,6 @@
 # Token efficiency guide (v9.2.0+)
 
-Large Zebrunner exports (thousands of test cases with steps, preconditions, and metadata) can consume **hundreds of thousands of tokens** in a single MCP response. v9.2.0 adds **opt-in** knobs to shrink payloads without changing default behavior for existing integrations.
+Large Zebrunner exports (thousands of test cases with steps, preconditions, and metadata) can consume **hundreds of thousands of tokens** in a single MCP response. **v9.2.0** introduced opt-in compact/summary/batch knobs; **v9.2.1** expanded compact to 19 additional bulk/reporting tools and added LLM-visible session/per-call metrics.
 
 > **Defaults unchanged:** `format=json`, `detail=full`, `max_results=5000`, suite-smart `get_all=true`, reports `inline=true`. Enable compact/summary explicitly in prompts or via env flags below.
 
@@ -54,6 +54,11 @@ Large Zebrunner exports (thousands of test cases with steps, preconditions, and 
 | `adv_get_tcm_test_suites_by_project` | Paginated suite dump |
 | `adv_get_all_tcm_test_case_suites_by_project` | Full suite catalog |
 | `adv_get_tcm_suite_by_id` | Single suite lookup |
+| `adv_get_root_id_by_suite_id` | Root suite ID lookup |
+
+### v9.2.1 additions (Tier 1 + Tier 2)
+
+v9.2.0 shipped compact on the first seven data-family reads (list/batch/bulk-by-project/suite-smart/launches). v9.2.1 adds compact to the Tier 1 bulk tools in the table above plus nine reporting/public-API tools in the launch/reporting table below.
 
 ### Launch / reporting (`raw` / `formatted` / `compact`)
 
@@ -155,7 +160,16 @@ Fetch up to **50** test cases in one call with **partial success** (`notFound[]`
 
 ## Response-size notices
 
-Bulk reads near ~800 KB may include a `_notice` field suggesting `detail=summary`, `count_only`, or lower `max_results`. stderr also logs per-tool telemetry:
+Bulk reads near ~800 KB may include a `_notice` field suggesting `detail=summary`, `count_only`, or lower `max_results`. When the hard ~900 KB safety net truncates a response:
+
+| `format` | Truncated payload shape |
+|----------|-------------------------|
+| `json` (default) | Prose header + **bare array slice** (unchanged from v9.2.0) |
+| `compact` | Prose header + **tool wrapper object** with truncated rows + `was_truncated: true` |
+
+Fair **compact vs json** A/B: use the same `max_results`, `detail`, and `include_call_metrics: true`, then compare `rowsReturned`, `wasTruncated`, and `bytesPerRow` in the footer — not raw `responseChars` alone. Before v9.2.1, compact often returned **more rows** than json under truncation (compact bytes per row are smaller, so the legacy avg-size cap kept more rows), which made compact look worse in total token counts.
+
+stderr also logs per-tool telemetry:
 
 ```text
 [telemetry] tool=adv_get_all_tcm_test_cases_by_project format=compact detail=summary responseBytes=… approxTokens=…
@@ -180,7 +194,7 @@ Call `adv_about_mcp_tools` with `mode: "metrics"` (or use the `/session-metrics`
 When enabled, the last text block includes a one-line `_mcp_metrics` JSON footer:
 
 ```json
-_mcp_metrics: {"tool":"adv_get_all_tcm_test_cases_by_project","durationMs":842,"responseChars":42100,"approxTokens":10525,"format":"compact","detail":"summary"}
+_mcp_metrics: {"tool":"adv_get_all_tcm_test_cases_by_project","durationMs":842,"responseChars":42100,"approxTokens":10525,"format":"compact","detail":"summary","rowsReturned":200,"wasTruncated":true,"bytesPerRow":210}
 ```
 
 | Switch | Scope |
@@ -196,13 +210,34 @@ Example prompt: *"List MCP test cases with compact JSON and **include call metri
 
 Set on the **MCP server** process (not eval-only):
 
-| Env | Effect when `true` |
-|-----|-------------------|
-| `MCP_COMPACT_DEFAULTS` | Default `format` becomes `compact` instead of `json` |
-| `MCP_SUMMARY_DEFAULTS` | Default `detail` becomes `summary` on supported bulk reads |
-| `MCP_INLINE_METRICS` | Append `_mcp_metrics` footer to every tool response |
+| Env | Effect when set |
+|-----|-----------------|
+| `MCP_COMPACT_DEFAULTS=true` | Default `format` becomes `compact` instead of `json` |
+| `MCP_SUMMARY_DEFAULTS=true` | Default `detail` becomes `summary` on supported bulk reads |
+| `MCP_MAX_RESULTS=N` | Positive int overrides `max_results` zod default on bulk tools (5000 / 500); **explicit tool arg wins** |
+| `MCP_INLINE_METRICS=true` | Append `_mcp_metrics` footer to every tool response |
 
 **Off by default** until cloud eval gates pass. Prefer explicit args in prompts for predictable assistant behavior.
+
+### PR #84 vs v9.2.1 (token levers)
+
+| Lever | Typical savings | v9.2.1 default | Opt-in |
+|-------|-----------------|----------------|--------|
+| `detail=summary` | Largest | `full` | arg or `MCP_SUMMARY_DEFAULTS=true` |
+| `max_results` cap | Caps rows | 5000 / 500 | arg or `MCP_MAX_RESULTS=N` |
+| `format=compact` | ~15–25% same payload | `json` | arg or `MCP_COMPACT_DEFAULTS=true` |
+| `get_all=false` on suite-smart | Avoids full dumps | `get_all=true` | arg |
+| Report disk refs | Megabytes off-chat | `inline=true` | `inline=false` |
+| Duplicate caps + batch | Large on dup/N× reads | **Adopted** | — |
+
+Fair compact/json comparison prompt:
+
+```text
+Reset metrics. For MFPAND call adv_get_all_tcm_test_cases_by_project twice with
+detail=summary, max_results=500, include_call_metrics=true:
+format=json then format=compact.
+Compare rowsReturned, wasTruncated, bytesPerRow.
+```
 
 ---
 
@@ -223,4 +258,4 @@ Set on the **MCP server** process (not eval-only):
 
 - [TOOLS_CATALOG.md](../TOOLS_CATALOG.md) — per-tool parameters
 - [RESOURCES_AND_PROMPTS.md](RESOURCES_AND_PROMPTS.md) — `zebrunner://formats` resource
-- [change-logs.md](../change-logs.md) — v9.2.0 changelog and upgrade checklist
+- [change-logs.md](../change-logs.md) — v9.2.0 / v9.2.1 changelogs and upgrade checklists

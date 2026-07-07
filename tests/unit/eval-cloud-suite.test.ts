@@ -18,7 +18,7 @@ describe("eval cloud suite", () => {
 
   it("partitions default vs cloud without overlap", () => {
     const cloud = cloudEvalPromptIds();
-    assert.ok(cloud.length >= 20, "cloud suite should cover a meaningful tricky subset");
+    assert.ok(cloud.length >= 70, "cloud suite should cover a meaningful tricky subset");
 
     for (const id of cloud) {
       assert.ok(isCloudEvalPrompt(id));

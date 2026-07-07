@@ -259,7 +259,7 @@
 **Prompt 1 — Full export**
 > Get ALL test cases in the iOS project. How many are there in total?
 
-**Expected:** Auto-paginates through all test cases (up to 10,000). Response includes `total_fetched`, `was_truncated`, and `has_more_pages`.
+**Expected:** Auto-paginates through all test cases (up to 10,000). Response includes `total_fetched`, `was_truncated`, and `has_more_pages`. If the ~900 KB safety net truncates the payload: **`format=json`** returns a bare array slice; **`format=compact`** returns the same wrapper object with fewer `test_cases` and `was_truncated: true`.
 
 **Prompt 2 — Excluding deprecated/draft/deleted** *(v6.5.1)*
 > Get all active test cases in the Android project, excluding deprecated, draft, and deleted ones. How many are there?
@@ -690,7 +690,7 @@
 **Prompt 1 — Tool summary (default)**
 > Give me a summary of all available Zebrunner MCP tools.
 
-**Expected:** Returns categorized list of all 63 tools with brief descriptions. The summary footer includes "Additional MCP Capabilities" with prompt and resource counts.
+**Expected:** Returns categorized list of all 64 tools with brief descriptions. The summary footer includes "Additional MCP Capabilities" with prompt and resource counts.
 
 **Prompt 2 — Specific tool details**
 > Show me detailed info for the adv_analyze_regression_runtime tool with examples.
@@ -1473,7 +1473,7 @@ MCP prompts provide pre-built, tested workflow instructions accessible via the `
 
 ## 16. Tool Annotations *(v7.2.2)*
 
-All 63 tools now include MCP Tool Annotations (readOnlyHint, destructiveHint, idempotentHint, openWorldHint) that inform clients about tool behavior characteristics.
+All 64 tools now include MCP Tool Annotations (readOnlyHint, destructiveHint, idempotentHint, openWorldHint) that inform clients about tool behavior characteristics.
 
 **Verification 1 — Read-only tools respected**
 > In the MCP Inspector, examine any read-only tool (e.g., `adv_list_test_suites`). Check its annotations.

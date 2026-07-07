@@ -47,6 +47,9 @@ export const DEFAULT_CLOUD_TOOL_SELECTION_THRESHOLD = 0.9;
 /** Default when EVAL_BASE_URL points at local Ollama (small models score lower). */
 export const DEFAULT_LOCAL_TOOL_SELECTION_THRESHOLD = 0.8;
 
+/** Local Ollama: argument checks are noisy on 2B models (often omit optional keys). */
+export const DEFAULT_LOCAL_ARG_CORRECTNESS_THRESHOLD = 0.7;
+
 /** Cloud default for LLM judge average (1–5 scale). */
 export const DEFAULT_CLOUD_JUDGE_THRESHOLD = 3.0;
 
@@ -287,6 +290,9 @@ function resolveToolSelectionThreshold(provider: EvalProvider, baseUrl?: string)
 function resolveArgCorrectnessThreshold(provider: EvalProvider, baseUrl?: string): number {
   const explicit = readEnv("EVAL_MIN_ARG_PASS_RATE");
   if (explicit) return parsePassRate(explicit);
+  if (isLocalEvalProvider(provider, baseUrl)) {
+    return DEFAULT_LOCAL_ARG_CORRECTNESS_THRESHOLD;
+  }
   return 0.85;
 }
 

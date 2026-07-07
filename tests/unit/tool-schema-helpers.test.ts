@@ -14,8 +14,11 @@ describe("withCallMetricsSchema()", () => {
     assert.ok(shape.project_key);
   });
 
-  it("should pass through non-object schemas unchanged", () => {
-    const passthrough = withCallMetricsSchema("not-a-schema");
-    assert.equal(passthrough, "not-a-schema");
+  it("should add include_call_metrics to raw shape objects (registerTool style)", () => {
+    const base = { project_key: z.string(), format: z.enum(["json", "compact"]) };
+    const extended = withCallMetricsSchema(base) as Record<string, unknown>;
+    assert.ok(extended.include_call_metrics);
+    assert.ok(extended.project_key);
+    assert.ok(extended.format);
   });
 });

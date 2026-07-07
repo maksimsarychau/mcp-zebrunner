@@ -17,13 +17,19 @@ const CALL_METRICS_FIELD = {
 
 /** Add optional include_call_metrics to every tool input schema. */
 export function withCallMetricsSchema(schema: unknown): unknown {
+  if (!schema || typeof schema !== "object") return schema;
+
   if (
-    schema &&
-    typeof schema === "object" &&
     "extend" in schema &&
     typeof (schema as z.ZodObject<z.ZodRawShape>).extend === "function"
   ) {
     return (schema as z.ZodObject<z.ZodRawShape>).extend(CALL_METRICS_FIELD);
   }
+
+  // MCP registerTool uses a raw shape object { field: z.*, ... }, not z.object().
+  if (!(schema instanceof z.ZodType)) {
+    return { ...(schema as Record<string, unknown>), ...CALL_METRICS_FIELD };
+  }
+
   return schema;
 }
