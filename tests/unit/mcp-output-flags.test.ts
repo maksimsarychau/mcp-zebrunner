@@ -1,5 +1,6 @@
 import { describe, it, beforeEach, afterEach } from "node:test";
 import { strict as assert } from "node:assert";
+import { z } from "zod";
 
 import {
   isCompactDefaultsEnabled,
@@ -77,6 +78,21 @@ describe("mcp-output-flags", () => {
       assert.equal(defaultMaxResults(5000), 5000);
       process.env.MCP_MAX_RESULTS = "nope";
       assert.equal(defaultMaxResults(500), 500);
+    });
+
+    it("explicit max_results tool arg wins over MCP_MAX_RESULTS env (zod parse)", () => {
+      process.env.MCP_MAX_RESULTS = "200";
+      const bulkSchema = z.object({
+        max_results: z.number().int().positive().max(10000).default(defaultMaxResults(5000)),
+      });
+      const aggregateSchema = z.object({
+        max_results: z.number().int().positive().max(2000).default(defaultMaxResults(500)),
+      });
+
+      assert.equal(bulkSchema.parse({}).max_results, 200);
+      assert.equal(bulkSchema.parse({ max_results: 500 }).max_results, 500);
+      assert.equal(aggregateSchema.parse({}).max_results, 200);
+      assert.equal(aggregateSchema.parse({ max_results: 750 }).max_results, 750);
     });
   });
 });

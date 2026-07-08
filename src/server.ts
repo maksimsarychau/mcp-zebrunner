@@ -2127,12 +2127,16 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
             if (warning) summary += `\n⚠️ ${warning}`;
           }
 
-          return {
-            content: [{
-              type: "text" as const,
-              text: `${summary}\n\n${resultText}`
-            }]
-          };
+          return attachBulkMetrics(
+            {
+              content: [{
+                type: "text" as const,
+                text: `${summary}\n\n${resultText}`,
+              }],
+            },
+            processedCases.length,
+            false,
+          );
         }
 
         // Single page
@@ -2558,12 +2562,16 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
             if (warning) summary += `\n⚠️ ${warning}`;
           }
 
-          return {
-            content: [{
-              type: "text" as const,
-              text: `${summary}\n\n${resultText}`
-            }]
-          };
+          return attachBulkMetrics(
+            {
+              content: [{
+                type: "text" as const,
+                text: `${summary}\n\n${resultText}`,
+              }],
+            },
+            processedCases.length,
+            false,
+          );
         }
 
         // Single page
@@ -2858,9 +2866,16 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
           const summary = `Found ${matched.length} test case(s) matching field filter (${allCases.length} total, ${pageCount} pages scanned)`;
           const showingInfo = matched.length > limited.length ? `\nShowing first ${limited.length} of ${matched.length}. Set max_page_size higher to see more.` : '';
 
-          return { content: [{ type: "text" as const,
-            text: `${summary}\n${filterDesc}${filter ? `\nRQL filters: ${filter}` : ''}${showingInfo}\n\n${resultText}`
-          }] };
+          return attachBulkMetrics(
+            {
+              content: [{
+                type: "text" as const,
+                text: `${summary}\n${filterDesc}${filter ? `\nRQL filters: ${filter}` : ''}${showingInfo}\n\n${resultText}`,
+              }],
+            },
+            limited.length,
+            matched.length > limited.length,
+          );
         }
 
         if (get_all && count_only) {
@@ -2970,12 +2985,16 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
           }
           const filterSummary = `Applied filters: ${filter}`;
 
-          return {
-            content: [{
-              type: "text" as const,
-              text: `${summary}\n${filterSummary}\n\n${resultText}`
-            }]
-          };
+          return attachBulkMetrics(
+            {
+              content: [{
+                type: "text" as const,
+                text: `${summary}\n${filterSummary}\n\n${resultText}`,
+              }],
+            },
+            processedCases.length,
+            false,
+          );
         }
 
         // Single page
@@ -6376,12 +6395,16 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           );
         }
 
-        return {
-          content: [{
-            type: "text" as const,
-            text: resultText
-          }]
-        };
+        return attachBulkMetrics(
+          {
+            content: [{
+              type: "text" as const,
+              text: resultText,
+            }],
+          },
+          enrichedTestCases.length,
+          false,
+        );
 
       } catch (error: any) {
         debugLog("Error in adv_get_all_tcm_test_cases_with_root_suite_id", { error: error.message, args });
@@ -6852,12 +6875,16 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
 
         summaryMessage += `\n${resultText}`;
 
-        return {
-          content: [{
-            type: "text" as const,
-            text: summaryMessage
-          }]
-        };
+        return attachBulkMetrics(
+          {
+            content: [{
+              type: "text" as const,
+              text: summaryMessage,
+            }],
+          },
+          projectedCases.length,
+          false,
+        );
 
       } catch (error: any) {
         debugLog("Error in adv_get_test_cases_by_suite_smart", { error: error.message, args });

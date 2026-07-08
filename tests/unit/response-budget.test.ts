@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { projectTestCases, projectSuites, FormatProcessor } from '../../src/utils/formatter.js';
+import { projectTestCases, projectSuites, FormatProcessor, serializeFormattedOutput } from '../../src/utils/formatter.js';
 
 const bytes = (s: string) => Buffer.byteLength(s, 'utf8');
 
@@ -41,5 +41,14 @@ describe('response-size budgets (zebrunner defaults)', () => {
     }));
     const summary = bytes(FormatProcessor.format(projectSuites(suites, 'summary'), 'compact') as string);
     assert.ok(summary < 8_000, `suite summary ${summary} should be under 8KB budget`);
+  });
+
+  it('compact json is smaller than pretty json for identical projected cases', () => {
+    const cases = Array.from({ length: 50 }, (_, i) => fatCase(i));
+    const projected = projectTestCases(cases, 'summary');
+    const jsonBytes = bytes(serializeFormattedOutput(projected, 'json'));
+    const compactBytes = bytes(serializeFormattedOutput(projected, 'compact'));
+    assert.ok(compactBytes < jsonBytes, `compact ${compactBytes} should be smaller than json ${jsonBytes}`);
+    assert.ok(compactBytes <= jsonBytes * 0.85, 'compact should save at least ~15% vs pretty json');
   });
 });

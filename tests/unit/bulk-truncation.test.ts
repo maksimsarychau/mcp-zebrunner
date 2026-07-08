@@ -9,7 +9,7 @@ import {
   measurePayloadBytes,
   MAX_RESPONSE_BYTES,
 } from "../../src/utils/bulk-truncation.js";
-import { serializeFormattedOutput } from "../../src/utils/formatter.js";
+import { projectTestCases, serializeFormattedOutput } from "../../src/utils/formatter.js";
 
 function makeCase(i: number) {
   return {
@@ -90,6 +90,51 @@ describe("bulk-truncation", () => {
       const jsonTrunc = legacyBulkTruncate(cases, fullJson.length, "json");
       const compactTrunc = compactBulkTruncate(cases, buildPayload, "compact");
       assert.ok(compactTrunc.slice.length <= jsonTrunc.slice.length);
+    });
+  });
+
+  describe("get_all_tcm_test_cases_by_project json truncation golden", () => {
+    function goldenProjectedCases() {
+      const raw = Array.from({ length: 110 }, (_, i) => ({
+        id: 1000 + i,
+        key: `MFPAND-${1000 + i}`,
+        title: "Login flow validation step with extended title padding",
+        priority: { name: "High" },
+        automationState: { name: "Automated" },
+        description: "x".repeat(8000),
+      }));
+      return projectTestCases(raw, "full");
+    }
+
+    it("unchanged bare-array json slice for projected bulk-by-project cases", () => {
+      const projectedCases = goldenProjectedCases();
+      const resultText = serializeFormattedOutput(projectedCases, "json");
+      assert.ok(resultText.length > MAX_RESPONSE_BYTES, "fixture must exceed MCP safety net");
+
+      const legacy = legacyBulkTruncate(projectedCases, resultText.length, "json");
+      const viaHandler = truncateBulkItems(
+        projectedCases,
+        resultText.length,
+        "json",
+        (slice) => ({
+          project_key: "MFPAND",
+          total_fetched: projectedCases.length,
+          was_truncated: true,
+          test_cases: slice,
+        }),
+      );
+
+      assert.deepEqual(viaHandler.slice, legacy.slice);
+      assert.equal(viaHandler.bodyText, legacy.bodyText);
+      assert.equal(viaHandler.wasTruncated, true);
+      assert.ok(legacy.slice.length < projectedCases.length);
+      assert.equal(legacy.slice[0]?.key, "MFPAND-1000");
+      assert.ok(legacy.bodyText.trimStart().startsWith("["));
+      assert.ok(!legacy.bodyText.includes('"project_key"'));
+      assert.equal(
+        legacy.bodyText,
+        serializeFormattedOutput(legacy.slice, "json"),
+      );
     });
   });
 });

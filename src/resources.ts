@@ -271,7 +271,11 @@ export function buildFormatReferenceContent(): object {
         description: "Full data format for TCM tools (test cases, suites, hierarchy). compact = minified JSON.",
         tools_count: 21,
         default: "json",
-        env_flags: { MCP_COMPACT_DEFAULTS: "When true, default becomes compact instead of json" },
+        env_flags: {
+          MCP_COMPACT_DEFAULTS: "When true, default becomes compact instead of json",
+          MCP_SUMMARY_DEFAULTS: "When true, default detail becomes summary on bulk reads",
+          MCP_MAX_RESULTS: "Positive int overrides max_results zod default (5000 bulk / 500 aggregate); tool arg wins",
+        },
         tips: "Use detail=summary with compact for token-efficient list/filter reads; adv_get_test_case_by_key for full body",
       },
       {

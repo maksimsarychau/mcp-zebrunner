@@ -183,6 +183,11 @@ describe("Format Reference Resource Content", () => {
       assert.ok(family.default, `${family.name} missing default`);
     }
   });
+
+  it("data family documents MCP_MAX_RESULTS env flag", () => {
+    const data = content.format_families.find((f: { name: string }) => f.name === "data");
+    assert.ok(data?.env_flags?.MCP_MAX_RESULTS?.includes("max_results"));
+  });
 });
 
 // ── Resource Catalog API ─────────────────────────────────────────────────────
