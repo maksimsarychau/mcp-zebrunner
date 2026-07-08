@@ -153,6 +153,19 @@ export async function getMCPToolSchemas(): Promise<any[]> {
   return _toolSchemas!;
 }
 
+/** Extract inputSchema.properties from an MCP tools/list entry. */
+export function mcpToolInputProperties(tool: { inputSchema?: Record<string, unknown> }): Record<string, unknown> {
+  const schema = tool.inputSchema as { properties?: Record<string, unknown> } | undefined;
+  return schema?.properties ?? {};
+}
+
+/** True if any loaded tool schema exposes the given input property. */
+export function mcpToolsExposeInputProperty(tools: unknown[], property: string): boolean {
+  return (tools as Array<{ inputSchema?: Record<string, unknown> }>).some(
+    (t) => property in mcpToolInputProperties(t),
+  );
+}
+
 /**
  * Call an MCP tool by name with arguments.
  */

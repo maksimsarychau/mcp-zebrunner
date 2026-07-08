@@ -1,5 +1,57 @@
 # Change Logs
 
+## v9.2.1 — LLM-visible metrics + compact expansion
+
+> **Metrics guide:** [docs/TOKEN_EFFICIENCY.md](docs/TOKEN_EFFICIENCY.md#observing-metrics-in-the-llm)
+
+### Highlights
+
+- **Session metrics breakdown** — `adv_about_mcp_tools` `mode=metrics` includes per-tool **format + detail** table; optional `metrics_reset`.
+- **Per-call `_mcp_metrics` footer** — opt-in via `include_call_metrics: true` on any tool or `MCP_INLINE_METRICS=true` server env.
+- **`format: compact` Tier 1** — 11 additional TCM data-family bulk reads (`adv_get_test_cases_advanced`, `adv_get_root_suites`, etc.).
+- **`format: compact` Tier 2** — 7 reporting/public-API tools (`adv_get_platform_results_by_period`, `adv_list_test_runs`, etc.).
+
+### Added
+
+- `getBreakdownMarkdown()` / `getFullMetricsMarkdown()` in `src/utils/tool-metrics.ts`.
+- `src/utils/response-metrics.ts` — footer builder and `include_call_metrics` stripping.
+- `include_call_metrics` injected on all tool schemas via `registerTool` wrapper (`src/utils/tool-schema-helpers.ts`).
+- Env flag `MCP_INLINE_METRICS` (default off).
+- **`MCP_MAX_RESULTS`** env — overrides `max_results` zod default on bulk tools (5000 / 500); explicit tool arg wins.
+- **`src/utils/bulk-truncation.ts`** — format-agnostic byte budgeting for fair compact truncation.
+- Per-call footer fields **`rowsReturned`**, **`wasTruncated`**, **`bytesPerRow`** when bulk handlers attach `_mcpBulkMetrics`.
+
+### Changed
+
+- stderr `[telemetry]` lines include `format` and `detail` dimensions.
+- `zebrunner://formats` `raw_formatted` family documents 9 tools with `compact`; `data` family count corrected to 21 tools.
+- `/session-metrics` prompt documents breakdown, reset, and per-call footer.
+- Eval cloud suite expanded to **76** prompts (34 flaky local-Ollama cases moved from default suite).
+
+### Fixed
+
+- **`adv_get_test_cases_by_automation_state`** — single-page path now honors `format=compact` / `dto` via `FormatProcessor` (was always pretty JSON).
+- **Bulk truncation safety net** — seven TCM bulk tools use **fair row cap** for `format=compact` (wrapper object + same byte budget as json); **json truncated path unchanged** (bare array slice).
+- **MCP compact > json paradox** — compact no longer returns more rows than json under the ~900 KB safety net when comparing the same `max_results`.
+- **`include_call_metrics`** — injected on schema-less tools (e.g. `adv_test_reporting_connection`) via global `registerTool` wrapper.
+- **`adv_get_top_bugs`** — removed unreachable duplicate compact branches after early raw-widget return.
+
+### Upgrade checklist
+
+1. Pull / install `mcp-zebrunner@9.2.1` (npm, Docker, or `dist/` build).
+2. **No breaking changes** — defaults unchanged from v9.2.0 / v9.1.x.
+3. Optional: enable per-call metrics with `include_call_metrics: true` or `MCP_INLINE_METRICS=true`.
+4. Run `npm run test:eval:cloud` before release if you changed compact/metrics behavior.
+
+### Documentation
+
+- [docs/TOKEN_EFFICIENCY.md](docs/TOKEN_EFFICIENCY.md) — v9.2.0 vs v9.2.1 compact matrix, truncation note, metrics footer.
+- [docs/EVALUATION_FRAMEWORK.md](docs/EVALUATION_FRAMEWORK.md) — 64 tools, 76 cloud prompts, local 80%/70% gates.
+- [TOOLS_CATALOG.md](TOOLS_CATALOG.md) — `adv_about_mcp_tools` metrics/routing params.
+- [docs/releases/v9.2.1.md](docs/releases/v9.2.1.md) — local GitHub release draft (gitignored).
+
+---
+
 ## v9.2.0 — Token/cost optimization (opt-in)
 
 > Re-implements selected ideas from PR #84 on master without flipping defaults.  
@@ -21,7 +73,7 @@
 - **`adv_generate_report` `inline` flag** — Default `true`; `inline=false` writes HTML/PNG to `<tmpdir>/zebrunner-reports/` (or `output_dir`).
 - **Launch listing `format: compact`** — Minified JSON on `adv_get_all_launches_for_project` / `adv_get_all_launches_with_filter`.
 - **Env flags (off by default):** `MCP_COMPACT_DEFAULTS`, `MCP_SUMMARY_DEFAULTS` — wired for future default flips after eval.
-- **Eval cloud suite** — `npm run test:eval:cloud` (32 tricky prompts, Claude gate); `EVAL_SUITE=default|cloud|all`.
+- **Eval cloud suite** — `npm run test:eval:cloud` (41 tricky prompts at release; expanded to 55 in v9.2.1); `EVAL_SUITE=default|cloud|all`.
 - **Docs:** [docs/TOKEN_EFFICIENCY.md](docs/TOKEN_EFFICIENCY.md).
 
 ### Changed

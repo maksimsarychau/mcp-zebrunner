@@ -1,6 +1,6 @@
 import type { ResolvedConfig } from "./config-loader.js";
 
-/** Default locale for full feature coverage in MFP automation. */
+/** Default locale for full feature coverage in PROJ automation. */
 export const DEFAULT_EN_US_LOCALE = "en_US";
 
 export type LocaleTestRunRulesSettings = ResolvedConfig["localeTestRunRules"];

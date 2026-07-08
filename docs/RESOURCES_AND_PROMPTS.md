@@ -145,7 +145,7 @@ Documents 5 format parameter families used across tools, with valid values per f
 | Family | Values | Used By |
 |--------|--------|---------|
 | data | `dto`, `json`, `compact`, `string`, `markdown` | TCM tools (test cases, suites) |
-| data_simple | `dto`, `json`, `string` | 6 tools |
+| data_simple | `dto`, `json`, `string` | 5 tools |
 | raw_formatted | `raw`, `formatted`, `compact` | Launch listing tools |
 | verbosity | `detailed`, `summary`, `jira` | 3 failure tools |
 | metadata | `json`, `markdown` | 2 tools |
@@ -347,7 +347,7 @@ Discovers failed launches and reruns failures via `adv_rerun_launch_failures` wi
 
 **Always excludes launches matching `relaunchFailures.excludeLaunchNamePatterns`** from [zebrunner-config.json](../zebrunner-config.json) (default: `"Performance"`). Uses batch rerun when exclusion-safe; otherwise reruns filtered launch IDs one at a time. Cap: `relaunchFailures.maxLaunchesPerPlatform` per platform (default 50).
 
-> **Configure for your projects:** Edit `relaunchFailures` in `zebrunner-config.json` — see [Project-specific automation configuration](#project-specific-automation-configuration). Non-MFP users can set `"excludeLaunchNamePatterns": []`.
+> **Configure for your projects:** Edit `relaunchFailures` in `zebrunner-config.json` — see [Project-specific automation configuration](#project-specific-automation-configuration). Non-PROJ users can set `"excludeLaunchNamePatterns": []`.
 
 **Best for:** Re-running regression failures after a milestone run or weekly failure cleanup across platforms.
 
@@ -411,7 +411,7 @@ Generates a comprehensive project health card: suite structure, coverage metrics
 
 **Parameters:** *(none)*
 
-Shows tool usage metrics for the current MCP session by calling `adv_about_mcp_tools` with `mode: "metrics"`. Displays per-tool call counts, average/min/max durations, response sizes, and error counts.
+Shows tool usage metrics for the current MCP session by calling `adv_about_mcp_tools` with `mode: "metrics"`. Displays per-tool call counts, average/min/max durations, response sizes, error counts, and a **format/detail breakdown** (which `format` and `detail` combinations drove response size). Optional `metrics_reset: true` clears stats after the report. For per-call timing on a single response, pass `include_call_metrics: true` on that tool or set `MCP_INLINE_METRICS=true` on the server.
 
 **Best for:** Debugging performance, understanding session activity, and verifying tool behavior.
 
@@ -419,7 +419,7 @@ Shows tool usage metrics for the current MCP session by calling `adv_about_mcp_t
 
 ## Project-specific automation configuration
 
-Several launch workflows read **`zebrunner-config.json`** at runtime. Customize this file (or `ZEBRUNNER_CONFIG_JSON`) so rules match **your** projects — the shipped defaults target MFP Jenkins automation and are safe to disable or replace.
+Several launch workflows read **`zebrunner-config.json`** at runtime. Customize this file (or `ZEBRUNNER_CONFIG_JSON`) so rules match **your** projects — the shipped defaults target PROJ Jenkins automation and are safe to disable or replace.
 
 | Config block | Used by | Scope |
 |--------------|---------|-------|
@@ -441,7 +441,7 @@ Projects **not** in `projectKeys` (e.g. `MCP` on a demo instance) are unaffected
 ```json
 "localeTestRunRules": {
   "enabled": true,
-  "projectKeys": ["MFPAND", "MFPIOS", "MFPWEB"],
+  "projectKeys": ["PROJ-1", "PROJ-2", "PROJ-3"],
   "enUsOnlyFeatureSuites": ["Plans", "Workout Routines", "Recipe Discovery"],
   "suiteNameMatch": "includes"
 }
@@ -465,7 +465,7 @@ The `/relaunch-regression-failures` prompt embeds these values so the agent know
 
 `adv_rerun_launch_failures` tool description cross-links this block; the tool itself does not re-read patterns at runtime (the prompt orchestrates discovery + filtering).
 
-### Non-MFP / multi-tenant checklist
+### Non-PROJ / multi-tenant checklist
 
 1. Update `projectAliases` to your Zebrunner project keys.
 2. Set `localeTestRunRules.enabled` to `false` **or** replace `projectKeys` / `enUsOnlyFeatureSuites` with your suite names.

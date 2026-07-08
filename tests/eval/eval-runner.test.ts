@@ -21,6 +21,7 @@ import {
   startMCPServer,
   stopMCPServer,
   getMCPToolSchemas,
+  mcpToolsExposeInputProperty,
   callMCPTool,
 } from "./eval-mcp-client.js";
 import { formatToolsForProvider } from "./eval-tool-format.js";
@@ -146,6 +147,15 @@ describe("LLM Evaluation Tests", () => {
     // Start the real MCP server and get tool schemas via tools/list
     await startMCPServer();
     const mcpSchemas = await getMCPToolSchemas();
+    if (
+      shouldIncludePromptInSuite("get_all_tcm_test_cases_by_project.with_call_metrics", EVAL_SUITE) &&
+      !mcpToolsExposeInputProperty(mcpSchemas, "include_call_metrics")
+    ) {
+      throw new Error(
+        "Tool schemas from dist/server.js do not include include_call_metrics. " +
+          "Rebuild and re-sign before eval: npm run build && npm run sign-release",
+      );
+    }
     llmTools = formatToolsForProvider(config.provider, mcpSchemas);
     console.error(`[eval] Loaded ${llmTools.length} tools for ${config.provider}\n`);
   });

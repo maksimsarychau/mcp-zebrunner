@@ -11,8 +11,13 @@ import { EnhancedZebrunnerClient } from "./api/enhanced-client.js";
 import { ZebrunnerReportingClient, type FieldsLayout } from "./api/reporting-client.js";
 import { ZebrunnerReportingToolHandlers } from "./handlers/reporting-tools.js";
 import { ReportHandler } from "./handlers/report-handler.js";
-import { FormatProcessor, projectTestCases, projectSuites } from "./utils/formatter.js";
-import { defaultDataFormat, defaultDetailLevel } from "./utils/mcp-output-flags.js";
+import { FormatProcessor, projectTestCases, projectSuites, serializeFormattedOutput } from "./utils/formatter.js";
+import { defaultDataFormat, defaultDetailLevel, defaultMaxResults } from "./utils/mcp-output-flags.js";
+import {
+  MAX_RESPONSE_BYTES,
+  attachBulkMetrics,
+  truncateBulkItems,
+} from "./utils/bulk-truncation.js";
 import { appendResponseSizeNotice } from "./utils/response-size.js";
 import { capDuplicateAnalysisJson } from "./utils/duplicate-json-cap.js";
 import { mapWithConcurrency } from "./utils/batch-concurrency.js";
@@ -57,6 +62,7 @@ import {
   markdownForResources,
 } from "./utils/tool-intel.js";
 import { ToolMetrics, wrapToolHandler } from "./utils/tool-metrics.js";
+import { withCallMetricsSchema } from "./utils/tool-schema-helpers.js";
 import { enrichTestCasesWithHistory, getHistoryBulkWarning, type HistoryFilter, type AutomationStatesMap } from "./utils/testCaseHistory.js";
 import { analyzeRegressionResults, type RegressionAnalyzerInput } from "./handlers/regression-results-analyzer.js";
 
@@ -1094,6 +1100,7 @@ function createConfiguredServer(): McpServer {
     const advancedConfig = {
       ...config,
       description: `${ADV_DESC_PREFIX}${baseDescription}`,
+      inputSchema: withCallMetricsSchema(config.inputSchema ?? {}),
     };
 
     const primaryResult = origRegisterTool(
@@ -1109,6 +1116,7 @@ function createConfiguredServer(): McpServer {
     const legacyConfig = {
       ...config,
       description: `[deprecated alias — use ${advName}] ${baseDescription}`,
+      inputSchema: withCallMetricsSchema(config.inputSchema ?? {}),
     };
     return origRegisterTool(name, legacyConfig, wrapToolHandler(advName, handler, toolMetrics));
   }) as typeof server.registerTool;
@@ -1473,7 +1481,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
       project_key: z.string().min(1).describe("Project key"),
       root_suite_id: z.number().int().positive().describe("Root suite ID to get all subsuites from"),
       include_root: z.boolean().default(true).describe("Include the root suite in results"),
-      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
+      format: z.enum(['dto', 'json', 'compact', 'string', 'markdown']).default('json').describe("Output format"),
       page: z.number().int().nonnegative().default(0).describe("Page number (0-based)"),
       size: z.number().int().positive().max(1000).default(50).describe("Page size (configurable via MAX_PAGE_SIZE env var)"),
       count_only: z.boolean().default(false).describe(
@@ -1608,7 +1616,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
       field_path: z.string().optional().describe("Filter by any field using dot-notation path. Top-level: 'title', 'key', 'deprecated'. Nested: 'priority.name', 'automationState.name', 'testSuite.id', 'createdBy.username'. Custom fields: 'customField.manualOnly', 'customField.caseStatus'. Triggers client-side filtering (paginates all pages)."),
       field_value: z.string().optional().describe("Value to match against the field. Required for 'exact', 'contains', and 'regex' modes. Not needed for 'exists' mode."),
       field_match: z.enum(["exact", "contains", "regex", "exists"]).default("exact").describe("Match mode: 'exact' (case-insensitive equality), 'contains' (substring), 'regex' (pattern), 'exists' (field is present and non-null)"),
-      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
+      format: z.enum(['dto', 'json', 'compact', 'string', 'markdown']).default('json').describe("Output format"),
       page: z.number().int().nonnegative().default(0).describe("Page number (0-based)"),
       size: z.number().int().positive().max(100).default(100).describe("Page size (configurable via MAX_PAGE_SIZE env var)"),
       count_only: z.boolean().default(false).describe(
@@ -1885,7 +1893,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
       project_key: z.string().min(1).describe("Project key"),
       root_suite_id: z.number().int().positive().optional().describe("Start from specific root suite"),
       max_depth: z.number().int().positive().max(10).default(5).describe("Maximum tree depth"),
-      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
+      format: z.enum(['dto', 'json', 'compact', 'string', 'markdown']).default('json').describe("Output format"),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI")
     },
       annotations: {
@@ -1980,7 +1988,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
         "When true with get_all, returns only the total count without test case data. " +
         "Efficient for metrics collection -- avoids 1MB response limit on large projects."
       ),
-      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
+      format: z.enum(['dto', 'json', 'compact', 'string', 'markdown']).default('json').describe("Output format"),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI"),
       include_history: z.boolean().default(false).describe("When true, each test case includes a 'history' array of change log entries. Filtered to steps, preconditions, expected results, and lifecycle events (automation state changes, deprecation) by default."),
       history_filter: z.enum(['steps_only', 'events_only', 'all']).default('steps_only').describe("What to include in history. 'steps_only': step/precondition/expectedResult diffs only. 'events_only': lifecycle events only (automated, deprecated, etc.). 'all': everything. Only used when include_history=true."),
@@ -2085,17 +2093,32 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
           const formattedData = FormatProcessor.format(processedCases, format);
           const resultText = typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2);
 
-          const MAX_RESPONSE_BYTES = 900_000;
           if (resultText.length > MAX_RESPONSE_BYTES) {
-            const avgItemSize = resultText.length / processedCases.length;
-            const safeCount = Math.floor(MAX_RESPONSE_BYTES / avgItemSize * 0.9);
-            const truncated = processedCases.slice(0, Math.max(safeCount, 1));
-            const truncatedText = JSON.stringify(truncated, null, 2);
-            return { content: [{ type: "text" as const, text:
-              `Found ${processedCases.length} total for automation state(s): ${automationStateInfo}, returning first ${truncated.length} ` +
-              `(response truncated to stay under MCP 1MB limit).\n` +
-              `Use count_only=true with get_all=true to get just the count without data.\n\n${truncatedText}`
-            }] };
+            const { slice, bodyText, wasTruncated } = truncateBulkItems(
+              processedCases,
+              resultText.length,
+              format,
+              (s) => ({
+                project_key,
+                automation_states: automationStateInfo,
+                total_count: processedCases.length,
+                was_truncated: true,
+                test_cases: s,
+              }),
+            );
+            return attachBulkMetrics(
+              {
+                content: [{
+                  type: "text" as const,
+                  text:
+                    `Found ${processedCases.length} total for automation state(s): ${automationStateInfo}, returning first ${slice.length} ` +
+                    `(response truncated to stay under MCP 1MB limit).\n` +
+                    `Use count_only=true with get_all=true to get just the count without data.\n\n${bodyText}`,
+                }],
+              },
+              slice.length,
+              wasTruncated,
+            );
           }
 
           let summary = `Found ${processedCases.length} test case(s) total for automation state(s): ${automationStateInfo}`;
@@ -2104,12 +2127,16 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
             if (warning) summary += `\n⚠️ ${warning}`;
           }
 
-          return {
-            content: [{
-              type: "text" as const,
-              text: `${summary}\n\n${resultText}`
-            }]
-          };
+          return attachBulkMetrics(
+            {
+              content: [{
+                type: "text" as const,
+                text: `${summary}\n\n${resultText}`,
+              }],
+            },
+            processedCases.length,
+            false,
+          );
         }
 
         // Single page
@@ -2271,10 +2298,12 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
           };
         }
 
+        const formatted = FormatProcessor.format(result, format);
+        const text = typeof formatted === 'string' ? formatted : JSON.stringify(formatted, null, 2);
         return {
           content: [{
             type: "text" as const,
-            text: JSON.stringify(result, null, 2)
+            text
           }]
         };
 
@@ -2405,7 +2434,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
         "When true with get_all, returns only the total count without test case data. " +
         "Efficient for metrics collection -- avoids 1MB response limit on large projects."
       ),
-      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
+      format: z.enum(['dto', 'json', 'compact', 'string', 'markdown']).default('json').describe("Output format"),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI"),
       include_history: z.boolean().default(false).describe("When true, each test case includes a 'history' array of change log entries. Filtered to steps, preconditions, expected results, and lifecycle events (automation state changes, deprecation) by default."),
       history_filter: z.enum(['steps_only', 'events_only', 'all']).default('steps_only').describe("What to include in history. 'steps_only': step/precondition/expectedResult diffs only. 'events_only': lifecycle events only (automated, deprecated, etc.). 'all': everything. Only used when include_history=true."),
@@ -2499,17 +2528,32 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
           const formattedData = FormatProcessor.format(processedCases, format);
           const resultText = typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2);
 
-          const MAX_RESPONSE_BYTES = 900_000;
           if (resultText.length > MAX_RESPONSE_BYTES) {
-            const avgItemSize = resultText.length / processedCases.length;
-            const safeCount = Math.floor(MAX_RESPONSE_BYTES / avgItemSize * 0.9);
-            const truncated = processedCases.slice(0, Math.max(safeCount, 1));
-            const truncatedText = JSON.stringify(truncated, null, 2);
-            return { content: [{ type: "text" as const, text:
-              `Found ${processedCases.length} total matching title "${title}", returning first ${truncated.length} ` +
-              `(response truncated to stay under MCP 1MB limit).\n` +
-              `Use count_only=true with get_all=true to get just the count without data.\n\n${truncatedText}`
-            }] };
+            const { slice, bodyText, wasTruncated } = truncateBulkItems(
+              processedCases,
+              resultText.length,
+              format,
+              (s) => ({
+                project_key,
+                title,
+                total_count: processedCases.length,
+                was_truncated: true,
+                test_cases: s,
+              }),
+            );
+            return attachBulkMetrics(
+              {
+                content: [{
+                  type: "text" as const,
+                  text:
+                    `Found ${processedCases.length} total matching title "${title}", returning first ${slice.length} ` +
+                    `(response truncated to stay under MCP 1MB limit).\n` +
+                    `Use count_only=true with get_all=true to get just the count without data.\n\n${bodyText}`,
+                }],
+              },
+              slice.length,
+              wasTruncated,
+            );
           }
 
           let summary = `Found ${processedCases.length} test case(s) total matching title "${title}"`;
@@ -2518,12 +2562,16 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
             if (warning) summary += `\n⚠️ ${warning}`;
           }
 
-          return {
-            content: [{
-              type: "text" as const,
-              text: `${summary}\n\n${resultText}`
-            }]
-          };
+          return attachBulkMetrics(
+            {
+              content: [{
+                type: "text" as const,
+                text: `${summary}\n\n${resultText}`,
+              }],
+            },
+            processedCases.length,
+            false,
+          );
         }
 
         // Single page
@@ -2619,7 +2667,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
         "When true with get_all, returns only the total count without test case data. " +
         "Efficient for metrics collection -- avoids 1MB response limit on large projects."
       ),
-      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
+      format: z.enum(['dto', 'json', 'compact', 'string', 'markdown']).default('json').describe("Output format"),
       include_clickable_links: z.boolean().default(false).describe("Include clickable links to Zebrunner web UI"),
       include_history: z.boolean().default(false).describe("When true, each test case includes a 'history' array of change log entries. Filtered to steps, preconditions, expected results, and lifecycle events (automation state changes, deprecation) by default."),
       history_filter: z.enum(['steps_only', 'events_only', 'all']).default('steps_only').describe("What to include in history. 'steps_only': step/precondition/expectedResult diffs only. 'events_only': lifecycle events only (automated, deprecated, etc.). 'all': everything. Only used when include_history=true."),
@@ -2778,28 +2826,56 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
           const formattedData = FormatProcessor.format(limited, format);
           const resultText = typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2);
 
-          const MAX_RESPONSE_BYTES = 900_000;
           if (resultText.length > MAX_RESPONSE_BYTES) {
-            const avgItemSize = resultText.length / limited.length;
-            const safeCount = Math.floor(MAX_RESPONSE_BYTES / avgItemSize * 0.9);
-            const truncated = limited.slice(0, Math.max(safeCount, 1));
-            const truncatedText = JSON.stringify(truncated, null, 2);
-            return { content: [{ type: "text" as const, text:
-              `Found ${matched.length} matching field filter (${allCases.length} total before filter), returning first ${truncated.length} ` +
-              `(response truncated to stay under MCP 1MB limit).\n` +
-              `Use count_only=true to get just the count.\n` +
-              `Field filter: ${fFilter!.fieldPath} ${fFilter!.matchMode} ${fFilter!.fieldValue || ''}\n` +
-              (filter ? `RQL filters: ${filter}\n` : '') + `\n${truncatedText}`
-            }] };
+            const { slice, bodyText, wasTruncated } = truncateBulkItems(
+              limited,
+              resultText.length,
+              format,
+              (s) => ({
+                project_key,
+                total_matched: matched.length,
+                total_scanned: allCases.length,
+                was_truncated: true,
+                field_filter: {
+                  fieldPath: fFilter!.fieldPath,
+                  matchMode: fFilter!.matchMode,
+                  fieldValue: fFilter!.fieldValue ?? null,
+                },
+                rql_filter: filter ?? null,
+                test_cases: s,
+              }),
+            );
+            return attachBulkMetrics(
+              {
+                content: [{
+                  type: "text" as const,
+                  text:
+                    `Found ${matched.length} matching field filter (${allCases.length} total before filter), returning first ${slice.length} ` +
+                    `(response truncated to stay under MCP 1MB limit).\n` +
+                    `Use count_only=true to get just the count.\n` +
+                    `Field filter: ${fFilter!.fieldPath} ${fFilter!.matchMode} ${fFilter!.fieldValue || ''}\n` +
+                    (filter ? `RQL filters: ${filter}\n` : '') + `\n${bodyText}`,
+                }],
+              },
+              slice.length,
+              wasTruncated,
+            );
           }
 
           const filterDesc = `Field filter: ${fFilter!.fieldPath} ${fFilter!.matchMode} ${fFilter!.fieldValue ?? '(any)'}`;
           const summary = `Found ${matched.length} test case(s) matching field filter (${allCases.length} total, ${pageCount} pages scanned)`;
           const showingInfo = matched.length > limited.length ? `\nShowing first ${limited.length} of ${matched.length}. Set max_page_size higher to see more.` : '';
 
-          return { content: [{ type: "text" as const,
-            text: `${summary}\n${filterDesc}${filter ? `\nRQL filters: ${filter}` : ''}${showingInfo}\n\n${resultText}`
-          }] };
+          return attachBulkMetrics(
+            {
+              content: [{
+                type: "text" as const,
+                text: `${summary}\n${filterDesc}${filter ? `\nRQL filters: ${filter}` : ''}${showingInfo}\n\n${resultText}`,
+              }],
+            },
+            limited.length,
+            matched.length > limited.length,
+          );
         }
 
         if (get_all && count_only) {
@@ -2873,18 +2949,33 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
           const formattedData = FormatProcessor.format(processedCases, format);
           const resultText = typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2);
 
-          const MAX_RESPONSE_BYTES = 900_000;
           if (resultText.length > MAX_RESPONSE_BYTES) {
-            const avgItemSize = resultText.length / processedCases.length;
-            const safeCount = Math.floor(MAX_RESPONSE_BYTES / avgItemSize * 0.9);
-            const truncated = processedCases.slice(0, Math.max(safeCount, 1));
-            const truncatedText = JSON.stringify(truncated, null, 2);
-            return { content: [{ type: "text" as const, text:
-              `Found ${processedCases.length} total matching filters, returning first ${truncated.length} ` +
-              `(response truncated to stay under MCP 1MB limit).\n` +
-              `Use count_only=true with get_all=true to get just the count without data.\n` +
-              `Applied filters: ${filter}\n\n${truncatedText}`
-            }] };
+            const { slice, bodyText, wasTruncated } = truncateBulkItems(
+              processedCases,
+              resultText.length,
+              format,
+              (s) => ({
+                project_key,
+                total_count: processedCases.length,
+                was_truncated: true,
+                filters_applied: filter,
+                test_cases: s,
+              }),
+            );
+            return attachBulkMetrics(
+              {
+                content: [{
+                  type: "text" as const,
+                  text:
+                    `Found ${processedCases.length} total matching filters, returning first ${slice.length} ` +
+                    `(response truncated to stay under MCP 1MB limit).\n` +
+                    `Use count_only=true with get_all=true to get just the count without data.\n` +
+                    `Applied filters: ${filter}\n\n${bodyText}`,
+                }],
+              },
+              slice.length,
+              wasTruncated,
+            );
           }
 
           let summary = `Found ${processedCases.length} test case(s) total matching the specified filters`;
@@ -2894,12 +2985,16 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
           }
           const filterSummary = `Applied filters: ${filter}`;
 
-          return {
-            content: [{
-              type: "text" as const,
-              text: `${summary}\n${filterSummary}\n\n${resultText}`
-            }]
-          };
+          return attachBulkMetrics(
+            {
+              content: [{
+                type: "text" as const,
+                text: `${summary}\n${filterSummary}\n\n${resultText}`,
+              }],
+            },
+            processedCases.length,
+            false,
+          );
         }
 
         // Single page
@@ -3557,7 +3652,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
         "When true, paginates through all pages and returns only the total count of suites without data. " +
         "Useful for metrics and dashboards. Bypasses MCP response size limits."
       ),
-      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format")
+      format: z.enum(['dto', 'json', 'compact', 'string', 'markdown']).default('json').describe("Output format")
     },
       annotations: {
         readOnlyHint: true,
@@ -3641,7 +3736,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
         "When true, returns only the total count of suites without data. " +
         "Paginates internally to count all suites, but skips hierarchy processing and formatting."
       ),
-      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format")
+      format: z.enum(['dto', 'json', 'compact', 'string', 'markdown']).default('json').describe("Output format")
     },
       annotations: {
         readOnlyHint: true,
@@ -3722,7 +3817,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
       description: "🌳 Get root suites (suites with no parent) from project",
     inputSchema: {
       project_key: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
-      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format")
+      format: z.enum(['dto', 'json', 'compact', 'string', 'markdown']).default('json').describe("Output format")
     },
       annotations: {
         readOnlyHint: true,
@@ -3780,7 +3875,7 @@ Supports two modes:
       suite_id: z.number().int().positive().describe("Suite ID to find"),
       mode: z.enum(['simple', 'full']).default('simple').describe("'simple' = fast direct API call (default). 'full' = hierarchy-enriched with root suite chain and clickable links."),
       only_root_suites: z.boolean().default(false).describe("(full mode only) Search only in root suites"),
-      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
+      format: z.enum(['dto', 'json', 'compact', 'string', 'markdown']).default('json').describe("Output format"),
       include_clickable_links: z.boolean().default(false).describe("(full mode only) Include clickable links to Zebrunner web UI")
     },
       annotations: {
@@ -5092,7 +5187,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
     launch_name: z.string().optional()
       .describe("Alias for template_query — launch name substring search."),
     suite_path: z.string().optional()
-      .describe("Match hidden CI suite param (e.g. 'mfp/android/critical-flow'). Can combine with template_query."),
+      .describe("Match hidden CI suite param (e.g. 'PROJ/android/critical-flow'). Can combine with template_query."),
     build: z.string().optional()
       .describe("Build filter override. Use '.*' for latest build."),
     locale: z.string().optional().describe("Locale override (e.g. 'en_US', 'de_DE'). When localeTestRunRules is enabled for the project, non-en_US may auto-merge NOT_TAGS exclusions."),
@@ -5962,7 +6057,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       exclude_deprecated: z.boolean().default(false).describe("Exclude deprecated test cases from results"),
       exclude_draft: z.boolean().default(false).describe("Exclude draft test cases from results"),
       exclude_deleted: z.boolean().default(true).describe("Exclude deleted test cases from results (default: true)"),
-      max_results: z.number().int().positive().max(10000).default(5000).describe("Maximum number of results (configurable limit for performance)"),
+      max_results: z.number().int().positive().max(10000).default(defaultMaxResults(5000)).describe("Maximum number of results (configurable limit for performance)"),
       detail: z.enum(['summary', 'full']).default(defaultDetailLevel()).describe("summary trims each case; full returns every field. Use count_only for metrics only."),
       fields: z.array(z.string()).optional().describe("Optional explicit field allow-list per test case (overrides detail)."),
       include_root_suite: z.boolean().default(false).describe("Enrich each case with rootSuiteId (suite hierarchy lookup)."),
@@ -6137,25 +6232,43 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           '- count_only: true',
         ]);
 
-        const MAX_RESPONSE_BYTES = 900_000;
         if (resultText.length > MAX_RESPONSE_BYTES) {
-          const avgItemSize = resultText.length / projectedCases.length;
-          const safeCount = Math.floor(MAX_RESPONSE_BYTES / avgItemSize * 0.9);
-          const truncated = projectedCases.slice(0, Math.max(safeCount, 1));
-          const truncatedText = JSON.stringify(truncated, null, 2);
-          return { content: [{ type: "text" as const, text:
-            `Found ${allTestCases.length} total test cases for ${project_key}, returning first ${truncated.length} ` +
-            `(response truncated to stay under MCP 1MB limit).\n` +
-            `Use count_only=true to get just the count without data.\n\n${truncatedText}`
-          }] };
+          const { slice, bodyText, wasTruncated } = truncateBulkItems(
+            projectedCases,
+            resultText.length,
+            format as any,
+            (s) => ({
+              ...resultPayload,
+              test_cases: s,
+              was_truncated: true,
+              total_fetched: allTestCases.length,
+            }),
+          );
+          return attachBulkMetrics(
+            {
+              content: [{
+                type: "text" as const,
+                text:
+                  `Found ${allTestCases.length} total test cases for ${project_key}, returning first ${slice.length} ` +
+                  `(response truncated to stay under MCP 1MB limit).\n` +
+                  `Use count_only=true to get just the count without data.\n\n${bodyText}`,
+              }],
+            },
+            slice.length,
+            wasTruncated,
+          );
         }
 
-        return {
-          content: [{
-            type: "text" as const,
-            text: resultText
-          }]
-        };
+        return attachBulkMetrics(
+          {
+            content: [{
+              type: "text" as const,
+              text: resultText,
+            }],
+          },
+          projectedCases.length,
+          wasTruncated,
+        );
 
       } catch (error: any) {
         debugLog("Error in adv_get_all_tcm_test_cases_by_project", { error: error.message, args });
@@ -6175,7 +6288,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       description: "🌳 Get ALL TCM test cases enriched with root suite ID information",
     inputSchema: {
       project_key: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
-      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format"),
+      format: z.enum(['dto', 'json', 'compact', 'string', 'markdown']).default('json').describe("Output format"),
       count_only: z.boolean().default(false).describe(
         "When true, returns only the total count without test case data. " +
         "Skips hierarchy enrichment for maximum efficiency."
@@ -6255,25 +6368,43 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         const formattedResult = FormatProcessor.format(enrichedTestCases, format as any);
         const resultText = typeof formattedResult === 'string' ? formattedResult : JSON.stringify(formattedResult, null, 2);
 
-        const MAX_RESPONSE_BYTES = 900_000;
         if (resultText.length > MAX_RESPONSE_BYTES) {
-          const avgItemSize = resultText.length / enrichedTestCases.length;
-          const safeCount = Math.floor(MAX_RESPONSE_BYTES / avgItemSize * 0.9);
-          const truncated = enrichedTestCases.slice(0, Math.max(safeCount, 1));
-          const truncatedText = JSON.stringify(truncated, null, 2);
-          return { content: [{ type: "text" as const, text:
-            `Found ${enrichedTestCases.length} total test cases with root suite IDs for ${project_key}, returning first ${truncated.length} ` +
-            `(response truncated to stay under MCP 1MB limit).\n` +
-            `Use count_only=true to get just the count without data.\n\n${truncatedText}`
-          }] };
+          const { slice, bodyText, wasTruncated } = truncateBulkItems(
+            enrichedTestCases,
+            resultText.length,
+            format as any,
+            (s) => ({
+              project_key,
+              total_fetched: enrichedTestCases.length,
+              was_truncated: true,
+              test_cases: s,
+            }),
+          );
+          return attachBulkMetrics(
+            {
+              content: [{
+                type: "text" as const,
+                text:
+                  `Found ${enrichedTestCases.length} total test cases with root suite IDs for ${project_key}, returning first ${slice.length} ` +
+                  `(response truncated to stay under MCP 1MB limit).\n` +
+                  `Use count_only=true to get just the count without data.\n\n${bodyText}`,
+              }],
+            },
+            slice.length,
+            wasTruncated,
+          );
         }
 
-        return {
-          content: [{
-            type: "text" as const,
-            text: resultText
-          }]
-        };
+        return attachBulkMetrics(
+          {
+            content: [{
+              type: "text" as const,
+              text: resultText,
+            }],
+          },
+          enrichedTestCases.length,
+          false,
+        );
 
       } catch (error: any) {
         debugLog("Error in adv_get_all_tcm_test_cases_with_root_suite_id", { error: error.message, args });
@@ -6294,7 +6425,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
     inputSchema: {
       project_key: z.string().min(1).describe("Project key (e.g., 'android' or 'ANDROID')"),
       suite_id: z.number().int().positive().describe("Suite ID to find root for"),
-      format: z.enum(['dto', 'json', 'string', 'markdown']).default('json').describe("Output format")
+      format: z.enum(['dto', 'json', 'compact', 'string', 'markdown']).default('json').describe("Output format")
     },
       annotations: {
         readOnlyHint: true,
@@ -6717,27 +6848,43 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           '- get_all: false with smaller page size',
         ]);
 
-        const MAX_RESPONSE_BYTES = 900_000;
         if (resultText.length > MAX_RESPONSE_BYTES) {
-          const avgItemSize = resultText.length / projectedCases.length;
-          const safeCount = Math.floor(MAX_RESPONSE_BYTES / avgItemSize * 0.9);
-          const truncated = projectedCases.slice(0, Math.max(safeCount, 1));
-          const truncatedText = JSON.stringify(truncated, null, 2);
-          return { content: [{ type: "text" as const, text:
-            `Found ${testCases.length} total test cases in suite ${suite_id}, returning first ${truncated.length} ` +
-            `(response truncated to stay under MCP 1MB limit).\n` +
-            `Use count_only=true to get just the count without data.\n\n${truncatedText}`
-          }] };
+          const { slice, bodyText, wasTruncated } = truncateBulkItems(
+            projectedCases,
+            resultText.length,
+            format,
+            (s) => ({
+              metadata: { ...metadata, was_truncated: true },
+              testCases: s,
+            }),
+          );
+          return attachBulkMetrics(
+            {
+              content: [{
+                type: "text" as const,
+                text:
+                  `Found ${testCases.length} total test cases in suite ${suite_id}, returning first ${slice.length} ` +
+                  `(response truncated to stay under MCP 1MB limit).\n` +
+                  `Use count_only=true to get just the count without data.\n\n${bodyText}`,
+              }],
+            },
+            slice.length,
+            wasTruncated,
+          );
         }
 
         summaryMessage += `\n${resultText}`;
 
-        return {
-          content: [{
-            type: "text" as const,
-            text: summaryMessage
-          }]
-        };
+        return attachBulkMetrics(
+          {
+            content: [{
+              type: "text" as const,
+              text: summaryMessage,
+            }],
+          },
+          projectedCases.length,
+          false,
+        );
 
       } catch (error: any) {
         debugLog("Error in adv_get_test_cases_by_suite_smart", { error: error.message, args });
@@ -7998,7 +8145,11 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         include_token_estimates: z.boolean().default(true)
           .describe("Include approximate token usage ranges (applies to summary and tool modes)"),
         include_role_benefits: z.boolean().default(true)
-          .describe("Include role-based value summary (applies to summary and tool modes)")
+          .describe("Include role-based value summary (applies to summary and tool modes)"),
+        metrics_breakdown: z.boolean().default(true)
+          .describe("When mode=metrics: include per-tool format/detail breakdown table"),
+        metrics_reset: z.boolean().default(false)
+          .describe("When mode=metrics: clear session metrics after returning the report"),
       },
       annotations: {
         readOnlyHint: true,
@@ -8043,7 +8194,11 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
 
         if (args.mode === "metrics") {
           const header = `MCP version: ${snapshot.mcpVersion}\n\n`;
-          return { content: [{ type: "text" as const, text: header + toolMetrics.getSummaryMarkdown() }] };
+          const body = toolMetrics.getFullMetricsMarkdown(args.metrics_breakdown !== false);
+          if (args.metrics_reset) {
+            toolMetrics.reset();
+          }
+          return { content: [{ type: "text" as const, text: header + body }] };
         }
 
         if (args.mode === "routing") {
@@ -8166,7 +8321,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         .describe("Override templateId if needed"),
       dashboardName: z.string().optional()
         .describe("Override dashboard title"),
-      format: z.enum(['raw', 'formatted']).default('formatted'),
+      format: z.enum(['raw', 'formatted', 'compact']).default('formatted'),
       chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
         "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
       ),
@@ -8266,6 +8421,11 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         }
 
         let result;
+        if (args.format === 'compact') {
+          return {
+            content: [{ type: "text" as const, text: JSON.stringify(data) }]
+          };
+        }
         if (args.format === 'raw') {
           result = data;
         } else {
@@ -8323,7 +8483,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       milestone: z.array(z.string())
         .default([])
         .describe("Optional MILESTONE filter, e.g., ['25.39.0'] for milestone filtering"),
-      format: z.enum(['raw', 'formatted']).default('formatted'),
+      format: z.enum(['raw', 'formatted', 'compact']).default('formatted'),
       chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
         "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
       ),
@@ -8355,6 +8515,12 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
 
         const raw = await callWidgetSql(projectId, args.templateId, paramsConfig);
 
+        if (args.format === 'compact') {
+          return {
+            content: [{ type: "text" as const, text: JSON.stringify(raw) }]
+          };
+        }
+
         if (args.format === 'raw') {
           return {
             content: [{ type: "text" as const, text: JSON.stringify(raw, null, 2) }]
@@ -8365,9 +8531,8 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         const rows: any[] = Array.isArray(raw) ? raw : [];
 
         if (rows.length === 0) {
-          const formatValue = args.format as 'raw' | 'formatted';
           return {
-            content: [{ type: "text" as const, text: formatValue === 'raw' ? JSON.stringify(raw, null, 2) : "No bug data found" }]
+            content: [{ type: "text" as const, text: "No bug data found" }]
           };
         }
 
@@ -8452,15 +8617,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           return buildChartResponse(chartConfig, args.chart as 'png' | 'html' | 'text', `Top ${top.length} bugs for ${args.period}`);
         }
 
-        // Return formatted or raw output based on format parameter
-        const formatValue = args.format as 'raw' | 'formatted';
-        if (formatValue === 'raw') {
-          return {
-            content: [{ type: "text" as const, text: JSON.stringify(top, null, 2) }]
-          };
-        }
-
-        // Return formatted output
+        // Return formatted output (compact/raw handled above on raw widget payload)
         const formatted = `📊 **Top ${top.length} Most Frequent Bugs** (${args.period})\n\n` +
           top.map((bug, i) => {
             const rank = i + 1;
@@ -9074,7 +9231,7 @@ ${detailsInfo.map((detail, i) => {
         "When true, returns only the total count of milestones matching the status filter. " +
         "For 'all'/'completed' uses efficient API metadata; for 'incomplete'/'overdue' paginates to apply client-side filter."
       ),
-      format: z.enum(['raw', 'formatted']).default('formatted')
+      format: z.enum(['raw', 'formatted', 'compact']).default('formatted')
         .describe("Output format: raw API response or formatted data")
     },
       annotations: {
@@ -9187,6 +9344,11 @@ ${detailsInfo.map((detail, i) => {
         }
 
         let result;
+        if (args.format === 'compact') {
+          return {
+            content: [{ type: "text" as const, text: JSON.stringify(filteredMilestonesData) }]
+          };
+        }
         if (args.format === 'raw') {
           result = filteredMilestonesData;
         } else {
@@ -9245,7 +9407,7 @@ ${detailsInfo.map((detail, i) => {
         .describe("Filter by starred projects (true=only starred, false=only non-starred, undefined=all)"),
       publiclyAccessible: z.boolean().optional()
         .describe("Filter by public accessibility (true=only public, false=only private, undefined=all)"),
-      format: z.enum(['raw', 'formatted']).default('formatted')
+      format: z.enum(['raw', 'formatted', 'compact']).default('formatted')
         .describe("Output format: raw API response or formatted data"),
       includePaginationInfo: z.boolean().default(false)
         .describe("Include pagination metadata from projects-limit endpoint")
@@ -9288,6 +9450,15 @@ ${detailsInfo.map((detail, i) => {
         }
 
         let result;
+        if (args.format === 'compact') {
+          const compactResult = {
+            projects: projectsData,
+            ...(paginationInfo && { pagination: paginationInfo })
+          };
+          return {
+            content: [{ type: "text" as const, text: JSON.stringify(compactResult) }]
+          };
+        }
         if (args.format === 'raw') {
           result = {
             projects: projectsData,
@@ -9470,7 +9641,7 @@ ${detailsInfo.map((detail, i) => {
         "When true, paginates through all pages and returns only the total count of test runs without data. " +
         "Useful for metrics and dashboards. Bypasses MCP response size limits."
       ),
-      format: z.enum(['raw', 'formatted']).default('formatted'),
+      format: z.enum(['raw', 'formatted', 'compact']).default('formatted'),
       chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
         "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
       ),
@@ -9599,6 +9770,11 @@ ${detailsInfo.map((detail, i) => {
         }
 
         let result: any;
+        if (args.format === 'compact') {
+          return {
+            content: [{ type: "text" as const, text: JSON.stringify(testRunsData) }]
+          };
+        }
         if (args.format === 'raw') {
           result = testRunsData;
         } else {
@@ -9673,7 +9849,7 @@ ${detailsInfo.map((detail, i) => {
       project: z.union([z.enum(["web","android","ios","api"]), z.string()])
         .default("web")
         .describe("Project alias ('web', 'android', 'ios', 'api') or project key"),
-      format: z.enum(['raw', 'formatted']).default('formatted'),
+      format: z.enum(['raw', 'formatted', 'compact']).default('formatted'),
       chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
         "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
       ),
@@ -9731,6 +9907,11 @@ ${detailsInfo.map((detail, i) => {
         }
 
         let result: any;
+        if (args.format === 'compact') {
+          return {
+            content: [{ type: "text" as const, text: JSON.stringify(testRunData) }]
+          };
+        }
         if (args.format === 'raw') {
           result = testRunData;
         } else {
@@ -9815,7 +9996,7 @@ ${detailsInfo.map((detail, i) => {
       project: z.union([z.enum(["web","android","ios","api"]), z.string()])
         .default("web")
         .describe("Project alias ('web', 'android', 'ios', 'api') or project key"),
-      format: z.enum(['raw', 'formatted']).default('formatted'),
+      format: z.enum(['raw', 'formatted', 'compact']).default('formatted'),
       chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
         "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
       ),
@@ -9868,6 +10049,11 @@ ${detailsInfo.map((detail, i) => {
         }
 
         let result: any;
+        if (args.format === 'compact') {
+          return {
+            content: [{ type: "text" as const, text: JSON.stringify(testCasesData) }]
+          };
+        }
         if (args.format === 'raw') {
           result = testCasesData;
         } else {
@@ -10874,7 +11060,7 @@ ${detailsInfo.map((detail, i) => {
       tags_format: z.enum(['by_root_suite', 'single_line']).default('by_root_suite').describe(
         "TAGS output format: by_root_suite (separate TAGS line per root suite, default) or single_line (all combined on one line)"
       ),
-      max_results: z.number().int().positive().max(2000).default(500).describe("Maximum test cases to process"),
+      max_results: z.number().int().positive().max(2000).default(defaultMaxResults(500)).describe("Maximum test cases to process"),
       chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
         "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
       ),

@@ -1,4 +1,5 @@
 import { argKeyPresent, normalizeArgKey } from "./eval-arg-aliases.js";
+import { normalizeEvalToolName } from "./eval-tool-aliases.js";
 import type { EvalConfig } from "./eval-config.js";
 import type { EvalPrompt } from "./eval-prompts.js";
 import type { TokenUsage } from "./eval-report.js";
@@ -80,9 +81,9 @@ function clampScore(val: unknown): number {
   return Math.max(1, Math.min(5, Math.round(n)));
 }
 
-/** Canonical v9 tool name (`adv_*`). Accepts legacy names for alias-enabled servers. */
+/** Canonical v9 tool name (`adv_*`). Accepts legacy names and common LLM aliases. */
 export function canonicalToolName(name: string): string {
-  return name.startsWith("adv_") ? name : `adv_${name}`;
+  return normalizeEvalToolName(name);
 }
 
 export function checkToolSelection(

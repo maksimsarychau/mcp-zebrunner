@@ -59,6 +59,12 @@ export function projectSuites<T>(data: T, detail: DetailLevel, fields?: string[]
 /**
  * Utility class for formatting output in different formats
  */
+/** Serialize formatted output to a string (handles dto returning raw objects). */
+export function serializeFormattedOutput(data: unknown, format: OutputFormat): string {
+  const formatted = FormatProcessor.format(data, format);
+  return typeof formatted === 'string' ? formatted : JSON.stringify(formatted, null, 2);
+}
+
 export class FormatProcessor {
   /**
    * Format data according to specified output format

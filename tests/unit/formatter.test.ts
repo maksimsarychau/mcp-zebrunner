@@ -1,8 +1,29 @@
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { FormatProcessor } from '../../src/utils/formatter.js';
+import { FormatProcessor, serializeFormattedOutput } from '../../src/utils/formatter.js';
 
 describe('FormatProcessor', () => {
+  describe('serializeFormattedOutput', () => {
+    const data = [{ id: 1, title: 'A' }, { id: 2, title: 'B' }];
+
+    it('returns compact minified JSON for truncated payloads', () => {
+      const text = serializeFormattedOutput(data, 'compact');
+      assert.equal(text, JSON.stringify(data));
+      assert.ok(!text.includes('\n'));
+    });
+
+    it('returns pretty JSON for json format', () => {
+      const text = serializeFormattedOutput(data, 'json');
+      assert.equal(text, JSON.stringify(data, null, 2));
+    });
+
+    it('serializes dto objects to pretty JSON', () => {
+      const obj = { id: 1, nested: { x: 2 } };
+      const text = serializeFormattedOutput(obj, 'dto');
+      assert.equal(text, JSON.stringify(obj, null, 2));
+    });
+  });
+
   describe('format method', () => {
     const testData = {
       id: 123,

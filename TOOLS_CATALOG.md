@@ -2,7 +2,9 @@
 
 Complete reference of all available tools with natural language usage examples.
 
-> **v9.2.0:** Token/cost optimization — `adv_batch_get_test_cases`, `format:compact`, `detail:summary`, `adv_generate_report` `inline:false`. Defaults unchanged. See [docs/TOKEN_EFFICIENCY.md](docs/TOKEN_EFFICIENCY.md) and [change-logs.md](change-logs.md).
+> **v9.2.1:** LLM-visible metrics (`include_call_metrics`, session breakdown), compact on 19 additional bulk/reporting tools, format/truncation fixes. See [docs/TOKEN_EFFICIENCY.md](docs/TOKEN_EFFICIENCY.md) and [change-logs.md](change-logs.md).
+
+> **v9.2.0:** Token/cost optimization — `adv_batch_get_test_cases`, `format:compact`, `detail:summary`, `adv_generate_report` `inline:false`. Defaults unchanged.
 
 > **v9.1.0:** New launch mutation tools — [`adv_rerun_launch_failures`](#adv_rerun_launch_failures), [`adv_start_launch`](#adv_start_launch), and [`adv_get_launch_details`](#adv_get_launch_details) (`includeJobParameters`). See [GitHub Release v9.1.0](https://github.com/maksimsarychau/mcp-zebrunner/releases/tag/v9.1.0).
 
@@ -886,14 +888,14 @@ Weekly stability report for project MCP using:
 
 ## Launch mutations & instance configuration
 
-Tools and prompts below honor optional blocks in **[zebrunner-config.json](zebrunner-config.json)** (or `ZEBRUNNER_CONFIG_JSON`). Customize per deployment; defaults in the repo target MFP Jenkins automation.
+Tools and prompts below honor optional blocks in **[zebrunner-config.json](zebrunner-config.json)** (or `ZEBRUNNER_CONFIG_JSON`). Customize per deployment; defaults in the repo target PROJ Jenkins automation.
 
 | Block | Tool / prompt | When it applies |
 |-------|---------------|-----------------|
 | `localeTestRunRules` | `adv_start_launch` | Preview only; project in `projectKeys` and locale ≠ `en_US` |
 | `relaunchFailures` | `/relaunch-regression-failures`, `adv_rerun_launch_failures` (via prompt) | Launch name exclusions + batch cap in prompt text |
 
-**Non-MFP deployments:** set `localeTestRunRules.enabled: false` and adjust `relaunchFailures.excludeLaunchNamePatterns`. `/feature-scoped-launch` resolves Jenkins `suite_path` from user input or recent launches — no config required.
+**Non-PROJ deployments:** set `localeTestRunRules.enabled: false` and adjust `relaunchFailures.excludeLaunchNamePatterns`. `/feature-scoped-launch` resolves Jenkins `suite_path` from user input or recent launches — no config required.
 
 Details: [README — Project-specific automation rules](README.md#project-specific-automation-rules-localetestrunrules--relaunchfailures) · [RESOURCES_AND_PROMPTS.md](docs/RESOURCES_AND_PROMPTS.md#project-specific-automation-configuration)
 
@@ -924,7 +926,7 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 
 **Example Prompts:**
 
-- "Rerun failures for launch 132522 in project MFPAND"
+- "Rerun failures for launch 132522 in project MCP"
 - "Rerun failed tests for the latest 5 launches in milestone 26.19.0 for android"
 - "Preview which launches in project android have failures and can be rerun"
 
@@ -948,7 +950,7 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 | `project` | string / number | yes | Project alias, key, or numeric ID |
 | `launch_id` | number | | Explicit template launch ID |
 | `template_query` / `launch_name` | string | | Search past launches by name substring |
-| `suite_path` | string | | Match hidden CI `suite` param (e.g. `mfp/android/critical-flow`) |
+| `suite_path` | string | | Match hidden CI `suite` param (e.g. `PROJ/android/critical-flow`) |
 | `build` | string | | Build override — use `.*` for latest build |
 | `locale` | string | | Locale override — when `localeTestRunRules` is enabled for the project, non-en_US may auto-merge NOT_TAGS exclusions |
 | `test_run_rules` | string | | Test run rules override — en_US-only suite exclusions are configured in `zebrunner-config.json` → `localeTestRunRules` |
@@ -961,7 +963,7 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 
 **Example Prompts:**
 
-- "Start Minimal-Acceptance launch for latest build in project MFPAND"
+- "Start Minimal-Acceptance launch for latest build in project MCP"
 - "Build now Critical flow with build .* and locale en_US"
 - "Build now regression for locale de_DE when localeTestRunRules is enabled for the project (see zebrunner-config.json)"
 - "Preview adv_start_launch for template launch 132452 with test_run_rules PRIORITY=>P0||P1;;"
@@ -1330,16 +1332,20 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 - Detail mode for a single tool by name
 - Prompts catalog: all `/` workflow commands grouped by category
 - Resources catalog: all `@` reference data (static and template)
-- Metrics mode: per-tool session stats (call count, durations, response size, errors)
+- Metrics mode: per-tool session stats (call count, durations, response size, errors, **format/detail breakdown**)
+- Routing mode: official vs Advanced MCP tool diff
 - MCP version displayed in all mode outputs
 
 **Parameters:**
 
-- `mode`: `summary` | `tool` | `prompts` | `resources` | `metrics` (default: `summary`)
+- `mode`: `summary` | `tool` | `prompts` | `resources` | `metrics` | `routing` (default: `summary`)
 - `tool_name`: required when `mode = tool`
 - `include_examples`: boolean (default: true)
 - `include_token_estimates`: boolean (default: true)
 - `include_role_benefits`: boolean (default: true)
+- `metrics_breakdown`: boolean (default: true when `mode=metrics`) — per-tool format/detail table
+- `metrics_reset`: boolean (default: false) — clear session stats after metrics report
+- `include_call_metrics`: boolean (optional, on **any** tool) — append `_mcp_metrics` footer to that response; also set `MCP_INLINE_METRICS=true` server-wide
 
 **Example Prompts:**
 
@@ -1481,6 +1487,6 @@ For large datasets, you can specify filters and limits:
 
 ---
 
-**Last Updated:** v9.2.0 - July 2026
+**Last Updated:** v9.2.1 - July 2026
 
 For the latest features and updates, see [change-logs.md](change-logs.md).

@@ -88,6 +88,38 @@ describe("ToolMetrics", () => {
       metrics.reset();
       assert.equal(metrics.getStats().size, 0);
     });
+
+    it("should clear breakdown stats", () => {
+      metrics.record("tool_a", 100, 500, false, { format: "compact", detail: "summary" });
+      assert.equal(metrics.getBreakdownStats().length, 1);
+      metrics.reset();
+      assert.equal(metrics.getBreakdownStats().length, 0);
+    });
+  });
+
+  describe("breakdown", () => {
+    it("should bucket by format and detail", () => {
+      metrics.record("bulk_tool", 100, 1000, false, { format: "compact", detail: "summary" });
+      metrics.record("bulk_tool", 120, 2000, false, { format: "json", detail: "full" });
+
+      const rows = metrics.getBreakdownStats();
+      assert.equal(rows.length, 2);
+      assert.equal(rows.find((r) => r.format === "compact")?.callCount, 1);
+      assert.equal(rows.find((r) => r.format === "json")?.callCount, 1);
+    });
+
+    it("should include breakdown in getFullMetricsMarkdown()", () => {
+      metrics.record("tool", 50, 200, false, { format: "compact", detail: "summary" });
+      const md = metrics.getFullMetricsMarkdown(true);
+      assert.ok(md.includes("Format / Detail"));
+      assert.ok(md.includes("| compact |"));
+    });
+
+    it("should omit breakdown when disabled", () => {
+      metrics.record("tool", 50, 200, false, { format: "compact", detail: "summary" });
+      const md = metrics.getFullMetricsMarkdown(false);
+      assert.ok(!md.includes("Format / Detail"));
+    });
   });
 });
 
@@ -158,5 +190,84 @@ describe("wrapToolHandler()", () => {
 
     const stats = metrics.getStats().get("empty_tool")!;
     assert.equal(stats.totalResponseChars, 0);
+  });
+
+  it("should strip include_call_metrics and not pass it to handler", async () => {
+    const metrics = new ToolMetrics();
+    const handler = async (args: { project_key?: string; include_call_metrics?: boolean }) => ({
+      content: [{ type: "text" as const, text: args.project_key ?? "ok" }],
+    });
+
+    const wrapped = wrapToolHandler("strip_tool", handler, metrics);
+    const result = await wrapped({ project_key: "MCP", include_call_metrics: false });
+
+    assert.equal(result.content[0].text, "MCP");
+    const rows = metrics.getBreakdownStats();
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].format, "-");
+  });
+
+  it("should append footer when include_call_metrics is true", async () => {
+    const metrics = new ToolMetrics();
+    const handler = async () => ({
+      content: [{ type: "text" as const, text: "payload" }],
+    });
+
+    const wrapped = wrapToolHandler("footer_tool", handler, metrics);
+    const result = await wrapped({ include_call_metrics: true, format: "compact", detail: "summary" });
+
+    assert.ok(result.content[0].text.includes("payload"));
+    assert.ok(result.content[0].text.includes("_mcp_metrics:"));
+    assert.ok(result.content[0].text.includes('"format":"compact"'));
+    assert.ok(result.content[0].text.includes('"detail":"summary"'));
+  });
+
+  it("should not append footer when include_call_metrics is false and env off", async () => {
+    const metrics = new ToolMetrics();
+    const handler = async () => ({
+      content: [{ type: "text" as const, text: "only payload" }],
+    });
+
+    const wrapped = wrapToolHandler("no_footer_tool", handler, metrics);
+    const result = await wrapped({ include_call_metrics: false });
+
+    assert.equal(result.content[0].text, "only payload");
+  });
+
+  it("should append footer when MCP_INLINE_METRICS env is true", async () => {
+    const prev = process.env.MCP_INLINE_METRICS;
+    process.env.MCP_INLINE_METRICS = "true";
+    try {
+      const metrics = new ToolMetrics();
+      const handler = async () => ({
+        content: [{ type: "text" as const, text: "env payload" }],
+      });
+
+      const wrapped = wrapToolHandler("env_footer_tool", handler, metrics);
+      const result = await wrapped({ format: "json" });
+
+      assert.ok(result.content[0].text.includes("env payload"));
+      assert.ok(result.content[0].text.includes("_mcp_metrics:"));
+    } finally {
+      if (prev === undefined) delete process.env.MCP_INLINE_METRICS;
+      else process.env.MCP_INLINE_METRICS = prev;
+    }
+  });
+
+  it("should append footer with bulk row metrics from _mcpBulkMetrics", async () => {
+    const metrics = new ToolMetrics();
+    const handler = async () => ({
+      content: [{ type: "text" as const, text: "payload" }],
+      _mcpBulkMetrics: { rowsReturned: 150, wasTruncated: true },
+    });
+
+    const wrapped = wrapToolHandler("bulk_tool", handler, metrics);
+    const result = await wrapped({ include_call_metrics: true, format: "compact", detail: "summary" });
+
+    assert.ok(result.content[0].text.includes("_mcp_metrics:"));
+    assert.ok(result.content[0].text.includes('"rowsReturned":150'));
+    assert.ok(result.content[0].text.includes('"wasTruncated":true'));
+    assert.ok(result.content[0].text.includes('"bytesPerRow"'));
+    assert.equal((result as { _mcpBulkMetrics?: unknown })._mcpBulkMetrics, undefined);
   });
 });

@@ -5,7 +5,9 @@ A **Model Context Protocol (MCP)** server that brings advanced analytics, report
 
 > Tool naming: every tool on this server is registered under the canonical `adv_<name>` form (e.g. `adv_create_test_case`, `adv_list_test_runs`) so it never collides with the official Zebrunner MCP. The legacy names are kept as **deprecated aliases** so prompts/scripts that called the old names continue to work for now; aliases will be removed in the next major release. 
 
-> 🆕 **v9.2.0** — Opt-in token/cost optimizations: `format:'compact'`, `detail:'summary'`, `adv_batch_get_test_cases`, report `inline:false`. Defaults unchanged. See **[Token efficiency guide](docs/TOKEN_EFFICIENCY.md)** and [change-logs.md](change-logs.md#v920--tokencost-optimization-opt-in).
+> 🆕 **v9.2.1** — LLM-visible metrics (`include_call_metrics`, session breakdown), compact expansion (+19 tools), format/truncation bugfixes. See **[Token efficiency guide](docs/TOKEN_EFFICIENCY.md)** and [change-logs.md](change-logs.md#v921--llm-visible-metrics--compact-expansion).
+
+> **v9.2.0** — Opt-in token/cost optimizations: `format:'compact'`, `detail:'summary'`, `adv_batch_get_test_cases`, report `inline:false`. Defaults unchanged. See [change-logs.md](change-logs.md#v920--tokencost-optimization-opt-in).
 
 > **v9.1.0** — Launch mutations: `adv_rerun_launch_failures`, `adv_start_launch` (Jenkins Build Now), plus `/relaunch-regression-failures` and `/feature-scoped-launch` prompts. See [GitHub Release v9.1.0](https://github.com/maksimsarychau/mcp-zebrunner/releases/tag/v9.1.0).
 >
