@@ -36,7 +36,7 @@ describe("bulk-truncation", () => {
     it("binary-searches row cap from compact wrapper size", () => {
       const cases = Array.from({ length: 200 }, (_, i) => makeCase(i));
       const buildPayload = (slice: typeof cases) => ({
-        project_key: "MFPAND",
+        project_key: "MCP",
         total_fetched: cases.length,
         was_truncated: true,
         test_cases: slice,
@@ -52,7 +52,7 @@ describe("bulk-truncation", () => {
     it("compact path uses wrapper shape, not bare array root", () => {
       const cases = Array.from({ length: 100 }, (_, i) => makeCase(i));
       const buildPayload = (s: typeof cases) => ({
-        project_key: "MFPAND",
+        project_key: "MCP",
         total_fetched: cases.length,
         was_truncated: true,
         test_cases: s,
@@ -82,7 +82,7 @@ describe("bulk-truncation", () => {
       const cases = Array.from({ length: 150 }, (_, i) => makeCase(i));
       const fullJson = serializeFormattedOutput(cases, "json");
       const buildPayload = (slice: typeof cases) => ({
-        project_key: "MFPAND",
+        project_key: "MCP",
         total_fetched: cases.length,
         was_truncated: true,
         test_cases: slice,
@@ -97,7 +97,7 @@ describe("bulk-truncation", () => {
     function goldenProjectedCases() {
       const raw = Array.from({ length: 110 }, (_, i) => ({
         id: 1000 + i,
-        key: `MFPAND-${1000 + i}`,
+        key: `MCP-${1000 + i}`,
         title: "Login flow validation step with extended title padding",
         priority: { name: "High" },
         automationState: { name: "Automated" },
@@ -117,7 +117,7 @@ describe("bulk-truncation", () => {
         resultText.length,
         "json",
         (slice) => ({
-          project_key: "MFPAND",
+          project_key: "MCP",
           total_fetched: projectedCases.length,
           was_truncated: true,
           test_cases: slice,
@@ -128,7 +128,7 @@ describe("bulk-truncation", () => {
       assert.equal(viaHandler.bodyText, legacy.bodyText);
       assert.equal(viaHandler.wasTruncated, true);
       assert.ok(legacy.slice.length < projectedCases.length);
-      assert.equal(legacy.slice[0]?.key, "MFPAND-1000");
+      assert.equal(legacy.slice[0]?.key, "MCP-1000");
       assert.ok(legacy.bodyText.trimStart().startsWith("["));
       assert.ok(!legacy.bodyText.includes('"project_key"'));
       assert.equal(

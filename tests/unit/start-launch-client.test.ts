@@ -9,7 +9,7 @@ import {
 describe("ZebrunnerReportingClient launch build methods", () => {
   it("GETs job parameters from the correct URL", async () => {
     const client = new ZebrunnerReportingClient({
-      baseUrl: "https://mfp.zebrunner.com",
+      baseUrl: "https://PROJ.zebrunner.com",
       accessToken: "test-token",
     });
 
@@ -31,7 +31,7 @@ describe("ZebrunnerReportingClient launch build methods", () => {
 
   it("POSTs job:build with JSON payload", async () => {
     const client = new ZebrunnerReportingClient({
-      baseUrl: "https://mfp.zebrunner.com",
+      baseUrl: "https://PROJ.zebrunner.com",
       accessToken: "test-token",
     });
 
@@ -50,7 +50,7 @@ describe("ZebrunnerReportingClient launch build methods", () => {
       return { id: 140100, name: "Critical", status: "IN_PROGRESS" };
     };
 
-    const payload = { build: ".*", locale: "en_US", suite: "mfp/android/critical-flow" };
+    const payload = { build: ".*", locale: "en_US", suite: "PROJ/android/critical-flow" };
     const result = await client.startLaunchBuild(132452, 7, payload);
 
     assert.equal(capturedMethod, "POST");

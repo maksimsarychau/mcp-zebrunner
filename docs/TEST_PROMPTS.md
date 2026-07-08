@@ -271,6 +271,11 @@
 
 **Expected:** Uses `count_only: true, exclude_deleted: true`. Returns `{total_count: N}` without fetching all test case objects. Efficient for coverage metrics.
 
+**Prompt 4 — Fair compact vs json A/B** *(v9.2.1)*
+> Call `adv_get_all_tcm_test_cases_by_project` for project MCP twice with identical args except format: `detail=summary`, `max_results=500`, `include_call_metrics=true`. First call `format=json`, second `format=compact`. Do not summarize the test case bodies. For each response, read the `_mcp_metrics` footer and report: `format | rowsReturned | wasTruncated | responseChars | approxTokens | bytesPerRow`. State whether compact is cheaper per row and in total, and whether `rowsReturned` matched.
+
+**Expected:** Same `rowsReturned` on both calls; `bytesPerRow` and `approxTokens` lower on `compact`. If `rowsReturned` differs, the comparison is unfair. See [§17 Test 8](#per-call-compact-vs-json-comparison-v921).
+
 ---
 
 ### `adv_get_all_tcm_test_cases_with_root_suite_id`
@@ -312,6 +317,11 @@
 > How many test cases are in suite 42 of the iOS project, including sub-suites? Just the count.
 
 **Expected:** Uses `count_only: true`. Auto-detects suite type, builds filter, and paginates to count without returning test case data. Returns `{total_count: N, suite_name: "...", is_root_suite: true/false}`.
+
+**Prompt 4 — Fair compact vs json A/B** *(v9.2.1)*
+> Pick one suite in the MCP project with a decent number of cases. Call `adv_get_test_cases_by_suite_smart` twice for that suite with `project_key: "MCP"`, `detail=summary`, `get_all=true`, `include_call_metrics=true` — first `format=json`, then `format=compact`. Compare only the `_mcp_metrics` footers: `rowsReturned`, `responseChars`, `approxTokens`, `bytesPerRow`. Confirm compact used fewer chars/tokens per row; if `rowsReturned` differs, say why the comparison is unfair.
+
+**Expected:** Equal `rowsReturned`; compact wins on `bytesPerRow`. See [§17 Test 9](#per-call-compact-vs-json-comparison-v921).
 
 ---
 
@@ -1545,6 +1555,43 @@ Requires LLM provider config in `.env` — see `.env.example` (`EVAL_PROVIDER=lo
 
 **Expected:** Each result object in the `results` array contains `tokenUsage: { inputTokens, outputTokens }`. Layer 3 results also contain `judgeTokenUsage`. The `summary` object contains `tokens: { totalInputTokens, totalOutputTokens, judgeInputTokens, judgeOutputTokens, estimatedCost: { input, output, total } }`.
 
+### Per-call compact vs JSON comparison *(v9.2.1)*
+
+Use in Claude Desktop. Each tool call must pass `include_call_metrics: true` (or set `MCP_INLINE_METRICS=true` on the server). Read the `_mcp_metrics` JSON footer on each response. Compare `rowsReturned`, `wasTruncated`, `bytesPerRow`, and `approxTokens` — not raw body size alone. See [TOKEN_EFFICIENCY.md](TOKEN_EFFICIENCY.md).
+
+**Test 8 — Fair A/B: project bulk read**
+
+> Call `adv_get_all_tcm_test_cases_by_project` for project MCP twice with identical args except format:
+> - `detail=summary`
+> - `max_results=500`
+> - `include_call_metrics=true`
+>
+> First call: `format=json`. Second call: `format=compact`.
+>
+> Do not summarize the test case bodies. For each response, read the `_mcp_metrics` footer and report a small table:
+> `format | rowsReturned | wasTruncated | responseChars | approxTokens | bytesPerRow`
+>
+> Then state whether compact is cheaper per row and in total, and whether `rowsReturned` matched (required for a fair comparison).
+
+**Expected:** Same `rowsReturned` on both calls. `bytesPerRow` and `approxTokens` lower on `format=compact` (~15–25% per row). If `rowsReturned` differs, flag the comparison as unfair.
+
+**Test 9 — Fair A/B: suite bulk read**
+
+> Pick one suite in the MCP project with a decent number of cases (or use a `suite_id` you already know).
+>
+> Call `adv_get_test_cases_by_suite_smart` twice for that suite with:
+> - `project_key: "MCP"`
+> - `detail=summary`
+> - `get_all=true`
+> - `include_call_metrics=true`
+> - `format=json` on the first call, `format=compact` on the second
+>
+> Compare only the `_mcp_metrics` footers: `rowsReturned`, `responseChars`, `approxTokens`, `bytesPerRow`.
+>
+> Confirm compact used fewer chars/tokens per row. If `rowsReturned` differs, say the comparison is unfair and why.
+
+**Expected:** Equal `rowsReturned`; compact wins on `bytesPerRow`.
+
 ---
 
-*Last Updated: v9.1.0 - July 2026*
+*Last Updated: v9.2.1 - July 2026*

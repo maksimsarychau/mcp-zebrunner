@@ -9,7 +9,7 @@ import {
 import type { LaunchJobParameter } from "../../src/types/reporting.js";
 
 const SAMPLE_PARAMS: LaunchJobParameter[] = [
-  { name: "suite", parameterClass: "HIDDEN", value: "mfp/android/critical-flow" },
+  { name: "suite", parameterClass: "HIDDEN", value: "PROJ/android/critical-flow" },
   { name: "build", parameterClass: "STRING", value: ".*" },
   { name: "locale", parameterClass: "STRING", value: "en_US" },
   { name: "test_run_rules", parameterClass: "STRING", value: "PRIORITY=>P0;;" },
@@ -19,7 +19,7 @@ const SAMPLE_PARAMS: LaunchJobParameter[] = [
 describe("launch-job-build utilities", () => {
   it("extractJobSummary derives suite and defaults", () => {
     const summary = extractJobSummary(SAMPLE_PARAMS);
-    assert.equal(summary.suitePath, "mfp/android/critical-flow");
+    assert.equal(summary.suitePath, "PROJ/android/critical-flow");
     assert.equal(summary.buildDefault, ".*");
     assert.equal(summary.localeDefault, "en_US");
     assert.equal(summary.visibleParameters.length, 4);
@@ -29,7 +29,7 @@ describe("launch-job-build utilities", () => {
     const merged = mergeJobParameters(SAMPLE_PARAMS, { build: "12345", fork: true });
     assert.equal(merged.build, "12345");
     assert.equal(merged.fork, true);
-    assert.equal(merged.suite, "mfp/android/critical-flow");
+    assert.equal(merged.suite, "PROJ/android/critical-flow");
   });
 
   it("mergeJobParameters rejects unknown keys", () => {

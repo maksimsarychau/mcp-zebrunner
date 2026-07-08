@@ -888,14 +888,14 @@ Weekly stability report for project MCP using:
 
 ## Launch mutations & instance configuration
 
-Tools and prompts below honor optional blocks in **[zebrunner-config.json](zebrunner-config.json)** (or `ZEBRUNNER_CONFIG_JSON`). Customize per deployment; defaults in the repo target MFP Jenkins automation.
+Tools and prompts below honor optional blocks in **[zebrunner-config.json](zebrunner-config.json)** (or `ZEBRUNNER_CONFIG_JSON`). Customize per deployment; defaults in the repo target PROJ Jenkins automation.
 
 | Block | Tool / prompt | When it applies |
 |-------|---------------|-----------------|
 | `localeTestRunRules` | `adv_start_launch` | Preview only; project in `projectKeys` and locale ≠ `en_US` |
 | `relaunchFailures` | `/relaunch-regression-failures`, `adv_rerun_launch_failures` (via prompt) | Launch name exclusions + batch cap in prompt text |
 
-**Non-MFP deployments:** set `localeTestRunRules.enabled: false` and adjust `relaunchFailures.excludeLaunchNamePatterns`. `/feature-scoped-launch` resolves Jenkins `suite_path` from user input or recent launches — no config required.
+**Non-PROJ deployments:** set `localeTestRunRules.enabled: false` and adjust `relaunchFailures.excludeLaunchNamePatterns`. `/feature-scoped-launch` resolves Jenkins `suite_path` from user input or recent launches — no config required.
 
 Details: [README — Project-specific automation rules](README.md#project-specific-automation-rules-localetestrunrules--relaunchfailures) · [RESOURCES_AND_PROMPTS.md](docs/RESOURCES_AND_PROMPTS.md#project-specific-automation-configuration)
 
@@ -926,7 +926,7 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 
 **Example Prompts:**
 
-- "Rerun failures for launch 132522 in project MFPAND"
+- "Rerun failures for launch 132522 in project MCP"
 - "Rerun failed tests for the latest 5 launches in milestone 26.19.0 for android"
 - "Preview which launches in project android have failures and can be rerun"
 
@@ -950,7 +950,7 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 | `project` | string / number | yes | Project alias, key, or numeric ID |
 | `launch_id` | number | | Explicit template launch ID |
 | `template_query` / `launch_name` | string | | Search past launches by name substring |
-| `suite_path` | string | | Match hidden CI `suite` param (e.g. `mfp/android/critical-flow`) |
+| `suite_path` | string | | Match hidden CI `suite` param (e.g. `PROJ/android/critical-flow`) |
 | `build` | string | | Build override — use `.*` for latest build |
 | `locale` | string | | Locale override — when `localeTestRunRules` is enabled for the project, non-en_US may auto-merge NOT_TAGS exclusions |
 | `test_run_rules` | string | | Test run rules override — en_US-only suite exclusions are configured in `zebrunner-config.json` → `localeTestRunRules` |
@@ -963,7 +963,7 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 
 **Example Prompts:**
 
-- "Start Minimal-Acceptance launch for latest build in project MFPAND"
+- "Start Minimal-Acceptance launch for latest build in project MCP"
 - "Build now Critical flow with build .* and locale en_US"
 - "Build now regression for locale de_DE when localeTestRunRules is enabled for the project (see zebrunner-config.json)"
 - "Preview adv_start_launch for template launch 132452 with test_run_rules PRIORITY=>P0||P1;;"

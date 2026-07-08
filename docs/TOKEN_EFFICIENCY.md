@@ -233,7 +233,7 @@ Set on the **MCP server** process (not eval-only):
 Fair compact/json comparison prompt:
 
 ```text
-Reset metrics. For MFPAND call adv_get_all_tcm_test_cases_by_project twice with
+Reset metrics. For PROJ-1 call adv_get_all_tcm_test_cases_by_project twice with
 detail=summary, max_results=500, include_call_metrics=true:
 format=json then format=compact.
 Compare rowsReturned, wasTruncated, bytesPerRow.

@@ -6,7 +6,7 @@ import { RerunLaunchResponseSchema } from "../../src/types/reporting.js";
 describe("ZebrunnerReportingClient.rerunLaunchFailures", () => {
   it("POSTs to the rerun failures endpoint with correct query params", async () => {
     const client = new ZebrunnerReportingClient({
-      baseUrl: "https://mfp.zebrunner.com",
+      baseUrl: "https://PROJ.zebrunner.com",
       accessToken: "test-token",
     });
 
@@ -31,7 +31,7 @@ describe("ZebrunnerReportingClient.rerunLaunchFailures", () => {
 
   it("supports rerunFailures=false when requested", async () => {
     const client = new ZebrunnerReportingClient({
-      baseUrl: "https://mfp.zebrunner.com",
+      baseUrl: "https://PROJ.zebrunner.com",
       accessToken: "test-token",
     });
 

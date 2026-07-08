@@ -5187,7 +5187,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
     launch_name: z.string().optional()
       .describe("Alias for template_query — launch name substring search."),
     suite_path: z.string().optional()
-      .describe("Match hidden CI suite param (e.g. 'mfp/android/critical-flow'). Can combine with template_query."),
+      .describe("Match hidden CI suite param (e.g. 'PROJ/android/critical-flow'). Can combine with template_query."),
     build: z.string().optional()
       .describe("Build filter override. Use '.*' for latest build."),
     locale: z.string().optional().describe("Locale override (e.g. 'en_US', 'de_DE'). When localeTestRunRules is enabled for the project, non-en_US may auto-merge NOT_TAGS exclusions."),

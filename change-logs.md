@@ -32,7 +32,7 @@
 
 - **`adv_get_test_cases_by_automation_state`** — single-page path now honors `format=compact` / `dto` via `FormatProcessor` (was always pretty JSON).
 - **Bulk truncation safety net** — seven TCM bulk tools use **fair row cap** for `format=compact` (wrapper object + same byte budget as json); **json truncated path unchanged** (bare array slice).
-- **MFPAND compact > json paradox** — compact no longer returns more rows than json under the ~900 KB safety net when comparing the same `max_results`.
+- **MCP compact > json paradox** — compact no longer returns more rows than json under the ~900 KB safety net when comparing the same `max_results`.
 - **`include_call_metrics`** — injected on schema-less tools (e.g. `adv_test_reporting_connection`) via global `registerTool` wrapper.
 - **`adv_get_top_bugs`** — removed unreachable duplicate compact branches after early raw-widget return.
 
