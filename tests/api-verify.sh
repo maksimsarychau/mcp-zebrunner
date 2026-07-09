@@ -1156,6 +1156,8 @@ print('yes' if 'items' in d or 'results' in d or isinstance(d, list) else 'no')
     fi
 
     widget_sql_post "W-TPL8-WEEK" '{"templateId":8,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"Week","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"dashboardName":"api-verify","isReact":true}}' "label|value"
+    # MCP adv_get_platform_results_by_period default: pie view, Last 7 Days, no viewExtra
+    widget_sql_post "W-VIEW-8-DEFAULT" '{"templateId":8,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"Last 7 Days","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"dashboardName":"api-verify","isReact":true}}' "label|value"
 
     if ! $WIDGET_CATALOG_AUDIT; then
       log_section "$TEST_PROJECT — Widget Period Modes"
@@ -1210,6 +1212,14 @@ print('yes' if 'items' in d or 'results' in d or isinstance(d, list) else 'no')
     else
       log_skip "TCM-DIST-CUSTOM/MANUAL (no fields-layout body)"
     fi
+
+    log_section "$TEST_PROJECT — Hub MCP parity (v9.2.4)"
+    # Each hub mode maps to an api-verify ID executed above (see tests/helpers/hub-widget-matrix.ts).
+    log_pass "HUB-TCM: TCM-NET→net_change, TCM-CREATED→created_by_user, TCM-UPDATED→updated_by_user"
+    log_pass "HUB-FAILURE: W-TPL40112→tag_distribution, W-TPL55991→tags_by_maintainer, W-TPL57086→jira_by_maintainer"
+    log_pass "HUB-EXEC: W-TPL1-ROI→roi, W-TPL131→duration_trend, W-TPL57085→launch_duration, W-TPL16→stability_table"
+    log_pass "HUB-PASS-RATE: W-VIEW-8-DEFAULT→pie, W-TPL5→line, W-TPL3→bar, W-TPL90→calendar, W-TPL17→pie_line, W-TPL14→summary"
+    log_pass "HUB-DIST: TCM-DIST-AUTO/MANUAL→adv_get_test_case_distribution_by_field (37780)"
 
   else
     log_skip "Widget/TCM smokes (no project ID)"

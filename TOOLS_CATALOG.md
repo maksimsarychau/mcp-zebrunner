@@ -1273,6 +1273,23 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 - "Pie chart of cases by Priority in MCP"
 - `{ project: "MCP", system_field: "AUTOMATION_STATE", format: "json" }`
 
+### `adv_get_tcm_case_analytics` *(v9.2.4 — TCM widgets 37777–37779)*
+
+**Modes:** `net_change` | `created_by_user` | `updated_by_user`
+
+**Example Prompts:**
+
+- "Show TCM net case change for project MCP over the last 90 days grouped by week"
+- "Who created the most test cases on MCP in the last 30 days?"
+
+### `adv_get_failure_analytics` *(v9.2.4 — templates 40112, 55991, 57086)*
+
+**Modes:** `tag_distribution` | `tags_by_maintainer` | `jira_by_maintainer`
+
+### `adv_get_execution_analytics` *(v9.2.4 — templates 1, 131, 57085, 16)*
+
+**Modes:** `roi` | `duration_trend` | `launch_duration` | `stability_table`
+
 ### `adv_get_project_milestones`
 
 **Description:** Get all milestones configured for a project.

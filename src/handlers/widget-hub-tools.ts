@@ -68,15 +68,6 @@ export interface WidgetHubToolsDeps {
   debugLog: (message: string, data?: unknown) => void;
 }
 
-function hubAnnotations() {
-  return {
-    readOnlyHint: true as const,
-    destructiveHint: false as const,
-    idempotentHint: true as const,
-    openWorldHint: false as const,
-  };
-}
-
 export function registerWidgetHubTools(server: McpServer, deps: WidgetHubToolsDeps): void {
   const { resolveProjectId, reportingClient, callWidgetSql, debugLog } = deps;
 
@@ -102,7 +93,12 @@ export function registerWidgetHubTools(server: McpServer, deps: WidgetHubToolsDe
         format: z.enum(['formatted', 'json', 'compact']).default('formatted'),
         chart: z.enum(['none', 'png', 'html', 'text']).default('none'),
       },
-      annotations: hubAnnotations(),
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       try {
@@ -195,7 +191,12 @@ export function registerWidgetHubTools(server: McpServer, deps: WidgetHubToolsDe
         ...widgetPeriodZodFields('Last 14 Days'),
         format: z.enum(['formatted', 'json', 'compact']).default('formatted'),
       },
-      annotations: hubAnnotations(),
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       try {
@@ -276,7 +277,12 @@ export function registerWidgetHubTools(server: McpServer, deps: WidgetHubToolsDe
           .describe('Minimum stability % for stability_table mode (template 16)'),
         format: z.enum(['formatted', 'json', 'compact']).default('formatted'),
       },
-      annotations: hubAnnotations(),
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       try {

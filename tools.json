@@ -116,6 +116,14 @@
     "description": "Enhanced test coverage analysis with rules engine"
   },
   {
+    "name": "adv_get_execution_analytics",
+    "description": "Execution dashboard widgets: ROI (1), duration trend (131), launch duration (57085), stability table (16)"
+  },
+  {
+    "name": "adv_get_failure_analytics",
+    "description": "Failure tag/Jira analytics widgets: tag pie (40112), tags×maintainer (55991), Jira×maintainer (57086)"
+  },
+  {
     "name": "adv_get_launch_details",
     "description": "Get comprehensive information about a specific launch including test results, environment, and metadata"
   },
@@ -146,6 +154,10 @@
   {
     "name": "adv_get_suite_hierarchy",
     "description": "Get complete suite hierarchy tree"
+  },
+  {
+    "name": "adv_get_tcm_case_analytics",
+    "description": "TCM case analytics widgets: net change (37777), created by user (37779), updated by user (37778)"
   },
   {
     "name": "adv_get_tcm_suite_by_id",

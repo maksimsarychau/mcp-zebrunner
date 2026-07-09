@@ -1,5 +1,25 @@
 # Change Logs
 
+## v9.2.4 — Widget hub tools + pass-rate view extension
+
+### Added
+
+- **`adv_get_tcm_case_analytics`** — TCM widgets 37777–37779 (`net_change`, `created_by_user`, `updated_by_user`)
+- **`adv_get_failure_analytics`** — templates 40112, 55991, 57086
+- **`adv_get_execution_analytics`** — templates 1, 131, 57085, 16
+- **`src/handlers/widget-hub-tools.ts`**, **`src/utils/widget-pass-rate-views.ts`**
+
+### Changed
+
+- **`adv_get_platform_results_by_period`** — optional `view` (`pie`|`line`|`bar`|`calendar`|`pie_line`|`summary`), `group_by`, `grouping_period`, `passed_value_threshold`; auto-selects templateId (default `pie` → 8, unchanged)
+- Tool count **65 → 68**; eval widget prompts route to hub tools where applicable
+
+### Deferred (v9.2.5)
+
+- **`adv_get_test_authoring_trend`** — TAM template 7
+
+---
+
 ## v9.2.3 — TCM distribution widget + widget platform verification
 
 ### Added

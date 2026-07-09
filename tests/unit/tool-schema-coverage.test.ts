@@ -4,8 +4,18 @@ import fs from "node:fs";
 import path from "node:path";
 import { TOOL_SCHEMA_REQUIRED_KEYS } from "../helpers/tool-coverage-matrix.js";
 
+function readRegistrationSources(): string {
+  const root = process.cwd();
+  return [
+    path.join(root, "src", "server.ts"),
+    path.join(root, "src", "handlers", "widget-hub-tools.ts"),
+  ]
+    .map(f => fs.readFileSync(f, "utf-8"))
+    .join("\n");
+}
+
 function readServerSource() {
-  return fs.readFileSync(path.join(process.cwd(), "src", "server.ts"), "utf-8");
+  return readRegistrationSources();
 }
 
 function extractBracedBlock(source: string, openBraceIdx: number, limit: number): string | null {
@@ -37,7 +47,7 @@ function extractBracedBlock(source: string, openBraceIdx: number, limit: number)
 
 function schemaBlockForTool(source: string, toolName: string): string | null {
   const escapedName = toolName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const startPattern = new RegExp(`server\\.registerTool\\(\\s*"${escapedName}"`, "m");
+  const startPattern = new RegExp(`server\\.registerTool\\(\\s*['"]${escapedName}['"]`, "m");
   const startMatch = source.match(startPattern);
   if (!startMatch || startMatch.index === undefined) return null;
 

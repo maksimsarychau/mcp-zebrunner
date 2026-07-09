@@ -1,5 +1,6 @@
 import type { EvalDiscoveryContext } from "./eval-discovery.js";
 import type { EvalLayer } from "./eval-config.js";
+import { HUB_EVAL_PROMPTS } from "./eval-hub-prompts.js";
 import { WIDGET_EVAL_PROMPTS } from "./eval-widget-prompts.js";
 
 export type PromptCategory =
@@ -728,6 +729,9 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
 
   // Widget prompts (22 templates) — see eval-widget-prompts.ts
   ...WIDGET_EVAL_PROMPTS,
+
+  // Hub tools + pass-rate views (v9.2.4) — see eval-hub-prompts.ts
+  ...HUB_EVAL_PROMPTS,
 
   // ── Section 4: Utility / Connection Tools ──
 
