@@ -37,6 +37,16 @@ const CLOUD_EVAL_PROMPT_IDS = [
   "get_test_case_distribution_by_field.automation_state",
   "get_test_case_distribution_by_field.field_name",
   "neg.confuse.distribution_vs_automation_state",
+  "widget.tpl37780.suite_scoped",
+  "widget.tpl37777.net_change",
+  "widget.tpl6.failure_info",
+  "widget.tpl10.failure_details",
+  "widget.tpl8.dynamic_period",
+  "widget.tpl16.stability_table",
+  "widget.chain.bug_triage",
+  "widget.e2e.coverage_dashboard",
+  "widget.neg.roi_not_distribution",
+  "widget.neg.stability_not_pass_rate",
 
   // TCM hierarchy / root-suite routing
   "list_test_suites.hierarchy",

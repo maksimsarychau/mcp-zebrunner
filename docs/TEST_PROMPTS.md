@@ -23,6 +23,7 @@
 15. [MCP Prompts](#15-mcp-prompts-v910)
 16. [Tool Annotations](#16-tool-annotations-v721)
 17. [Tool Metrics & Token Tracking](#17-tool-metrics--token-tracking-v721)
+18. [Dashboard Widgets (22 templates)](#18-dashboard-widgets-22-templates--v923)
 
 ---
 
@@ -681,6 +682,25 @@
 > Get detailed failure information for a specific bug hashcode in the Android project.
 
 **Expected:** Returns failure summary, affected test runs, and reproduction details for the specific defect.
+
+---
+
+### `adv_get_test_case_distribution_by_field` *(v9.2.3 — TCM widget 37780)*
+
+**Prompt 1 — Automation state pie**
+> Show test case distribution by automation state for the Android project as a pie breakdown.
+
+**Expected:** Calls `adv_get_test_case_distribution_by_field` with `system_field: "AUTOMATION_STATE"`. Returns label/count/% table (or pie chart when `chart` is set). Not a paginated case list.
+
+**Prompt 2 — Priority field by display name**
+> Get the dashboard-style test case distribution by Priority field for the iOS project.
+
+**Expected:** Resolves "Priority" via fields-layout. Returns counts per priority value with percentages.
+
+**Prompt 3 — Scoped to a root suite**
+> Show automation state distribution for test cases under root suite 42 in the Web project, including all subsuites.
+
+**Expected:** Uses `root_suite_ids: [42]` with descendant expansion. Summary includes `suiteFilter.count`.
 
 ---
 
@@ -1594,4 +1614,392 @@ Use in Claude Desktop. Each tool call must pass `include_call_metrics: true` (or
 
 ---
 
-*Last Updated: v9.2.1 - July 2026*
+## 18. Dashboard Widgets (22 templates) — v9.2.3
+
+Zebrunner exposes **22 dashboard widget templates** validated in `tests/api-verify.sh` (17 TAM SQL widgets + 4 TCM content widgets + legacy W1). Only **37780** has a dedicated MCP tool in v9.2.3; several TAM templates map to existing Tier A tools; the rest are documented here for manual/API verification and upcoming hub tools ([TCM_TAM_WIDGET_BACKLOG.md](todos/TCM_TAM_WIDGET_BACKLOG.md)).
+
+**Conventions:** Prompts use generic platform names (Android / iOS / Web). Replace with your project key or alias. Period strings must match Zebrunner presets unless using v9.2.2+ `period_mode` fields on Tier A tools.
+
+---
+
+### TCM widgets (4) — `POST /api/tcm/v1/widgets/{systemName}/content:get`
+
+#### Template **37780** — Test cases distribution by field
+
+**MCP tool:** `adv_get_test_case_distribution_by_field`
+
+**Prompt 1 — Project-wide automation state**
+> Show a pie chart of test case distribution by automation state for the Android project.
+
+**Expected:** Widget API (37780). Returns counts and percentages per automation state; optional PNG pie when `chart: "png"`.
+
+**Prompt 2 — Custom field + root suite**
+> How are test cases in root suite 100 distributed by the "Manual Only" custom field on iOS? Include subsuites.
+
+**Expected:** Resolves custom field via fields-layout; expands `root_suite_ids`. Not the same as `adv_get_test_cases_by_automation_state` (paginated list).
+
+**Prompt 3 — JSON for automation**
+> Return compact JSON for Priority distribution across the Web project.
+
+**Expected:** `format: "compact"` or `"json"` with `{ summary, items: [{ label, value, percent }] }`.
+
+---
+
+#### Template **37777** — Test cases net change
+
+**MCP today:** API only (planned `adv_get_tcm_case_analytics` v9.2.4)
+
+**Prompt 1**
+> Show net change in test case count for the Android project over the last 90 days, grouped by week.
+
+**Expected:** TCM widget `test-cases-net-change` with `period: "Last 90 Days"`, `groupingPeriod: "Week"`. Rows include `period`, `valueFrom`, `valueTo`.
+
+**Prompt 2**
+> Compare TCM case volume at the start vs end of last month for iOS.
+
+**Expected:** Net-change widget with monthly grouping; suitable for coverage trend standups.
+
+---
+
+#### Template **37778** — Test cases updated by user
+
+**MCP today:** API only (TCM analytics hub v9.2.4)
+
+**Prompt 1**
+> Who updated the most test cases on the Web project in the last 30 days?
+
+**Expected:** TCM widget `test-cases-updated-by-user`; bar/list by user with counts.
+
+**Prompt 2**
+> Show TCM update activity by author for Android this quarter.
+
+**Expected:** Adjust `period` in widget filters; snapshot-only (no ABSOLUTE/DYNAMIC on TCM widgets).
+
+---
+
+#### Template **37779** — Test cases created by user
+
+**MCP today:** API only (TCM analytics hub v9.2.4)
+
+**Prompt 1**
+> Which authors created the most new test cases on iOS in the last 30 days?
+
+**Expected:** TCM widget `test-cases-created-by-user`.
+
+**Prompt 2**
+> Show test case authoring leaderboard for the Web project for last month.
+
+**Expected:** Same widget family as 37778 but creation events.
+
+---
+
+### TAM SQL widgets (18) — `POST /api/reporting/v1/widget-templates/sql`
+
+#### Template **1** — Execution ROI
+
+**MCP today:** API only (planned `adv_get_execution_analytics` v9.2.4). Legacy **W1** smoke uses older `PROJECT_NAME` payload shape.
+
+**Prompt 1**
+> What is the execution ROI (time saved vs manual effort) for the Android project over the last 7 days?
+
+**Expected:** Template 1 with dashboard filters; columns include `TIME` or `STARTED_AT`.
+
+**Prompt 2**
+> Summarize automation ROI for iOS launches this week.
+
+**Expected:** React dashboard params (`isReact: true`, empty filter arrays, `PERIOD: "Last 7 Days"`).
+
+---
+
+#### Template **3** — Pass rate (bar, grouped)
+
+**MCP today:** API only (extend `adv_get_platform_results_by_period` with `view: bar` v9.2.4)
+
+**Prompt 1**
+> Show pass rate broken down by priority for the Web project for July 2026.
+
+**Expected:** Template 3, `GROUP_BY: "PRIORITY"`, `PERIOD: "ABSOLUTE"` with start/end dates; rows use `GROUP_FIELD` or group column + status counts.
+
+**Prompt 2**
+> Bar chart of pass/fail by priority for Android last month.
+
+**Expected:** Prefer future MCP pass-rate tool; today use widget SQL or `adv_generate_report` pass_rate leg.
+
+---
+
+#### Template **4** — Top defects
+
+**MCP tool:** `adv_get_top_bugs`
+
+**Prompt 1**
+> What are the top 10 defects by failure count on Android over the last 7 days?
+
+**Expected:** Template 4 / `adv_get_top_bugs`; columns `DEFECT`, `FAILURES`, `%`.
+
+**Prompt 2**
+> List the most frequent Jira-linked bugs on iOS this month with failure counts.
+
+**Expected:** Uses widget SQL or MCP tool; optional `issueUrlPattern` for links.
+
+---
+
+#### Template **5** — Pass rate (line trend)
+
+**MCP today:** API only (pass-rate extension v9.2.4)
+
+**Prompt 1**
+> Show daily pass and fail counts for the Web project over the last 14 days as a trend line.
+
+**Expected:** Template 5, `groupingPeriod: "DAY"`, columns `STARTED_AT`, `PASSED`, `FAILED`.
+
+**Prompt 2**
+> Line chart of test pass rate trend for Android over the past two weeks.
+
+**Expected:** Same widget; MCP pass-rate line view when shipped.
+
+---
+
+#### Template **6** — Failure info (summary)
+
+**MCP tool:** `adv_get_bug_failure_info` (requires hashcode from bug review)
+
+**Prompt 1**
+> Get failure stability summary for hashcode from the latest bug review on Android.
+
+**Expected:** Chain: `adv_get_bug_review` → extract hashcode → template 6 / `adv_get_bug_failure_info`.
+
+**Prompt 2**
+> Show error/stability column for the top failure hashcode on iOS today.
+
+**Expected:** Template 6 with `hashcode` in paramsConfig; columns `#`, `ERROR/STABILITY`.
+
+---
+
+#### Template **7** — Test case development trend
+
+**MCP today:** API only (planned `adv_get_test_authoring_trend` v9.2.5 — priority #2 backlog)
+
+**Prompt 1**
+> How many test cases were created per day on the Web project over the last 14 days?
+
+**Expected:** Template 7; columns `CREATED_AT`, `AMOUNT`.
+
+**Prompt 2**
+> Show TCM authoring velocity trend for Android this sprint.
+
+**Expected:** Daily grouping; distinct from net-change widget (37777).
+
+---
+
+#### Template **8** — Pass rate (pie)
+
+**MCP tool:** `adv_get_platform_results_by_period`
+
+**Prompt 1**
+> What is the overall pass rate breakdown for the Android project this week?
+
+**Expected:** Template 8 / MCP tool; pie rows `label`, `value` (PASSED, FAILED, etc.).
+
+**Prompt 2 — Dynamic period (v9.2.2+)**
+> Pass rate for iOS from start of last month through today using a dynamic widget period.
+
+**Expected:** `period_mode: "dynamic"`, expressions like `START_OF_MONTH -1 MONTH` → `TODAY`.
+
+---
+
+#### Template **9** — Failures by reason (bug review)
+
+**MCP tool:** `adv_get_bug_review`
+
+**Prompt 1**
+> Give me a bug review for the Web project for today — failures grouped by reason.
+
+**Expected:** Template 9 / `adv_get_bug_review`; columns include `PROJECT`, `REASON`, `#`, `SINCE`, `REPRO`.
+
+**Prompt 2**
+> Show failure reasons with reproduction counts for Android in the last 24 hours.
+
+**Expected:** Adjust `PERIOD`; hashcodes in `#` column feed template 6/10.
+
+---
+
+#### Template **10** — Failure details
+
+**MCP tool:** `adv_get_bug_failure_info` (detail leg)
+
+**Prompt 1**
+> List affected runs and tests for hashcode X on the Android project.
+
+**Expected:** Template 10 after bug review; columns `RUN_ID`, `TEST_ID`, `RUN`, `TEST`, `DEFECT`.
+
+**Prompt 2**
+> Deep-dive failure rows for the top hashcode from today's bug review on iOS.
+
+**Expected:** Same hashcode-chained workflow as template 6.
+
+---
+
+#### Template **14** — Tests summary (grouped table)
+
+**MCP today:** API only (pass-rate extension v9.2.4)
+
+**Prompt 1**
+> Summarize passed, failed, and total tests grouped by build for Android over the last 7 days.
+
+**Expected:** Template 14, `GROUP_BY: "BUILD"`; dimension column `BUILD`/`NAME`/`GROUP_FIELD` plus `PASSED`, `FAILED`, `TOTAL`.
+
+**Prompt 2**
+> Tests summary table by platform for iOS today.
+
+**Expected:** Set `GROUP_BY: "PLATFORM"`; HTTP 200 even when some groups are empty.
+
+---
+
+#### Template **16** — Stability table
+
+**MCP today:** API only (execution analytics hub v9.2.4)
+
+**Prompt 1**
+> Which tests fell below 99% stability on Android in the last 24 hours?
+
+**Expected:** Template 16, `STABILITY: "99"`; columns `NAME`, `PLATFORM`, `STABILITY`, `DURATION`.
+
+**Prompt 2**
+> Show low-stability tests on Web with duration — not the same as flaky flip-flop detection (`adv_find_flaky_tests`).
+
+**Expected:** Widget sub-threshold table vs cross-launch flip analysis.
+
+---
+
+#### Template **17** — Pass rate (pie + line combo)
+
+**MCP today:** API only (pass-rate extension v9.2.4)
+
+**Prompt 1**
+> Combined pass-rate pie and daily trend for iOS over the last 14 days.
+
+**Expected:** Template 17, `groupingPeriod: "DAY"`, columns `STARTED_AT`, `PASSED`, `FAILED`.
+
+**Prompt 2**
+> Dashboard-style pass rate combo chart for Android this sprint.
+
+**Expected:** Widget SQL; future MCP `view: combo`.
+
+---
+
+#### Template **90** — Pass rate (calendar heatmap)
+
+**MCP today:** API only (pass-rate extension v9.2.4)
+
+**Prompt 1**
+> Calendar heatmap of daily pass rate for the Web project in 2026 Q2 with 75% as the green threshold.
+
+**Expected:** Template 90, `PERIOD: "2026-Q2"`, `PASSED_VALUE: "75"`; columns `date`, `value`, `passed`.
+
+**Prompt 2**
+> Show which days in the quarter missed the 75% pass target on Android.
+
+**Expected:** Calendar widget rows; not the same as `adv_get_platform_results_by_period` preset pie.
+
+---
+
+#### Template **131** — Execution duration (daily)
+
+**MCP today:** API only (execution analytics hub v9.2.4)
+
+**Prompt 1**
+> Daily test execution duration trend for the Android project over the last 7 days.
+
+**Expected:** Template 131 project-wide; column `TESTED_AT` (may be empty if no executions in window).
+
+**Prompt 2 — Filtered by run/suite name**
+> Execution duration for run/suite "Regression" on iOS last week.
+
+**Expected:** Template 131 with `RUN: ["Regression"]`; empty array is valid when no matching executions.
+
+---
+
+#### Template **40112** — Failure tag pie
+
+**MCP today:** API only (`adv_get_failure_analytics` v9.2.4)
+
+**Prompt 1**
+> Pie chart of failure tags by test count on Android in the last 24 hours.
+
+**Expected:** Template 40112; columns `tag`, `tests_count`.
+
+**Prompt 2**
+> Which failure tags dominate on Web today?
+
+**Expected:** Tag aggregation widget; complements bug review (template 9).
+
+---
+
+#### Template **55991** — Failure tags × maintainer
+
+**MCP today:** API only (failure analytics hub v9.2.4)
+
+**Prompt 1**
+> Cross-tab of failure tags and maintainers for iOS today.
+
+**Expected:** Template 55991; columns `tag`, `username`, `tests_count`.
+
+**Prompt 2**
+> Which maintainers own the most tagged failures on Android this week?
+
+**Expected:** Same widget with `PERIOD: "Last 7 Days"`.
+
+---
+
+#### Template **57086** — Jira issues × maintainer
+
+**MCP today:** API only (failure analytics hub v9.2.4)
+
+**Prompt 1**
+> Map Jira issues to maintainers by failure count on Web for the last 14 days.
+
+**Expected:** Template 57086; columns `ISSUES`, `MAINTAINER`, `COUNT`.
+
+**Prompt 2**
+> Who maintains the noisiest Jira defects on Android this sprint?
+
+**Expected:** Failure/defect cross-widget; distinct from top bugs (template 4).
+
+---
+
+#### Template **57085** — Launch duration by suite/run
+
+**MCP today:** API only (execution analytics hub v9.2.4)
+
+**Prompt 1**
+> Launch duration trend for suite "Regression" on Android this quarter.
+
+**Expected:** Template 57085; try `RUN` or `SUITE` filter with reporting run names; columns include launch id, start time, duration.
+
+**Prompt 2**
+> How long did launches take for the Social suite on iOS last 7 days?
+
+**Expected:** May return HTTP 200 with alternate column names (`LAUNCH_ID`, `DURATION`, etc.) depending on tenant schema.
+
+---
+
+### E2E widget workflows
+
+**Prompt — Bug triage chain (templates 9 → 6 → 10)**
+> Run a bug review for Android today, then pull failure info and detailed rows for the top hashcode.
+
+**Expected tools:** `adv_get_bug_review` → `adv_get_bug_failure_info` (maps to templates 9, 6, 10).
+
+**Prompt — Coverage dashboard (37780 + 37777 + 8)**
+> For iOS: pie of cases by automation state, net case change last 90 days, and pass rate this week.
+
+**Expected:** `adv_get_test_case_distribution_by_field` + TCM net-change API + `adv_get_platform_results_by_period`.
+
+**Prompt — Quality report overlap**
+> Generate pass rate and top bugs for Web last 14 days using MCP tools that mirror dashboard widgets 8 and 4.
+
+**Expected:** `adv_get_platform_results_by_period` + `adv_get_top_bugs`, or `adv_generate_report` with `report_types: ["pass_rate", "quality_dashboard"]`.
+
+---
+
+*Last Updated: v9.2.3 - July 2026*

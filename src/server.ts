@@ -69,6 +69,14 @@ import {
 } from "./utils/tcm-widget-field.js";
 import { distributionWithPercents } from "./utils/widget-response-parsers.js";
 import { TCM_WIDGET_SYSTEM_NAMES } from "./utils/tcm-widget-client.js";
+import { registerWidgetHubTools } from "./handlers/widget-hub-tools.js";
+import {
+  buildPassRateViewExtra,
+  PASS_RATE_GROUP_BY,
+  PASS_RATE_GROUPING_PERIOD,
+  PASS_RATE_VIEWS,
+  resolvePassRateTemplateId,
+} from "./utils/widget-pass-rate-views.js";
 import { getConfig } from "./utils/config-loader.js";
 import { registerResources, getResourcesCatalog, buildMcpRoutingContent } from "./resources.js";
 import { registerPrompts, getPromptsCatalog } from "./prompts.js";
@@ -8349,7 +8357,21 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         .describe("Optional MILESTONE filter, e.g., ['25.39.0'] for milestone filtering"),
       templateId: z.number()
         .default(getTemplate().RESULTS_BY_PLATFORM)
-        .describe("Override templateId if needed"),
+        .describe("Override templateId if needed (auto-selected from view when omitted)"),
+      view: z.enum(PASS_RATE_VIEWS)
+        .default('pie')
+        .describe(
+          "Pass-rate widget view: pie (8, default), line (5), bar (3), calendar (90), pie_line (17), summary (14)",
+        ),
+      group_by: z.enum(PASS_RATE_GROUP_BY).optional().describe(
+        "GROUP_BY for bar/summary views (e.g. BUILD, PRIORITY, PLATFORM)",
+      ),
+      grouping_period: z.enum(PASS_RATE_GROUPING_PERIOD).optional().describe(
+        "Daily/weekly/monthly bucket for line and pie_line views",
+      ),
+      passed_value_threshold: z.number().int().min(0).max(100).optional().describe(
+        "Green threshold for calendar heatmap view (template 90, default 75)",
+      ),
       dashboardName: z.string().optional()
         .describe("Override dashboard title"),
       format: z.enum(['raw', 'formatted', 'compact']).default('formatted'),
@@ -8376,22 +8398,30 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
 
         const periodInput = pickWidgetPeriodInput(args);
 
+        const templateId = resolvePassRateTemplateId(args.view, args.templateId);
+        const viewExtra = buildPassRateViewExtra(args.view, {
+          group_by: args.group_by,
+          grouping_period: args.grouping_period,
+          passed_value_threshold: args.passed_value_threshold,
+        });
+
         const paramsConfig = buildParamsConfig({
           period: args.period,
           periodInput,
           platform: args.platform ?? (typeof args.project === 'string' ? args.project : undefined),   // default to project alias
           browser: args.browser,
           milestone: args.milestone,
-          dashboardName: args.dashboardName
+          dashboardName: args.dashboardName,
+          extra: viewExtra,
         });
 
-        const data = await callWidgetSql(projectId, args.templateId, paramsConfig);
+        const data = await callWidgetSql(projectId, templateId, paramsConfig);
         const resolvedPeriodLabel = extractResolvedPeriodLabel(Array.isArray(data) ? data : []);
         const displayPeriod = formatWidgetPeriodLabel(periodInput, resolvedPeriodLabel, 'Last 7 Days');
 
         if (DEBUG_MODE) {
           console.error("adv_get_platform_results_by_period ok", {
-            projectId, templateId: args.templateId, period: args.period
+            projectId, templateId, view: args.view, period: args.period
           });
         }
 
@@ -8470,6 +8500,8 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
             summary: {
               project: args.project,
               period: displayPeriod,
+              view: args.view,
+              templateId,
               platform: args.platform ?? args.project,
               browser: args.browser.length > 0 ? args.browser : undefined,
               milestone: args.milestone.length > 0 ? args.milestone : undefined
@@ -9382,6 +9414,13 @@ ${detailsInfo.map((detail, i) => {
       }
     }
   );
+
+  registerWidgetHubTools(server, {
+    resolveProjectId,
+    reportingClient,
+    callWidgetSql,
+    debugLog,
+  });
 
   // === Tool #3: Get project milestones ===
   server.registerTool(

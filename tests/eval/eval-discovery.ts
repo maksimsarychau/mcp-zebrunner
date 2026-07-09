@@ -1,5 +1,9 @@
 import "dotenv/config";
 import { EvalLayer } from "./eval-config.js";
+import {
+  buildBugReviewParamsConfig,
+  createWidgetSqlCaller,
+} from "../../src/utils/widget-sql.js";
 
 /**
  * Runtime-discovered context from real Zebrunner data.
@@ -12,6 +16,8 @@ export interface EvalDiscoveryContext {
   suiteName: string;
   testCaseKey: string;
   testCaseId: number;
+  /** Default widget period preset for eval prompts (e.g. pass-rate widgets). */
+  period: string;
 
   launchId?: number;
   launchName?: string;
@@ -23,6 +29,9 @@ export interface EvalDiscoveryContext {
   automationStateId?: number;
   automationStateName?: string;
   secondTestCaseKey?: string;
+  /** From live bug-review widget (template 9) for failure-info prompts. */
+  bugHashcode?: string;
+  dashboardId?: number;
 }
 
 interface DiscoveryDeps {
@@ -117,7 +126,10 @@ export async function discoverEvalContext(layer: EvalLayer): Promise<EvalDiscove
     suiteName: firstSuite.title || firstSuite.name || `Suite ${firstSuite.id}`,
     testCaseKey: firstCase.key || `${projectKey}-${firstCase.id}`,
     testCaseId: firstCase.id,
+    period: "Last 14 Days",
   };
+
+  await discoverBugWidgetContext(ctx, reportingBase, token, projectId);
 
   if (casesResp.items.length > 1) {
     const second = casesResp.items[1];
@@ -242,4 +254,69 @@ function logContext(ctx: EvalDiscoveryContext): void {
     "[eval-discovery] Context:\n" +
       entries.map(([k, v]) => `  ${k}: ${v}`).join("\n")
   );
+}
+
+async function refreshBearerToken(reportingBase: string, refreshToken: string): Promise<string> {
+  const resp = await fetch(`${reportingBase}/api/iam/v1/auth/refresh`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ refreshToken }),
+  });
+  if (!resp.ok) {
+    throw new Error(`Auth refresh failed: HTTP ${resp.status}`);
+  }
+  const data = (await resp.json()) as { authToken?: string };
+  if (!data.authToken) {
+    throw new Error("Auth refresh response missing authToken");
+  }
+  return data.authToken;
+}
+
+function extractBugReviewAnchors(rows: unknown[]): { bugHashcode?: string; dashboardId?: number } {
+  for (const row of rows) {
+    if (!row || typeof row !== "object") continue;
+    const rec = row as Record<string, unknown>;
+    const col = rec["#"] ?? rec.Failures ?? rec.failures ?? "";
+    const text = String(col);
+    const hashMatch = text.match(/hashcode=([^&"']+)/);
+    if (!hashMatch) continue;
+    const dashMatch = text.match(/automation-dashboards\/(\d+)/);
+    return {
+      bugHashcode: hashMatch[1],
+      dashboardId: dashMatch ? parseInt(dashMatch[1], 10) : 99,
+    };
+  }
+  return {};
+}
+
+/** Fetch bug-review widget row so failure-info eval prompts have hashcode + dashboardId. */
+async function discoverBugWidgetContext(
+  ctx: EvalDiscoveryContext,
+  reportingBase: string,
+  refreshToken: string,
+  projectId: number,
+): Promise<void> {
+  try {
+    console.error("[eval-discovery] Fetching bug-review widget for hashcode...");
+    const callWidgetSql = createWidgetSqlCaller(reportingBase, () =>
+      refreshBearerToken(reportingBase, refreshToken),
+    );
+    const params = buildBugReviewParamsConfig({ period: "Today" });
+    const rows = await callWidgetSql(projectId, 9, params);
+    const anchors = extractBugReviewAnchors(Array.isArray(rows) ? rows : []);
+    if (anchors.bugHashcode) {
+      ctx.bugHashcode = anchors.bugHashcode;
+      ctx.dashboardId = anchors.dashboardId ?? 99;
+      console.error(
+        `[eval-discovery]   bug widget: hashcode=${ctx.bugHashcode}, dashboardId=${ctx.dashboardId}`,
+      );
+    } else {
+      console.error("[eval-discovery]   No hashcode in bug-review widget (failure-info prompts may skip)");
+    }
+  } catch (err) {
+    console.error(
+      "[eval-discovery]   Bug-review widget discovery failed (skipped):",
+      err instanceof Error ? err.message : err,
+    );
+  }
 }

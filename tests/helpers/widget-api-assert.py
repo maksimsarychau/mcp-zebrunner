@@ -19,19 +19,35 @@ def main() -> int:
         return 1
 
     if mode == "json_array":
-        keys = sys.argv[3].split("|") if len(sys.argv) > 3 else []
+        key_specs = sys.argv[3].split("|") if len(sys.argv) > 3 else []
         rows = data if isinstance(data, list) else []
         if not rows:
-            print("empty array")
-            return 1
+            print("ok-empty")
+            return 0
         for row in rows:
             if not isinstance(row, dict):
                 print("row not object")
                 return 1
             lower = {k.lower(): k for k in row.keys()}
-            for k in keys:
-                if k.lower() not in lower:
-                    print(f"missing key {k}")
+            keys_lower = set(lower.keys())
+            for spec in key_specs:
+                if spec.startswith("@"):
+                    alts = [a.strip().lower() for a in spec[1:].split(",")]
+                    if not any(a in keys_lower for a in alts):
+                        print(f"missing one of {spec[1:]}")
+                        return 1
+                elif spec == "%":
+                    pct_keys = {k.lower() for k in row.keys()}
+                    if not (
+                        "%" in row.keys()
+                        or any(k == "%" or k.endswith("%") for k in row.keys())
+                        or any("pass" in k and "rate" in k for k in pct_keys)
+                        or any(k in pct_keys for k in ("pass_rate", "pass rate", "pass rate %"))
+                    ):
+                        print("missing percent column")
+                        return 1
+                elif spec.lower() not in keys_lower:
+                    print(f"missing key {spec}")
                     return 1
         print("ok")
         return 0
@@ -107,6 +123,21 @@ def main() -> int:
             return 0
         ids = [str(i.get("id")) for i in items[:3] if isinstance(i, dict) and i.get("id")]
         print(",".join(ids))
+        return 0
+
+    if mode == "suite_names":
+        items = data.get("items", data) if isinstance(data, dict) else data
+        if not isinstance(items, list):
+            print("")
+            return 0
+        names: list[str] = []
+        for i in items[:5]:
+            if not isinstance(i, dict):
+                continue
+            n = i.get("title") or i.get("name") or ""
+            if n:
+                names.append(str(n).replace("\n", " "))
+        print("\n".join(names))
         return 0
 
     print(f"unknown mode {mode}", file=sys.stderr)

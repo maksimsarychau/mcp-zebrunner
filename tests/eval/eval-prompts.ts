@@ -1,5 +1,6 @@
 import type { EvalDiscoveryContext } from "./eval-discovery.js";
 import type { EvalLayer } from "./eval-config.js";
+import { WIDGET_EVAL_PROMPTS } from "./eval-widget-prompts.js";
 
 export type PromptCategory =
   | "tcm"
@@ -67,6 +68,9 @@ export function populatePrompt(template: string, ctx: EvalDiscoveryContext): str
     automation_state_id: ctx.automationStateId != null ? String(ctx.automationStateId) : undefined,
     automation_state_name: ctx.automationStateName,
     second_test_case_key: ctx.secondTestCaseKey,
+    period: ctx.period,
+    bug_hashcode: ctx.bugHashcode,
+    dashboard_id: ctx.dashboardId != null ? String(ctx.dashboardId) : undefined,
   };
 
   return template.replace(/\{\{(\w+)\}\}/g, (match, key) => {
@@ -721,6 +725,9 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
     layer: 1,
     requiredContext: ["projectKey"],
   },
+
+  // Widget prompts (22 templates) — see eval-widget-prompts.ts
+  ...WIDGET_EVAL_PROMPTS,
 
   // ── Section 4: Utility / Connection Tools ──
 
