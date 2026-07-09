@@ -47,10 +47,20 @@ import {
   getTemplate,
   getPlatformMap,
   buildParamsConfig as sharedBuildParamsConfig,
+  buildBugReviewParamsConfig,
+  buildFailureWidgetParamsConfig,
   createWidgetSqlCaller,
   parseWidgetStatusCounts,
+  extractResolvedPeriodLabel,
   type WidgetSqlCaller,
 } from "./utils/widget-sql.js";
+import {
+  formatWidgetPeriodLabel,
+  pickWidgetPeriodInput,
+  pickWidgetPeriodInputFromReport,
+  widgetPeriodZodFields,
+  widgetReportPeriodZodFields,
+} from "./utils/widget-period.js";
 import { getConfig } from "./utils/config-loader.js";
 import { registerResources, getResourcesCatalog, buildMcpRoutingContent } from "./resources.js";
 import { registerPrompts, getPromptsCatalog } from "./prompts.js";
@@ -7424,8 +7434,9 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         "Project aliases or keys (e.g., ['android', 'ios'] or ['MCP', 'DEF'])"
       ),
       period: z.enum(ALL_PERIODS).default("Last 30 Days").describe(
-        "Time period for the report data"
+        "Time period preset for report data (flaky/milestones always use this; widget legs use widget_period_* when set)"
       ),
+      ...widgetReportPeriodZodFields(),
       milestone: z.string().optional().describe(
         "Optional milestone filter (e.g., '25.39.0')"
       ),
@@ -7465,6 +7476,17 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           report_types: args.report_types,
           projects: args.projects,
           period: args.period,
+          widget_period_mode: args.widget_period_mode,
+          widget_period_start_date: args.widget_period_start_date,
+          widget_period_end_date: args.widget_period_end_date,
+          widget_period_start_expression: args.widget_period_start_expression,
+          widget_period_end_expression: args.widget_period_end_expression,
+          widget_period_dynamic_from_anchor: args.widget_period_dynamic_from_anchor,
+          widget_period_dynamic_from_offset: args.widget_period_dynamic_from_offset,
+          widget_period_dynamic_from_unit: args.widget_period_dynamic_from_unit,
+          widget_period_dynamic_to_anchor: args.widget_period_dynamic_to_anchor,
+          widget_period_dynamic_to_offset: args.widget_period_dynamic_to_offset,
+          widget_period_dynamic_to_unit: args.widget_period_dynamic_to_unit,
           milestone: args.milestone,
           top_bugs_limit: args.top_bugs_limit,
           sections: args.sections,
@@ -8306,7 +8328,8 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         .describe("Project alias ('web', 'android', 'ios', 'api'), project key, or numeric projectId"),
       period: z.enum(ALL_PERIODS)
         .default("Last 7 Days")
-        .describe("Time period (passed to widget as-is)"),
+        .describe("Time period preset (used when period_mode is preset)"),
+      ...widgetPeriodZodFields('Last 7 Days'),
       platform: z.union([z.enum(["web","android","ios","api"]), z.array(z.string())])
         .optional()
         .describe("Platform alias or explicit array for paramsConfig.PLATFORM"),
@@ -8343,8 +8366,11 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         // Resolve project ID with enhanced discovery and suggestions
         const { projectId } = await resolveProjectId(args.project);
 
+        const periodInput = pickWidgetPeriodInput(args);
+
         const paramsConfig = buildParamsConfig({
           period: args.period,
+          periodInput,
           platform: args.platform ?? (typeof args.project === 'string' ? args.project : undefined),   // default to project alias
           browser: args.browser,
           milestone: args.milestone,
@@ -8352,6 +8378,8 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         });
 
         const data = await callWidgetSql(projectId, args.templateId, paramsConfig);
+        const resolvedPeriodLabel = extractResolvedPeriodLabel(Array.isArray(data) ? data : []);
+        const displayPeriod = formatWidgetPeriodLabel(periodInput, resolvedPeriodLabel, 'Last 7 Days');
 
         if (DEBUG_MODE) {
           console.error("adv_get_platform_results_by_period ok", {
@@ -8369,14 +8397,14 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
                 : String(args.platform ?? args.project);
               const chartConfig: ChartConfig = {
                 type: args.chart_type !== 'auto' ? args.chart_type : 'stacked_bar',
-                title: `Platform Results (${args.period})`,
+                title: `Platform Results (${displayPeriod})`,
                 labels: [chartLabel],
                 datasets: buildStackedStatusChartDatasets(statusCounts),
               };
               return buildChartResponse(
                 chartConfig,
                 args.chart as 'png' | 'html' | 'text',
-                `Platform results for ${args.period}`,
+                `Platform results for ${displayPeriod}`,
               );
             }
 
@@ -8411,11 +8439,11 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
 
             const chartConfig: ChartConfig = {
               type: args.chart_type !== 'auto' ? args.chart_type : 'stacked_bar',
-              title: `Platform Results (${args.period})`,
+              title: `Platform Results (${displayPeriod})`,
               labels,
               datasets,
             };
-            return buildChartResponse(chartConfig, args.chart as 'png' | 'html' | 'text', `Platform results for ${args.period}`);
+            return buildChartResponse(chartConfig, args.chart as 'png' | 'html' | 'text', `Platform results for ${displayPeriod}`);
           }
           return { content: [{ type: "text" as const, text: "No platform data to chart." }] };
         }
@@ -8433,7 +8461,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           result = {
             summary: {
               project: args.project,
-              period: args.period,
+              period: displayPeriod,
               platform: args.platform ?? args.project,
               browser: args.browser.length > 0 ? args.browser : undefined,
               milestone: args.milestone.length > 0 ? args.milestone : undefined
@@ -8468,7 +8496,8 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         .describe("Project alias ('web', 'android', 'ios', 'api'), project key, or numeric projectId"),
       period: z.enum(ALL_PERIODS)
         .default("Last 7 Days")
-        .describe("Time period (passed to widget as-is)"),
+        .describe("Time period preset (used when period_mode is preset)"),
+      ...widgetPeriodZodFields('Last 7 Days'),
       limit: z.number().int().positive().max(100)
         .default(10)
         .describe("How many bugs to return"),
@@ -8505,15 +8534,23 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         // Resolve project ID with enhanced discovery and suggestions
         const { projectId } = await resolveProjectId(args.project);
 
+        const periodInput = pickWidgetPeriodInput(args);
+
         // Keep PLATFORM empty by default as per your examples
         const paramsConfig = buildParamsConfig({
           period: args.period,
+          periodInput,
           platform: args.platform ?? [],
           milestone: args.milestone,
           dashboardName: "Bugs repro rate (last 7 days)"
         });
 
         const raw = await callWidgetSql(projectId, args.templateId, paramsConfig);
+        const displayPeriod = formatWidgetPeriodLabel(
+          periodInput,
+          extractResolvedPeriodLabel(Array.isArray(raw) ? raw : []),
+          'Last 7 Days',
+        );
 
         if (args.format === 'compact') {
           return {
@@ -8610,15 +8647,15 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         if (args.chart && args.chart !== 'none') {
           const chartConfig: ChartConfig = {
             type: args.chart_type !== 'auto' ? args.chart_type : 'horizontal_bar',
-            title: `Top ${top.length} Bugs (${args.period})`,
+            title: `Top ${top.length} Bugs (${displayPeriod})`,
             labels: top.map((b: any) => b.key),
             datasets: [{ label: 'Failures', values: top.map((b: any) => b.failures) }],
           };
-          return buildChartResponse(chartConfig, args.chart as 'png' | 'html' | 'text', `Top ${top.length} bugs for ${args.period}`);
+          return buildChartResponse(chartConfig, args.chart as 'png' | 'html' | 'text', `Top ${top.length} bugs for ${displayPeriod}`);
         }
 
         // Return formatted output (compact/raw handled above on raw widget payload)
-        const formatted = `📊 **Top ${top.length} Most Frequent Bugs** (${args.period})\n\n` +
+        const formatted = `📊 **Top ${top.length} Most Frequent Bugs** (${displayPeriod})\n\n` +
           top.map((bug, i) => {
             const rank = i + 1;
             const linkText = bug.link ? `[${bug.key}](${bug.link})` : bug.key;
@@ -8652,7 +8689,8 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         .describe("Project alias ('web', 'android', 'ios', 'api'), project key, or numeric projectId"),
       period: z.enum(ALL_PERIODS)
         .default("Last 7 Days")
-        .describe("Time period for bug review (passed to widget as-is)"),
+        .describe("Time period preset (used when period_mode is preset)"),
+      ...widgetPeriodZodFields('Last 7 Days'),
       limit: z.number().int().positive().max(500)
         .default(100)
         .describe("Maximum number of bugs to return (default: 100, max: 500)"),
@@ -8691,27 +8729,17 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         // Resolve project ID with enhanced discovery and suggestions
         const { projectId } = await resolveProjectId(args.project);
 
+        const periodInput = pickWidgetPeriodInput(args);
+
         // Build params config for bug review widget
-        const paramsConfig = {
-          BROWSER: [],
-          DEFECT: [],
-          APPLICATION: [],
-          BUILD: [],
-          PRIORITY: [],
-          RUN: [],
-          USER: [],
-          ENV: [],
-          MILESTONE: [],
-          PLATFORM: [],
-          STATUS: [],
-          LOCALE: [],
-          PERIOD: args.period,
-          ERROR_COUNT: "0",
-          dashboardName: "Bug review",
-          isReact: true
-        };
+        const paramsConfig = buildBugReviewParamsConfig({
+          period: args.period,
+          periodInput,
+        });
 
         const raw = await callWidgetSql(projectId, args.templateId, paramsConfig);
+        const resolvedPeriodLabel = extractResolvedPeriodLabel(Array.isArray(raw) ? raw : []);
+        const periodLabel = formatWidgetPeriodLabel(periodInput, resolvedPeriodLabel, 'Last 7 Days');
 
         // Normalize returned rows - widget returns array directly
         const rows: any[] = Array.isArray(raw) ? raw : [];
@@ -8761,19 +8789,17 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           // Fetch failure details in parallel for all bugs with hashcodes
           const detailPromises = bugsToFetch.map(async (bug) => {
             try {
-              const failureInfoParams = {
-                PERIOD: args.period,
-                dashboardName: "Failures analysis",
-                hashcode: bug.hashcode,
-                isReact: true
-              };
+              const failureInfoParams = buildFailureWidgetParamsConfig({
+                period: args.period,
+                periodInput,
+                hashcode: bug.hashcode!,
+              });
 
-              const failureDetailsParams = {
-                PERIOD: args.period,
-                dashboardName: "Failures analysis",
-                hashcode: bug.hashcode,
-                isReact: true
-              };
+              const failureDetailsParams = buildFailureWidgetParamsConfig({
+                period: args.period,
+                periodInput,
+                hashcode: bug.hashcode!,
+              });
 
               // Fetch both widgets in parallel
               const [failureInfoRaw, failureDetailsRaw] = await Promise.all([
@@ -8810,7 +8836,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
                 : [];
 
               return {
-                hashcode: bug.hashcode,
+                hashcode: bug.hashcode!,
                 summary: summaryInfo,
                 totalFailures: failureDetails.length,
                 failures: detailsInfo
@@ -8818,7 +8844,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
             } catch (error: any) {
               debugLog(`Failed to fetch details for hashcode ${bug.hashcode}`, error.message);
               return {
-                hashcode: bug.hashcode,
+                hashcode: bug.hashcode!,
                 summary: [],
                 totalFailures: 0,
                 failures: [],
@@ -8847,7 +8873,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         if (args.chart && args.chart !== 'none') {
           const chartConfig: ChartConfig = {
             type: args.chart_type !== 'auto' ? args.chart_type : 'pie',
-            title: `Bug Priority Distribution (${args.period})`,
+            title: `Bug Priority Distribution (${periodLabel})`,
             labels: ['Critical', 'High', 'Medium', 'Low'],
             datasets: [{
               label: 'Bugs',
@@ -8894,7 +8920,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
             content: [{ 
               type: "text" as const, 
               text: JSON.stringify({ 
-                period: args.period, 
+                period: periodLabel, 
                 totalBugs: rows.length,
                 returnedBugs: bugs.length,
                 includeFailureDetails: args.include_failure_details,
@@ -8921,7 +8947,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         }
 
         if (args.format === 'summary') {
-          const summary = `📋 **Bug Review Summary** (${args.period})
+          const summary = `📋 **Bug Review Summary** (${periodLabel})
 
 **Total Bugs Found:** ${rows.length}
 **Showing:** ${bugs.length} bugs
@@ -8955,7 +8981,7 @@ ${bugs.length > 10 ? `\n---\n\n*...and ${bugs.length - 10} more bugs*` : ''}`;
         }
 
         // Detailed format (default)
-        const detailed = `🔍 **Comprehensive Bug Review** (${args.period})
+        const detailed = `🔍 **Comprehensive Bug Review** (${periodLabel})
 
 ## 📊 Executive Summary
 
@@ -9042,7 +9068,8 @@ ${priorityAnalysis.statistics.withoutDefects > 0 ? `- **Tracking Gap:** ${priori
         .describe("Hashcode from bug review failure link (e.g., '1051677506')"),
       period: z.enum(ALL_PERIODS)
         .default("Last 14 Days")
-        .describe("Time period for failure analysis (passed to widget as-is)"),
+        .describe("Time period preset (used when period_mode is preset)"),
+      ...widgetPeriodZodFields('Last 14 Days'),
       format: z.enum(['detailed', 'summary', 'json']).default('detailed')
         .describe("Output format: detailed (full info), summary (concise), or json (raw data)")
     },
@@ -9060,20 +9087,21 @@ ${priorityAnalysis.statistics.withoutDefects > 0 ? `- **Tracking Gap:** ${priori
         // Resolve project ID with enhanced discovery and suggestions
         const { projectId } = await resolveProjectId(args.project);
 
-        // Build params config for both widgets
-        const failureInfoParams = {
-          PERIOD: args.period,
-          dashboardName: "Failures analysis",
-          hashcode: args.hashcode,
-          isReact: true
-        };
+        const periodInput = pickWidgetPeriodInput(args);
+        const periodLabel = formatWidgetPeriodLabel(periodInput, null, 'Last 14 Days');
 
-        const failureDetailsParams = {
-          PERIOD: args.period,
-          dashboardName: "Failures analysis",
+        // Build params config for both widgets
+        const failureInfoParams = buildFailureWidgetParamsConfig({
+          period: args.period,
+          periodInput,
           hashcode: args.hashcode,
-          isReact: true
-        };
+        });
+
+        const failureDetailsParams = buildFailureWidgetParamsConfig({
+          period: args.period,
+          periodInput,
+          hashcode: args.hashcode,
+        });
 
         // Call both widgets in parallel
         const [failureInfoRaw, failureDetailsRaw] = await Promise.all([
@@ -9123,7 +9151,7 @@ ${priorityAnalysis.statistics.withoutDefects > 0 ? `- **Tracking Gap:** ${priori
               text: JSON.stringify({ 
                 dashboardId: args.dashboardId,
                 hashcode: args.hashcode,
-                period: args.period,
+                period: periodLabel,
                 summary: summaryInfo,
                 totalFailures: detailsInfo.length,
                 failures: detailsInfo
@@ -9137,7 +9165,7 @@ ${priorityAnalysis.statistics.withoutDefects > 0 ? `- **Tracking Gap:** ${priori
 
 **Dashboard ID:** ${args.dashboardId}
 **Hashcode:** ${args.hashcode}
-**Period:** ${args.period}
+**Period:** ${periodLabel}
 
 **Overview:**
 ${summaryInfo.length > 0 ? summaryInfo.map(s => `- **${s.failureCount}** failures detected
@@ -9165,7 +9193,7 @@ ${detailsInfo.length > 5 ? `\n*...and ${detailsInfo.length - 5} more failures*` 
 
 **Dashboard ID:** ${args.dashboardId}
 **Hashcode:** ${args.hashcode}
-**Period:** ${args.period}
+**Period:** ${periodLabel}
 
 ---
 

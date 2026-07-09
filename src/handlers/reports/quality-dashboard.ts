@@ -6,6 +6,7 @@
  * Supports 6 configurable sections: pass_rate, runtime, coverage, bugs, milestones, flaky.
  */
 
+import { resolveReportWidgetPeriodInput } from "../../utils/widget-period.js";
 import {
   type ReportContext,
   type ReportInput,
@@ -59,6 +60,7 @@ export async function generateQualityDashboardReport(
     output_dir,
   } = input;
 
+  const widgetPeriodInput = resolveReportWidgetPeriodInput(input as unknown as Record<string, unknown>);
   const mergedTargets: PassRateTargets = { ...DEFAULT_TARGETS, ...(targets ?? {}) };
   const enabledSections = new Set(sections);
   const periodDays = ctx.periodToDays(period);
@@ -67,7 +69,7 @@ export async function generateQualityDashboardReport(
 
   const allResults = await Promise.all(
     projectContexts.map(pCtx =>
-      fetchProjectData(ctx, pCtx, period, periodDays, milestone, top_bugs_limit, enabledSections),
+      fetchProjectData(ctx, pCtx, period, periodDays, milestone, top_bugs_limit, enabledSections, widgetPeriodInput),
     ),
   );
 
@@ -178,13 +180,14 @@ async function fetchProjectData(
   milestone: string | undefined,
   bugsLimit: number,
   sections: Set<string>,
+  widgetPeriodInput?: ReturnType<typeof resolveReportWidgetPeriodInput>,
 ): Promise<ProjectDataResult> {
   const fetchers: Promise<any>[] = [];
   const keys: string[] = [];
 
   if (sections.has('pass_rate')) {
     keys.push('passRate');
-    fetchers.push(ctx.fetchPassRate(pCtx, period, milestone));
+    fetchers.push(ctx.fetchPassRate(pCtx, period, milestone, widgetPeriodInput));
   }
   if (sections.has('runtime')) {
     keys.push('runtime');
@@ -196,7 +199,7 @@ async function fetchProjectData(
   }
   if (sections.has('bugs')) {
     keys.push('bugs');
-    fetchers.push(ctx.fetchBugs(pCtx, period, bugsLimit, milestone));
+    fetchers.push(ctx.fetchBugs(pCtx, period, bugsLimit, milestone, widgetPeriodInput));
   }
   if (sections.has('milestones')) {
     keys.push('milestones');

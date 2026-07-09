@@ -12,6 +12,7 @@
  * 5. Top defect patterns
  */
 
+import { resolveReportWidgetPeriodInput } from "../../utils/widget-period.js";
 import {
   type ReportContext,
   type ReportInput,
@@ -45,6 +46,7 @@ export async function generateReleaseReadinessReport(
   input: ReportInput,
 ): Promise<ReportOutput> {
   const { projects, period, milestone, previous_milestone, targets } = input;
+  const widgetPeriodInput = resolveReportWidgetPeriodInput(input as unknown as Record<string, unknown>);
   const mergedTargets: PassRateTargets = { ...DEFAULT_TARGETS, ...(targets ?? {}) };
 
   const projectContexts = await ctx.resolveProjects(projects);
@@ -52,7 +54,7 @@ export async function generateReleaseReadinessReport(
   const assessments: PlatformReadiness[] = [];
 
   for (const pCtx of projectContexts) {
-    const assessment = await assessPlatform(ctx, pCtx, period, milestone, previous_milestone, mergedTargets);
+    const assessment = await assessPlatform(ctx, pCtx, period, milestone, previous_milestone, mergedTargets, widgetPeriodInput);
     assessments.push(assessment);
   }
 
@@ -67,13 +69,14 @@ async function assessPlatform(
   milestone: string | undefined,
   previousMilestone: string | undefined,
   targets: PassRateTargets,
+  widgetPeriodInput?: ReturnType<typeof resolveReportWidgetPeriodInput>,
 ): Promise<PlatformReadiness> {
   const checks: ReadinessCheck[] = [];
 
   // 1. Pass Rate
   let passRate: PassRateData | null = null;
   try {
-    passRate = await ctx.fetchPassRate(pCtx, period, milestone);
+    passRate = await ctx.fetchPassRate(pCtx, period, milestone, widgetPeriodInput);
     const target = targets[pCtx.alias.toLowerCase()] ?? targets[pCtx.alias] ?? 90;
     if (passRate.noMilestoneLaunches) {
       checks.push({
@@ -146,7 +149,7 @@ async function assessPlatform(
 
   // 5. Top Defects
   try {
-    const bugs = await ctx.fetchBugs(pCtx, period, 5, milestone);
+    const bugs = await ctx.fetchBugs(pCtx, period, 5, milestone, widgetPeriodInput);
     if (bugs.bugs.length === 0) {
       checks.push({ name: 'Top Defects', status: 'PASS', detail: 'No recurring defects found' });
     } else {

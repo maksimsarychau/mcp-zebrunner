@@ -1,5 +1,27 @@
 # Change Logs
 
+## v9.2.2 — Widget period modes (ABSOLUTE / DYNAMIC)
+
+### Added
+
+- **`src/utils/widget-period.ts`** — preset, absolute, and dynamic widget SQL period resolution; structured `period_dynamic_*` fields + raw expression escape hatch.
+- **Tier A widget tools** — `adv_get_platform_results_by_period`, `adv_get_top_bugs`, `adv_get_bug_review`, `adv_get_bug_failure_info` accept `period_mode`, absolute dates, and dynamic expressions.
+- **`adv_generate_report`** — `widget_period_*` fields for pass_rate/bugs widget legs only (flaky/runtime unchanged).
+- **API verification** — `tests/api-verify.sh` W-ABS, W-DYN, W-DYN-QUARTER, W-DYN-WEEK, W-DYN-LONG, W-PRESET, W-TPL3.
+- **Unit tests** — `tests/unit/widget-period.test.ts`; GROUP_FIELD + negative-count clamp in `parseWidgetStatusCounts`.
+
+### Changed
+
+- `buildParamsConfig`, `buildBugReviewParamsConfig`, `buildFailureWidgetParamsConfig` in `src/utils/widget-sql.ts`.
+- `zebrunner://periods` resource documents three period modes.
+
+### Backward compatibility
+
+- Default `period_mode: preset`; existing `period` enum defaults unchanged.
+- Preset-only callers produce identical widget `paramsConfig` (no new required fields).
+
+---
+
 ## v9.2.1 — LLM-visible metrics + compact expansion
 
 > **Metrics guide:** [docs/TOKEN_EFFICIENCY.md](docs/TOKEN_EFFICIENCY.md#observing-metrics-in-the-llm)

@@ -14,6 +14,10 @@ import {
   parseWidgetStatusCounts,
   type WidgetSqlCaller,
 } from "../utils/widget-sql.js";
+import {
+  isNonPresetWidgetPeriod,
+  type WidgetPeriodInput,
+} from "../utils/widget-period.js";
 import { getConfig } from "../utils/config-loader.js";
 
 import {
@@ -135,8 +139,13 @@ export class ReportHandler implements ReportContext {
 
   // ── Shared Fetch Methods ──────────────────────────────────────────────
 
-  async fetchPassRate(ctx: ProjectContext, period: string, milestone?: string): Promise<PassRateData> {
-    const result = await this.fetchPassRateOnce(ctx, period, milestone);
+  async fetchPassRate(
+    ctx: ProjectContext,
+    period: string,
+    milestone?: string,
+    periodInput?: WidgetPeriodInput,
+  ): Promise<PassRateData> {
+    const result = await this.fetchPassRateOnce(ctx, period, milestone, periodInput);
 
     if (milestone && result.total === 0) {
       console.error(
@@ -157,9 +166,11 @@ export class ReportHandler implements ReportContext {
     ctx: ProjectContext,
     period: string,
     milestone?: string,
+    periodInput?: WidgetPeriodInput,
   ): Promise<PassRateData> {
     const params = buildParamsConfig({
       period,
+      periodInput: periodInput && isNonPresetWidgetPeriod(periodInput) ? periodInput : undefined,
       milestone: milestone ? [milestone] : [],
     });
     const widgetData = await this.callWidgetSql(ctx.projectId, getTemplate().RESULTS_BY_PLATFORM, params);
@@ -330,9 +341,16 @@ export class ReportHandler implements ReportContext {
     };
   }
 
-  async fetchBugs(ctx: ProjectContext, period: string, limit: number, milestone?: string): Promise<BugsData> {
+  async fetchBugs(
+    ctx: ProjectContext,
+    period: string,
+    limit: number,
+    milestone?: string,
+    periodInput?: WidgetPeriodInput,
+  ): Promise<BugsData> {
     const params = buildParamsConfig({
       period,
+      periodInput: periodInput && isNonPresetWidgetPeriod(periodInput) ? periodInput : undefined,
       milestone: milestone ? [milestone] : [],
       dashboardName: getConfig().dashboardNames.bugsReproRate,
     });

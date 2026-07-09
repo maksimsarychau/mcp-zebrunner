@@ -1162,9 +1162,11 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 
 **Supported Periods (Input):**
 
-- Today, Last 24 Hours, Week, Last 7 Days, Last 14 Days, Month, Last 30 Days, Quarter, Last 90 Days, Year, Last 365 Days, Total
+- **Preset (default):** Today, Last 24 Hours, Week, Last 7 Days, Last 14 Days, Month, Last 30 Days, Quarter, Last 90 Days, Year, Last 365 Days, Total — via `period` when `period_mode` is `preset` (default).
+- **Absolute:** `period_mode: absolute` + `period_start_date` / `period_end_date` (YYYY-MM-DD).
+- **Dynamic:** `period_mode: dynamic` + structured `period_dynamic_from_*` / `period_dynamic_to_*` (anchors: `START_OF_MONTH`, `END_OF_WEEK`, `TODAY`, etc.) **or** raw `period_start_expression` / `period_end_expression`.
 
-**Note:** Periods are passed through as-is. If a widget does not support a period, the API will return an error.
+**Note:** Chart titles use Zebrunner's resolved date-range label from widget response when available.
 
 **Example Prompts:**
 
@@ -1179,9 +1181,11 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 
 **Supported Periods (Input):**
 
-- Today, Last 24 Hours, Week, Last 7 Days, Last 14 Days, Month, Last 30 Days, Quarter, Last 90 Days, Year, Last 365 Days, Total
+- **Preset (default):** Today, Last 24 Hours, Week, Last 7 Days, Last 14 Days, Month, Last 30 Days, Quarter, Last 90 Days, Year, Last 365 Days, Total — via `period` when `period_mode` is `preset` (default).
+- **Absolute:** `period_mode: absolute` + `period_start_date` / `period_end_date` (YYYY-MM-DD).
+- **Dynamic:** `period_mode: dynamic` + structured `period_dynamic_from_*` / `period_dynamic_to_*` (anchors: `START_OF_MONTH`, `END_OF_WEEK`, `TODAY`, etc.) **or** raw `period_start_expression` / `period_end_expression`.
 
-**Note:** Periods are passed through as-is. If a widget does not support a period, the API will return an error.
+**Note:** Chart titles use Zebrunner's resolved date-range label from widget response when available.
 
 **Example Prompts:**
 
@@ -1198,7 +1202,7 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 - Detailed bug review with failure analysis
 - Defect tracking with Jira/issue tracker links
 - Historical data (first seen and last reproduction dates)
-- Configurable time periods (Today, Last 24 Hours, Week, Last 7/14/30/90 Days, Month, Quarter, Year, Last 365 Days, Total)
+- Configurable time periods — preset, absolute (ISO dates), or dynamic (relative expressions)
 - Multiple output formats (detailed, summary, json)
 - **NEW: Automatic failure detail fetching** - No need for separate calls
 - **NEW: Priority analysis** - Bugs categorized as Critical/High/Medium/Low
@@ -1270,7 +1274,10 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 | ------------------------ | ------------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | `report_types`           | `string[]`                | Report type(s) to generate (required). See report types below.                                                   |
 | `projects`               | `string[]`                | Project aliases or keys (e.g., `["android", "ios"]`)                                                             |
-| `period`                 | `string`                  | Time period (e.g., `"Last 30 Days"`)                                                                             |
+| `period`                 | `string`                  | Preset time period for flaky/milestones and widget legs when `widget_period_mode` omitted (e.g., `"Last 30 Days"`) |
+| `widget_period_mode`     | `preset\|absolute\|dynamic?` | Widget SQL period for **pass_rate/bugs only** (does not affect flaky/runtime) |
+| `widget_period_start_date` / `widget_period_end_date` | `string?` | Absolute widget window (YYYY-MM-DD) |
+| `widget_period_*_expression` / `widget_period_dynamic_*` | various | Dynamic widget window — see widget tools |
 | `milestone`              | `string?`                 | Optional milestone filter                                                                                        |
 | `top_bugs_limit`         | `number?`                 | Top bugs count for `quality_dashboard` / `executive_dashboard` (default: 10)                                     |
 | `sections`               | `string[]?`               | Sections for `quality_dashboard`: `pass_rate`, `runtime`, `coverage`, `bugs`, `milestones`, `flaky`              |

@@ -6,6 +6,7 @@ import type { ZebrunnerReportingClient } from "../../api/reporting-client.js";
 import type { EnhancedZebrunnerClient } from "../../api/enhanced-client.js";
 import type { ZebrunnerReportingToolHandlers } from "../reporting-tools.js";
 import type { WidgetSqlCaller } from "../../utils/widget-sql.js";
+import type { WidgetPeriodInput } from "../../utils/widget-period.js";
 
 // ── Data Types ──────────────────────────────────────────────────────────────
 
@@ -116,6 +117,18 @@ export interface ReportInput {
   inline?: boolean;
   /** Output directory for artifacts when inline=false. */
   output_dir?: string;
+  /** Widget SQL period mode for pass_rate/bugs legs only (does not affect flaky/runtime). */
+  widget_period_mode?: WidgetPeriodInput['period_mode'];
+  widget_period_start_date?: string;
+  widget_period_end_date?: string;
+  widget_period_start_expression?: string;
+  widget_period_end_expression?: string;
+  widget_period_dynamic_from_anchor?: WidgetPeriodInput['period_dynamic_from_anchor'];
+  widget_period_dynamic_from_offset?: number;
+  widget_period_dynamic_from_unit?: WidgetPeriodInput['period_dynamic_from_unit'];
+  widget_period_dynamic_to_anchor?: WidgetPeriodInput['period_dynamic_to_anchor'];
+  widget_period_dynamic_to_offset?: number;
+  widget_period_dynamic_to_unit?: WidgetPeriodInput['period_dynamic_to_unit'];
 }
 
 export interface ReportOutput {
@@ -162,10 +175,10 @@ export interface ReportContext {
   reportingHandlers: ZebrunnerReportingToolHandlers;
   callWidgetSql: WidgetSqlCaller;
   resolveProjects(projects: string[]): Promise<ProjectContext[]>;
-  fetchPassRate(ctx: ProjectContext, period: string, milestone?: string): Promise<PassRateData>;
+  fetchPassRate(ctx: ProjectContext, period: string, milestone?: string, periodInput?: WidgetPeriodInput): Promise<PassRateData>;
   fetchRuntime(ctx: ProjectContext, milestone?: string): Promise<RuntimeData>;
   fetchCoverage(ctx: ProjectContext): Promise<CoverageData>;
-  fetchBugs(ctx: ProjectContext, period: string, limit: number, milestone?: string): Promise<BugsData>;
+  fetchBugs(ctx: ProjectContext, period: string, limit: number, milestone?: string, periodInput?: WidgetPeriodInput): Promise<BugsData>;
   fetchMilestones(ctx: ProjectContext, periodDays: number): Promise<MilestoneData>;
   fetchFlaky(ctx: ProjectContext, periodDays: number, milestone?: string): Promise<FlakyData>;
   fmtSeconds(sec: number): string;

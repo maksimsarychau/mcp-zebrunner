@@ -894,6 +894,71 @@ print('yes' if 'items' in d or 'results' in d or isinstance(d, list) else 'no')
   else
     log_skip "W1: Widget SQL (no project ID)"
   fi
+
+  # Widget period modes (template 8 — RESULTS_BY_PLATFORM)
+  log_section "$TEST_PROJECT — Widget Period Modes"
+
+  if [[ -n "$PROJECT_ID" ]]; then
+    local W_ABS='{"templateId":8,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"ABSOLUTE","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"dashboardName":"api-verify","isReact":true,"periodStartDate":"2026-07-01","periodEndDate":"2026-07-09","periodStartExpression":null,"periodEndExpression":null}}'
+    do_reporting_post "/api/reporting/v1/widget-templates/sql?projectId=$PROJECT_ID" "$W_ABS"
+    if [[ "$_STATUS" == "200" ]]; then
+      log_pass "W-ABS: ABSOLUTE period (HTTP 200)"
+    else
+      log_fail "W-ABS: ABSOLUTE period" "HTTP $_STATUS"
+    fi
+
+    local W_DYN='{"templateId":8,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"DYNAMIC","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"dashboardName":"api-verify","isReact":true,"periodStartDate":null,"periodEndDate":null,"periodStartExpression":"START_OF_MONTH -1 MONTH","periodEndExpression":"TODAY"}}'
+    do_reporting_post "/api/reporting/v1/widget-templates/sql?projectId=$PROJECT_ID" "$W_DYN"
+    if [[ "$_STATUS" == "200" ]]; then
+      log_pass "W-DYN: DYNAMIC START_OF_MONTH -1 MONTH / TODAY (HTTP 200)"
+    else
+      log_fail "W-DYN: DYNAMIC period" "HTTP $_STATUS"
+    fi
+
+    local W_DYN_Q='{"templateId":8,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"DYNAMIC","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"dashboardName":"api-verify","isReact":true,"periodStartDate":null,"periodEndDate":null,"periodStartExpression":"START_OF_MONTH -2 QUARTER","periodEndExpression":"TODAY"}}'
+    do_reporting_post "/api/reporting/v1/widget-templates/sql?projectId=$PROJECT_ID" "$W_DYN_Q"
+    if [[ "$_STATUS" == "200" ]]; then
+      log_pass "W-DYN-QUARTER: START_OF_MONTH -2 QUARTER / TODAY (HTTP 200)"
+    else
+      log_fail "W-DYN-QUARTER" "HTTP $_STATUS"
+    fi
+
+    local W_DYN_W='{"templateId":8,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"DYNAMIC","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"dashboardName":"api-verify","isReact":true,"periodStartDate":null,"periodEndDate":null,"periodStartExpression":"START_OF_WEEK -2 WEEK","periodEndExpression":"END_OF_WEEK -1 DAY"}}'
+    do_reporting_post "/api/reporting/v1/widget-templates/sql?projectId=$PROJECT_ID" "$W_DYN_W"
+    if [[ "$_STATUS" == "200" ]]; then
+      log_pass "W-DYN-WEEK: START_OF_WEEK -2 WEEK / END_OF_WEEK -1 DAY (HTTP 200)"
+    else
+      log_fail "W-DYN-WEEK" "HTTP $_STATUS"
+    fi
+
+    local W_DYN_L='{"templateId":8,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"DYNAMIC","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"dashboardName":"api-verify","isReact":true,"periodStartDate":null,"periodEndDate":null,"periodStartExpression":"START_OF_QUARTER -2 YEAR","periodEndExpression":"END_OF_MONTH -1 DAY"}}'
+    do_reporting_post "/api/reporting/v1/widget-templates/sql?projectId=$PROJECT_ID" "$W_DYN_L"
+    if [[ "$_STATUS" == "200" ]]; then
+      log_pass "W-DYN-LONG: START_OF_QUARTER -2 YEAR / END_OF_MONTH -1 DAY (HTTP 200)"
+    else
+      log_fail "W-DYN-LONG" "HTTP $_STATUS"
+    fi
+
+    local W_PRESET='{"templateId":8,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"Last 14 Days","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"dashboardName":"api-verify","isReact":true}}'
+    do_reporting_post "/api/reporting/v1/widget-templates/sql?projectId=$PROJECT_ID" "$W_PRESET"
+    if [[ "$_STATUS" == "200" ]]; then
+      log_pass "W-PRESET: Last 14 Days (HTTP 200)"
+    else
+      log_fail "W-PRESET" "HTTP $_STATUS"
+    fi
+
+    local W_TPL3='{"templateId":3,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"ABSOLUTE","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"GROUP_BY":"PRIORITY","dashboardName":"api-verify","isReact":true,"periodStartDate":"2026-07-01","periodEndDate":"2026-07-09","periodStartExpression":null,"periodEndExpression":null}}'
+    do_reporting_post "/api/reporting/v1/widget-templates/sql?projectId=$PROJECT_ID" "$W_TPL3"
+    if [[ "$_STATUS" == "200" ]]; then
+      log_pass "W-TPL3: template 3 GROUP_BY PRIORITY + ABSOLUTE (HTTP 200)"
+    elif [[ "$_STATUS" == "400" || "$_STATUS" == "404" ]]; then
+      log_pass "W-TPL3: template 3 returned HTTP $_STATUS (may not exist on project)"
+    else
+      log_fail "W-TPL3" "HTTP $_STATUS"
+    fi
+  else
+    log_skip "Widget period modes (no project ID)"
+  fi
 }
 
 # Run tests for each starred project

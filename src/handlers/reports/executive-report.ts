@@ -6,6 +6,7 @@
  * Returns Markdown + PNG charts + HTML dashboard.
  */
 
+import { resolveReportWidgetPeriodInput } from "../../utils/widget-period.js";
 import {
   type ReportContext,
   type ReportInput,
@@ -46,13 +47,14 @@ export async function generateExecutiveReport(
   input: ReportInput,
 ): Promise<ReportOutput> {
   const { projects, period, milestone, targets, top_bugs_limit = 5, inline = true, output_dir } = input;
+  const widgetPeriodInput = resolveReportWidgetPeriodInput(input as unknown as Record<string, unknown>);
   const mergedTargets: PassRateTargets = { ...DEFAULT_TARGETS, ...(targets ?? {}) };
   const periodDays = ctx.periodToDays(period);
 
   const projectContexts = await ctx.resolveProjects(projects);
 
   const allData = await Promise.all(
-    projectContexts.map(pCtx => fetchExecutiveData(ctx, pCtx, period, periodDays, milestone, top_bugs_limit)),
+    projectContexts.map(pCtx => fetchExecutiveData(ctx, pCtx, period, periodDays, milestone, top_bugs_limit, widgetPeriodInput)),
   );
 
   const markdown = buildExecutiveMarkdown(allData, projectContexts, mergedTargets, ctx, period, milestone);
@@ -121,12 +123,13 @@ async function fetchExecutiveData(
   periodDays: number,
   milestone: string | undefined,
   bugsLimit: number,
+  widgetPeriodInput?: ReturnType<typeof resolveReportWidgetPeriodInput>,
 ): Promise<ExecutiveData> {
   const [passRate, runtime, coverage, bugs, flaky] = await Promise.allSettled([
-    ctx.fetchPassRate(pCtx, period, milestone),
+    ctx.fetchPassRate(pCtx, period, milestone, widgetPeriodInput),
     ctx.fetchRuntime(pCtx, milestone),
     ctx.fetchCoverage(pCtx),
-    ctx.fetchBugs(pCtx, period, bugsLimit, milestone),
+    ctx.fetchBugs(pCtx, period, bugsLimit, milestone, widgetPeriodInput),
     ctx.fetchFlaky(pCtx, periodDays, milestone),
   ]);
 
