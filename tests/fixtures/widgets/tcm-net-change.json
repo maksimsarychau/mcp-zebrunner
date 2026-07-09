@@ -1,0 +1,6 @@
+{
+  "items": [
+    { "period": "2026-W01", "valueFrom": 100, "valueTo": 110 },
+    { "period": "2026-W02", "valueFrom": 110, "valueTo": 115 }
+  ]
+}

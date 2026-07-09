@@ -28,17 +28,17 @@ function extractServerTools(serverSource: string): string[] {
   return tools;
 }
 
-describe("Tool Registry Coverage (64 tools)", () => {
+describe("Tool Registry Coverage (65 tools)", () => {
   it("ensures every registered server tool has smoke coverage metadata", () => {
     const root = getProjectRoot();
     const serverSource = fs.readFileSync(path.join(root, "src", "server.ts"), "utf-8");
     const serverTools = extractServerTools(serverSource);
 
-    assert.equal(serverTools.length, 64, "server.ts should register exactly 64 tools");
-    assert.equal(new Set(serverTools).size, 64, "all registered tools should be unique");
+    assert.equal(serverTools.length, 65, "server.ts should register exactly 65 tools");
+    assert.equal(new Set(serverTools).size, 65, "all registered tools should be unique");
 
     const coverageKeys = Object.keys(TOOL_SMOKE_INPUTS);
-    assert.equal(coverageKeys.length, 64, "smoke coverage map should include 64 tools");
+    assert.equal(coverageKeys.length, 65, "smoke coverage map should include 65 tools");
 
     const missingCoverage = serverTools.filter(tool => !( `adv_${tool}` in TOOL_SMOKE_INPUTS));
     assert.deepEqual(missingCoverage, [], `missing smoke coverage for: ${missingCoverage.join(", ")}`);
@@ -128,7 +128,7 @@ describe("Critical Tool Intelligence Checks", () => {
 
 // ── Tool Annotations Coverage ─────────────────────────────────────────────────
 
-describe("Tool Annotations Coverage (64 tools)", () => {
+describe("Tool Annotations Coverage (65 tools)", () => {
   const root = getProjectRoot();
   const serverSource = fs.readFileSync(path.join(root, "src", "server.ts"), "utf-8");
 
@@ -164,7 +164,7 @@ describe("Tool Annotations Coverage (64 tools)", () => {
     while ((match = toolsRegex.exec(serverSource)) !== null) {
       allTools.push(match[1]);
     }
-    assert.equal(allTools.length, 64, "should have 64 registered tools");
+    assert.equal(allTools.length, 65, "should have 65 registered tools");
 
     const missing: string[] = [];
     for (const tool of allTools) {

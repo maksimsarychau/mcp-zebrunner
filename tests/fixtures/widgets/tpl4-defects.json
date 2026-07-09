@@ -1,0 +1,4 @@
+[
+  { "DEFECT": "BUG-101", "FAILURES": "12 of 20", "%": "60.0" },
+  { "DEFECT": "BUG-102", "FAILURES": "5 of 8", "%": "62.5" }
+]

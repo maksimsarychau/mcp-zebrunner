@@ -61,6 +61,14 @@ import {
   widgetPeriodZodFields,
   widgetReportPeriodZodFields,
 } from "./utils/widget-period.js";
+import {
+  expandSuiteIds,
+  resolveDistributionField,
+  SYSTEM_FIELD_DATA_TYPES,
+  type SystemFieldDataType,
+} from "./utils/tcm-widget-field.js";
+import { distributionWithPercents } from "./utils/widget-response-parsers.js";
+import { TCM_WIDGET_SYSTEM_NAMES } from "./utils/tcm-widget-client.js";
 import { getConfig } from "./utils/config-loader.js";
 import { registerResources, getResourcesCatalog, buildMcpRoutingContent } from "./resources.js";
 import { registerPrompts, getPromptsCatalog } from "./prompts.js";
@@ -9232,6 +9240,144 @@ ${detailsInfo.map((detail, i) => {
             type: "text" as const,
             text: `❌ Error getting failure info: ${error?.message || error}`
           }]
+        };
+      }
+    }
+  );
+
+  // === Tool #2.3: Test case distribution by field (TCM widget 37780) ===
+  server.registerTool(
+    "get_test_case_distribution_by_field",
+    {
+      description:
+        "📊 Pie-chart distribution of test cases grouped by a TCM field (automation state, priority, custom boolean, etc.). " +
+        "Uses the dashboard widget API (template 37780) — same view as 'TEST CASES DISTRIBUTION BY FIELD' in Zebrunner UI. " +
+        "For paginated case lists or counts per automation state, use adv_get_test_cases_by_automation_state instead.",
+      inputSchema: {
+        project: z.union([z.enum(["web", "android", "ios", "api"]), z.string(), z.number()])
+          .default("web")
+          .describe("Project alias, project key, or numeric projectId"),
+        field: z.string().optional().describe(
+          "Field display name from UI (e.g. 'Automation State', 'Is Automated', 'Manual Only') — resolved via fields-layout",
+        ),
+        system_field: z.enum(SYSTEM_FIELD_DATA_TYPES as unknown as [string, ...string[]]).optional().describe(
+          "System field enum (AUTOMATION_STATE, PRIORITY, etc.) — alternative to field name",
+        ),
+        custom_field_id: z.number().int().positive().optional().describe("Raw custom field id when known"),
+        test_suite_ids: z.array(z.number().int().positive()).optional().describe(
+          "Flat list of test suite IDs to filter (matches dashboard suite selection)",
+        ),
+        root_suite_ids: z.array(z.number().int().positive()).optional().describe(
+          "Root suite IDs — expanded to all descendants when expand_descendants is true",
+        ),
+        expand_descendants: z.boolean().default(true).describe(
+          "When root_suite_ids is set, include all descendant suites in the filter",
+        ),
+        format: z.enum(['formatted', 'json', 'compact']).default('formatted'),
+        chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
+          "Optional pie chart output (png/html/text)",
+        ),
+      },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async (args) => {
+      try {
+        debugLog("adv_get_test_case_distribution_by_field called", args);
+
+        const { projectId } = await resolveProjectId(args.project);
+        const aliases = getProjectAliases();
+        const projectKey =
+          typeof args.project === 'number'
+            ? String(args.project)
+            : (aliases[args.project as string] ?? String(args.project));
+
+        const fieldsLayout = await reportingClient.getFieldsLayout(projectId);
+        const resolved = resolveDistributionField(
+          {
+            field: args.field,
+            system_field: args.system_field as SystemFieldDataType | undefined,
+            custom_field_id: args.custom_field_id,
+          },
+          fieldsLayout,
+        );
+
+        let suiteIds: number[] | undefined;
+        const explicit = args.test_suite_ids ?? [];
+        const roots = args.root_suite_ids ?? [];
+
+        if (explicit.length > 0 || roots.length > 0) {
+          const allSuites = await client.getAllTestSuites(projectKey);
+          suiteIds = expandSuiteIds(allSuites, roots, explicit, args.expand_descendants);
+        }
+
+        const items = await reportingClient.getTestCaseDistributionByField(
+          projectId,
+          resolved.filter,
+          suiteIds,
+        );
+
+        const withPct = distributionWithPercents(items);
+        const total = items.reduce((s, i) => s + i.value, 0);
+
+        const summary = {
+          project: projectKey,
+          field: resolved.fieldLabel,
+          fieldType: resolved.fieldType,
+          ...(resolved.customFieldId != null ? { customFieldId: resolved.customFieldId } : {}),
+          ...(resolved.systemFieldDataType ? { systemFieldDataType: resolved.systemFieldDataType } : {}),
+          widget: TCM_WIDGET_SYSTEM_NAMES.DISTRIBUTION_BY_FIELD,
+          suiteFilter: suiteIds
+            ? { count: suiteIds.length, mode: roots.length > 0 ? 'explicit+expanded' : 'explicit' }
+            : { count: 0, mode: 'project-wide' },
+          total,
+        };
+
+        const payload = { summary, items: withPct };
+
+        if (args.format === 'compact' || args.format === 'json') {
+          return { content: [{ type: "text" as const, text: JSON.stringify(payload) }] };
+        }
+
+        if (args.chart !== 'none' && withPct.length > 0) {
+          const chartConfig: ChartConfig = {
+            type: 'pie',
+            title: `Distribution by ${resolved.fieldLabel}`,
+            labels: withPct.map(i => i.label),
+            datasets: [{ label: 'Cases', values: withPct.map(i => i.value) }],
+          };
+          return buildChartResponse(
+            chartConfig,
+            args.chart as 'png' | 'html' | 'text',
+            `${resolved.fieldLabel} — ${total} cases`,
+          );
+        }
+
+        const lines = [
+          `# Test case distribution by field`,
+          ``,
+          `**Project:** ${projectKey}`,
+          `**Field:** ${resolved.fieldLabel} (${resolved.fieldType})`,
+          `**Total:** ${total}`,
+          ...(suiteIds && suiteIds.length > 0 ? [`**Suites filtered:** ${suiteIds.length}`] : []),
+          ``,
+          `| Label | Count | % |`,
+          `|-------|------:|--:|`,
+          ...withPct.map(i => `| ${i.label} | ${i.value} | ${i.percent}% |`),
+        ];
+
+        return { content: [{ type: "text" as const, text: lines.join('\n') }] };
+      } catch (error: any) {
+        debugLog("Error in adv_get_test_case_distribution_by_field", { error: error.message, args });
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error getting test case distribution: ${error?.message || error}`,
+          }],
         };
       }
     }

@@ -1,5 +1,27 @@
 # Change Logs
 
+## v9.2.3 — TCM distribution widget + widget platform verification
+
+### Added
+
+- **`adv_get_test_case_distribution_by_field`** — TCM widget 37780 (`test-cases-distribution-by-field`); field/suite resolution, pie chart output.
+- **`src/utils/tcm-widget-field.ts`**, **`src/utils/tcm-widget-client.ts`**, **`src/utils/widget-response-parsers.ts`**
+- **`ZebrunnerReportingClient`** — `getWidgetTemplates`, `getTcmWidgetContent`, `getTestCaseDistributionByField`
+- **API verification** — WT-* catalog checks; W-TPL* smokes (22/22 TAM+TCM); TCM-DIST-*; `--widget-catalog-audit` flag
+- **Unit tests** — `tcm-widget-field`, `tcm-widget-client`, `widget-response-parsers`; fixtures under `tests/fixtures/widgets/`
+- **Eval** — distribution routing prompts + pass_rate/bugs regression prompts (`tests/eval/eval-prompts.ts`)
+- **Backlog doc** — [docs/todos/TCM_TAM_WIDGET_BACKLOG.md](docs/todos/TCM_TAM_WIDGET_BACKLOG.md)
+
+### Changed
+
+- Tool count **64 → 65** (`tools.json`, registry coverage tests, TOOLS_CATALOG)
+
+### Deferred (v9.2.4+)
+
+- Hub tools and `adv_get_platform_results_by_period` view/group_by extension — see TCM_TAM_WIDGET_BACKLOG.md
+
+---
+
 ## v9.2.2 — Widget period modes (ABSOLUTE / DYNAMIC)
 
 ### Added

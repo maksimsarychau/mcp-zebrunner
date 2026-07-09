@@ -666,6 +666,61 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
     layer: 1,
     requiredContext: ["projectKey"],
   },
+  {
+    id: "get_test_case_distribution_by_field.automation_state",
+    toolSection: "3. Analysis",
+    promptTemplate:
+      "Show test case distribution by automation state for the {{project_key}} project as a pie breakdown.",
+    expectedTools: ["adv_get_test_case_distribution_by_field"],
+    expectedArgKeys: ["project"],
+    category: "analysis",
+    layer: 2,
+    requiredContext: ["projectKey"],
+  },
+  {
+    id: "get_test_case_distribution_by_field.field_name",
+    toolSection: "3. Analysis",
+    promptTemplate:
+      "Get the dashboard-style test case distribution by Priority field for project {{project_key}}.",
+    expectedTools: ["adv_get_test_case_distribution_by_field"],
+    expectedArgKeys: ["project", "field"],
+    category: "analysis",
+    layer: 2,
+    requiredContext: ["projectKey"],
+  },
+  {
+    id: "neg.confuse.distribution_vs_automation_state",
+    toolSection: "3. Analysis",
+    promptTemplate:
+      "Show a pie chart of test cases grouped by automation state for {{project_key}} — use the distribution widget tool, not a paginated case list.",
+    expectedTools: ["adv_get_test_case_distribution_by_field"],
+    expectedArgKeys: ["project"],
+    category: "analysis",
+    layer: 2,
+    requiredContext: ["projectKey"],
+  },
+  {
+    id: "get_platform_results_by_period.v923_regression",
+    toolSection: "3. Analysis",
+    promptTemplate:
+      "What is the pass rate for the {{project_key}} project over {{period}}?",
+    expectedTools: ["adv_get_platform_results_by_period"],
+    expectedArgKeys: ["project", "period"],
+    category: "analysis",
+    layer: 1,
+    requiredContext: ["projectKey", "period"],
+  },
+  {
+    id: "get_top_bugs.v923_regression",
+    toolSection: "3. Analysis",
+    promptTemplate:
+      "List the most frequent defects in {{project_key}} over the last 7 days using the top bugs widget.",
+    expectedTools: ["adv_get_top_bugs"],
+    expectedArgKeys: ["project"],
+    category: "analysis",
+    layer: 1,
+    requiredContext: ["projectKey"],
+  },
 
   // ── Section 4: Utility / Connection Tools ──
 

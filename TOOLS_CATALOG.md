@@ -1249,6 +1249,30 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 
 **Usage Note:** The dashboardId and hashcode can be obtained from the `adv_get_bug_review` tool output. Each bug in the review includes these identifiers in the failure link.
 
+### `adv_get_test_case_distribution_by_field`
+
+**Description:** Pie-chart distribution of test cases by a TCM field (automation state, priority, custom field, etc.) using the dashboard widget API (template **37780**). Matches the Zebrunner UI widget **TEST CASES DISTRIBUTION BY FIELD**.
+
+**Key Features:**
+
+- Resolves field by display name via fields-layout, or by `system_field` / `custom_field_id`
+- Optional suite filter: flat `test_suite_ids` and/or expanded `root_suite_ids`
+- Returns counts with computed percentages; optional pie chart (`chart=png|html|text`)
+
+**When to use vs other tools:**
+
+| Need | Tool |
+|------|------|
+| Dashboard pie by field + suites | **This tool** |
+| Paginated case list by automation state | `adv_get_test_case_by_filter` / `adv_get_test_cases_by_automation_state` |
+| Coverage report automation breakdown | `adv_generate_report` → `coverage` |
+
+**Example Prompts:**
+
+- "Show test case distribution by automation state for project MCP"
+- "Pie chart of cases by Priority in MCP"
+- `{ project: "MCP", system_field: "AUTOMATION_STATE", format: "json" }`
+
 ### `adv_get_project_milestones`
 
 **Description:** Get all milestones configured for a project.

@@ -34,6 +34,9 @@ const CLOUD_EVAL_PROMPT_IDS = [
   "neg.confuse.report_vs_launch",
   "get_platform_results_by_period.7days",
   "get_platform_results_by_period.compact",
+  "get_test_case_distribution_by_field.automation_state",
+  "get_test_case_distribution_by_field.field_name",
+  "neg.confuse.distribution_vs_automation_state",
 
   // TCM hierarchy / root-suite routing
   "list_test_suites.hierarchy",

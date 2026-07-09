@@ -1131,4 +1131,60 @@ export class ZebrunnerReportingClient {
     const jiraBaseUrl = await this.resolveJiraBaseUrl(projectId, jiraBaseUrlOverride);
     return `${jiraBaseUrl}/browse/${issueKey}`;
   }
+
+  /**
+   * Widget template catalog (TAM + TCM metadata).
+   * GET /api/reporting/v1/widget-templates
+   */
+  async getWidgetTemplates(): Promise<WidgetTemplateCatalogItem[]> {
+    const response = await this.makeAuthenticatedRequest<any>('GET', '/api/reporting/v1/widget-templates');
+    const data = response.data?.items ?? response.data ?? response;
+    const items = Array.isArray(data) ? data : (data.items ?? []);
+    return items as WidgetTemplateCatalogItem[];
+  }
+
+  /**
+   * TCM dashboard widget content.
+   * POST /api/tcm/v1/widgets/{systemName}/content:get?projectId={id}
+   */
+  async getTcmWidgetContent<T = unknown>(
+    systemName: string,
+    projectId: number,
+    filters: object,
+  ): Promise<T> {
+    const url = `/api/tcm/v1/widgets/${encodeURIComponent(systemName)}/content:get?projectId=${projectId}`;
+    const response = await this.makeAuthenticatedRequest<any>('POST', url, { filters });
+    return (response.data?.data ?? response.data ?? response) as T;
+  }
+
+  /**
+   * Test case distribution by field (template 37780 / test-cases-distribution-by-field).
+   */
+  async getTestCaseDistributionByField(
+    projectId: number,
+    fieldFilter: { field: { systemFieldDataType?: string; customFieldId?: number } },
+    testSuiteIds?: number[],
+  ): Promise<{ label: string; value: number }[]> {
+    const filters: Record<string, unknown> = { field: fieldFilter.field };
+    if (testSuiteIds && testSuiteIds.length > 0) {
+      filters.testSuiteIds = testSuiteIds;
+    }
+    const data = await this.getTcmWidgetContent<{ items?: { label: string; value: number }[] }>(
+      'test-cases-distribution-by-field',
+      projectId,
+      filters,
+    );
+    return data?.items ?? [];
+  }
+}
+
+/** Widget template catalog entry from GET /api/reporting/v1/widget-templates */
+export interface WidgetTemplateCatalogItem {
+  id: number;
+  name: string;
+  systemName: string;
+  source: string;
+  type?: string;
+  feature?: string;
+  paramsConfig?: Record<string, unknown>;
 }

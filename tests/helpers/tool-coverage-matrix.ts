@@ -40,6 +40,7 @@ export const TOOL_SMOKE_INPUTS: Record<string, Record<string, unknown>> = {
   adv_get_top_bugs: { project: "android", period: "Month" },
   adv_get_bug_review: { project: "android", period: "Last 30 Days" },
   adv_get_bug_failure_info: { project: "android", dashboardId: 99, hashcode: "abc", period: "Week" },
+  adv_get_test_case_distribution_by_field: { project: "android", system_field: "AUTOMATION_STATE" },
   adv_get_project_milestones: { project: "android" },
   adv_get_available_projects: {},
   adv_validate_test_case: { project_key: "MCP", case_key: "MCP-1" },

@@ -156,6 +156,10 @@
     "description": "Get all test suites for a project"
   },
   {
+    "name": "adv_get_test_case_distribution_by_field",
+    "description": "Pie-chart distribution of test cases by TCM field (dashboard widget 37780)"
+  },
+  {
     "name": "adv_get_test_case_by_filter",
     "description": "Filter test cases by various criteria. Supports field_path/field_value/field_match for generic field-path filtering including custom fields. Supports optional include_history to enrich each case with change log entries."
   },
