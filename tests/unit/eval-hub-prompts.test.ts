@@ -6,10 +6,18 @@ import { allHubModes, PASS_RATE_VIEW_ROWS } from "../helpers/hub-widget-matrix.j
 
 describe("eval hub prompts", () => {
   it("has one prompt per hub mode", () => {
-    assert.equal(
-      HUB_EVAL_PROMPTS.filter(p => p.id.startsWith("hub.tcm.") || p.id.startsWith("hub.failure.") || p.id.startsWith("hub.execution.")).length,
-      allHubModes().length,
-    );
+    for (const row of allHubModes()) {
+      const prefix =
+        row.mcpTool === "adv_get_tcm_case_analytics"
+          ? "hub.tcm"
+          : row.mcpTool === "adv_get_failure_analytics"
+            ? "hub.failure"
+            : "hub.execution";
+      assert.ok(
+        HUB_EVAL_PROMPTS.some(p => p.id === `${prefix}.${row.mode}`),
+        `missing eval prompt for ${prefix}.${row.mode}`,
+      );
+    }
   });
 
   it("has pass-rate view prompts for bar/line/calendar/pie_line/summary", () => {

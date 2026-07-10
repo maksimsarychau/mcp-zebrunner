@@ -107,7 +107,7 @@ MCP Zebrunner provides a natural‑language interface for test management. Inste
 - ⚠️ **MCP Registry** — publication in progress
 
 ### Scale
-- **64 tools** across test management, mutation, and reporting  
+- **69 tools** across test management, mutation, and reporting  
 - **Multiple integrations** — Claude Desktop, Cursor, ChatGPT Desktop, IntelliJ IDEA, Docker  
 - **Rules engine** for quality validation  
 - **Multiple output formats** — JSON, Markdown, Jira‑ready

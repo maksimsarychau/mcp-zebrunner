@@ -103,6 +103,17 @@ export const HUB_EVAL_PROMPTS: EvalPrompt[] = [
     requiredContext: ["projectKey"],
   },
   {
+    id: "hub.failure.period_absolute",
+    toolSection: "3. Analysis — Hub tools (v9.2.4)",
+    promptTemplate:
+      "Failure tag distribution for {{project_key}} from 2026-07-01 to 2026-07-09 — adv_get_failure_analytics tag_distribution with period_mode absolute.",
+    expectedTools: ["adv_get_failure_analytics"],
+    expectedArgKeys: ["project", "mode", "period_mode", "period_start_date", "period_end_date"],
+    category: "analysis",
+    layer: 2,
+    requiredContext: ["projectKey"],
+  },
+  {
     id: "hub.authoring.trend",
     toolSection: "3. Analysis — Authoring trend (v9.2.5)",
     promptTemplate:

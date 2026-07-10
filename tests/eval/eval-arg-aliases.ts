@@ -23,6 +23,7 @@ export const EVAL_ARG_KEY_ALIASES: Record<string, readonly string[]> = {
   report_types: ["report_types", "reporttypes"],
   projects: ["projects", "project_key", "project"],
   include_call_metrics: ["include_call_metrics", "includecallmetrics", "call_metrics"],
+  field: ["field", "system_field", "systemfield", "custom_field_id", "customfieldid"],
 };
 
 export function normalizeArgKey(key: string): string {

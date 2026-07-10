@@ -1,6 +1,6 @@
 /**
  * Pass-rate widget view → templateId mapping (TAM SQL templates 3, 5, 8, 14, 17, 90).
- * @see docs/todos/TCM_TAM_WIDGET_BACKLOG.md
+ * @see docs/TEST_PROMPTS.md §18 — pass-rate view ↔ template mapping
  */
 
 export const PASS_RATE_VIEWS = ['pie', 'line', 'bar', 'calendar', 'pie_line', 'summary'] as const;

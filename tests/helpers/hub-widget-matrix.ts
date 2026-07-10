@@ -70,8 +70,21 @@ export const DISTRIBUTION_ROW = {
 export const AUTHORING_TREND_ROW = {
   mcpTool: "adv_get_test_authoring_trend",
   templateId: 7,
-  apiTestIds: ["W-TPL7", "W-TPL7-WEEK", "W-TPL7-MONTH"],
+  apiTestIds: ["W-TPL7", "W-TPL7-WEEK", "W-TPL7-MONTH", "W-TPL7-ABS"],
 };
+
+/** Widget period-mode API smokes (preset + ABSOLUTE + DYNAMIC tiers). */
+export const PERIOD_MODE_API_SMOKES = [
+  "W-ABS",
+  "W-DYN",
+  "W-DYN-QUARTER",
+  "W-DYN-WEEK",
+  "W-DYN-LONG",
+  "W-PRESET",
+  "W-TPL3-OWNER-TODAY",
+  "W-TPL7-ABS",
+  "W-TPL40112-ABS",
+] as const;
 
 /** All 22 widget templates → MCP tool (22/22 coverage). */
 export const WIDGET_TEMPLATE_TO_MCP: Record<string, string> = {

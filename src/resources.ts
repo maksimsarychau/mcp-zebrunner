@@ -165,7 +165,7 @@ export function buildPeriodsContent(): object {
     tips: [
       "Period values are case-sensitive — use 'Last 30 Days', not 'last 30 days'",
       "Use 'Total' for all-time data (maps to ~10 years)",
-      "Widget tools support period_mode: preset | absolute | dynamic (see WIDGET_PERIOD_COMPATIBILITY.md)",
+      "Widget tools support period_mode: preset | absolute | dynamic (see docs/TEST_PROMPTS.md §18 and change-logs v9.2.2+)",
       "adv_generate_report: widget_period_* affects pass_rate/bugs only; flaky/runtime still use period enum",
     ],
   };

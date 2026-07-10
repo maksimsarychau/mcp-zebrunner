@@ -2,7 +2,7 @@
 
 Complete reference of all available tools with natural language usage examples.
 
-> **v9.2.5:** `adv_get_test_authoring_trend` — template 7 completes **22/22** widget MCP coverage.
+> **v9.2.5:** `adv_get_test_authoring_trend` — template 7 completes **22/22** widget MCP coverage. See [TEST_PROMPTS.md §18](docs/TEST_PROMPTS.md#18-dashboard-widgets-22-templates--v925) and [docs/releases/v9.2.5.md](docs/releases/v9.2.5.md).
 
 > **v9.2.1:** LLM-visible metrics (`include_call_metrics`, session breakdown), compact on 19 additional bulk/reporting tools, format/truncation fixes. See [docs/TOKEN_EFFICIENCY.md](docs/TOKEN_EFFICIENCY.md) and [change-logs.md](change-logs.md).
 
@@ -1608,6 +1608,6 @@ For large datasets, you can specify filters and limits:
 
 ---
 
-**Last Updated:** v9.2.1 - July 2026
+**Last Updated:** v9.2.5 - July 2026
 
 For the latest features and updates, see [change-logs.md](change-logs.md).

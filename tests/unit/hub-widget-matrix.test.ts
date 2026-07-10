@@ -13,6 +13,7 @@ import {
   HUB_FAILURE_MODES,
   HUB_TCM_MODES,
   PASS_RATE_VIEW_ROWS,
+  PERIOD_MODE_API_SMOKES,
   WIDGET_TEMPLATE_TO_MCP,
 } from "../helpers/hub-widget-matrix.js";
 import { PASS_RATE_VIEWS } from "../../src/utils/widget-pass-rate-views.js";
@@ -79,8 +80,20 @@ describe("hub-widget-matrix", () => {
 
   it("authoring trend row maps to W-TPL7 smokes", () => {
     assert.equal(AUTHORING_TREND_ROW.templateId, 7);
-    assert.deepEqual(AUTHORING_TREND_ROW.apiTestIds, ["W-TPL7", "W-TPL7-WEEK", "W-TPL7-MONTH"]);
+    assert.deepEqual(AUTHORING_TREND_ROW.apiTestIds, [
+      "W-TPL7",
+      "W-TPL7-WEEK",
+      "W-TPL7-MONTH",
+      "W-TPL7-ABS",
+    ]);
     assert.equal(AUTHORING_TREND_ROW.mcpTool, "adv_get_test_authoring_trend");
+  });
+
+  it("period-mode smokes cover preset, absolute, and dynamic tiers", () => {
+    assert.ok(PERIOD_MODE_API_SMOKES.includes("W-ABS"));
+    assert.ok(PERIOD_MODE_API_SMOKES.includes("W-DYN"));
+    assert.ok(PERIOD_MODE_API_SMOKES.includes("W-TPL7-ABS"));
+    assert.ok(PERIOD_MODE_API_SMOKES.includes("W-TPL3-OWNER-TODAY"));
   });
 
   it("WIDGET_TEMPLATE_TO_MCP covers all 22 templates", () => {

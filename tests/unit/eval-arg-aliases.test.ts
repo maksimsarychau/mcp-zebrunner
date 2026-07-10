@@ -36,4 +36,11 @@ describe("eval-arg-aliases", () => {
     assert.equal(argKeyPresent({ detaillevel: "summary" }, "detail"), true);
     assert.equal(argKeyPresent({ outputformat: "compact" }, "format"), true);
   });
+
+  it("checkArgKeys accepts distribution field via system_field", () => {
+    assert.deepEqual(
+      checkArgKeys({ project: "MFPAND", system_field: "PRIORITY" }, ["project", "field"]),
+      { pass: true, missing: [] },
+    );
+  });
 });

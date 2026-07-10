@@ -17,9 +17,10 @@ describe("eval authoring prompts", () => {
     }
   });
 
-  it("includes daily default and weekly quarter variants", () => {
+  it("includes daily default, weekly quarter, and absolute period variants", () => {
     assert.ok(AUTHORING_EVAL_PROMPTS.some(p => p.id === "authoring.daily_default"));
     assert.ok(AUTHORING_EVAL_PROMPTS.some(p => p.id === "authoring.weekly_quarter"));
+    assert.ok(AUTHORING_EVAL_PROMPTS.some(p => p.id === "authoring.period.absolute"));
   });
 
   it("includes tool-confusion negatives", () => {

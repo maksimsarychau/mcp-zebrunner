@@ -48,6 +48,26 @@ describe("widget-authoring-trend-tool", () => {
     assert.equal(params.groupingPeriod, "WEEK");
   });
 
+  it("absolute period params match W-TPL7-ABS api-verify payload", () => {
+    const params = buildParamsConfig({
+      period: "Last 14 Days",
+      periodInput: {
+        period_mode: "absolute",
+        period_start_date: "2026-07-01",
+        period_end_date: "2026-07-09",
+      },
+      extra: {
+        groupingPeriod: "DAY",
+        dashboardName: "api-verify",
+        isReact: true,
+      },
+    });
+    assert.equal(params.PERIOD, "ABSOLUTE");
+    assert.equal(params.periodStartDate, "2026-07-01");
+    assert.equal(params.periodEndDate, "2026-07-09");
+    assert.equal(params.groupingPeriod, "DAY");
+  });
+
   it("formats compact output shape from parsed rows", () => {
     const rows = parseAuthoringTrendRows([
       { CREATED_AT: "07/01", AMOUNT: 10 },

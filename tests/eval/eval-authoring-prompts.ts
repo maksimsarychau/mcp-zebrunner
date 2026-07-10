@@ -25,6 +25,17 @@ export const AUTHORING_EVAL_PROMPTS: EvalPrompt[] = [
     requiredContext: ["projectKey"],
   },
   {
+    id: "authoring.period.absolute",
+    toolSection: "3. Analysis — Authoring trend (v9.2.5)",
+    promptTemplate:
+      "Test case creation trend for {{project_key}} from 2026-07-01 through 2026-07-09 using adv_get_test_authoring_trend with absolute period_mode (not a preset period string).",
+    expectedTools: ["adv_get_test_authoring_trend"],
+    expectedArgKeys: ["project", "period_mode", "period_start_date", "period_end_date"],
+    category: "analysis",
+    layer: 2,
+    requiredContext: ["projectKey"],
+  },
+  {
     id: "authoring.compact_json",
     toolSection: "3. Analysis — Authoring trend (v9.2.5)",
     promptTemplate:

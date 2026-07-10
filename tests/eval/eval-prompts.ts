@@ -687,7 +687,7 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
     id: "get_test_case_distribution_by_field.field_name",
     toolSection: "3. Analysis",
     promptTemplate:
-      "Get the dashboard-style test case distribution by Priority field for project {{project_key}}.",
+      "Get the dashboard-style test case distribution by Priority for project {{project_key}} using adv_get_test_case_distribution_by_field — pass field='Priority' or system_field=PRIORITY.",
     expectedTools: ["adv_get_test_case_distribution_by_field"],
     expectedArgKeys: ["project", "field"],
     category: "analysis",
@@ -906,9 +906,10 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
     id: "e2e.automation_coverage",
     toolSection: "7. E2E Metrics",
     promptTemplate:
-      "Collect Automation Coverage metrics for the {{project_key}} platform. Show total test cases, automated count, and coverage percentage.",
+      "Collect Automation Coverage metrics for the {{project_key}} project using TCM automation-state tools (adv_get_automation_states and/or adv_get_test_cases_by_automation_state). Show total test cases, automated count, and coverage percentage — NOT the distribution-by-field pie widget.",
     expectedTools: [ "adv_get_automation_states", "adv_get_test_cases_by_automation_state", "adv_get_all_tcm_test_cases_by_project",
     ],
+    forbiddenTools: ["adv_get_test_case_distribution_by_field"],
     expectedOutputPatterns: ["coverage", "automat", "\\d+%"],
     category: "e2e_metric",
     layer: 3,
@@ -1026,8 +1027,9 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
     id: "chart.text_fallback",
     toolSection: "9. Chart",
     promptTemplate:
-      "Show me a text-based chart of bug priority distribution for the {{project_key}} project over the last 14 days.",
+      "Show me a text-based chart of test-run defect frequency for the {{project_key}} project over the last 14 days — use adv_get_bug_review or adv_get_top_bugs (execution failures), NOT TCM test-case distribution by field.",
     expectedTools: [ "adv_get_bug_review", "adv_get_top_bugs"],
+    forbiddenTools: ["adv_get_test_case_distribution_by_field"],
     expectedArgKeys: ["project"],
     category: "chart",
     layer: 1,
@@ -1142,8 +1144,13 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
     id: "report.release_readiness",
     toolSection: "11. Reports",
     promptTemplate:
-      "Assess release readiness for the {{project_key}} project. Check pass rate, coverage, runtime, and top defects. Give a Go/No-Go recommendation.",
+      "Generate a release readiness report for the {{project_key}} project using adv_generate_report with report_types including release_readiness (pass rate, coverage, runtime, top defects, Go/No-Go) — not individual widget tools.",
     expectedTools: [ "adv_generate_report"],
+    forbiddenTools: [
+      "adv_get_platform_results_by_period",
+      "adv_get_test_case_distribution_by_field",
+      "adv_get_top_bugs",
+    ],
     expectedArgKeys: ["report_types", "projects"],
     category: "report",
     layer: 1,
@@ -1329,8 +1336,10 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
   {
     id: "neg.invalid.fake_project",
     toolSection: "Negative",
-    promptTemplate: "List all test suites for the ZZZZNONEXISTENT99 project.",
-    expectedTools: [ "adv_list_test_suites"],
+    promptTemplate:
+      "What is the pass rate for project ZZZZNONEXISTENT99 over the last 7 days?",
+    expectedTools: ["adv_get_platform_results_by_period"],
+    expectedArgKeys: ["project", "period"],
     category: "negative",
     layer: 3,
     isNegative: true,

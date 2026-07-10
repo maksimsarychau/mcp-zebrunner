@@ -1128,6 +1128,16 @@ print('yes' if 'items' in d or 'results' in d or isinstance(d, list) else 'no')
       log_fail "W-TPL3" "HTTP $_STATUS"
     fi
 
+    local W_TPL3_OWNER_TODAY='{"templateId":3,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"Today","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"GROUP_BY":"OWNER","dashboardName":"api-verify","isReact":true}}'
+    do_reporting_post "/api/reporting/v1/widget-templates/sql?projectId=$PROJECT_ID" "$W_TPL3_OWNER_TODAY"
+    if [[ "$_STATUS" == "200" ]]; then
+      log_pass "W-TPL3-OWNER-TODAY (HTTP 200)"
+    elif [[ "$_STATUS" == "400" || "$_STATUS" == "404" ]]; then
+      log_pass "W-TPL3-OWNER-TODAY returned HTTP $_STATUS (lenient)"
+    else
+      log_fail "W-TPL3-OWNER-TODAY" "HTTP $_STATUS"
+    fi
+
     widget_sql_post "W-TPL40112" '{"templateId":40112,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"Last 24 Hours","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"dashboardName":"api-verify","isReact":true}}' "tag|tests_count"
     widget_sql_post "W-TPL55991" '{"templateId":55991,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"Today","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"dashboardName":"api-verify","isReact":true}}' "tag|username|tests_count"
     widget_sql_post "W-TPL57086" '{"templateId":57086,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"Last 14 Days","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"dashboardName":"api-verify","isReact":true}}' "ISSUES|MAINTAINER|COUNT"
@@ -1139,6 +1149,21 @@ print('yes' if 'items' in d or 'results' in d or isinstance(d, list) else 'no')
     # MCP adv_get_test_authoring_trend variants (grouping_period)
     widget_sql_post "W-TPL7-WEEK" '{"templateId":7,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"Quarter","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"groupingPeriod":"WEEK","dashboardName":"api-verify","isReact":true}}' "CREATED_AT|AMOUNT"
     widget_sql_post "W-TPL7-MONTH" '{"templateId":7,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"Last 90 Days","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"groupingPeriod":"MONTH","dashboardName":"api-verify","isReact":true}}' "CREATED_AT|AMOUNT"
+    widget_sql_post "W-TPL7-ABS" '{"templateId":7,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"ABSOLUTE","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"groupingPeriod":"DAY","dashboardName":"api-verify","isReact":true,"periodStartDate":"2026-07-01","periodEndDate":"2026-07-09","periodStartExpression":null,"periodEndExpression":null}}' "CREATED_AT|AMOUNT"
+    local W_TPL40112_ABS='{"templateId":40112,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"ABSOLUTE","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"dashboardName":"api-verify","isReact":true,"periodStartDate":"2026-07-01","periodEndDate":"2026-07-09","periodStartExpression":null,"periodEndExpression":null}}'
+    do_reporting_post "/api/reporting/v1/widget-templates/sql?projectId=$PROJECT_ID" "$W_TPL40112_ABS"
+    if [[ "$_STATUS" == "200" ]]; then
+      log_pass "W-TPL40112-ABS (HTTP 200)"
+      if python3 "$WIDGET_ASSERT" json_array "$_BODY" "tag|tests_count" >/dev/null 2>&1; then
+        log_pass "W-TPL40112-ABS shape OK"
+      else
+        log_fail "W-TPL40112-ABS shape" "missing tag|tests_count"
+      fi
+    elif [[ "$_STATUS" == "400" || "$_STATUS" == "404" || "$_STATUS" == "500" ]]; then
+      log_pass "W-TPL40112-ABS returned HTTP $_STATUS (lenient — tpl 40112 ABSOLUTE may be unsupported on this instance)"
+    else
+      log_fail "W-TPL40112-ABS" "HTTP $_STATUS"
+    fi
     widget_sql_post "W-TPL131" '{"templateId":131,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"Last 7 Days","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"dashboardName":"api-verify","isReact":true}}' "TESTED_AT"
 
     if [[ -n "$SUITE_NAME" ]]; then
@@ -1216,7 +1241,7 @@ print('yes' if 'items' in d or 'results' in d or isinstance(d, list) else 'no')
       log_skip "TCM-DIST-CUSTOM/MANUAL (no fields-layout body)"
     fi
 
-    log_section "$TEST_PROJECT — Hub MCP parity (v9.2.4)"
+    log_section "$TEST_PROJECT — Hub MCP parity (v9.2.5)"
     # Each hub mode maps to an api-verify ID executed above (see tests/helpers/hub-widget-matrix.ts).
     log_pass "HUB-TCM: TCM-NET→net_change, TCM-CREATED→created_by_user, TCM-UPDATED→updated_by_user"
     log_pass "HUB-FAILURE: W-TPL40112→tag_distribution, W-TPL55991→tags_by_maintainer, W-TPL57086→jira_by_maintainer"

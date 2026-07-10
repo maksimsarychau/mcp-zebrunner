@@ -567,6 +567,9 @@ describe("LLM Evaluation Tests", () => {
       const argCheck = ep.expectedArgKeys
         ? checkArgKeys(args, ep.expectedArgKeys)
         : { pass: true, missing: [] as string[] };
+      const forbiddenCheck = ep.forbiddenTools
+        ? checkForbiddenToolNotUsed(selectedTool, ep.forbiddenTools)
+        : { pass: true };
 
       return {
         id: ep.id,
@@ -575,7 +578,8 @@ describe("LLM Evaluation Tests", () => {
         prompt: populated,
         expectedTools: ep.expectedTools,
         selectedTool,
-        toolSelectionCorrect: checkToolSelection(selectedTool, ep.expectedTools),
+        toolSelectionCorrect:
+          checkToolSelection(selectedTool, ep.expectedTools) && forbiddenCheck.pass,
         argsCorrect: argCheck.pass,
         missingArgs: argCheck.missing,
         durationMs: Date.now() - start,
@@ -684,6 +688,9 @@ describe("LLM Evaluation Tests", () => {
       const { selectedTool, args, tokenUsage } = extractToolSelection(response);
 
       const toolCorrect = checkToolSelection(selectedTool, ep.expectedTools);
+      const forbiddenCheck = ep.forbiddenTools
+        ? checkForbiddenToolNotUsed(selectedTool, ep.forbiddenTools)
+        : { pass: true };
 
       return {
         id: ep.id,
@@ -693,7 +700,7 @@ describe("LLM Evaluation Tests", () => {
         expectedTools: ep.expectedTools,
         selectedTool,
         selectedArgs: args,
-        toolSelectionCorrect: toolCorrect,
+        toolSelectionCorrect: toolCorrect && forbiddenCheck.pass,
         durationMs: Date.now() - start,
         tokenUsage,
       };

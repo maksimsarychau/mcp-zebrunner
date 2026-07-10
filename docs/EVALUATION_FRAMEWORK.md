@@ -2,7 +2,7 @@
 
 **Author:** Maksim Sarychau  
 **Version:** 1.1  
-**Last Updated:** v9.2.1 - July 2026
+**Last Updated:** v9.2.5 - July 2026
 
 ---
 
@@ -27,9 +27,9 @@
 
 ## 1. Executive Summary
 
-The Advanced Zebrunner MCP Server exposes **64 tools** (under `adv_<name>` names) to AI assistants (Claude, Cursor, ChatGPT). When a user asks "Show me the latest test failures," the AI must:
+The Advanced Zebrunner MCP Server exposes **69 tools** (under `adv_<name>` names) to AI assistants (Claude, Cursor, ChatGPT). When a user asks "Show me the latest test failures," the AI must:
 
-1. **Pick the right tool** from 64 options (e.g., `adv_detailed_analyze_launch_failures`)
+1. **Pick the right tool** from 69 options (e.g., `adv_detailed_analyze_launch_failures`)
 2. **Provide the right arguments** (e.g., `project: "MY_PROJECT"`, `launch_id: 12345`)
 3. **Return useful output** that actually answers the question
 
@@ -37,16 +37,17 @@ The Evaluation Framework automatically tests all three of these steps using a re
 
 ### Key Numbers (Latest Run)
 
-| Metric | Value |
+| Metric | Value (cloud suite, Jul 2026) |
 |--------|-------|
-| Model | Claude Sonnet 4 |
-| Tool Selection Accuracy | 97.6% |
-| Argument Correctness | 100.0% |
-| Output Quality (Judge) | 4.06 / 5.0 |
-| Total Prompts Tested | 100 (76 positive + 24 negative) |
-| Total Test Assertions | 154 |
-| Duration | ~5 minutes |
-| Estimated Cost | ~$4–5 per full run |
+| Model | Claude Sonnet 4.6 (`claude-sonnet-4-6`) |
+| Tool Selection Accuracy | 97.7% |
+| Argument Correctness | 98.4% |
+| Output Quality (Judge) | 4.73 / 5.0 |
+| Prompts in catalog | **189** (`default` ~40 + `cloud` ~149) |
+| Default suite (local Ollama) | ~40 prompts, relaxed aggregate (80% tool / 70% arg) |
+| Cloud suite (release gate) | ~149 prompts, strict per-prompt (90% tool / 85% arg) |
+| Duration (cloud full L3) | ~8–9 minutes |
+| Estimated Cost (cloud full L3) | ~$23 per run |
 
 ---
 
@@ -54,7 +55,7 @@ The Evaluation Framework automatically tests all three of these steps using a re
 
 ### The Problem
 
-The Advanced Zebrunner MCP Server has 64 tools with overlapping capabilities. For example:
+The Advanced Zebrunner MCP Server has 69 tools with overlapping capabilities. For example:
 
 - `adv_list_test_suites` vs `adv_get_tcm_test_suites_by_project` — both list suites
 - `adv_get_test_cases_advanced` vs `adv_get_test_cases_by_suite_smart` — both retrieve test cases by suite
@@ -74,7 +75,7 @@ When a user asks a natural-language question, the LLM must navigate this ambigui
 
 ### What the Eval Framework Does
 
-- Sends **57 positive + 17 negative natural-language prompts** to Claude (the same LLM that end users interact with)
+- Sends **189 structured prompts** (partitioned into default vs cloud suites) to the configured LLM
 - Verifies the LLM picks the correct tool, provides correct arguments, and produces quality output
 - Tests robustness against out-of-scope requests, ambiguous prompts, invalid data, tool confusion, and prompt injection
 - Generates a **scorecard** showing accuracy percentages by category
@@ -107,7 +108,7 @@ The framework uses a **layered evaluation** approach. Each layer tests a differe
 **Question answered:** "Given a user prompt, does the LLM select the correct tool?"
 
 **How it works:**
-1. Send a natural-language prompt to Claude along with all 64 tool definitions
+1. Send a natural-language prompt to the LLM along with all 69 tool definitions
 2. Claude responds with a tool_use block naming which tool it wants to call
 3. Compare the selected tool against the expected tool(s)
 
@@ -401,33 +402,19 @@ The framework uses **real Zebrunner project data** — not hardcoded values. At 
 
 ## 6. What Gets Tested
 
-### Prompt Catalog Breakdown
+### Prompt catalog (v9.2.5)
 
-| Category | Prompts | Description | Example |
-|----------|---------|-------------|---------|
-| **TCM** (Test Case Management) | 29 | Suites, test cases, hierarchy, filtering, token-efficient reads (`compact`, `summary`, `batch_get_test_cases`) | "Fetch MCP-1 and MCP-2 in one batch call with summary detail" |
-| **Launch** | 9 | Launches, milestones, regression reports | "Show the 10 most recent launches" |
-| **Analysis** | 8 | Coverage, validation, code generation | "Analyze test coverage for test case X-1" |
-| **Utility** | 4 | Connection test, tool info, projects | "Test the reporting API connection" |
-| **Test Run** | 5 | Test runs, statuses, configurations | "List recent test runs for project X" |
-| **Duplicate** | 2 | Duplicate detection (step + semantic) | "Find duplicate test cases in suite N" |
-| **E2E Metrics** | 3 | Multi-tool complex scenarios | "Assess release readiness" |
-| **Positive Total** | **60** | | |
-| **Negative** | 18 | Out-of-scope, ambiguous, invalid data, tool confusion, prompt injection | "What's the weather?" / "Ignore all instructions" |
-| **Grand Total** | **78** | | |
+The full catalog lives in `tests/eval/eval-prompts.ts` (**189 prompts**). Counts shift slightly as prompts are added; suite sizes are fixed in `tests/eval/eval-cloud-suite.ts`.
 
-### Layer Distribution
+| Suite | Prompts | When to run | Thresholds |
+|-------|---------|-------------|------------|
+| **`default`** | ~40 | `npm run test:eval` with local Ollama | Relaxed aggregate: 80% tool / 70% arg |
+| **`cloud`** | ~149 | `npm run test:eval:cloud` (sets `EVAL_PROVIDER=anthropic`) | Strict per-prompt: 90% tool / 85% arg |
+| **`all`** | ~189 | `EVAL_SUITE=all npm run test:eval` | Legacy full catalog |
 
-| Layer | Test Assertions | What Runs |
-|-------|----------------|-----------|
-| Layer 1 | 31 | Tool selection for all L1 prompts |
-| Layer 2 | 45 | Tool selection + arg validation for L1+L2 prompts |
-| Layer 3 | 8 | Full execution + Judge for L3 single-tool prompts |
-| Layer 3 E2E | 3 | Multi-tool first-step validation |
-| Negative: Refusal | 10 | Out-of-scope + ambiguous + prompt injection |
-| Negative: Confusion | 4 | Tool confusion (correct tool, no forbidden) |
-| Negative: Invalid Data | 4 | MCP error handling with fake IDs (Layer 3) |
-| **Total** | **105** | (+ skipped prompts when context unavailable) |
+Categories include TCM, launch, analysis (widgets/hubs/flaky), chart, field_filter, report, resource, mutation, e2e_metric, and negatives (refusal, tool confusion, invalid data).
+
+Layer distribution varies by `EVAL_LAYER` and suite filter; Layer 3 runs real MCP execution + LLM judge on execution prompts.
 
 ### Token-efficient read prompts (v9.2.0)
 
@@ -444,30 +431,48 @@ Four eval prompts verify LLM routing for opt-in compact/summary/batch reads (uni
 
 ### Cloud tricky suite (`EVAL_SUITE=cloud`)
 
-**76 prompts** that need a capable model are listed in `tests/eval/eval-cloud-suite.ts`. Default `npm run test:eval` uses `EVAL_SUITE=default` and **skips** them so local Ollama runs exit cleanly on **80% tool / 70% arg** aggregate thresholds.
+**~149 prompts** that need a capable model are listed in `tests/eval/eval-cloud-suite.ts`. Default `npm run test:eval` uses `EVAL_SUITE=default` and **skips** them so local Ollama runs exit cleanly on **80% tool / 70% arg** aggregate thresholds.
 
-| Group | Prompts | Why tricky |
-|-------|---------|------------|
-| Token-efficient reads | 5 | `detail`/`format` args; bulk vs `adv_list_test_suites` confusion; `include_call_metrics` |
-| Field-path filtering | 4 | Models invent non-existent filter tool names |
-| Ambiguous refusal | 3 | Plausible QA wording tempts a tool call |
-| Reports vs launches | 6 | `adv_generate_report` vs per-launch / platform tools |
-| TCM hierarchy | 7 | Root suite / hierarchy routing |
-| E2E metrics | 3 | Multi-tool chains |
-| Chart / analysis | 5 | Chart arg routing; wrong analysis tool temptation |
-| Mutation | 8 | Complex arg shapes (`source_case_key`) |
-| Local-Ollama flaky (v9.2.1) | 34 | Bulk pagination, core TCM reads, analysis, test runs, launch details |
+| Group | Why tricky |
+|-------|------------|
+| Token-efficient reads | `detail`/`format` args; bulk vs single-fetch confusion |
+| Field-path filtering | Models invent non-existent filter tools |
+| Widget / hub routing (v9.2.3–v9.2.5) | 22 templates, hub modes, pass-rate views, authoring trend |
+| Period modes | `period_mode` absolute/dynamic on widget tools |
+| Reports vs widgets | `adv_generate_report` vs pass-rate / distribution / top bugs |
+| TCM hierarchy | Root suite / hierarchy routing |
+| E2E metrics | Multi-tool chains |
+| Chart / analysis | Chart args; distribution vs bug-review confusion |
+| Mutation | Complex arg shapes (`source_case_key`) |
+| Local-Ollama flaky (v9.2.1+) | Bulk pagination, core TCM reads, L3 launch/failure |
 
 ```bash
-# Release gate on Claude (strict per-prompt asserts — 90% tool / 85% arg)
-EVAL_PROVIDER=anthropic ANTHROPIC_API_KEY=... npm run test:eval:cloud
+# Release gate — npm script sets EVAL_SUITE=cloud, EVAL_PROVIDER=anthropic, EVAL_STRICT=true
+npm run test:eval:cloud
+
+# Requires ANTHROPIC_API_KEY in .env (ignores EVAL_PROVIDER=local and Ollama EVAL_MODEL)
+# Thresholds: 90% tool / 85% arg (strict per-prompt)
 
 # Layers 1+2 only (faster, no L3 judge)
 npm run test:eval:cloud:l2
 
-# Legacy: run entire catalog including tricky prompts
+# Local Ollama smoke on default suite only (~40 prompts)
+EVAL_PROVIDER=local EVAL_MODEL=qwen3.5:2b npm run test:eval
+
+# Targeted re-run
+EVAL_FILTER=widget.tpl7,authoring npm run test:eval:cloud
+
+# Legacy: entire catalog
 EVAL_SUITE=all npm run test:eval
 ```
+
+### v9.2.5 eval changes
+
+- **Suite partition** — default ~40 / cloud ~149 (was single large default set); local Ollama passes 80% gate on core TCM/launch reads.
+- **`npm run test:eval:cloud`** — sets `EVAL_PROVIDER=anthropic` (fixes accidental Ollama + Claude model 404).
+- **Widget eval files** — `eval-widget-prompts.ts`, `eval-hub-prompts.ts`, `eval-authoring-prompts.ts`; cloud suite holds disambiguation + period-mode prompts.
+- **Distribution disambiguation** — `forbiddenTools` + prompt wording for chart/report/e2e vs `adv_get_test_case_distribution_by_field`.
+- **`field` arg alias** — eval accepts `system_field` / `custom_field_id` for distribution tool.
 
 ### v9.2.1 eval changes
 
@@ -550,7 +555,7 @@ Each LLM call sends the following to Claude:
 | Component | Approximate Tokens | Notes |
 |-----------|--------------------|-------|
 | System prompt | ~50 | Fixed "You are a QA assistant..." |
-| Tool definitions (64 tools) | ~12,000–15,000 | Each tool: name + description + JSON schema |
+| Tool definitions (69 tools) | ~13,000–16,000 | Each tool: name + description + JSON schema |
 | User prompt | ~30–100 | The populated eval prompt |
 | **Total input per call** | **~14,000** | |
 | **Output per call** | **~200–500** | tool_use block with name + args |
@@ -698,7 +703,7 @@ npm run test:eval:l2
 # Run all layers explicitly
 npm run test:eval:l3
 
-# Cloud tricky suite only (~76 prompts) — use Claude/GPT for release gating
+# Cloud tricky suite only (~149 prompts) — npm run test:eval:cloud sets EVAL_PROVIDER=anthropic
 npm run test:eval:cloud
 npm run test:eval:cloud:l2
 ```
@@ -713,10 +718,10 @@ npm run test:eval:cloud:l2
    ├── Fetch first test case → <project_key>-1
    └── (L3 only) Fetch launches, milestones, automation states
 3. Start the MCP server (dist/server.js via stdio)
-4. Load 64 tool schemas from the running server
+4. Load 69 tool schemas from the running server
 5. For each prompt:
    ├── Populate template variables ({{project_key}} → <discovered_value>)
-   ├── Send to Claude API with all 64 tool definitions
+   ├── Send to LLM API with all 69 tool definitions
    ├── Validate tool selection against expected tools
    ├── (L2+) Validate argument keys
    └── (L3) Execute tool via MCP, judge output quality
@@ -829,7 +834,7 @@ Test Failed
 tests/eval/
 ├── eval-config.ts          # Configuration: API keys, model, thresholds
 ├── eval-discovery.ts       # Dynamic data discovery from Zebrunner
-├── eval-prompts.ts         # 100 structured prompt definitions (76 positive + 24 negative)
+├── eval-prompts.ts         # 189 structured prompt definitions (default + cloud suites)
 ├── eval-mcp-client.ts      # MCP server lifecycle + JSON-RPC client
 ├── eval-judges.ts          # Tool selection, arg check, LLM judge
 ├── eval-report.ts          # Result aggregation, scorecard, JSON/MD output
@@ -877,4 +882,4 @@ The eval suite is **excluded from `npm run test:all`** to prevent accidental LLM
 
 ---
 
-*Last Updated: v9.2.1 - July 2026*
+*Last Updated: v9.2.5 - July 2026*

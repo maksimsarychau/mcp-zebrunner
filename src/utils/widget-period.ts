@@ -1,6 +1,6 @@
 /**
  * Zebrunner widget SQL period modes: preset, absolute, dynamic.
- * @see docs/todos/WIDGET_PERIOD_COMPATIBILITY.md
+ * @see docs/TEST_PROMPTS.md §18 — widget period_mode examples
  */
 
 import { z } from 'zod';

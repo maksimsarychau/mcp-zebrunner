@@ -1,6 +1,6 @@
 # Test Prompts for Zebrunner MCP Tools
 
-> This document contains 1–3 test prompts per tool with expected behavior, plus end-to-end metric collection prompts. **§18** documents all **22 Zebrunner dashboard widget templates** with MCP tool mapping and verification commands (v9.2.4). All prompts use generic platform references (iOS / Android / Web) without specific project keys, launch IDs, or milestones.
+> This document contains 1–3 test prompts per tool with expected behavior, plus end-to-end metric collection prompts. **§18** documents all **22 Zebrunner dashboard widget templates** with MCP tool mapping and verification commands (**v9.2.5**). All prompts use generic platform references (iOS / Android / Web) without specific project keys, launch IDs, or milestones.
 
 ---
 
@@ -23,7 +23,7 @@
 15. [MCP Prompts](#15-mcp-prompts-v910)
 16. [Tool Annotations](#16-tool-annotations-v721)
 17. [Tool Metrics & Token Tracking](#17-tool-metrics--token-tracking-v721)
-18. [Dashboard Widgets (22 templates)](#18-dashboard-widgets-22-templates--v924)
+18. [Dashboard Widgets (22 templates)](#18-dashboard-widgets-22-templates--v925)
 
 ---
 
@@ -823,6 +823,11 @@
 > TC development trend for iOS — use authoring trend widget, NOT adv_get_tcm_case_analytics net_change.
 
 **Expected:** `adv_get_test_authoring_trend`, not hub TCM analytics.
+
+**Prompt 4 — Absolute period (v9.2.2+)**
+> Test case creation trend for Web from 2026-07-01 through 2026-07-09 using period_mode absolute.
+
+**Expected:** `period_mode: "absolute"`, `period_start_date`, `period_end_date`. Eval cloud prompt: `authoring.period.absolute`.
 
 ---
 
@@ -1736,7 +1741,7 @@ Use in Claude Desktop. Each tool call must pass `include_call_metrics: true` (or
 
 ---
 
-## 18. Dashboard Widgets (22 templates) — v9.2.4
+## 18. Dashboard Widgets (22 templates) — v9.2.5
 
 Zebrunner exposes **22 dashboard widget templates** exercised by `npm run test:api` (`tests/api-verify.sh`). As of **v9.2.5**, **all 22** have MCP coverage via dedicated tools, hub tools, pass-rate views, and Tier A mappings.
 
@@ -1752,7 +1757,7 @@ Zebrunner exposes **22 dashboard widget templates** exercised by `npm run test:a
 | Authoring trend | `adv_get_test_authoring_trend` | Template **7** |
 | Tier A (existing) | `adv_get_top_bugs`, `adv_get_bug_review`, `adv_get_bug_failure_info` | Templates **4**, **9**, **6**, **10** |
 
-Full matrix: [docs/todos/TCM_TAM_WIDGET_BACKLOG.md](todos/TCM_TAM_WIDGET_BACKLOG.md). Eval routing: `tests/eval/eval-widget-prompts.ts` + `tests/eval/eval-hub-prompts.ts`.
+Full matrix: [docs/archive/TCM_TAM_WIDGET_BACKLOG.md](archive/TCM_TAM_WIDGET_BACKLOG.md) (archived). Eval routing: `tests/eval/eval-widget-prompts.ts`, `tests/eval/eval-hub-prompts.ts`, `tests/eval/eval-authoring-prompts.ts`.
 
 ---
 
@@ -1769,12 +1774,12 @@ Full matrix: [docs/todos/TCM_TAM_WIDGET_BACKLOG.md](todos/TCM_TAM_WIDGET_BACKLOG
 | **6** | Failure info | `adv_get_bug_failure_info` | W-TPL6 |
 | **10** | Failure details | `adv_get_bug_failure_info` | W-TPL10 |
 | **8** | Pass rate pie | `adv_get_platform_results_by_period` (`view=pie`, default) | W-VIEW-8-DEFAULT, W-TPL8-WEEK |
-| **3** | Pass rate bar | `adv_get_platform_results_by_period` `view=bar` | W-TPL3 |
+| **3** | Pass rate bar | `adv_get_platform_results_by_period` `view=bar` | W-TPL3, W-TPL3-OWNER-TODAY |
 | **5** | Pass rate line | `adv_get_platform_results_by_period` `view=line` | W-TPL5 |
 | **17** | Pass rate pie+line | `adv_get_platform_results_by_period` `view=pie_line` | W-TPL17 |
 | **90** | Pass rate calendar | `adv_get_platform_results_by_period` `view=calendar` | W-TPL90 |
 | **14** | Tests summary | `adv_get_platform_results_by_period` `view=summary` | W-TPL14 |
-| **7** | TC development trend | `adv_get_test_authoring_trend` | W-TPL7 |
+| **7** | TC development trend | `adv_get_test_authoring_trend` | W-TPL7, W-TPL7-ABS |
 | **40112** | Failure tag pie | `adv_get_failure_analytics` `mode=tag_distribution` | W-TPL40112 |
 | **55991** | Tags × maintainer | `adv_get_failure_analytics` `mode=tags_by_maintainer` | W-TPL55991 |
 | **57086** | Jira × maintainer | `adv_get_failure_analytics` `mode=jira_by_maintainer` | W-TPL57086 |
@@ -1797,10 +1802,20 @@ Expect hub parity lines per project (`HUB-TCM`, `HUB-FAILURE`, `HUB-EXEC`, `HUB-
 
 **Unit + eval (no live tenant):**
 ```bash
-npm test                                    # hub-widget-matrix, eval-widget-prompts, eval-hub-prompts
-npm run test:eval                           # layer-1 widget + hub routing prompts
-EVAL_SUITE=cloud npm run test:eval          # tricky hub/view disambiguation
+npm test                                    # hub-widget-matrix, eval-widget/hub/authoring prompts
+npm run test:eval                           # default suite (~40 prompts, local Ollama, 80% aggregate)
+npm run test:eval:cloud                     # cloud suite (~149 prompts, Anthropic, strict per-prompt)
+EVAL_FILTER=widget.tpl7 npm run test:eval:cloud   # single prompt smoke
 ```
+
+**Eval prompt files (widget platform v9.2.3–v9.2.5):**
+
+| File | Covers |
+|------|--------|
+| `tests/eval/eval-widget-prompts.ts` | All 22 template routing + chains |
+| `tests/eval/eval-hub-prompts.ts` | Hub modes, pass-rate views, period absolute |
+| `tests/eval/eval-authoring-prompts.ts` | `adv_get_test_authoring_trend` + negatives |
+| `tests/eval/eval-cloud-suite.ts` | Default vs cloud partition |
 
 **Catalog audit (informational):**
 ```bash

@@ -14,6 +14,12 @@
 
 - Tool count **68 → 69**; **22/22** dashboard widgets MCP-covered
 
+### Docs
+
+- [docs/TEST_PROMPTS.md](docs/TEST_PROMPTS.md) §18 — all 22 widgets + verify commands
+- [docs/releases/v9.2.5.md](docs/releases/v9.2.5.md) — release draft
+- Archived planning: [docs/archive/](docs/archive/)
+
 ---
 
 ## v9.2.4 — Widget hub tools + pass-rate view extension
@@ -47,7 +53,7 @@
 - **API verification** — WT-* catalog checks; W-TPL* smokes (22/22 TAM+TCM); TCM-DIST-*; `--widget-catalog-audit` flag
 - **Unit tests** — `tcm-widget-field`, `tcm-widget-client`, `widget-response-parsers`; fixtures under `tests/fixtures/widgets/`
 - **Eval** — distribution routing prompts + pass_rate/bugs regression prompts (`tests/eval/eval-prompts.ts`)
-- **Backlog doc** — [docs/todos/TCM_TAM_WIDGET_BACKLOG.md](docs/todos/TCM_TAM_WIDGET_BACKLOG.md)
+- **Backlog doc (archived)** — [docs/archive/TCM_TAM_WIDGET_BACKLOG.md](docs/archive/TCM_TAM_WIDGET_BACKLOG.md)
 
 ### Changed
 
@@ -55,7 +61,7 @@
 
 ### Deferred (v9.2.4+)
 
-- Hub tools and `adv_get_platform_results_by_period` view/group_by extension — see TCM_TAM_WIDGET_BACKLOG.md
+- Hub tools and `adv_get_platform_results_by_period` view/group_by extension — see [docs/archive/TCM_TAM_WIDGET_BACKLOG.md](docs/archive/TCM_TAM_WIDGET_BACKLOG.md)
 
 ---
 
@@ -127,7 +133,7 @@
 ### Documentation
 
 - [docs/TOKEN_EFFICIENCY.md](docs/TOKEN_EFFICIENCY.md) — v9.2.0 vs v9.2.1 compact matrix, truncation note, metrics footer.
-- [docs/EVALUATION_FRAMEWORK.md](docs/EVALUATION_FRAMEWORK.md) — 64 tools, 76 cloud prompts, local 80%/70% gates.
+- [docs/EVALUATION_FRAMEWORK.md](docs/EVALUATION_FRAMEWORK.md) — 69 tools, default/cloud eval suites (~40 / ~149 prompts).
 - [TOOLS_CATALOG.md](TOOLS_CATALOG.md) — `adv_about_mcp_tools` metrics/routing params.
 - [docs/releases/v9.2.1.md](docs/releases/v9.2.1.md) — local GitHub release draft (gitignored).
 

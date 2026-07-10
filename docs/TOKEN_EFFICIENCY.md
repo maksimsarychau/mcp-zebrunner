@@ -2,6 +2,8 @@
 
 Large Zebrunner exports (thousands of test cases with steps, preconditions, and metadata) can consume **hundreds of thousands of tokens** in a single MCP response. **v9.2.0** introduced opt-in compact/summary/batch knobs; **v9.2.1** expanded compact to 19 additional bulk/reporting tools and added LLM-visible session/per-call metrics.
 
+> **v9.2.5 note:** Widget platform work (22/22 dashboard templates, hub tools) does not change token-efficiency defaults — use `format: compact` / `detail: summary` on bulk TCM reads as before. See [TEST_PROMPTS.md §18](TEST_PROMPTS.md#18-dashboard-widgets-22-templates--v925) for widget-specific prompts.
+
 > **Defaults unchanged:** `format=json`, `detail=full`, `max_results=5000`, suite-smart `get_all=true`, reports `inline=true`. Enable compact/summary explicitly in prompts or via env flags below.
 
 ---
