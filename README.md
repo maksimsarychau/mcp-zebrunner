@@ -547,7 +547,9 @@ Inside chat, ask `adv_about_mcp_tools` with `mode: "routing"` or open the
 
 ## 🛠️ Available Tools
 
-Once connected, you can use these tools through natural language in your AI assistant. This section highlights all **64 tools** organized by category. For the complete catalog with natural-language examples for every tool, see **[TOOLS_CATALOG.md](TOOLS_CATALOG.md)**.
+Once connected, you can use these tools through natural language in your AI assistant. This section highlights all **69 tools** organized by category. For the complete catalog with natural-language examples for every tool, see **[TOOLS_CATALOG.md](TOOLS_CATALOG.md)**.
+
+**Dashboard widgets:** All **22** Zebrunner dashboard templates have MCP coverage (v9.2.5). See **[docs/TEST_PROMPTS.md](docs/TEST_PROMPTS.md) §18** for example prompts and `npm run test:api` verification.
 
 ### Token-efficient reads
 
@@ -1568,8 +1570,10 @@ Leverage intelligent validation:
 ## 📚 Additional Documentation
 
 ### 📖 Tool References
-- **[TOOLS_CATALOG.md](TOOLS_CATALOG.md)** - 🆕 **Complete catalog of all 64 tools with natural language examples**
-- **[docs/RESOURCES_AND_PROMPTS.md](docs/RESOURCES_AND_PROMPTS.md)** - 📎 **MCP Resources & Prompts — full usage guide, reference tables, and contributor guide**
+- **[TOOLS_CATALOG.md](TOOLS_CATALOG.md)** - Complete catalog of all **69** tools with natural language examples
+- **[docs/TEST_PROMPTS.md](docs/TEST_PROMPTS.md)** - Test prompts per tool; **§18** covers all **22 dashboard widgets** (MCP + API verify)
+- **[docs/todos/TCM_TAM_WIDGET_BACKLOG.md](docs/todos/TCM_TAM_WIDGET_BACKLOG.md)** - Widget template ↔ MCP tool matrix
+- **[docs/RESOURCES_AND_PROMPTS.md](docs/RESOURCES_AND_PROMPTS.md)** - MCP Resources & Prompts — full usage guide, reference tables, and contributor guide
 - **[INSTALL-GUIDE.md](INSTALL-GUIDE.md)** - 📥 **Step-by-step installation and setup guide**
 
 ### 🧠 Intelligent Rules System

@@ -32,20 +32,21 @@ function extractAllRegisteredTools(root: string): string[] {
   const files = [
     path.join(root, "src", "server.ts"),
     path.join(root, "src", "handlers", "widget-hub-tools.ts"),
+    path.join(root, "src", "handlers", "widget-authoring-trend-tool.ts"),
   ];
   return files.flatMap(f => extractServerTools(fs.readFileSync(f, "utf-8")));
 }
 
-describe("Tool Registry Coverage (68 tools)", () => {
+describe("Tool Registry Coverage (69 tools)", () => {
   it("ensures every registered server tool has smoke coverage metadata", () => {
     const root = getProjectRoot();
     const serverTools = extractAllRegisteredTools(root);
 
-    assert.equal(serverTools.length, 68, "registered tools should total exactly 68");
-    assert.equal(new Set(serverTools).size, 68, "all registered tools should be unique");
+    assert.equal(serverTools.length, 69, "registered tools should total exactly 69");
+    assert.equal(new Set(serverTools).size, 69, "all registered tools should be unique");
 
     const coverageKeys = Object.keys(TOOL_SMOKE_INPUTS);
-    assert.equal(coverageKeys.length, 68, "smoke coverage map should include 68 tools");
+    assert.equal(coverageKeys.length, 69, "smoke coverage map should include 69 tools");
 
     const missingCoverage = serverTools.filter(tool => !( `adv_${tool}` in TOOL_SMOKE_INPUTS));
     assert.deepEqual(missingCoverage, [], `missing smoke coverage for: ${missingCoverage.join(", ")}`);
@@ -134,11 +135,12 @@ describe("Critical Tool Intelligence Checks", () => {
 
 // ── Tool Annotations Coverage ─────────────────────────────────────────────────
 
-describe("Tool Annotations Coverage (68 tools)", () => {
+describe("Tool Annotations Coverage (69 tools)", () => {
   const root = getProjectRoot();
   const registrationSource = [
     fs.readFileSync(path.join(root, "src", "server.ts"), "utf-8"),
     fs.readFileSync(path.join(root, "src", "handlers", "widget-hub-tools.ts"), "utf-8"),
+    fs.readFileSync(path.join(root, "src", "handlers", "widget-authoring-trend-tool.ts"), "utf-8"),
   ].join("\n");
 
   const MUTATION_TOOLS = new Set([
@@ -173,7 +175,7 @@ describe("Tool Annotations Coverage (68 tools)", () => {
     while ((match = toolsRegex.exec(registrationSource)) !== null) {
       allTools.push(match[1]);
     }
-    assert.equal(allTools.length, 68, "should have 68 registered tools");
+    assert.equal(allTools.length, 69, "should have 69 registered tools");
 
     const missing: string[] = [];
     for (const tool of allTools) {

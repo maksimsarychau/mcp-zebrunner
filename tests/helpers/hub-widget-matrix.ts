@@ -66,6 +66,43 @@ export const DISTRIBUTION_ROW = {
   apiTestIds: ["TCM-DIST-AUTO", "TCM-DIST-MANUAL"],
 };
 
+/** Authoring trend (v9.2.5) — standalone TAM template 7. */
+export const AUTHORING_TREND_ROW = {
+  mcpTool: "adv_get_test_authoring_trend",
+  templateId: 7,
+  apiTestIds: ["W-TPL7", "W-TPL7-WEEK", "W-TPL7-MONTH"],
+};
+
+/** All 22 widget templates → MCP tool (22/22 coverage). */
+export const WIDGET_TEMPLATE_TO_MCP: Record<string, string> = {
+  "37780": DISTRIBUTION_ROW.mcpTool,
+  "37777": "adv_get_tcm_case_analytics",
+  "37778": "adv_get_tcm_case_analytics",
+  "37779": "adv_get_tcm_case_analytics",
+  "4": "adv_get_top_bugs",
+  "9": "adv_get_bug_review",
+  "6": "adv_get_bug_failure_info",
+  "10": "adv_get_bug_failure_info",
+  "8": "adv_get_platform_results_by_period",
+  "3": "adv_get_platform_results_by_period",
+  "5": "adv_get_platform_results_by_period",
+  "17": "adv_get_platform_results_by_period",
+  "90": "adv_get_platform_results_by_period",
+  "14": "adv_get_platform_results_by_period",
+  "7": AUTHORING_TREND_ROW.mcpTool,
+  "40112": "adv_get_failure_analytics",
+  "55991": "adv_get_failure_analytics",
+  "57086": "adv_get_failure_analytics",
+  "57085": "adv_get_execution_analytics",
+  "131": "adv_get_execution_analytics",
+  "1": "adv_get_execution_analytics",
+  "16": "adv_get_execution_analytics",
+};
+
+export function allWidgetTemplateIds(): string[] {
+  return Object.keys(WIDGET_TEMPLATE_TO_MCP).sort();
+}
+
 export function allHubModes(): HubModeRow[] {
   return [...HUB_TCM_MODES, ...HUB_FAILURE_MODES, ...HUB_EXECUTION_MODES];
 }

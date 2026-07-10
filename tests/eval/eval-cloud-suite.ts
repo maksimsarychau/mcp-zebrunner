@@ -57,6 +57,11 @@ const CLOUD_EVAL_PROMPT_IDS = [
   "hub.neg.failure_not_top_bugs",
   "hub.neg.execution_not_regression_runtime",
   "hub.neg.tcm_not_distribution",
+  "widget.tpl7.authoring_trend",
+  "hub.authoring.trend",
+  "authoring.weekly_quarter",
+  "authoring.neg.not_net_change",
+  "authoring.neg.not_execution_duration",
 
   // TCM hierarchy / root-suite routing
   "list_test_suites.hierarchy",

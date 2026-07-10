@@ -5,14 +5,19 @@ import { EVAL_PROMPTS } from "../eval/eval-prompts.js";
 import { HUB_EVAL_PROMPTS } from "../eval/eval-hub-prompts.js";
 import {
   allHubModes,
+  allWidgetTemplateIds,
   assertHubExportsMatchMatrix,
+  AUTHORING_TREND_ROW,
   DISTRIBUTION_ROW,
   HUB_EXECUTION_MODES,
   HUB_FAILURE_MODES,
   HUB_TCM_MODES,
   PASS_RATE_VIEW_ROWS,
+  WIDGET_TEMPLATE_TO_MCP,
 } from "../helpers/hub-widget-matrix.js";
 import { PASS_RATE_VIEWS } from "../../src/utils/widget-pass-rate-views.js";
+import { AUTHORING_EVAL_PROMPTS } from "../eval/eval-authoring-prompts.js";
+import { WIDGET_TEMPLATE_IDS } from "../eval/eval-widget-prompts.js";
 
 describe("hub-widget-matrix", () => {
   it("matrix modes match widget-hub-tools exports", () => {
@@ -72,9 +77,29 @@ describe("hub-widget-matrix", () => {
     assert.deepEqual(p!.expectedTools, ["adv_get_platform_results_by_period"]);
   });
 
-  it("hub matrix counts: 3 TCM + 3 failure + 4 execution modes", () => {
-    assert.equal(HUB_TCM_MODES.length, 3);
-    assert.equal(HUB_FAILURE_MODES.length, 3);
-    assert.equal(HUB_EXECUTION_MODES.length, 4);
+  it("authoring trend row maps to W-TPL7 smokes", () => {
+    assert.equal(AUTHORING_TREND_ROW.templateId, 7);
+    assert.deepEqual(AUTHORING_TREND_ROW.apiTestIds, ["W-TPL7", "W-TPL7-WEEK", "W-TPL7-MONTH"]);
+    assert.equal(AUTHORING_TREND_ROW.mcpTool, "adv_get_test_authoring_trend");
+  });
+
+  it("WIDGET_TEMPLATE_TO_MCP covers all 22 templates", () => {
+    const ids = allWidgetTemplateIds();
+    assert.equal(ids.length, 22);
+    for (const tid of WIDGET_TEMPLATE_IDS) {
+      assert.ok(WIDGET_TEMPLATE_TO_MCP[tid], `template ${tid} missing MCP mapping`);
+    }
+  });
+
+  it("every authoring eval prompt is merged", () => {
+    for (const p of AUTHORING_EVAL_PROMPTS) {
+      assert.ok(EVAL_PROMPTS.some(e => e.id === p.id), `missing ${p.id}`);
+    }
+  });
+
+  it("template 7 eval prompt routes to adv_get_test_authoring_trend", () => {
+    const p = EVAL_PROMPTS.find(e => e.id === "widget.tpl7.authoring_trend");
+    assert.ok(p);
+    assert.deepEqual(p!.expectedTools, ["adv_get_test_authoring_trend"]);
   });
 });

@@ -44,6 +44,7 @@ export const TOOL_SMOKE_INPUTS: Record<string, Record<string, unknown>> = {
   adv_get_tcm_case_analytics: { project: "android", mode: "created_by_user" },
   adv_get_failure_analytics: { project: "android", mode: "tag_distribution" },
   adv_get_execution_analytics: { project: "android", mode: "roi" },
+  adv_get_test_authoring_trend: { project: "android", period: "Last 14 Days" },
   adv_get_project_milestones: { project: "android" },
   adv_get_available_projects: {},
   adv_validate_test_case: { project_key: "MCP", case_key: "MCP-1" },

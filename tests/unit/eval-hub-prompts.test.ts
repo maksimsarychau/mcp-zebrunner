@@ -23,11 +23,21 @@ describe("eval hub prompts", () => {
   });
 
   it("includes tool-confusion negatives for hub vs legacy tools", () => {
-    const negIds = ["hub.neg.failure_not_top_bugs", "hub.neg.execution_not_regression_runtime", "hub.neg.tcm_not_distribution"];
+    const negIds = [
+      "hub.neg.failure_not_top_bugs",
+      "hub.neg.execution_not_regression_runtime",
+      "hub.neg.tcm_not_distribution",
+    ];
     for (const id of negIds) {
       const p = HUB_EVAL_PROMPTS.find(e => e.id === id);
       assert.ok(p?.isNegative);
       assert.ok(p?.forbiddenTools && p.forbiddenTools.length >= 1);
     }
+  });
+
+  it("includes authoring trend prompt in hub eval set", () => {
+    const p = HUB_EVAL_PROMPTS.find(e => e.id === "hub.authoring.trend");
+    assert.ok(p);
+    assert.deepEqual(p!.expectedTools, ["adv_get_test_authoring_trend"]);
   });
 });

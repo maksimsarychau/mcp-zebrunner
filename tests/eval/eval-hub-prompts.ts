@@ -103,6 +103,18 @@ export const HUB_EVAL_PROMPTS: EvalPrompt[] = [
     requiredContext: ["projectKey"],
   },
   {
+    id: "hub.authoring.trend",
+    toolSection: "3. Analysis — Authoring trend (v9.2.5)",
+    promptTemplate:
+      "Daily test case creation trend for {{project_key}} over the last 14 days — adv_get_test_authoring_trend, NOT net_change or distribution pie.",
+    expectedTools: ["adv_get_test_authoring_trend"],
+    expectedArgKeys: ["project", "period"],
+    forbiddenTools: ["adv_get_tcm_case_analytics", "adv_get_test_case_distribution_by_field"],
+    category: "analysis",
+    layer: 1,
+    requiredContext: ["projectKey"],
+  },
+  {
     id: "hub.neg.failure_not_top_bugs",
     toolSection: "3. Analysis — Hub tools (v9.2.4)",
     promptTemplate:

@@ -1,5 +1,21 @@
 # Change Logs
 
+---
+
+## v9.2.5 — Test authoring trend (template 7)
+
+### Added
+
+- **`adv_get_test_authoring_trend`** — TAM template 7 (`CREATED_AT` / `AMOUNT`); [`src/handlers/widget-authoring-trend-tool.ts`](src/handlers/widget-authoring-trend-tool.ts)
+- **`parseAuthoringTrendRows`** / **`sumAuthoringAmounts`** in `widget-response-parsers.ts`
+- Eval: `widget.tpl7.authoring_trend`, `hub.authoring.trend`; api-verify `HUB-AUTHOR` parity line
+
+### Changed
+
+- Tool count **68 → 69**; **22/22** dashboard widgets MCP-covered
+
+---
+
 ## v9.2.4 — Widget hub tools + pass-rate view extension
 
 ### Added
@@ -13,6 +29,7 @@
 
 - **`adv_get_platform_results_by_period`** — optional `view` (`pie`|`line`|`bar`|`calendar`|`pie_line`|`summary`), `group_by`, `grouping_period`, `passed_value_threshold`; auto-selects templateId (default `pie` → 8, unchanged)
 - Tool count **65 → 68**; eval widget prompts route to hub tools where applicable
+- **Docs** — [docs/TEST_PROMPTS.md](docs/TEST_PROMPTS.md) §18 rewritten for all 22 widgets; hub tool sections in §2–§3; [TOOLS_CATALOG.md](TOOLS_CATALOG.md) pass-rate views + hub examples
 
 ### Deferred (v9.2.5)
 

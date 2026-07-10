@@ -8,6 +8,8 @@ import {
   parseDistributionItems,
   parseLabeledValueItems,
   parseNetChangeItems,
+  parseAuthoringTrendRows,
+  sumAuthoringAmounts,
 } from '../../src/utils/widget-response-parsers.js';
 
 const fixturesDir = path.join(process.cwd(), 'tests/fixtures/widgets');
@@ -48,5 +50,14 @@ describe('widget-response-parsers', () => {
   it('parseLabeledValueItems from items envelope', () => {
     const items = parseLabeledValueItems({ items: [{ label: 'User1', value: 5 }] });
     assert.equal(items[0].value, 5);
+  });
+
+  it('parses template 7 authoring trend fixture', () => {
+    const rows = loadFixture('tpl7-authoring-trend.json') as Array<Record<string, unknown>>;
+    const parsed = parseAuthoringTrendRows(rows);
+    assert.equal(parsed.length, 3);
+    assert.equal(parsed[0].created_at, '07/01');
+    assert.equal(parsed[0].amount, 26);
+    assert.equal(sumAuthoringAmounts(parsed), 40);
   });
 });

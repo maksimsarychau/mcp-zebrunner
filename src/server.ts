@@ -70,6 +70,7 @@ import {
 import { distributionWithPercents } from "./utils/widget-response-parsers.js";
 import { TCM_WIDGET_SYSTEM_NAMES } from "./utils/tcm-widget-client.js";
 import { registerWidgetHubTools } from "./handlers/widget-hub-tools.js";
+import { registerTestAuthoringTrendTool } from "./handlers/widget-authoring-trend-tool.js";
 import {
   buildPassRateViewExtra,
   PASS_RATE_GROUP_BY,
@@ -9418,6 +9419,12 @@ ${detailsInfo.map((detail, i) => {
   registerWidgetHubTools(server, {
     resolveProjectId,
     reportingClient,
+    callWidgetSql,
+    debugLog,
+  });
+
+  registerTestAuthoringTrendTool(server, {
+    resolveProjectId,
     callWidgetSql,
     debugLog,
   });

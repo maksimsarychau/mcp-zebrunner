@@ -168,6 +168,10 @@
     "description": "Get all test suites for a project"
   },
   {
+    "name": "adv_get_test_authoring_trend",
+    "description": "TCM test case development trend (TAM widget template 7): CREATED_AT × AMOUNT series by day/week/month"
+  },
+  {
     "name": "adv_get_test_case_distribution_by_field",
     "description": "Pie-chart distribution of test cases by TCM field (dashboard widget 37780)"
   },

@@ -9,6 +9,7 @@ function readRegistrationSources(): string {
   return [
     path.join(root, "src", "server.ts"),
     path.join(root, "src", "handlers", "widget-hub-tools.ts"),
+    path.join(root, "src", "handlers", "widget-authoring-trend-tool.ts"),
   ]
     .map(f => fs.readFileSync(f, "utf-8"))
     .join("\n");

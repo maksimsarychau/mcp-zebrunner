@@ -1,6 +1,7 @@
 import type { EvalDiscoveryContext } from "./eval-discovery.js";
 import type { EvalLayer } from "./eval-config.js";
 import { HUB_EVAL_PROMPTS } from "./eval-hub-prompts.js";
+import { AUTHORING_EVAL_PROMPTS } from "./eval-authoring-prompts.js";
 import { WIDGET_EVAL_PROMPTS } from "./eval-widget-prompts.js";
 
 export type PromptCategory =
@@ -732,6 +733,9 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
 
   // Hub tools + pass-rate views (v9.2.4) — see eval-hub-prompts.ts
   ...HUB_EVAL_PROMPTS,
+
+  // Authoring trend (v9.2.5) — see eval-authoring-prompts.ts
+  ...AUTHORING_EVAL_PROMPTS,
 
   // ── Section 4: Utility / Connection Tools ──
 

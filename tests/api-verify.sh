@@ -1136,6 +1136,9 @@ print('yes' if 'items' in d or 'results' in d or isinstance(d, list) else 'no')
     widget_sql_post "W-TPL17" '{"templateId":17,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"Last 14 Days","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"groupingPeriod":"DAY","dashboardName":"api-verify","isReact":true}}' "STARTED_AT|PASSED|FAILED"
     widget_sql_post "W-TPL16" '{"templateId":16,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"Last 24 Hours","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"STABILITY":"99","dashboardName":"api-verify","isReact":true}}' "NAME|PLATFORM|STABILITY|DURATION"
     widget_sql_post "W-TPL7" '{"templateId":7,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"Last 14 Days","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"groupingPeriod":"DAY","dashboardName":"api-verify","isReact":true}}' "CREATED_AT|AMOUNT"
+    # MCP adv_get_test_authoring_trend variants (grouping_period)
+    widget_sql_post "W-TPL7-WEEK" '{"templateId":7,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"Quarter","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"groupingPeriod":"WEEK","dashboardName":"api-verify","isReact":true}}' "CREATED_AT|AMOUNT"
+    widget_sql_post "W-TPL7-MONTH" '{"templateId":7,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"Last 90 Days","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"groupingPeriod":"MONTH","dashboardName":"api-verify","isReact":true}}' "CREATED_AT|AMOUNT"
     widget_sql_post "W-TPL131" '{"templateId":131,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"Last 7 Days","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"dashboardName":"api-verify","isReact":true}}' "TESTED_AT"
 
     if [[ -n "$SUITE_NAME" ]]; then
@@ -1220,6 +1223,7 @@ print('yes' if 'items' in d or 'results' in d or isinstance(d, list) else 'no')
     log_pass "HUB-EXEC: W-TPL1-ROI→roi, W-TPL131→duration_trend, W-TPL57085→launch_duration, W-TPL16→stability_table"
     log_pass "HUB-PASS-RATE: W-VIEW-8-DEFAULT→pie, W-TPL5→line, W-TPL3→bar, W-TPL90→calendar, W-TPL17→pie_line, W-TPL14→summary"
     log_pass "HUB-DIST: TCM-DIST-AUTO/MANUAL→adv_get_test_case_distribution_by_field (37780)"
+    log_pass "HUB-AUTHOR: W-TPL7/W-TPL7-WEEK/W-TPL7-MONTH→adv_get_test_authoring_trend (7) — 22/22 widgets MCP-covered"
 
   else
     log_skip "Widget/TCM smokes (no project ID)"

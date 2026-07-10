@@ -118,11 +118,12 @@ export const WIDGET_EVAL_PROMPTS: EvalPrompt[] = [
     id: "widget.tpl7.authoring_trend",
     toolSection: "18. Dashboard Widgets",
     promptTemplate:
-      "How many test cases were created per day on {{project_key}} in the last 14 days? (TC development trend widget — use execution or case analytics, not distribution pie.)",
-    expectedTools: ["adv_get_execution_analytics", "adv_get_tcm_case_analytics", "adv_get_test_case_by_filter"],
-    forbiddenTools: ["adv_get_test_case_distribution_by_field"],
+      "How many test cases were created per day on {{project_key}} in the last 14 days? Use the TC development trend widget (template 7).",
+    expectedTools: ["adv_get_test_authoring_trend"],
+    expectedArgKeys: ["project", "period"],
+    forbiddenTools: ["adv_get_test_case_distribution_by_field", "adv_get_tcm_case_analytics"],
     category: "analysis",
-    layer: 2,
+    layer: 1,
     requiredContext: ["projectKey"],
   },
   {

@@ -71,3 +71,29 @@ export function distributionWithPercents(items: TcmDistributionItem[]): Array<Tc
     percent: Math.round((i.value / total) * 1000) / 10,
   }));
 }
+
+export interface AuthoringTrendRow {
+  created_at: string;
+  amount: number;
+}
+
+function pickRowValue(row: Record<string, unknown>, keys: string[]): unknown {
+  const lower = new Map(Object.keys(row).map(k => [k.toLowerCase(), k]));
+  for (const k of keys) {
+    const hit = lower.get(k.toLowerCase());
+    if (hit != null && row[hit] !== undefined) return row[hit];
+  }
+  return undefined;
+}
+
+/** Normalize template 7 rows (CREATED_AT × AMOUNT). */
+export function parseAuthoringTrendRows(rows: unknown[]): AuthoringTrendRow[] {
+  return rows.filter(isRecord).map(row => ({
+    created_at: String(pickRowValue(row, ['CREATED_AT', 'created_at', 'DATE']) ?? ''),
+    amount: Number(pickRowValue(row, ['AMOUNT', 'amount', 'COUNT']) ?? 0),
+  }));
+}
+
+export function sumAuthoringAmounts(rows: AuthoringTrendRow[]): number {
+  return rows.reduce((s, r) => s + r.amount, 0);
+}
