@@ -2,7 +2,7 @@
 
 **Author:** Maksim Sarychau  
 **Version:** 1.1  
-**Last Updated:** v9.2.5 - July 2026
+**Last Updated:** v9.2.6 - August 2026
 
 ---
 
@@ -882,4 +882,4 @@ The eval suite is **excluded from `npm run test:all`** to prevent accidental LLM
 
 ---
 
-*Last Updated: v9.2.5 - July 2026*
+*Last Updated: v9.2.6 - August 2026*

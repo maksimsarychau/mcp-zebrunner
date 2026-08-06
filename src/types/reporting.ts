@@ -246,8 +246,12 @@ export const LaunchListItemSchema = z.object({
   finishedAt: z.coerce.number().nullable().optional(), // timestamp - coerce to handle string or number
   duration: z.coerce.number().nullable().optional(),
   passed: z.coerce.number().optional(),
+  passedManually: z.coerce.number().optional(),
   failed: z.coerce.number().optional(),
+  failedAsKnown: z.coerce.number().optional(),
   skipped: z.coerce.number().optional(),
+  blocked: z.coerce.number().optional(),
+  inProgress: z.coerce.number().optional(),
   aborted: z.coerce.number().optional(),
   queued: z.coerce.number().optional(),
   total: z.coerce.number().optional(),

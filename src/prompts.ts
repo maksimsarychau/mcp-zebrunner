@@ -41,7 +41,7 @@ Targets:
 
 Steps:
 1. Use adv_get_all_launches_with_filter to find launches by latest milestone for each platform
-2. Use adv_get_launch_test_summary for each launch to collect pass/fail/known-issue counts
+2. Use adv_get_launch_test_summary with includeDetailedStatuses: true for each launch to collect separate launch buckets and test-run known-issue counts
 3. Calculate pass rates with and without known issues
 4. Compare against targets
 

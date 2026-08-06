@@ -14,6 +14,7 @@ export interface LaunchRerunTarget {
   failed: number;
   aborted: number;
   status: string;
+  detailedStatuses?: unknown;
 }
 
 const RUNNING_STATUSES = new Set(["IN_PROGRESS", "RUNNING"]);

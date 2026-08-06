@@ -11,8 +11,8 @@ mcp-mutation-safety.md
 !.env.example
 # Allow committing shared Cursor rules so the implementation-notes convention
 # survives across machines and PRs; everything else under .cursor stays ignored.
-!.cursor/rules/
-!.cursor/rules/**
+.cursor/rules/
+.cursor/rules/**
 
 .mcpregistry_registry_token
 .mcpregistry_github_token
@@ -34,4 +34,6 @@ docs/releases
 
 # LLM eval results (contain real Zebrunner project data)
 tests/eval/results/
+
+graphify-out/
 

@@ -118,11 +118,14 @@ All tools marked with chart support accept these two parameters:
 
 **Description:** Lightweight aggregated test results with statistics, most unstable tests, and tests with issues. Optimized for large launches.
 
+**Detailed statuses:** Set `includeDetailedStatuses: true` to add source-labeled launch buckets and per-test `passedManually` / `knownIssue` counts, their overlap, and the deduplicated `eitherCondition`. Existing totals are unchanged.
+
 **Example Prompts:**
 
 - "Get test summary for launch 119783 with top 10 most unstable tests"
 - "Show me summary of launch 120906 - just failed tests"
 - "Get lightweight summary for launch 121482"
+- "For launch 134978, how many tests were passed manually, have known issues assigned, or match either condition?"
 
 ### `adv_regression_results_analyzer`
 
@@ -1608,6 +1611,6 @@ For large datasets, you can specify filters and limits:
 
 ---
 
-**Last Updated:** v9.2.5 - July 2026
+**Last Updated:** v9.2.6 - August 2026
 
 For the latest features and updates, see [change-logs.md](change-logs.md).

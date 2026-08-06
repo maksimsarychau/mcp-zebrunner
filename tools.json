@@ -133,7 +133,7 @@
   },
   {
     "name": "adv_get_launch_test_summary",
-    "description": "Lightweight aggregated test results with statistics and most unstable tests"
+    "description": "Lightweight aggregated test results with statistics and most unstable tests. Set includeDetailedStatuses=true for source-aware passed-manually and known-issue counts, overlap, and deduplicated union."
   },
   {
     "name": "adv_get_platform_results_by_period",

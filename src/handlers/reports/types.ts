@@ -117,6 +117,8 @@ export interface ReportInput {
   inline?: boolean;
   /** Output directory for artifacts when inline=false. */
   output_dir?: string;
+  /** Add source-aware status counters without changing generated report math/artifacts. */
+  includeDetailedStatuses?: boolean;
   /** Widget SQL period mode for pass_rate/bugs legs only (does not affect flaky/runtime). */
   widget_period_mode?: WidgetPeriodInput['period_mode'];
   widget_period_start_date?: string;

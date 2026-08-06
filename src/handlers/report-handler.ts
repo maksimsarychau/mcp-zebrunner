@@ -16,9 +16,14 @@ import {
 } from "../utils/widget-sql.js";
 import {
   isNonPresetWidgetPeriod,
+  pickWidgetPeriodInputFromReport,
   type WidgetPeriodInput,
 } from "../utils/widget-period.js";
 import { getConfig } from "../utils/config-loader.js";
+import {
+  getLaunchDetailedStatusCounts,
+  getWidgetDetailedStatusCounts,
+} from "../utils/launch-status-counts.js";
 
 import {
   type ProjectContext,
@@ -100,6 +105,32 @@ export class ReportHandler implements ReportContext {
       }
     }
 
+    if (input.includeDetailedStatuses) {
+      const projects = await this.resolveProjects(input.projects);
+      const periodInput = pickWidgetPeriodInputFromReport(input as unknown as Record<string, unknown>);
+      const detailedStatuses = await Promise.all(projects.map(async (project) => {
+        const fetched = await this.fetchPassRateOnce(
+          project,
+          input.period,
+          input.milestone,
+          periodInput,
+        );
+        const scope = `${project.alias} report status data`;
+        const statusCounts = fetched.dataSource === "widget_sql"
+          ? getWidgetDetailedStatusCounts(fetched, scope)
+          : getLaunchDetailedStatusCounts(fetched, scope);
+        return {
+          project: project.alias,
+          dataSource: fetched.dataSource,
+          detailedStatuses: statusCounts,
+        };
+      }));
+      contentBlocks.push({
+        type: "text" as const,
+        text: JSON.stringify({ detailedStatuses }, null, 2),
+      });
+    }
+
     return { content: contentBlocks };
   }
 
@@ -145,7 +176,8 @@ export class ReportHandler implements ReportContext {
     milestone?: string,
     periodInput?: WidgetPeriodInput,
   ): Promise<PassRateData> {
-    const result = await this.fetchPassRateOnce(ctx, period, milestone, periodInput);
+    const fetched = await this.fetchPassRateOnce(ctx, period, milestone, periodInput);
+    const { dataSource: _dataSource, ...result } = fetched;
 
     if (milestone && result.total === 0) {
       console.error(
@@ -167,7 +199,7 @@ export class ReportHandler implements ReportContext {
     period: string,
     milestone?: string,
     periodInput?: WidgetPeriodInput,
-  ): Promise<PassRateData> {
+  ): Promise<PassRateData & { dataSource: "widget_sql" | "launches_fallback" }> {
     const params = buildParamsConfig({
       period,
       periodInput: periodInput && isNonPresetWidgetPeriod(periodInput) ? periodInput : undefined,
@@ -263,6 +295,7 @@ export class ReportHandler implements ReportContext {
       passed, failed, skipped, knownIssue, aborted, total,
       passRate,
       passRateExclKnown,
+      dataSource,
     };
   }
 

@@ -424,6 +424,11 @@
 
 **Expected:** Uses `count_only: true`. Fetches all test runs but skips session resolution and JIRA URL lookups. Returns `{total_count: N, filtered_count: N, by_status: {PASSED: X, FAILED: Y, ...}}`.
 
+**Prompt 4 — Manual pass / known issue union**
+> For launch 134978, how many tests were passed manually, have known issues assigned, or match either condition?
+
+**Expected:** Uses `includeDetailedStatuses: true` with `count_only: true` (or `summaryOnly: true`). Returns separate launch-source buckets and test-run-source `passedManually`, `knownIssue`, `bothConditions`, and deduplicated `eitherCondition` counts. Message text does not override the API booleans.
+
 ---
 
 ### `adv_generate_weekly_regression_stability_report`
@@ -2238,4 +2243,4 @@ bash tests/api-verify.sh --widget-catalog-audit
 
 ---
 
-*Last Updated: v9.2.5 — July 2026*
+*Last Updated: v9.2.6 — August 2026*

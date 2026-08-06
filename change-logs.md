@@ -2,6 +2,29 @@
 
 ---
 
+## v9.2.6 — Dependency security and detailed statuses
+
+### Added
+
+- Opt-in, source-aware `includeDetailedStatuses` counters for reporting analysis.
+- Generated image/video compatibility tests and mocked OpenAI/Anthropic request tests.
+- Explicit Node `^22 || ^24` runtime contract with Node 22 declarations.
+
+### Changed
+
+- Updated MCP SDK v1, HTTP/image/LLM SDKs, TypeScript, and supporting dependencies.
+- Existing totals, pass rates, charts, rerun eligibility, transport, and session behavior remain unchanged by default.
+
+### Security
+
+- `npm audit` and `npm audit --omit=dev` report zero vulnerabilities after resolving all eight baseline vulnerable package entries.
+
+### Docs
+
+- [docs/releases/v9.2.6.md](docs/releases/v9.2.6.md)
+
+---
+
 ## v9.2.5 — Test authoring trend (template 7)
 
 ### Added

@@ -92,6 +92,10 @@ import { ToolMetrics, wrapToolHandler } from "./utils/tool-metrics.js";
 import { withCallMetricsSchema } from "./utils/tool-schema-helpers.js";
 import { enrichTestCasesWithHistory, getHistoryBulkWarning, type HistoryFilter, type AutomationStatesMap } from "./utils/testCaseHistory.js";
 import { analyzeRegressionResults, type RegressionAnalyzerInput } from "./handlers/regression-results-analyzer.js";
+import {
+  getLaunchDetailedStatusCounts,
+  getWidgetDetailedStatusCounts,
+} from "./utils/launch-status-counts.js";
 
 // Mutation tools imports
 import { ZebrunnerMutationClient } from "./api/mutation-client.js";
@@ -4947,6 +4951,8 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       .describe("Batch mode safety cap — max eligible launches to rerun (default 10, max 50)."),
     min_failed: z.number().int().min(0).default(1)
       .describe("Minimum failed+aborted test count for a launch to qualify (default 1)."),
+    includeDetailedStatuses: z.boolean().default(false)
+      .describe("Include diagnostic source-aware launch buckets in the preview; never changes rerun eligibility"),
     skip_errors: BoolParam.describe("When true (default), continue batch if one launch fails."),
     dry_run: BoolParam.describe("If true, show resolved targets and API URLs without POST."),
     confirm: BoolParam.describe("Must be true to execute. Without it, returns a preview for user approval."),
@@ -4974,7 +4980,12 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         return { targets: [], skipped };
       }
       return {
-        targets: [toLaunchRerunTarget({ ...launch, id: launch.id, name: launch.name })],
+        targets: [{
+          ...toLaunchRerunTarget({ ...launch, id: launch.id, name: launch.name }),
+          ...(args.includeDetailedStatuses ? {
+            detailedStatuses: getLaunchDetailedStatusCounts(launch, `rerun candidate ${launch.id}`)
+          } : {}),
+        }],
         skipped,
       };
     }
@@ -4997,7 +5008,12 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           skipped.push({ launchId: launch.id, name: launch.name, reason });
           continue;
         }
-        targets.push(toLaunchRerunTarget(launch));
+        targets.push({
+          ...toLaunchRerunTarget(launch),
+          ...(args.includeDetailedStatuses ? {
+            detailedStatuses: getLaunchDetailedStatusCounts(launch, `rerun candidate ${launch.id}`)
+          } : {}),
+        });
         if (targets.length >= maxLaunches) break;
       }
 
@@ -5087,6 +5103,9 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           for (const t of previewTargets) {
             lines.push(`| ${t.launchId} | ${t.name.slice(0, 40)} | ${t.failed} | ${t.aborted} | ${t.status} |`);
             lines.push(`  URL: ${baseUrl}/projects/${projectKey}/automation-launches/${t.launchId}`);
+            if (args.includeDetailedStatuses) {
+              lines.push(`  Detailed status diagnostics: ${JSON.stringify(t.detailedStatuses)}`);
+            }
           }
 
           if (!args.launch_id) {
@@ -6941,6 +6960,9 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         "Include CI job parameters from Jenkins Build Now dialog (suite path, build/locale/test_run_rules defaults). " +
         "Jenkins integration only — not available for Launch Launchers."
       ),
+      includeDetailedStatuses: z.boolean().default(false).describe(
+        "Include normalized source-aware status counters as siblings; raw launch/test-run payloads remain unchanged."
+      ),
       format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format"),
       chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
         "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
@@ -7006,6 +7028,9 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       summaryOnly: z.boolean().default(false).describe("Return only statistics without full test list (most lightweight)"),
       includeLabels: z.boolean().default(false).describe("Include labels array (increases token usage)"),
       includeTestCases: z.boolean().default(false).describe("Include testCases array (increases token usage)"),
+      includeDetailedStatuses: z.boolean().default(false).describe(
+        "Include separate launch API buckets and per-test manual-pass/known-issue classifications."
+      ),
       format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format"),
       session_resolution: z.enum(['auto', 'per_test', 'launch_level']).default('auto').describe("Session duration resolution strategy: auto (launch-level first, fallback per-test), per_test, or launch_level"),
       jira_base_url: z.string().url().optional().describe("Override JIRA base URL (e.g., 'https://myproject.atlassian.net'). If not set, resolved from Zebrunner integrations or JIRA_BASE_URL env var"),
@@ -7078,6 +7103,9 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         .describe("Optional cap for slowest-tests section: exclude test cases with duration exceeding this value (in ms). Useful to filter anomalies."),
       include_empty_suites: z.boolean().default(true)
         .describe("When true, includes test runs with 0 linked bugs in the bugs_per_suite section. Default: true"),
+      includeDetailedStatuses: z.boolean().default(false).describe(
+        "Include only status counters derivable from TCM execution summaries; unsupported fields are marked unavailable."
+      ),
       chart: z.enum(["none","png","html","text"]).default("none").describe(
         "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
       ),
@@ -7124,6 +7152,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           zebrunnerBaseUrl,
           max_test_duration_ms: args.max_test_duration_ms,
           include_empty_suites: args.include_empty_suites,
+          includeDetailedStatuses: args.includeDetailedStatuses,
         };
 
         if (args.chart && args.chart !== 'none') {
@@ -7198,6 +7227,9 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         "When true, resolves builds/suites but returns only the count of matched suites without generating the full report. " +
         "Useful for pre-checking how many suites will be included."
       ),
+      includeDetailedStatuses: z.boolean().default(false).describe(
+        "Include manual-pass and known-issue breakdowns while preserving existing weekly pass-rate math."
+      ),
       chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
         "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
       ),
@@ -7235,6 +7267,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           outputStyle: args.output_style,
           outputFormat: args.output_format,
           count_only: args.count_only,
+          includeDetailedStatuses: args.includeDetailedStatuses,
           chart: args.chart,
           chart_type: args.chart_type,
         });
@@ -7260,6 +7293,9 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       launchId: z.number().int().positive().describe("Launch ID (e.g., 118685)"),
       format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format"),
       jira_base_url: z.string().url().optional().describe("Override JIRA base URL (e.g., 'https://myproject.atlassian.net'). If not set, resolved from Zebrunner integrations or JIRA_BASE_URL env var"),
+      includeDetailedStatuses: z.boolean().default(false).describe(
+        "Include source-aware launch buckets under testResults.detailedStatuses."
+      ),
       chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
         "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
       ),
@@ -7304,6 +7340,9 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       previous_build: z.string().optional().describe("Previous build identifier for baseline comparison"),
       include_test_details: z.boolean().default(false).describe("Include per-test duration listing within each duration class"),
       include_attempts_details: z.boolean().default(true).describe("Include detailed re-run attempt breakdown per launch"),
+      includeDetailedStatuses: z.boolean().default(false).describe(
+        "Include launch/test-run classifications and attempt manual-pass fields when supplied by the API."
+      ),
       format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format"),
       session_resolution: z.enum(['auto', 'per_test', 'launch_level']).default('auto').describe("Session duration resolution strategy: auto (launch-level first, fallback per-test), per_test, or launch_level"),
       medium_threshold_seconds: z.number().int().positive().default(300).describe("Duration threshold (seconds) above which a test is classified as Medium. Default: 300 (5 min)"),
@@ -7342,6 +7381,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           previousBuild: args.previous_build,
           includeTestDetails: args.include_test_details,
           includeAttemptsDetails: args.include_attempts_details,
+          includeDetailedStatuses: args.includeDetailedStatuses,
           format: args.format,
           session_resolution: args.session_resolution,
           medium_threshold_seconds: args.medium_threshold_seconds,
@@ -7478,6 +7518,9 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       output_dir: z.string().optional().describe(
         "Directory for report artifacts when inline=false. Defaults to <tmpdir>/zebrunner-reports/"
       ),
+      includeDetailedStatuses: z.boolean().default(false).describe(
+        "Append source-aware widget or launch-fallback status counters without changing report calculations or artifacts."
+      ),
     },
       annotations: {
         readOnlyHint: true,
@@ -7512,6 +7555,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           previous_milestone: args.previous_milestone,
           inline: args.inline,
           output_dir: args.output_dir,
+          includeDetailedStatuses: args.includeDetailedStatuses,
         });
       } catch (error: any) {
         debugLog("Error in adv_generate_report", { error: error.message, args });
@@ -7803,6 +7847,9 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         "Uses API metadata for an efficient single-request count. Bypasses MCP response size limits."
       ),
       format: z.enum(['raw', 'formatted', 'compact']).default('formatted').describe("Output format - 'raw' for pretty JSON API response, 'compact' for minified JSON, 'formatted' for user-friendly display"),
+      includeDetailedStatuses: z.boolean().default(false).describe(
+        "Include source-aware detailed counters for each list item; unsupported list fields are marked unavailable."
+      ),
       chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
         "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
       ),
@@ -7837,6 +7884,15 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           page: args.page,
           pageSize: args.pageSize
         });
+        if (args.includeDetailedStatuses) {
+          launchesData.items = launchesData.items.map((launch) => ({
+            ...launch,
+            detailedStatuses: getLaunchDetailedStatusCounts(
+              launch,
+              `launch list item ${launch.id}`
+            ),
+          })) as typeof launchesData.items;
+        }
 
         if (args.chart && args.chart !== 'none') {
           const items = launchesData.items || [];
@@ -7921,6 +7977,11 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           if (total > 0) {
             output += `   📈 Results: ${passed} passed, ${failed} failed, ${skipped} skipped (${total} total)\n`;
           }
+          if (args.includeDetailedStatuses) {
+            output += `   🔎 Detailed statuses: ${JSON.stringify(
+              getLaunchDetailedStatusCounts(launch, `launch list item ${launch.id}`)
+            )}\n`;
+          }
 
           output += '\n';
         });
@@ -7959,6 +8020,9 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         "Uses API metadata for an efficient single-request count. Bypasses MCP response size limits."
       ),
       format: z.enum(['raw', 'formatted', 'compact']).default('formatted').describe("Output format - 'raw' for pretty JSON API response, 'compact' for minified JSON, 'formatted' for user-friendly display"),
+      includeDetailedStatuses: z.boolean().default(false).describe(
+        "Include source-aware detailed counters for each list item; unsupported list fields are marked unavailable."
+      ),
       chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
         "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
       ),
@@ -8014,6 +8078,15 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           milestone: args.milestone,
           query: args.query
         });
+        if (args.includeDetailedStatuses) {
+          launchesData.items = launchesData.items.map((launch) => ({
+            ...launch,
+            detailedStatuses: getLaunchDetailedStatusCounts(
+              launch,
+              `launch list item ${launch.id}`
+            ),
+          })) as typeof launchesData.items;
+        }
 
                 if (args.chart && args.chart !== 'none') {
           const items = launchesData.items || [];
@@ -8108,6 +8181,11 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
 
           if (total > 0) {
             output += `   📈 Results: ${passed} passed, ${failed} failed, ${skipped} skipped (${total} total)\n`;
+          }
+          if (args.includeDetailedStatuses) {
+            output += `   🔎 Detailed statuses: ${JSON.stringify(
+              getLaunchDetailedStatusCounts(launch, `launch list item ${launch.id}`)
+            )}\n`;
           }
 
           output += '\n';
@@ -8376,6 +8454,9 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       dashboardName: z.string().optional()
         .describe("Override dashboard title"),
       format: z.enum(['raw', 'formatted', 'compact']).default('formatted'),
+      includeDetailedStatuses: z.boolean().default(false).describe(
+        "Include widget-source known-issue counters and explicit unavailable fields without changing report math."
+      ),
       chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
         "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
       ),
@@ -8488,13 +8569,22 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         }
 
         let result;
+        const widgetCounts = parseWidgetStatusCounts(Array.isArray(data) ? data : []);
+        const detailedStatuses = args.includeDetailedStatuses
+          ? getWidgetDetailedStatusCounts(widgetCounts || {}, `platform results for ${displayPeriod}`)
+          : undefined;
         if (args.format === 'compact') {
           return {
-            content: [{ type: "text" as const, text: JSON.stringify(data) }]
+            content: [{
+              type: "text" as const,
+              text: args.includeDetailedStatuses
+                ? JSON.stringify({ data, detailedStatuses })
+                : JSON.stringify(data)
+            }]
           };
         }
         if (args.format === 'raw') {
-          result = data;
+          result = args.includeDetailedStatuses ? { data, detailedStatuses } : data;
         } else {
           // Format the data for better readability
           result = {
@@ -8507,7 +8597,8 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
               browser: args.browser.length > 0 ? args.browser : undefined,
               milestone: args.milestone.length > 0 ? args.milestone : undefined
             },
-            data: data
+            data: data,
+            ...(args.includeDetailedStatuses ? { detailedStatuses } : {})
           };
         }
 

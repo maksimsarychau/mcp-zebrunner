@@ -8,6 +8,10 @@ import type { TestEffectiveDuration, TestSessionBreakdown, SessionResolutionStra
 import { buildChartResponse, type ChartConfig } from "../utils/chart-generator.js";
 import { getConfig } from "../utils/config-loader.js";
 import { extractJobSummary } from "../utils/launch-job-build.js";
+import {
+  getLaunchDetailedStatusCounts,
+  getTestRunDetailedStatusCounts,
+} from "../utils/launch-status-counts.js";
 
 /**
  * MCP Tool handlers for Zebrunner Reporting API
@@ -36,6 +40,7 @@ export class ZebrunnerReportingToolHandlers {
       includeLaunchDetails, 
       includeTestSessions,
       includeJobParameters,
+      includeDetailedStatuses,
       format 
     } = input;
 
@@ -69,6 +74,12 @@ export class ZebrunnerReportingToolHandlers {
         try {
           const launchDetails = await this.reportingClient.getLaunch(launchId, resolvedProjectId!);
           results.launch = launchDetails;
+          if (includeDetailedStatuses) {
+            results.launchDetailedStatuses = getLaunchDetailedStatusCounts(
+              launchDetails,
+              `launch ${launchId}`
+            );
+          }
         } catch (error: any) {
           results.launchError = `Failed to fetch launch details: ${error.message}`;
         }
@@ -114,6 +125,12 @@ export class ZebrunnerReportingToolHandlers {
               });
 
               results.testRunsSummary = summary;
+              if (includeDetailedStatuses) {
+                results.testRunsDetailedStatuses = getTestRunDetailedStatusCounts(
+                  testRuns.items,
+                  `test runs returned for launch ${launchId}`
+                );
+              }
             }
           } catch (testRunError) {
             // Fallback to test sessions if test runs endpoint doesn't work
@@ -207,6 +224,7 @@ export class ZebrunnerReportingToolHandlers {
     session_resolution?: SessionResolutionStrategy;
     jira_base_url?: string;
     count_only?: boolean;
+    includeDetailedStatuses?: boolean;
     chart?: 'none' | 'png' | 'html' | 'text';
     chart_type?: 'auto' | 'pie' | 'bar' | 'stacked_bar' | 'horizontal_bar' | 'line';
   }) {
@@ -226,6 +244,7 @@ export class ZebrunnerReportingToolHandlers {
       session_resolution = 'auto',
       jira_base_url,
       count_only = false,
+      includeDetailedStatuses = false,
       chart = 'none',
       chart_type = 'auto' as const,
     } = input;
@@ -285,7 +304,11 @@ export class ZebrunnerReportingToolHandlers {
           total_count: allItems.length,
           filtered_count: filtered.length,
           by_status: byStatus,
-          launch_id: launchId
+          launch_id: launchId,
+          ...(includeDetailedStatuses ? {
+            launchDetailedStatuses: getLaunchDetailedStatusCounts(launch, `launch ${launchId}`),
+            detailedStatuses: getTestRunDetailedStatusCounts(filtered, "filtered test runs")
+          } : {})
         }, null, 2) }] };
       }
 
@@ -310,6 +333,7 @@ export class ZebrunnerReportingToolHandlers {
           finishTime: test.finishTime,
           issueReferences: test.issueReferences || [],
           knownIssue: test.knownIssue || false,
+          ...(includeDetailedStatuses ? { passedManually: test.passedManually === true } : {}),
           testClass: test.testClass || 'Unknown',
           owner: test.owner,
           stability: test.stability !== undefined ? Math.round((test.stability || 0) * 100) : 0,
@@ -511,6 +535,13 @@ export class ZebrunnerReportingToolHandlers {
         launchStartedAt: launch.startedAt,
         launchEndedAt: launch.endedAt,
         summary: stats,
+        ...(includeDetailedStatuses ? {
+          launchDetailedStatuses: getLaunchDetailedStatusCounts(launch, `launch ${launchId}`),
+          testRunDetailedStatuses: getTestRunDetailedStatusCounts(
+            filteredTests,
+            "filtered test runs"
+          )
+        } : {}),
         
         // Always include top 20 most unstable tests (lightweight)
         top20MostUnstableTests: filteredTests.slice(0, 20).map(t => ({
@@ -520,6 +551,7 @@ export class ZebrunnerReportingToolHandlers {
           status: t.status,
           testClass: t.testClass,
           knownIssue: t.knownIssue,
+          ...(includeDetailedStatuses ? { passedManually: t.passedManually } : {}),
           durationSeconds: t.durationSeconds,
           issueReferences: t.issueReferencesWithUrls || t.issueReferences,
           testUrl: t.testUrl
@@ -605,6 +637,7 @@ export class ZebrunnerReportingToolHandlers {
     outputStyle?: 'strict' | 'default';
     outputFormat?: 'jira' | 'json' | 'dto' | 'summary' | 'detailed';
     count_only?: boolean;
+    includeDetailedStatuses?: boolean;
     chart?: 'none' | 'png' | 'html' | 'text';
     chart_type?: 'auto' | 'pie' | 'bar' | 'stacked_bar' | 'horizontal_bar' | 'line';
   }) {
@@ -617,6 +650,7 @@ export class ZebrunnerReportingToolHandlers {
       outputStyle = 'strict',
       outputFormat = 'jira',
       count_only = false,
+      includeDetailedStatuses = false,
       chart = 'none',
       chart_type = 'auto' as const,
     } = input;
@@ -663,6 +697,14 @@ export class ZebrunnerReportingToolHandlers {
         status: 'STABLE' | 'WATCH' | 'UNSTABLE' | 'ERROR';
         note?: string;
         linkedIssues?: Array<{ key: string; url?: string; type?: string }>;
+        detailedStatuses?: {
+          current: ReturnType<typeof getTestRunDetailedStatusCounts>;
+          previous: ReturnType<typeof getTestRunDetailedStatusCounts>;
+        };
+        manualVsAutomatic?: {
+          current: { passedManually: number; otherPassed: number };
+          previous: { passedManually: number; otherPassed: number };
+        };
       }> = [];
 
       const linkedIssuesConfig = {
@@ -790,7 +832,31 @@ export class ZebrunnerReportingToolHandlers {
             deltaWoW,
             status,
             note,
-            linkedIssues: currentMetrics.linkedIssues
+            linkedIssues: currentMetrics.linkedIssues,
+            ...(includeDetailedStatuses ? {
+              detailedStatuses: {
+                current: currentMetrics.detailedStatuses,
+                previous: previousMetrics.detailedStatuses
+              },
+              manualVsAutomatic: {
+                current: {
+                  passedManually: currentMetrics.detailedStatuses.passedManually as number,
+                  otherPassed: Math.max(
+                    0,
+                    currentMetrics.passed -
+                      (currentMetrics.detailedStatuses.passedManually as number)
+                  )
+                },
+                previous: {
+                  passedManually: previousMetrics.detailedStatuses.passedManually as number,
+                  otherPassed: Math.max(
+                    0,
+                    previousMetrics.passed -
+                      (previousMetrics.detailedStatuses.passedManually as number)
+                  )
+                }
+              }
+            } : {})
           });
         } catch (error: any) {
           suiteResults.push({
@@ -970,7 +1036,8 @@ export class ZebrunnerReportingToolHandlers {
       skipped,
       flaky,
       passRate,
-      linkedIssues: Array.from(linkedIssuesMap.values())
+      linkedIssues: Array.from(linkedIssuesMap.values()),
+      detailedStatuses: getTestRunDetailedStatusCounts(items, `test runs for launch ${launchId}`)
     };
   }
 
@@ -1294,6 +1361,14 @@ export class ZebrunnerReportingToolHandlers {
       status: 'STABLE' | 'WATCH' | 'UNSTABLE' | 'ERROR';
       note?: string;
       linkedIssues?: Array<{ key: string; url?: string; type?: string }>;
+      detailedStatuses?: {
+        current: ReturnType<typeof getTestRunDetailedStatusCounts>;
+        previous: ReturnType<typeof getTestRunDetailedStatusCounts>;
+      };
+      manualVsAutomatic?: {
+        current: { passedManually: number; otherPassed: number };
+        previous: { passedManually: number; otherPassed: number };
+      };
     }>,
     thresholds: { stable: number; watch: number },
     linkedIssuesConfig: { enabled: boolean; limit: number; position: 'after_comparison' | 'after_status' | 'end' },
@@ -1324,6 +1399,17 @@ export class ZebrunnerReportingToolHandlers {
         : `${suite.deltaWoW >= 0 ? '+' : ''}${suite.deltaWoW}%`;
       report += `| ${suite.suite} | ${passRate} | ${total} | ${failed} | ${skipped} | ${flaky} | ${delta} |\n`;
     });
+
+    const detailedSuites = suites.filter((suite) => suite.manualVsAutomatic);
+    if (detailedSuites.length > 0) {
+      report += `\n### Manual vs Automatic Pass Breakdown\n\n`;
+      report += `| Suite | Current Manual | Current Other Passed | Previous Manual | Previous Other Passed |\n`;
+      report += `|------|----------------|----------------------|-----------------|-----------------------|\n`;
+      detailedSuites.forEach((suite) => {
+        const breakdown = suite.manualVsAutomatic!;
+        report += `| ${suite.suite} | ${breakdown.current.passedManually} | ${breakdown.current.otherPassed} | ${breakdown.previous.passedManually} | ${breakdown.previous.otherPassed} |\n`;
+      });
+    }
 
     if (detailLevel === 'detailed' && buildComparisonSummary) {
       report += this.buildLaunchMappingSection(buildComparisonSummary);
@@ -1444,8 +1530,8 @@ export class ZebrunnerReportingToolHandlers {
   /**
    * Get launcher summary - quick overview without detailed test sessions
    */
-  async getLauncherSummary(input: { projectKey?: string; projectId?: number; launchId: number; format?: 'dto' | 'json' | 'string'; jira_base_url?: string; chart?: 'none' | 'png' | 'html' | 'text'; chart_type?: 'auto' | 'pie' | 'bar' | 'stacked_bar' | 'horizontal_bar' | 'line' }) {
-    const { projectKey, projectId, launchId, format = 'json', jira_base_url, chart = 'none', chart_type = 'auto' as const } = input;
+  async getLauncherSummary(input: { projectKey?: string; projectId?: number; launchId: number; format?: 'dto' | 'json' | 'string'; jira_base_url?: string; chart?: 'none' | 'png' | 'html' | 'text'; chart_type?: 'auto' | 'pie' | 'bar' | 'stacked_bar' | 'horizontal_bar' | 'line'; includeDetailedStatuses?: boolean }) {
+    const { projectKey, projectId, launchId, format = 'json', jira_base_url, chart = 'none', chart_type = 'auto' as const, includeDetailedStatuses = false } = input;
 
     try {
       if (!projectKey && !projectId) {
@@ -1481,6 +1567,9 @@ export class ZebrunnerReportingToolHandlers {
           blocked: launch.blocked || 0,
           aborted: launch.aborted || 0,
           total: (launch.passed || 0) + (launch.failed || 0) + (launch.skipped || 0) + (launch.blocked || 0) + (launch.aborted || 0),
+          ...(includeDetailedStatuses ? {
+            detailedStatuses: getLaunchDetailedStatusCounts(launch, `launch ${launchId}`)
+          } : {}),
           note: 'These are test counts (not TCM test cases). Each test may cover 0, 1, or many test cases. Use get_launch_test_summary for test case coverage details.'
         }
       };
@@ -5783,6 +5872,7 @@ async analyzeTestExecutionVideoTool(input: AnalyzeTestExecutionVideoInput): Prom
     projectId: number,
     includeTestDetails: boolean,
     includeAttemptsDetails: boolean,
+    includeDetailedStatuses: boolean,
     sessionResolution: SessionResolutionStrategy = 'auto',
     mediumThreshold = ZebrunnerReportingToolHandlers.DEFAULT_MEDIUM_THRESHOLD_S,
     longThreshold = ZebrunnerReportingToolHandlers.DEFAULT_LONG_THRESHOLD_S
@@ -5906,7 +5996,10 @@ async analyzeTestExecutionVideoTool(input: AnalyzeTestExecutionVideoInput): Prom
         passed: initialRun!.finishPassed ?? 0,
         failed: initialRun!.finishFailed ?? 0,
         skipped: initialRun!.finishSkipped ?? 0,
-        knownIssue: initialRun!.finishKnownIssue ?? 0
+        knownIssue: initialRun!.finishKnownIssue ?? 0,
+        ...(includeDetailedStatuses ? {
+          passedManually: initialRun!.finishPassedManually ?? "unavailable"
+        } : {})
       };
       attemptsSummary.reRuns = reRuns.map((a, idx) => ({
         attempt: idx + 2,
@@ -5917,7 +6010,10 @@ async analyzeTestExecutionVideoTool(input: AnalyzeTestExecutionVideoInput): Prom
         passed: a.finishPassed ?? 0,
         failed: a.finishFailed ?? 0,
         skipped: a.finishSkipped ?? 0,
-        knownIssue: a.finishKnownIssue ?? 0
+        knownIssue: a.finishKnownIssue ?? 0,
+        ...(includeDetailedStatuses ? {
+          passedManually: a.finishPassedManually ?? "unavailable"
+        } : {})
       }));
     }
 
@@ -5958,6 +6054,10 @@ async analyzeTestExecutionVideoTool(input: AnalyzeTestExecutionVideoInput): Prom
       name: launch.name,
       suiteName: launch.testSuite?.name ?? launch.name,
       status: launch.status,
+      ...(includeDetailedStatuses ? {
+        launchDetailedStatuses: getLaunchDetailedStatusCounts(launch, `launch ${launchId}`),
+        testRunDetailedStatuses: getTestRunDetailedStatusCounts(tests, `test runs for launch ${launchId}`)
+      } : {}),
       elapsedSeconds,
       elapsedFormatted: this.formatElapsed(elapsedSeconds),
       attempts: attemptsSummary,
@@ -6058,6 +6158,7 @@ async analyzeTestExecutionVideoTool(input: AnalyzeTestExecutionVideoInput): Prom
     previousBuild?: string;
     includeTestDetails?: boolean;
     includeAttemptsDetails?: boolean;
+    includeDetailedStatuses?: boolean;
     format?: 'dto' | 'json' | 'string';
     session_resolution?: SessionResolutionStrategy;
     medium_threshold_seconds?: number;
@@ -6076,6 +6177,7 @@ async analyzeTestExecutionVideoTool(input: AnalyzeTestExecutionVideoInput): Prom
       previousBuild,
       includeTestDetails = false,
       includeAttemptsDetails = true,
+      includeDetailedStatuses = false,
       format = 'json',
       session_resolution = 'auto',
       medium_threshold_seconds = ZebrunnerReportingToolHandlers.DEFAULT_MEDIUM_THRESHOLD_S,
@@ -6120,7 +6222,7 @@ async analyzeTestExecutionVideoTool(input: AnalyzeTestExecutionVideoInput): Prom
       // --- Collect metrics for each current launch (parallel) ---
       const currentResults = await Promise.all(
         currentLaunchIds.map(id =>
-          this.collectLaunchRuntimeMetrics(id, resolvedProjectId!, includeTestDetails, includeAttemptsDetails, session_resolution, medium_threshold_seconds, long_threshold_seconds)
+          this.collectLaunchRuntimeMetrics(id, resolvedProjectId!, includeTestDetails, includeAttemptsDetails, includeDetailedStatuses, session_resolution, medium_threshold_seconds, long_threshold_seconds)
         )
       );
 
@@ -6222,7 +6324,7 @@ async analyzeTestExecutionVideoTool(input: AnalyzeTestExecutionVideoInput): Prom
         if (prevLaunchIds.length > 0) {
           const prevResults = await Promise.all(
             prevLaunchIds.map(id =>
-              this.collectLaunchRuntimeMetrics(id, resolvedProjectId!, false, false, session_resolution, medium_threshold_seconds, long_threshold_seconds)
+              this.collectLaunchRuntimeMetrics(id, resolvedProjectId!, false, false, includeDetailedStatuses, session_resolution, medium_threshold_seconds, long_threshold_seconds)
             )
           );
 
