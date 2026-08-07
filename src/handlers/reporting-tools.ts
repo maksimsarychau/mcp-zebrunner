@@ -128,7 +128,7 @@ export class ZebrunnerReportingToolHandlers {
               if (includeDetailedStatuses) {
                 results.testRunsDetailedStatuses = getTestRunDetailedStatusCounts(
                   testRuns.items,
-                  `test runs returned for launch ${launchId}`
+                  "allLaunchTests"
                 );
               }
             }
@@ -266,6 +266,12 @@ export class ZebrunnerReportingToolHandlers {
       const launchUrl = `${baseUrl}/projects/${resolvedProjectKey}/automation-launches/${launchId}`;
       
       const testRuns = await this.reportingClient.getAllTestRuns(launchId, resolvedProjectId!);
+      const detailedStatusScope =
+        (statusFilter?.length ?? 0) > 0 ||
+        minStability !== undefined ||
+        maxStability !== undefined
+          ? "filteredTests" as const
+          : "allLaunchTests" as const;
 
       if (chart && chart !== 'none') {
         const allItems = testRuns.items || [];
@@ -307,7 +313,7 @@ export class ZebrunnerReportingToolHandlers {
           launch_id: launchId,
           ...(includeDetailedStatuses ? {
             launchDetailedStatuses: getLaunchDetailedStatusCounts(launch, `launch ${launchId}`),
-            detailedStatuses: getTestRunDetailedStatusCounts(filtered, "filtered test runs")
+            detailedStatuses: getTestRunDetailedStatusCounts(filtered, detailedStatusScope)
           } : {})
         }, null, 2) }] };
       }
@@ -539,7 +545,7 @@ export class ZebrunnerReportingToolHandlers {
           launchDetailedStatuses: getLaunchDetailedStatusCounts(launch, `launch ${launchId}`),
           testRunDetailedStatuses: getTestRunDetailedStatusCounts(
             filteredTests,
-            "filtered test runs"
+            detailedStatusScope
           )
         } : {}),
         
@@ -840,20 +846,12 @@ export class ZebrunnerReportingToolHandlers {
               },
               manualVsAutomatic: {
                 current: {
-                  passedManually: currentMetrics.detailedStatuses.passedManually as number,
-                  otherPassed: Math.max(
-                    0,
-                    currentMetrics.passed -
-                      (currentMetrics.detailedStatuses.passedManually as number)
-                  )
+                  passedManually: currentMetrics.passedManually,
+                  otherPassed: currentMetrics.passedAutomatically
                 },
                 previous: {
-                  passedManually: previousMetrics.detailedStatuses.passedManually as number,
-                  otherPassed: Math.max(
-                    0,
-                    previousMetrics.passed -
-                      (previousMetrics.detailedStatuses.passedManually as number)
-                  )
+                  passedManually: previousMetrics.passedManually,
+                  otherPassed: previousMetrics.passedAutomatically
                 }
               }
             } : {})
@@ -972,6 +970,8 @@ export class ZebrunnerReportingToolHandlers {
     const items = testRuns.items || [];
 
     let passed = 0;
+    let passedManually = 0;
+    let passedAutomatically = 0;
     let failed = 0;
     let skipped = 0;
     let flaky = 0;
@@ -983,6 +983,11 @@ export class ZebrunnerReportingToolHandlers {
       this.collectTestIdentifiers(test, testIdentifiers);
       totalTestCasesCovered += test.testCases?.length ?? 0;
       const status = (test.status || '').toUpperCase();
+      if (test.passedManually === true) {
+        passedManually += 1;
+      } else if (status === 'PASSED') {
+        passedAutomatically += 1;
+      }
       if (status === 'PASSED' || test.passedManually === true) {
         passed += 1;
       } else if (status === 'FAILED' || status === 'ABORTED') {
@@ -1032,12 +1037,14 @@ export class ZebrunnerReportingToolHandlers {
       total,
       totalTestCasesCovered,
       passed,
+      passedManually,
+      passedAutomatically,
       failed,
       skipped,
       flaky,
       passRate,
       linkedIssues: Array.from(linkedIssuesMap.values()),
-      detailedStatuses: getTestRunDetailedStatusCounts(items, `test runs for launch ${launchId}`)
+      detailedStatuses: getTestRunDetailedStatusCounts(items, "allLaunchTests")
     };
   }
 
@@ -6056,7 +6063,7 @@ async analyzeTestExecutionVideoTool(input: AnalyzeTestExecutionVideoInput): Prom
       status: launch.status,
       ...(includeDetailedStatuses ? {
         launchDetailedStatuses: getLaunchDetailedStatusCounts(launch, `launch ${launchId}`),
-        testRunDetailedStatuses: getTestRunDetailedStatusCounts(tests, `test runs for launch ${launchId}`)
+        testRunDetailedStatuses: getTestRunDetailedStatusCounts(tests, "allLaunchTests")
       } : {}),
       elapsedSeconds,
       elapsedFormatted: this.formatElapsed(elapsedSeconds),

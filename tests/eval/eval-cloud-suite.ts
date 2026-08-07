@@ -178,6 +178,11 @@ const CLOUD_EVAL_PROMPT_IDS = [
   "get_launch_details.full",
   "get_test_run_by_id.details",
   "list_test_run_test_cases.cases",
+
+  // v9.2.6 opt-in detailed statuses — requires setting includeDetailedStatuses=true explicitly
+  "get_launch_test_summary.detailed_statuses",
+  "get_launch_test_summary.manual_known_union",
+  "get_launch_details.detailed_statuses",
 ] as const;
 
 export type CloudEvalPromptId = (typeof CLOUD_EVAL_PROMPT_IDS)[number];

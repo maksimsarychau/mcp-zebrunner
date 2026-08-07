@@ -118,7 +118,7 @@ All tools marked with chart support accept these two parameters:
 
 **Description:** Lightweight aggregated test results with statistics, most unstable tests, and tests with issues. Optimized for large launches.
 
-**Detailed statuses:** Set `includeDetailedStatuses: true` to add source-labeled launch buckets and per-test `passedManually` / `knownIssue` counts, their overlap, and the deduplicated `eitherCondition`. Existing totals are unchanged.
+**Detailed statuses:** Set `includeDetailedStatuses: true` to add source-labeled launch buckets and a per-test `manualAndKnownIssue` block with `passedManually`, `knownIssue`, overlap, and the deduplicated `eitherCondition`. Existing totals are unchanged.
 
 **Example Prompts:**
 

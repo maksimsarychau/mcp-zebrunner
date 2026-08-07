@@ -9,6 +9,8 @@
 - Opt-in, source-aware `includeDetailedStatuses` counters for reporting analysis.
 - Generated image/video compatibility tests and mocked OpenAI/Anthropic request tests.
 - Explicit Node `^22 || ^24` runtime contract with Node 22 declarations.
+- Detailed-status coverage across every test layer: api-verify `R6b` (launch buckets) and `R9` (per-test `passedManually` / `knownIssue`), MCP boundary tests in [`tests/e2e/detailed-statuses.test.ts`](tests/e2e/detailed-statuses.test.ts), and cloud-gated eval prompts `get_launch_test_summary.detailed_statuses`, `get_launch_test_summary.manual_known_union`, `get_launch_details.detailed_statuses`.
+- Eval prompts can assert argument values (`expectedArgValues`), not just argument keys.
 
 ### Changed
 

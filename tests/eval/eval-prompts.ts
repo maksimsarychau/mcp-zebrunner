@@ -38,6 +38,8 @@ export interface EvalPrompt {
   promptTemplate: string;
   expectedTools: string[];
   expectedArgKeys?: string[];
+  /** Exact argument values the model must send (checked alongside expectedArgKeys). */
+  expectedArgValues?: Record<string, unknown>;
   expectedOutputPatterns?: string[];
   category: PromptCategory;
   layer: EvalLayer;
@@ -491,6 +493,48 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
     expectedOutputPatterns: ["pass"],
     category: "launch",
     layer: 3,
+    requiredContext: ["projectKey", "launchId"],
+  },
+  {
+    id: "get_launch_test_summary.detailed_statuses",
+    toolSection: "2. Launch",
+    promptTemplate:
+      "For launch {{launch_id}} in the {{project_key}} project, how many tests were passed manually, " +
+      "how many have known issues assigned, and how many match either condition? " +
+      "Only the counts are needed.",
+    expectedTools: ["adv_get_launch_test_summary"],
+    expectedArgKeys: ["project_key", "launch_id", "include_detailed_statuses"],
+    expectedArgValues: { include_detailed_statuses: true },
+    category: "launch",
+    layer: 2,
+    requiredContext: ["projectKey", "launchId"],
+  },
+  {
+    id: "get_launch_test_summary.manual_known_union",
+    toolSection: "2. Launch",
+    promptTemplate:
+      "Break down launch {{launch_id}} in the {{project_key}} project by manual passes and known issues. " +
+      "I need the passedManually count, the knownIssue count, how many tests are both, " +
+      "and the deduplicated either-condition total.",
+    expectedTools: ["adv_get_launch_test_summary"],
+    expectedArgKeys: ["project_key", "launch_id", "include_detailed_statuses"],
+    expectedArgValues: { include_detailed_statuses: true },
+    expectedOutputPatterns: ["passedManually", "eitherCondition"],
+    category: "launch",
+    layer: 3,
+    requiredContext: ["projectKey", "launchId"],
+  },
+  {
+    id: "get_launch_details.detailed_statuses",
+    toolSection: "2. Launch",
+    promptTemplate:
+      "Show the details of launch {{launch_id}} in the {{project_key}} project including the separate " +
+      "passedManually, failedAsKnown, blocked, and aborted buckets reported by the launch API.",
+    expectedTools: ["adv_get_launch_details", "adv_get_launch_summary"],
+    expectedArgKeys: ["project_key", "launch_id", "include_detailed_statuses"],
+    expectedArgValues: { include_detailed_statuses: true },
+    category: "launch",
+    layer: 2,
     requiredContext: ["projectKey", "launchId"],
   },
   {

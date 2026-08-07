@@ -11,7 +11,7 @@
 #
 # Auto-discovers projects via Reporting API and runs tests against all starred projects.
 #
-# Coverage: 28 unique endpoint patterns across Public API, Reporting API, and Widget SQL.
+# Coverage: 29 unique endpoint patterns across Public API, Reporting API, and Widget SQL.
 #
 # Usage: ./tests/api-verify.sh [--verbose] [--widget-catalog-audit]
 #
@@ -81,6 +81,45 @@ try:
     print('' if val is None else val)
 except: print('')
 " 2>/dev/null || echo ""
+}
+
+# Prints "<field>:<python type>" (or "<field>:missing") for each requested field
+# of the response data object. Used to assert response contracts without
+# depending on live counts.
+json_data_types() {
+  echo "$1" | python3 -c "
+import sys, json
+fields = '''$2'''.split()
+try:
+    d = json.load(sys.stdin)
+    obj = d.get('data', d) if isinstance(d, dict) else {}
+    if not isinstance(obj, dict):
+        obj = {}
+    for f in fields:
+        print(f + ':' + ('missing' if f not in obj else type(obj[f]).__name__))
+except Exception:
+    for f in fields:
+        print(f + ':unparsable')
+" 2>/dev/null || echo ""
+}
+
+# Asserts each field is of an expected python type, tolerating omitted fields
+# (the MCP detailed-status contract reports those as "unavailable").
+check_field_types() {
+  local label="$1" expected_types="$2" types="$3"
+  local field type
+  while IFS= read -r entry; do
+    [[ -z "$entry" ]] && continue
+    field="${entry%%:*}"
+    type="${entry#*:}"
+    if [[ " $expected_types " == *" $type "* ]]; then
+      log_pass "$label: $field is $type"
+    elif [[ "$type" == "missing" || "$type" == "NoneType" ]]; then
+      log_skip "$label: $field not reported by this launch"
+    else
+      log_fail "$label: $field has unexpected type" "Expected one of [$expected_types], got $type"
+    fi
+  done <<< "$types"
 }
 
 json_data_field() {
@@ -976,6 +1015,7 @@ print('yes' if 'items' in d or 'results' in d or isinstance(d, list) else 'no')
   if [[ -n "$LAUNCH_ID" && -n "$PROJECT_ID" ]]; then
     do_reporting_get "/api/reporting/v1/launches/$LAUNCH_ID?projectId=$PROJECT_ID"
     check_status "R6: GET /api/reporting/v1/launches/$LAUNCH_ID"
+    local R6_BODY="$_BODY"
 
     local R6_NAME
     R6_NAME=$(json_data_field "$_BODY" "name")
@@ -989,6 +1029,12 @@ print('yes' if 'items' in d or 'results' in d or isinstance(d, list) else 'no')
         debug "Could not extract launch name"
       fi
     fi
+
+    # Status buckets behind adv_* includeDetailedStatuses (launch source)
+    local R6B_TYPES
+    R6B_TYPES=$(json_data_types "$R6_BODY" \
+      "passed passedManually failed failedAsKnown skipped blocked inProgress aborted")
+    check_field_types "R6b: launch detailed statuses" "int float" "$R6B_TYPES"
   else
     log_skip "R6: GET single launch (no LAUNCH_ID)"
   fi
@@ -1025,6 +1071,26 @@ print('yes' if 'items' in d or 'results' in d or isinstance(d, list) else 'no')
     fi
   else
     log_skip "R8: Launch tests (no LAUNCH_ID)"
+  fi
+
+  # Single test — per-test manual pass / known issue flags
+  if [[ -n "$LAUNCH_ID" && -n "$LAUNCH_TEST_ID" && -n "$PROJECT_ID" ]]; then
+    do_reporting_get "/api/reporting/v1/launches/$LAUNCH_ID/tests/$LAUNCH_TEST_ID?projectId=$PROJECT_ID"
+    check_status "R9: GET .../launches/$LAUNCH_ID/tests/$LAUNCH_TEST_ID"
+
+    local R9_TYPES
+    R9_TYPES=$(json_data_types "$_BODY" "passedManually knownIssue")
+    check_field_types "R9: per-test manual/known flags" "bool" "$R9_TYPES"
+
+    local R9_STATUS
+    R9_STATUS=$(json_data_field "$_BODY" "status")
+    if [[ -n "$R9_STATUS" ]]; then
+      log_pass "Test $LAUNCH_TEST_ID status: $R9_STATUS"
+    else
+      log_fail "Test $LAUNCH_TEST_ID has no status" "$(echo "$_BODY" | head -c 200)"
+    fi
+  else
+    log_skip "R9: Single launch test (no LAUNCH_ID or TEST_ID)"
   fi
 
   # Test execution history

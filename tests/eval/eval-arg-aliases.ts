@@ -23,6 +23,12 @@ export const EVAL_ARG_KEY_ALIASES: Record<string, readonly string[]> = {
   report_types: ["report_types", "reporttypes"],
   projects: ["projects", "project_key", "project"],
   include_call_metrics: ["include_call_metrics", "includecallmetrics", "call_metrics"],
+  include_detailed_statuses: [
+    "include_detailed_statuses",
+    "includedetailedstatuses",
+    "detailed_statuses",
+  ],
+  count_only: ["count_only", "countonly"],
   field: ["field", "system_field", "systemfield", "custom_field_id", "customfieldid"],
 };
 
@@ -36,4 +42,17 @@ export function argKeyPresent(
 ): boolean {
   const candidates = EVAL_ARG_KEY_ALIASES[expectedKey] ?? [expectedKey];
   return candidates.some((c) => normalizeArgKey(c) in normalizedArgs);
+}
+
+/** Value of the first alias of `expectedKey` present in `normalizedArgs`. */
+export function argValueFor(
+  normalizedArgs: Record<string, unknown>,
+  expectedKey: string,
+): unknown {
+  const candidates = EVAL_ARG_KEY_ALIASES[expectedKey] ?? [expectedKey];
+  for (const candidate of candidates) {
+    const normalized = normalizeArgKey(candidate);
+    if (normalized in normalizedArgs) return normalizedArgs[normalized];
+  }
+  return undefined;
 }

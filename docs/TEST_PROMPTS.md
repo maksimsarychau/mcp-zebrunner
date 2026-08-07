@@ -427,7 +427,7 @@
 **Prompt 4 — Manual pass / known issue union**
 > For launch 134978, how many tests were passed manually, have known issues assigned, or match either condition?
 
-**Expected:** Uses `includeDetailedStatuses: true` with `count_only: true` (or `summaryOnly: true`). Returns separate launch-source buckets and test-run-source `passedManually`, `knownIssue`, `bothConditions`, and deduplicated `eitherCondition` counts. Message text does not override the API booleans.
+**Expected:** Uses `includeDetailedStatuses: true` with `count_only: true` (or `summaryOnly: true`). Returns separate launch-source buckets and a test-run-source `manualAndKnownIssue` block containing `passedManually`, `knownIssue`, `bothConditions`, and deduplicated `eitherCondition` counts. Message text does not override the API booleans.
 
 ---
 
