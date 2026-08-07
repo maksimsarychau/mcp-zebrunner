@@ -4,6 +4,32 @@ import type { ChildProcess } from 'node:child_process';
 export const SERVER_READY_PATTERN =
   /Zebrunner MCP Server started|MCP HTTP server listening on port/;
 
+/**
+ * True when the URL's host is a placeholder (example.com or a subdomain of it).
+ * Uses host parsing rather than a substring match so that hosts like
+ * `example.com.evil.test` are not mistaken for the placeholder.
+ */
+export function isPlaceholderUrl(rawUrl: string): boolean {
+  let host: string;
+  try {
+    host = new URL(rawUrl).hostname.toLowerCase();
+  } catch {
+    return true; // an unparseable URL is not a usable credential
+  }
+  return host === 'example.com' || host.endsWith('.example.com');
+}
+
+/** True when Zebrunner credentials are present and not obvious placeholders. */
+export function hasRealZebrunnerCredentials(env: NodeJS.ProcessEnv = process.env): boolean {
+  return Boolean(
+    env.ZEBRUNNER_URL &&
+    env.ZEBRUNNER_LOGIN &&
+    env.ZEBRUNNER_TOKEN &&
+    !isPlaceholderUrl(env.ZEBRUNNER_URL) &&
+    !env.ZEBRUNNER_TOKEN.includes('test-token'),
+  );
+}
+
 export const E2E_SERVER_ENV: NodeJS.ProcessEnv = {
   ...process.env,
   DEBUG: 'false',

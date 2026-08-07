@@ -3,7 +3,7 @@ import { describe, it, before, after } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { existsSync } from 'node:fs';
 import { spawn, type ChildProcess } from 'child_process';
-import { E2E_SERVER_ENV, waitForServerReady } from './server-startup.js';
+import { E2E_SERVER_ENV, hasRealZebrunnerCredentials, waitForServerReady } from './server-startup.js';
 
 /**
  * Boundary tests for the opt-in `includeDetailedStatuses` flag (v9.2.6).
@@ -41,13 +41,7 @@ const DETAILED_STATUS_TOOLS = [
   'adv_generate_report',
 ];
 
-const hasCredentials = Boolean(
-  process.env.ZEBRUNNER_URL &&
-  process.env.ZEBRUNNER_LOGIN &&
-  process.env.ZEBRUNNER_TOKEN &&
-  !process.env.ZEBRUNNER_URL.includes('example.com') &&
-  !process.env.ZEBRUNNER_TOKEN.includes('test-token')
-);
+const hasCredentials = hasRealZebrunnerCredentials();
 
 const skipReason = !hasCredentials
   ? 'no real Zebrunner credentials in .env'
