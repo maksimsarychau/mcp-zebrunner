@@ -5,7 +5,11 @@ A **Model Context Protocol (MCP)** server that brings advanced analytics, report
 
 > Tool naming: every tool on this server is registered under the canonical `adv_<name>` form (e.g. `adv_create_test_case`, `adv_list_test_runs`) so it never collides with the official Zebrunner MCP. The legacy names are kept as **deprecated aliases** so prompts/scripts that called the old names continue to work for now; aliases will be removed in the next major release. 
 
-> 🆕 **v9.2.1** — LLM-visible metrics (`include_call_metrics`, session breakdown), compact expansion (+19 tools), format/truncation bugfixes. See **[Token efficiency guide](docs/TOKEN_EFFICIENCY.md)** and [change-logs.md](change-logs.md#v921--llm-visible-metrics--compact-expansion).
+> 🆕 **v9.2.6** — Security-cleared dependency refresh plus opt-in, source-aware `includeDetailedStatuses` counters. Existing totals and behavior are unchanged by default. See [release notes](docs/releases/v9.2.6.md).
+>
+> 🆕 **v9.2.5** — **`adv_get_test_authoring_trend`** (TAM template 7) completes **22/22** dashboard widget MCP coverage. Hub tools, pass-rate views, period modes. See **[TEST_PROMPTS.md §18](docs/TEST_PROMPTS.md#18-dashboard-widgets-22-templates--v925)** and [change-logs.md](change-logs.md#v925--test-authoring-trend-template-7).
+
+> **v9.2.1** — LLM-visible metrics (`include_call_metrics`, session breakdown), compact expansion (+19 tools), format/truncation bugfixes. See **[Token efficiency guide](docs/TOKEN_EFFICIENCY.md)** and [change-logs.md](change-logs.md#v921--llm-visible-metrics--compact-expansion).
 
 > **v9.2.0** — Opt-in token/cost optimizations: `format:'compact'`, `detail:'summary'`, `adv_batch_get_test_cases`, report `inline:false`. Defaults unchanged. See [change-logs.md](change-logs.md#v920--tokencost-optimization-opt-in).
 
@@ -19,7 +23,7 @@ A **Model Context Protocol (MCP)** server that brings advanced analytics, report
 
 ## 🔥 Why This Server
 
-This is the **Advanced Zebrunner MCP Server** — built to go well beyond basic test case management and help QA teams work smarter and faster with AI. Compared to the official Zebrunner MCP (beta, ~70 tools spanning Public REST + Reporting/TAM/Launcher), this server provides **64 analytics-focused tools** (`adv_*` prefix) and is safe to run side-by-side with the official server:
+This is the **Advanced Zebrunner MCP Server** — built to go well beyond basic test case management and help QA teams work smarter and faster with AI. Compared to the official Zebrunner MCP (beta, ~70 tools spanning Public REST + Reporting/TAM/Launcher), this server provides **69 analytics-focused tools** (`adv_*` prefix) and is safe to run side-by-side with the official server:
 
 - **[Reporting & Analytics](#-reporting--analytics)** — dashboards, pass-rate trends, regression stability reports, runtime efficiency analysis, bug reviews, and weekly delta tracking
 - **[Test Coverage & Analysis](#-test-coverage--analysis)** — coverage gaps, automation readiness scoring, and cross-suite analysis
@@ -547,7 +551,9 @@ Inside chat, ask `adv_about_mcp_tools` with `mode: "routing"` or open the
 
 ## 🛠️ Available Tools
 
-Once connected, you can use these tools through natural language in your AI assistant. This section highlights all **64 tools** organized by category. For the complete catalog with natural-language examples for every tool, see **[TOOLS_CATALOG.md](TOOLS_CATALOG.md)**.
+Once connected, you can use these tools through natural language in your AI assistant. This section highlights all **69 tools** organized by category. For the complete catalog with natural-language examples for every tool, see **[TOOLS_CATALOG.md](TOOLS_CATALOG.md)**.
+
+**Dashboard widgets:** All **22** Zebrunner dashboard templates have MCP coverage (v9.2.5). See **[docs/TEST_PROMPTS.md](docs/TEST_PROMPTS.md) §18** for example prompts and `npm run test:api` verification.
 
 ### Token-efficient reads
 
@@ -791,7 +797,7 @@ Most test case tools support optional **change history enrichment** — fetching
 
 > **Full guide:** [docs/RESOURCES_AND_PROMPTS.md](docs/RESOURCES_AND_PROMPTS.md) — detailed usage, examples, reference tables, and contributor guide.
 
-In addition to 64 tools, the server now provides **14 resources** and **17 prompts** that improve discoverability and automate complex workflows.
+In addition to 69 tools, the server now provides **14 resources** and **17 prompts** that improve discoverability and automate complex workflows.
 
 ### Resources — `@` Context Injection
 
@@ -1568,8 +1574,10 @@ Leverage intelligent validation:
 ## 📚 Additional Documentation
 
 ### 📖 Tool References
-- **[TOOLS_CATALOG.md](TOOLS_CATALOG.md)** - 🆕 **Complete catalog of all 64 tools with natural language examples**
-- **[docs/RESOURCES_AND_PROMPTS.md](docs/RESOURCES_AND_PROMPTS.md)** - 📎 **MCP Resources & Prompts — full usage guide, reference tables, and contributor guide**
+- **[TOOLS_CATALOG.md](TOOLS_CATALOG.md)** - Complete catalog of all **69** tools with natural language examples
+- **[docs/TEST_PROMPTS.md](docs/TEST_PROMPTS.md)** - Test prompts per tool; **§18** covers all **22 dashboard widgets** (MCP + API verify)
+- **[docs/archive/TCM_TAM_WIDGET_BACKLOG.md](docs/archive/TCM_TAM_WIDGET_BACKLOG.md)** - Archived widget template ↔ MCP matrix (live: TEST_PROMPTS §18)
+- **[docs/RESOURCES_AND_PROMPTS.md](docs/RESOURCES_AND_PROMPTS.md)** - MCP Resources & Prompts — full usage guide, reference tables, and contributor guide
 - **[INSTALL-GUIDE.md](INSTALL-GUIDE.md)** - 📥 **Step-by-step installation and setup guide**
 
 ### 🧠 Intelligent Rules System

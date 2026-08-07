@@ -6,6 +6,13 @@
  */
 
 import { getConfig } from "./config-loader.js";
+import {
+  resolveWidgetPeriodParams,
+  type WidgetPeriodInput,
+} from "./widget-period.js";
+
+export { extractResolvedPeriodLabel } from "./widget-period.js";
+export type { WidgetPeriodInput } from "./widget-period.js";
 
 export const ALL_PERIODS = [
   "Today",
@@ -55,13 +62,14 @@ export function buildParamsConfig(opts: {
   browser?: string[];
   milestone?: string[];
   dashboardName?: string;
+  periodInput?: WidgetPeriodInput;
   extra?: Partial<Record<string, any>>;
 }) {
-  const { period, platform, browser = [], milestone = [], dashboardName, extra = {} } = opts;
-  const normalized = ALL_PERIODS.find(p => p.toLowerCase() === period.toLowerCase());
-  if (!normalized) {
-    throw new Error(`Invalid period: ${period}. Allowed: ${ALL_PERIODS.join(", ")}`);
-  }
+  const { period, platform, browser = [], milestone = [], dashboardName, periodInput, extra = {} } = opts;
+
+  const periodParams = periodInput
+    ? resolveWidgetPeriodParams({ ...periodInput, period: periodInput.period ?? period }, period)
+    : resolveWidgetPeriodParams({ period }, period);
 
   const cfg = getConfig();
   const pMap = cfg.platformMap;
@@ -72,17 +80,95 @@ export function buildParamsConfig(opts: {
       ? (pMap[platform] ?? [])
       : [];
 
-  return {
+  const base: Record<string, unknown> = {
     BROWSER: browser,
     DEFECT: [], APPLICATION: [], BUILD: [], PRIORITY: [],
     RUN: [], USER: [], ENV: [], MILESTONE: milestone,
     PLATFORM: resolvedPlatform,
     STATUS: [], LOCALE: [],
-    PERIOD: normalized,
+    PERIOD: periodParams.PERIOD,
     dashboardName: dashboardName ?? cfg.dashboardNames.weeklyResults,
     isReact: true,
-    ...extra
+    ...extra,
   };
+
+  if (periodParams.PERIOD === 'ABSOLUTE' || periodParams.PERIOD === 'DYNAMIC') {
+    base.periodStartDate = periodParams.periodStartDate;
+    base.periodEndDate = periodParams.periodEndDate;
+    base.periodStartExpression = periodParams.periodStartExpression;
+    base.periodEndExpression = periodParams.periodEndExpression;
+  }
+
+  return base;
+}
+
+/** Params for BUG_REVIEW widget (template 9). */
+export function buildBugReviewParamsConfig(opts: {
+  period: string;
+  periodInput?: WidgetPeriodInput;
+  dashboardName?: string;
+}) {
+  const periodParams = resolveWidgetPeriodParams(
+    { ...opts.periodInput, period: opts.periodInput?.period ?? opts.period },
+    opts.period,
+  );
+
+  const base: Record<string, unknown> = {
+    BROWSER: [],
+    DEFECT: [],
+    APPLICATION: [],
+    BUILD: [],
+    PRIORITY: [],
+    RUN: [],
+    USER: [],
+    ENV: [],
+    MILESTONE: [],
+    PLATFORM: [],
+    STATUS: [],
+    LOCALE: [],
+    PERIOD: periodParams.PERIOD,
+    ERROR_COUNT: "0",
+    dashboardName: opts.dashboardName ?? "Bug review",
+    isReact: true,
+  };
+
+  if (periodParams.PERIOD === 'ABSOLUTE' || periodParams.PERIOD === 'DYNAMIC') {
+    base.periodStartDate = periodParams.periodStartDate;
+    base.periodEndDate = periodParams.periodEndDate;
+    base.periodStartExpression = periodParams.periodStartExpression;
+    base.periodEndExpression = periodParams.periodEndExpression;
+  }
+
+  return base;
+}
+
+/** Params for FAILURE_INFO / FAILURE_DETAILS widgets (templates 6 & 10). */
+export function buildFailureWidgetParamsConfig(opts: {
+  period: string;
+  periodInput?: WidgetPeriodInput;
+  hashcode: string;
+  dashboardName?: string;
+}) {
+  const periodParams = resolveWidgetPeriodParams(
+    { ...opts.periodInput, period: opts.periodInput?.period ?? opts.period },
+    opts.period,
+  );
+
+  const base: Record<string, unknown> = {
+    PERIOD: periodParams.PERIOD,
+    dashboardName: opts.dashboardName ?? "Failures analysis",
+    hashcode: opts.hashcode,
+    isReact: true,
+  };
+
+  if (periodParams.PERIOD === 'ABSOLUTE' || periodParams.PERIOD === 'DYNAMIC') {
+    base.periodStartDate = periodParams.periodStartDate;
+    base.periodEndDate = periodParams.periodEndDate;
+    base.periodStartExpression = periodParams.periodStartExpression;
+    base.periodEndExpression = periodParams.periodEndExpression;
+  }
+
+  return base;
 }
 
 export type WidgetSqlCaller = (
@@ -146,12 +232,24 @@ function classifyWidgetStatusLabel(label: string): keyof WidgetStatusCounts | nu
  * Zebrunner returns either:
  * - label/value pairs: [{ label: "PASSED", value: 1087 }, ...] (common with milestone filter)
  * - column-oriented rows: [{ PLATFORM: "Android", PASSED: 80, FAILED: 10 }, ...]
+ * - GROUP_FIELD rows (template 3 priority breakdown): prefer GROUP_FIELD null totals row
  */
 export function parseWidgetStatusCounts(rows: any[]): WidgetStatusCounts | null {
   if (!Array.isArray(rows) || rows.length === 0) return null;
 
   const first = rows[0];
   if (!first || typeof first !== 'object') return null;
+
+  const groupFieldKey = findRowKey(first as Record<string, unknown>, ['GROUP_FIELD', 'group_field']);
+  if (groupFieldKey) {
+    const totalsRow = rows.find((row) => {
+      if (!row || typeof row !== 'object') return false;
+      const gf = (row as Record<string, unknown>)[groupFieldKey];
+      return gf === null || gf === undefined || gf === '';
+    });
+    const sourceRows = totalsRow ? [totalsRow] : rows;
+    return parseWidgetStatusCountsFromColumns(sourceRows);
+  }
 
   const labelKey = findRowKey(first as Record<string, unknown>, ['label']);
   const valueKey = findRowKey(first as Record<string, unknown>, ['value']);
@@ -165,10 +263,18 @@ export function parseWidgetStatusCounts(rows: any[]): WidgetStatusCounts | null 
       if (!cat) continue;
       const raw = (row as Record<string, unknown>)[valueKey];
       const val = typeof raw === 'number' ? raw : parseInt(String(raw ?? '0'), 10) || 0;
-      counts[cat] += val;
+      counts[cat] += Math.max(0, val);
     }
     return counts;
   }
+
+  return parseWidgetStatusCountsFromColumns(rows);
+}
+
+function parseWidgetStatusCountsFromColumns(rows: any[]): WidgetStatusCounts | null {
+  if (!Array.isArray(rows) || rows.length === 0) return null;
+  const first = rows[0];
+  if (!first || typeof first !== 'object') return null;
 
   const counts = { ...EMPTY_STATUS_COUNTS };
   const allKeys = Object.keys(first);
@@ -185,7 +291,7 @@ export function parseWidgetStatusCounts(rows: any[]): WidgetStatusCounts | null 
     for (const [k, cat] of columnMap) {
       const raw = row[k];
       const val = typeof raw === 'number' ? raw : parseInt(String(raw ?? '0'), 10) || 0;
-      counts[cat] += val;
+      counts[cat] += Math.max(0, val);
     }
   }
 

@@ -13,6 +13,7 @@ describe("eval-config", () => {
       "EVAL_MIN_PASS_RATE",
       "EVAL_MIN_JUDGE_SCORE",
       "EVAL_STRICT",
+      "EVAL_SUITE",
       "ANTHROPIC_API_KEY",
       "OPENAI_API_KEY",
       "GEMINI_API_KEY",
@@ -158,5 +159,27 @@ describe("eval-config", () => {
     const { isLikelyOllamaModelName } = await import("../eval/eval-config.js");
     assert.equal(isLikelyOllamaModelName("qwen3.5:2b"), true);
     assert.equal(isLikelyOllamaModelName("claude-sonnet-4-6"), false);
+  });
+
+  it("cloud suite + local provider + cloud model fails fast", async () => {
+    process.env.EVAL_SUITE = "cloud";
+    process.env.EVAL_PROVIDER = "local";
+    process.env.EVAL_MODEL = "claude-sonnet-4-6";
+    process.env.EVAL_BASE_URL = "http://localhost:11434/v1";
+
+    const { getEvalConfig } = await import("../eval/eval-config.js");
+    assert.throws(() => getEvalConfig(), /Cloud eval suite cannot use local/);
+  });
+
+  it("cloud suite + local provider + Ollama model is allowed", async () => {
+    process.env.EVAL_SUITE = "cloud";
+    process.env.EVAL_PROVIDER = "local";
+    process.env.EVAL_MODEL = "qwen3.5:2b";
+
+    const { getEvalConfig } = await import("../eval/eval-config.js");
+    const config = getEvalConfig();
+    assert.equal(config.suite, "cloud");
+    assert.equal(config.provider, "local");
+    assert.equal(config.model, "qwen3.5:2b");
   });
 });

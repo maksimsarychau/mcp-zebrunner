@@ -6,6 +6,7 @@
  * pass rate excluding known issues, and target comparison.
  */
 
+import { resolveReportWidgetPeriodInput } from "../../utils/widget-period.js";
 import {
   type ReportContext,
   type ReportInput,
@@ -26,6 +27,7 @@ export async function generatePassRateReport(
   input: ReportInput,
 ): Promise<ReportOutput> {
   const { projects, period, milestone, targets } = input;
+  const widgetPeriodInput = resolveReportWidgetPeriodInput(input as unknown as Record<string, unknown>);
   const mergedTargets: PassRateTargets = { ...DEFAULT_TARGETS, ...(targets ?? {}) };
 
   const projectContexts = await ctx.resolveProjects(projects);
@@ -34,7 +36,7 @@ export async function generatePassRateReport(
   const fetchWarnings: string[] = [];
 
   const results = await Promise.allSettled(
-    projectContexts.map(pCtx => ctx.fetchPassRate(pCtx, period, milestone)),
+    projectContexts.map(pCtx => ctx.fetchPassRate(pCtx, period, milestone, widgetPeriodInput)),
   );
 
   for (let i = 0; i < results.length; i++) {

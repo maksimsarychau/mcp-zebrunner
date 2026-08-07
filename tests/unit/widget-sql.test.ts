@@ -51,4 +51,25 @@ describe("parseWidgetStatusCounts", () => {
     assert.equal(datasets[1].label, "Known Issue");
     assert.equal(datasets[1].values[0], 5);
   });
+
+  it("parses GROUP_FIELD rows preferring null totals row", () => {
+    const rows = [
+      { GROUP_FIELD: "p0", PASSED: 10, FAILED: 1 },
+      { GROUP_FIELD: "p1", PASSED: 20, FAILED: 2 },
+      { GROUP_FIELD: null, PASSED: 100, FAILED: 5 },
+    ];
+    const counts = parseWidgetStatusCounts(rows);
+    assert.ok(counts);
+    assert.equal(counts.passed, 100);
+    assert.equal(counts.failed, 5);
+  });
+
+  it("clamps negative status counts to zero", () => {
+    const counts = parseWidgetStatusCounts([
+      { label: "PASSED", value: 10 },
+      { label: "FAILED", value: -20 },
+    ]);
+    assert.ok(counts);
+    assert.equal(counts.failed, 0);
+  });
 });

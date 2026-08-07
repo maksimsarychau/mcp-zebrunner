@@ -44,11 +44,11 @@ export function checkRefusalFromResponse(
   return { refused: false, selectedTool: call.name };
 }
 
-class AnthropicEvalClient implements EvalLlmClient {
+export class AnthropicEvalClient implements EvalLlmClient {
   private client: Anthropic;
 
-  constructor(apiKey: string) {
-    this.client = new Anthropic({ apiKey });
+  constructor(apiKey: string, fetchImpl?: typeof fetch) {
+    this.client = new Anthropic({ apiKey, fetch: fetchImpl });
   }
 
   async chatWithTools(opts: EvalLlmChatOptions): Promise<EvalLlmResponse> {
@@ -71,13 +71,14 @@ class AnthropicEvalClient implements EvalLlmClient {
   }
 }
 
-class OpenAiEvalClient implements EvalLlmClient {
+export class OpenAiEvalClient implements EvalLlmClient {
   private client: OpenAI;
 
-  constructor(apiKey: string, baseUrl?: string) {
+  constructor(apiKey: string, baseUrl?: string, fetchImpl?: typeof fetch) {
     this.client = new OpenAI({
       apiKey: apiKey || "ollama",
       baseURL: baseUrl,
+      fetch: fetchImpl,
     });
   }
 

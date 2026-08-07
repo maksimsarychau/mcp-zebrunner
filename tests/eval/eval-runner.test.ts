@@ -34,6 +34,7 @@ import {
 import {
   checkToolSelection,
   checkArgKeys,
+  checkArgValues,
   checkOutputPatterns,
   judgeToolOutput,
   checkRefusalResponse,
@@ -217,7 +218,8 @@ describe("LLM Evaluation Tests", () => {
     );
 
     for (const ep of prompts) {
-      it(`[${ep.id}] selects correct tool${ep.expectedArgKeys ? " with correct arguments" : ""}`, async () => {
+      const checksArgs = Boolean(ep.expectedArgKeys || ep.expectedArgValues);
+      it(`[${ep.id}] selects correct tool${checksArgs ? " with correct arguments" : ""}`, async () => {
         const result = await runArgValidation(ep);
         reporter.addResult(result);
 
@@ -226,10 +228,10 @@ describe("LLM Evaluation Tests", () => {
           result.toolSelectionCorrect,
           `Expected ${ep.expectedTools.join("|")}, got ${result.selectedTool || "none"}`,
         );
-        if (ep.expectedArgKeys) {
+        if (checksArgs) {
           evalAssert(
             result.argsCorrect ?? false,
-            `Missing args: ${result.missingArgs?.join(", ")}`,
+            `Incorrect args: ${result.missingArgs?.join(", ")}`,
           );
         }
       });
@@ -311,7 +313,7 @@ describe("LLM Evaluation Tests", () => {
       it(`[${ep.id}] LLM correctly refuses`, async () => {
         const result = await runRefusalTest(ep);
         reporter.addResult(result);
-        evalAssert(result.negativePass, result.negativeReason || "LLM should have refused");
+        evalAssert(result.negativePass ?? false, result.negativeReason || "LLM should have refused");
       });
     }
   });
@@ -325,7 +327,7 @@ describe("LLM Evaluation Tests", () => {
       it(`[${ep.id}] LLM picks correct tool, avoids forbidden`, async () => {
         const result = await runToolConfusionTest(ep);
         reporter.addResult(result);
-        evalAssert(result.negativePass, result.negativeReason || "LLM used a forbidden tool");
+        evalAssert(result.negativePass ?? false, result.negativeReason || "LLM used a forbidden tool");
       });
     }
   });
@@ -344,7 +346,7 @@ describe("LLM Evaluation Tests", () => {
 
         const result = await runInvalidDataTest(ep);
         reporter.addResult(result);
-        evalAssert(result.negativePass, result.negativeReason || "Expected error output from MCP");
+        evalAssert(result.negativePass ?? false, result.negativeReason || "Expected error output from MCP");
       });
     }
   });
@@ -552,6 +554,24 @@ describe("LLM Evaluation Tests", () => {
     }
   }
 
+  /** Combined key-presence and value check; value problems are reported alongside missing keys. */
+  function checkArgs(
+    ep: EvalPrompt,
+    args: Record<string, unknown>,
+  ): { pass: boolean; missing: string[] } {
+    const keyCheck = ep.expectedArgKeys
+      ? checkArgKeys(args, ep.expectedArgKeys)
+      : { pass: true, missing: [] as string[] };
+    const valueCheck = ep.expectedArgValues
+      ? checkArgValues(args, ep.expectedArgValues)
+      : { pass: true, mismatched: [] as string[] };
+
+    return {
+      pass: keyCheck.pass && valueCheck.pass,
+      missing: [...keyCheck.missing, ...valueCheck.mismatched],
+    };
+  }
+
   async function runArgValidation(ep: EvalPrompt): Promise<EvalResult> {
     if (!isReady(ep)) {
       return skipResult(ep, "Missing required context");
@@ -564,9 +584,10 @@ describe("LLM Evaluation Tests", () => {
       const response = await callEvalLlm(populated);
       const { selectedTool, args, tokenUsage } = extractToolSelection(response);
 
-      const argCheck = ep.expectedArgKeys
-        ? checkArgKeys(args, ep.expectedArgKeys)
-        : { pass: true, missing: [] as string[] };
+      const argCheck = checkArgs(ep, args);
+      const forbiddenCheck = ep.forbiddenTools
+        ? checkForbiddenToolNotUsed(selectedTool, ep.forbiddenTools)
+        : { pass: true };
 
       return {
         id: ep.id,
@@ -575,7 +596,8 @@ describe("LLM Evaluation Tests", () => {
         prompt: populated,
         expectedTools: ep.expectedTools,
         selectedTool,
-        toolSelectionCorrect: checkToolSelection(selectedTool, ep.expectedTools),
+        toolSelectionCorrect:
+          checkToolSelection(selectedTool, ep.expectedTools) && forbiddenCheck.pass,
         argsCorrect: argCheck.pass,
         missingArgs: argCheck.missing,
         durationMs: Date.now() - start,
@@ -611,9 +633,7 @@ describe("LLM Evaluation Tests", () => {
 
     const toolCorrect = checkToolSelection(selectedTool, ep.expectedTools);
 
-    const argCheck = ep.expectedArgKeys
-      ? checkArgKeys(args, ep.expectedArgKeys)
-      : { pass: true, missing: [] as string[] };
+    const argCheck = checkArgs(ep, args);
 
     let mcpOutput = "";
     let judgeScore;
@@ -684,6 +704,9 @@ describe("LLM Evaluation Tests", () => {
       const { selectedTool, args, tokenUsage } = extractToolSelection(response);
 
       const toolCorrect = checkToolSelection(selectedTool, ep.expectedTools);
+      const forbiddenCheck = ep.forbiddenTools
+        ? checkForbiddenToolNotUsed(selectedTool, ep.forbiddenTools)
+        : { pass: true };
 
       return {
         id: ep.id,
@@ -693,7 +716,7 @@ describe("LLM Evaluation Tests", () => {
         expectedTools: ep.expectedTools,
         selectedTool,
         selectedArgs: args,
-        toolSelectionCorrect: toolCorrect,
+        toolSelectionCorrect: toolCorrect && forbiddenCheck.pass,
         durationMs: Date.now() - start,
         tokenUsage,
       };

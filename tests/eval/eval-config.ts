@@ -202,6 +202,19 @@ function validateProviderConfig(provider: EvalProvider): void {
   }
 }
 
+export function validateCloudSuiteConfig(config: EvalConfig): void {
+  if (config.suite !== "cloud") return;
+  if (!isLocalEvalProvider(config.provider, config.baseUrl)) return;
+  if (isLikelyOllamaModelName(config.model)) return;
+
+  throw new Error(
+    `Cloud eval suite cannot use ${config.provider} with model "${config.model}" — ` +
+      "Ollama/LM Studio does not host that model (instant 404).\n" +
+      "  Release gate:  npm run test:eval:cloud  (sets EVAL_PROVIDER=anthropic)\n" +
+      "  Local smoke:   EVAL_SUITE=cloud EVAL_PROVIDER=local EVAL_MODEL=qwen3.5:2b npm run test:eval",
+  );
+}
+
 export function getEvalConfig(): EvalConfig {
   const provider = resolveEvalProvider();
   if (!provider) {
@@ -229,7 +242,7 @@ export function getEvalConfig(): EvalConfig {
   const baseUrl = resolveEvalBaseUrl(provider);
   const model = resolveEvalModel(provider, baseUrl);
 
-  return {
+  const config: EvalConfig = {
     provider,
     layer,
     model,
@@ -249,6 +262,9 @@ export function getEvalConfig(): EvalConfig {
     filter,
     suite: resolveEvalSuite(),
   };
+
+  validateCloudSuiteConfig(config);
+  return config;
 }
 
 /**

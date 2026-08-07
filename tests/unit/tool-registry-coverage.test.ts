@@ -19,7 +19,7 @@ function getProjectRoot() {
 }
 
 function extractServerTools(serverSource: string): string[] {
-  const regex = /server\.registerTool\(\s*"([^"]+)"/g;
+  const regex = /server\.registerTool\(\s*['"]([^'"]+)['"]/g;
   const tools: string[] = [];
   let match: RegExpExecArray | null;
   while ((match = regex.exec(serverSource)) !== null) {
@@ -28,17 +28,25 @@ function extractServerTools(serverSource: string): string[] {
   return tools;
 }
 
-describe("Tool Registry Coverage (64 tools)", () => {
+function extractAllRegisteredTools(root: string): string[] {
+  const files = [
+    path.join(root, "src", "server.ts"),
+    path.join(root, "src", "handlers", "widget-hub-tools.ts"),
+    path.join(root, "src", "handlers", "widget-authoring-trend-tool.ts"),
+  ];
+  return files.flatMap(f => extractServerTools(fs.readFileSync(f, "utf-8")));
+}
+
+describe("Tool Registry Coverage (69 tools)", () => {
   it("ensures every registered server tool has smoke coverage metadata", () => {
     const root = getProjectRoot();
-    const serverSource = fs.readFileSync(path.join(root, "src", "server.ts"), "utf-8");
-    const serverTools = extractServerTools(serverSource);
+    const serverTools = extractAllRegisteredTools(root);
 
-    assert.equal(serverTools.length, 64, "server.ts should register exactly 64 tools");
-    assert.equal(new Set(serverTools).size, 64, "all registered tools should be unique");
+    assert.equal(serverTools.length, 69, "registered tools should total exactly 69");
+    assert.equal(new Set(serverTools).size, 69, "all registered tools should be unique");
 
     const coverageKeys = Object.keys(TOOL_SMOKE_INPUTS);
-    assert.equal(coverageKeys.length, 64, "smoke coverage map should include 64 tools");
+    assert.equal(coverageKeys.length, 69, "smoke coverage map should include 69 tools");
 
     const missingCoverage = serverTools.filter(tool => !( `adv_${tool}` in TOOL_SMOKE_INPUTS));
     assert.deepEqual(missingCoverage, [], `missing smoke coverage for: ${missingCoverage.join(", ")}`);
@@ -50,8 +58,7 @@ describe("Tool Registry Coverage (64 tools)", () => {
 
   it("ensures tools.json stays in sync with server registrations", () => {
     const root = getProjectRoot();
-    const serverSource = fs.readFileSync(path.join(root, "src", "server.ts"), "utf-8");
-    const serverTools = extractServerTools(serverSource).map((t) => `adv_${t}`).sort();
+    const serverTools = extractAllRegisteredTools(root).map((t) => `adv_${t}`).sort();
     const toolsCatalog = JSON.parse(fs.readFileSync(path.join(root, "tools.json"), "utf-8")) as Array<{ name: string }>;
     const toolsJsonNames = toolsCatalog.map(t => t.name).sort();
 
@@ -128,9 +135,13 @@ describe("Critical Tool Intelligence Checks", () => {
 
 // ── Tool Annotations Coverage ─────────────────────────────────────────────────
 
-describe("Tool Annotations Coverage (64 tools)", () => {
+describe("Tool Annotations Coverage (69 tools)", () => {
   const root = getProjectRoot();
-  const serverSource = fs.readFileSync(path.join(root, "src", "server.ts"), "utf-8");
+  const registrationSource = [
+    fs.readFileSync(path.join(root, "src", "server.ts"), "utf-8"),
+    fs.readFileSync(path.join(root, "src", "handlers", "widget-hub-tools.ts"), "utf-8"),
+    fs.readFileSync(path.join(root, "src", "handlers", "widget-authoring-trend-tool.ts"), "utf-8"),
+  ].join("\n");
 
   const MUTATION_TOOLS = new Set([
     "create_test_suite",
@@ -145,7 +156,7 @@ describe("Tool Annotations Coverage (64 tools)", () => {
 
   function extractAnnotationsForTool(source: string, toolName: string): Record<string, boolean> | null {
     const escaped = toolName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const re = new RegExp(`server\\.registerTool\\(\\s*"${escaped}"[\\s\\S]*?annotations:\\s*\\{([^}]+)\\}`, "m");
+    const re = new RegExp(`server\\.registerTool\\(\\s*['"]${escaped}['"][\\s\\S]*?annotations:\\s*\\{([^}]+)\\}`, "m");
     const match = source.match(re);
     if (!match) return null;
     const block = match[1];
@@ -158,29 +169,29 @@ describe("Tool Annotations Coverage (64 tools)", () => {
   }
 
   it("every registered tool has annotations", () => {
-    const toolsRegex = /server\.registerTool\(\s*\n\s*"([^"]+)"/g;
+    const toolsRegex = /server\.registerTool\(\s*[\n\s]*['"]([^'"]+)['"]/g;
     let match: RegExpExecArray | null;
     const allTools: string[] = [];
-    while ((match = toolsRegex.exec(serverSource)) !== null) {
+    while ((match = toolsRegex.exec(registrationSource)) !== null) {
       allTools.push(match[1]);
     }
-    assert.equal(allTools.length, 64, "should have 64 registered tools");
+    assert.equal(allTools.length, 69, "should have 69 registered tools");
 
     const missing: string[] = [];
     for (const tool of allTools) {
-      const annotations = extractAnnotationsForTool(serverSource, tool);
+      const annotations = extractAnnotationsForTool(registrationSource, tool);
       if (!annotations) missing.push(tool);
     }
     assert.deepEqual(missing, [], `tools missing annotations: ${missing.join(", ")}`);
   });
 
   it("all 55 read-only tools have readOnlyHint: true", () => {
-    const toolsRegex = /server\.registerTool\(\s*\n\s*"([^"]+)"/g;
+    const toolsRegex = /server\.registerTool\(\s*[\n\s]*['"]([^'"]+)['"]/g;
     let match: RegExpExecArray | null;
     const errors: string[] = [];
-    while ((match = toolsRegex.exec(serverSource)) !== null) {
+    while ((match = toolsRegex.exec(registrationSource)) !== null) {
       if (MUTATION_TOOLS.has(match[1])) continue;
-      const annotations = extractAnnotationsForTool(serverSource, match[1]);
+      const annotations = extractAnnotationsForTool(registrationSource, match[1]);
       if (!annotations || annotations.readOnlyHint !== true) {
         errors.push(match[1]);
       }
@@ -190,19 +201,19 @@ describe("Tool Annotations Coverage (64 tools)", () => {
 
   it("all 8 mutation tools have readOnlyHint: false", () => {
     for (const tool of MUTATION_TOOLS) {
-      const annotations = extractAnnotationsForTool(serverSource, tool);
+      const annotations = extractAnnotationsForTool(registrationSource, tool);
       assert.ok(annotations, `${tool} should have annotations`);
       assert.equal(annotations!.readOnlyHint, false, `${tool} should have readOnlyHint: false`);
     }
   });
 
   it("all read-only tools have destructiveHint: false and idempotentHint: true", () => {
-    const toolsRegex = /server\.registerTool\(\s*\n\s*"([^"]+)"/g;
+    const toolsRegex = /server\.registerTool\(\s*[\n\s]*['"]([^'"]+)['"]/g;
     let match: RegExpExecArray | null;
     const errors: string[] = [];
-    while ((match = toolsRegex.exec(serverSource)) !== null) {
+    while ((match = toolsRegex.exec(registrationSource)) !== null) {
       if (MUTATION_TOOLS.has(match[1])) continue;
-      const annotations = extractAnnotationsForTool(serverSource, match[1]);
+      const annotations = extractAnnotationsForTool(registrationSource, match[1]);
       if (!annotations) continue;
       if (annotations.destructiveHint !== false) errors.push(`${match[1]}: destructiveHint should be false`);
       if (annotations.idempotentHint !== true) errors.push(`${match[1]}: idempotentHint should be true`);
@@ -212,27 +223,27 @@ describe("Tool Annotations Coverage (64 tools)", () => {
 
   it("update_test_suite and update_test_case have idempotentHint: true", () => {
     for (const tool of ["update_test_suite", "update_test_case"]) {
-      const annotations = extractAnnotationsForTool(serverSource, tool);
+      const annotations = extractAnnotationsForTool(registrationSource, tool);
       assert.ok(annotations, `${tool} should have annotations`);
       assert.equal(annotations!.idempotentHint, true, `${tool} should be idempotent (PUT/PATCH)`);
     }
   });
 
   it("import_launch_results_to_test_run has destructiveHint: true", () => {
-    const annotations = extractAnnotationsForTool(serverSource, "import_launch_results_to_test_run");
+    const annotations = extractAnnotationsForTool(registrationSource, "import_launch_results_to_test_run");
     assert.ok(annotations);
     assert.equal(annotations!.destructiveHint, true, "import tool should be destructive (overrides results)");
   });
 
   it("rerun_launch_failures has destructiveHint: true", () => {
-    const annotations = extractAnnotationsForTool(serverSource, "rerun_launch_failures");
+    const annotations = extractAnnotationsForTool(registrationSource, "rerun_launch_failures");
     assert.ok(annotations);
     assert.equal(annotations!.destructiveHint, true, "rerun tool should be destructive (triggers CI)");
     assert.equal(annotations!.idempotentHint, false, "rerun tool should not be idempotent");
   });
 
   it("start_launch has destructiveHint: true", () => {
-    const annotations = extractAnnotationsForTool(serverSource, "start_launch");
+    const annotations = extractAnnotationsForTool(registrationSource, "start_launch");
     assert.ok(annotations);
     assert.equal(annotations!.destructiveHint, true, "start_launch should be destructive (triggers CI)");
     assert.equal(annotations!.idempotentHint, false, "start_launch should not be idempotent");

@@ -9,6 +9,10 @@
 import type { EnhancedZebrunnerClient } from "../api/enhanced-client.js";
 import type { ZebrunnerReportingClient } from "../api/reporting-client.js";
 import { sanitizeRqlString } from "../utils/security.js";
+import {
+  getTcmDetailedStatusCounts,
+  type DetailedStatusCounts,
+} from "../utils/launch-status-counts.js";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -29,6 +33,7 @@ export interface RegressionAnalyzerInput {
   zebrunnerBaseUrl: string;
   max_test_duration_ms?: number;
   include_empty_suites: boolean;
+  includeDetailedStatuses?: boolean;
 }
 
 interface RunSummary {
@@ -42,6 +47,7 @@ interface RunSummary {
   total: number;
   covered: boolean;
   uncoveredCount: number;
+  detailedStatuses?: DetailedStatusCounts;
 }
 
 interface TestCaseResult {
@@ -102,6 +108,7 @@ interface AnalysisResult {
   totalFailuresWithIssues: number;
   uniqueBugsCount: number;
   timestamp: string;
+  detailedStatuses?: DetailedStatusCounts;
 }
 
 // ── Dependencies ─────────────────────────────────────────────────────────────
@@ -142,6 +149,7 @@ async function executeAnalysis(
     sections, top_bugs_limit, slowest_tests_limit, jira_base_url,
     output_format, count_only, zebrunnerBaseUrl, max_test_duration_ms,
     include_empty_suites,
+    includeDetailedStatuses = false,
   } = input;
 
   if (!milestone && !build) {
@@ -173,7 +181,12 @@ async function executeAnalysis(
   }
 
   // Build initial overview from executionSummaries (counts only, coverage computed after test cases fetch)
-  const overviewInitial = buildOverviewCounts(runs, projectKey, zebrunnerBaseUrl);
+  const overviewInitial = buildOverviewCounts(
+    runs,
+    projectKey,
+    zebrunnerBaseUrl,
+    includeDetailedStatuses
+  );
   const totalTestCases = overviewInitial.reduce((sum, r) => sum + r.total, 0);
 
   if (count_only) {
@@ -186,6 +199,22 @@ async function executeAnalysis(
           project_key: projectKey,
           milestone: resolvedMilestoneName || milestone,
           build,
+          ...(includeDetailedStatuses ? {
+            detailedStatuses: getTcmDetailedStatusCounts(
+              Object.fromEntries(
+                runs.flatMap((run) => run.executionSummaries || [])
+                  .map((summary: any) => [
+                    summary.status?.name || "UNKNOWN",
+                    summary.testCasesCount || 0,
+                  ] as [string, number])
+                  .reduce((counts, [name, count]) => {
+                    counts.set(name, (counts.get(name) || 0) + count);
+                    return counts;
+                  }, new Map<string, number>())
+              ),
+              "matched TCM test runs"
+            )
+          } : {}),
         }, null, 2),
       }],
     };
@@ -268,6 +297,19 @@ async function executeAnalysis(
     totalFailuresWithIssues,
     uniqueBugsCount: allIssueIds.size,
     timestamp,
+    ...(includeDetailedStatuses ? {
+      detailedStatuses: getTcmDetailedStatusCounts(
+        runs.flatMap((run) => run.executionSummaries || []).reduce(
+          (counts: Record<string, number>, summary: any) => {
+            const name = summary.status?.name || "UNKNOWN";
+            counts[name] = (counts[name] || 0) + (summary.testCasesCount || 0);
+            return counts;
+          },
+          {}
+        ),
+        "matched TCM test runs"
+      )
+    } : {}),
   };
 
   // Resolve JIRA URLs for output
@@ -387,7 +429,12 @@ async function fetchAllTestRuns(
   return allRuns;
 }
 
-function buildOverviewCounts(runs: any[], projectKey: string, baseUrl: string): RunSummary[] {
+function buildOverviewCounts(
+  runs: any[],
+  projectKey: string,
+  baseUrl: string,
+  includeDetailedStatuses = false
+): RunSummary[] {
   return runs.map((run) => {
     const summaries: any[] = run.executionSummaries || [];
     let passed = 0, failed = 0, skipped = 0, untested = 0;
@@ -400,6 +447,12 @@ function buildOverviewCounts(runs: any[], projectKey: string, baseUrl: string): 
       else if (name === "skipped") skipped += count;
       else if (name === "untested" || name === "not tested") untested += count;
     }
+    const statusCounts = Object.fromEntries(
+      summaries.map((summary) => [
+        summary.status?.name || "UNKNOWN",
+        summary.testCasesCount || 0,
+      ])
+    );
 
     return {
       id: run.id,
@@ -412,6 +465,9 @@ function buildOverviewCounts(runs: any[], projectKey: string, baseUrl: string): 
       total: passed + failed + skipped + untested,
       covered: false,
       uncoveredCount: 0,
+      ...(includeDetailedStatuses ? {
+        detailedStatuses: getTcmDetailedStatusCounts(statusCounts, `TCM test run ${run.id}`)
+      } : {}),
     };
   });
 }

@@ -116,6 +116,14 @@
     "description": "Enhanced test coverage analysis with rules engine"
   },
   {
+    "name": "adv_get_execution_analytics",
+    "description": "Execution dashboard widgets: ROI (1), duration trend (131), launch duration (57085), stability table (16)"
+  },
+  {
+    "name": "adv_get_failure_analytics",
+    "description": "Failure tag/Jira analytics widgets: tag pie (40112), tags×maintainer (55991), Jira×maintainer (57086)"
+  },
+  {
     "name": "adv_get_launch_details",
     "description": "Get comprehensive information about a specific launch including test results, environment, and metadata"
   },
@@ -125,7 +133,7 @@
   },
   {
     "name": "adv_get_launch_test_summary",
-    "description": "Lightweight aggregated test results with statistics and most unstable tests"
+    "description": "Lightweight aggregated test results with statistics and most unstable tests. Set includeDetailedStatuses=true for source-aware passed-manually and known-issue counts, overlap, and deduplicated union."
   },
   {
     "name": "adv_get_platform_results_by_period",
@@ -148,12 +156,24 @@
     "description": "Get complete suite hierarchy tree"
   },
   {
+    "name": "adv_get_tcm_case_analytics",
+    "description": "TCM case analytics widgets: net change (37777), created by user (37779), updated by user (37778)"
+  },
+  {
     "name": "adv_get_tcm_suite_by_id",
     "description": "Get test suite by its numeric ID. Use for any 'show me suite', 'get suite by ID', 'find suite' request. Supports simple (fast direct API) and full (hierarchy-enriched) modes."
   },
   {
     "name": "adv_get_tcm_test_suites_by_project",
     "description": "Get all test suites for a project"
+  },
+  {
+    "name": "adv_get_test_authoring_trend",
+    "description": "TCM test case development trend (TAM widget template 7): CREATED_AT × AMOUNT series by day/week/month"
+  },
+  {
+    "name": "adv_get_test_case_distribution_by_field",
+    "description": "Pie-chart distribution of test cases by TCM field (dashboard widget 37780)"
   },
   {
     "name": "adv_get_test_case_by_filter",

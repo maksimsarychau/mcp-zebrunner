@@ -3,7 +3,7 @@ import { describe, it, before, after } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { existsSync } from 'fs';
 import { spawn, type ChildProcess } from 'child_process';
-import { E2E_SERVER_ENV, waitForServerReady } from './server-startup.js';
+import { E2E_SERVER_ENV, hasRealZebrunnerCredentials, waitForServerReady } from './server-startup.js';
 
 /**
  * End-to-End tests for the Zebrunner MCP Server
@@ -14,20 +14,12 @@ import { E2E_SERVER_ENV, waitForServerReady } from './server-startup.js';
  */
 
 // Check for real credentials
-const hasRealCredentials = process.env.ZEBRUNNER_URL &&
-                          process.env.ZEBRUNNER_LOGIN &&
-                          process.env.ZEBRUNNER_TOKEN &&
-                          !process.env.ZEBRUNNER_URL.includes('example.com') &&
-                          !process.env.ZEBRUNNER_TOKEN.includes('test-token');
+const hasRealCredentials = hasRealZebrunnerCredentials();
 
 describe('Zebrunner MCP Server E2E Tests', () => {
   describe('Prerequisites Check', () => {
     it('should indicate if E2E tests can run with current configuration', () => {
-      const hasRealCredentials = process.env.ZEBRUNNER_URL &&
-                                process.env.ZEBRUNNER_LOGIN &&
-                                process.env.ZEBRUNNER_TOKEN &&
-                                !process.env.ZEBRUNNER_URL.includes('example.com') &&
-                                !process.env.ZEBRUNNER_TOKEN.includes('test-token');
+      const hasRealCredentials = hasRealZebrunnerCredentials();
 
       if (!hasRealCredentials) {
         console.log('⚠️  E2E tests require real Zebrunner credentials');

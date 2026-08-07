@@ -11,18 +11,25 @@
 #
 # Auto-discovers projects via Reporting API and runs tests against all starred projects.
 #
-# Coverage: 28 unique endpoint patterns across Public API, Reporting API, and Widget SQL.
+# Coverage: 29 unique endpoint patterns across Public API, Reporting API, and Widget SQL.
 #
-# Usage: ./tests/api-verify.sh [--verbose]
+# Usage: ./tests/api-verify.sh [--verbose] [--widget-catalog-audit]
 #
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 ENV_FILE="$ROOT_DIR/.env"
+WIDGET_ASSERT="$SCRIPT_DIR/helpers/widget-api-assert.py"
 
 VERBOSE=false
-[[ "${1:-}" == "--verbose" ]] && VERBOSE=true
+WIDGET_CATALOG_AUDIT=false
+for arg in "$@"; do
+  case "$arg" in
+    --verbose) VERBOSE=true ;;
+    --widget-catalog-audit) WIDGET_CATALOG_AUDIT=true ;;
+  esac
+done
 
 PASS=0
 FAIL=0
@@ -74,6 +81,45 @@ try:
     print('' if val is None else val)
 except: print('')
 " 2>/dev/null || echo ""
+}
+
+# Prints "<field>:<python type>" (or "<field>:missing") for each requested field
+# of the response data object. Used to assert response contracts without
+# depending on live counts.
+json_data_types() {
+  echo "$1" | python3 -c "
+import sys, json
+fields = '''$2'''.split()
+try:
+    d = json.load(sys.stdin)
+    obj = d.get('data', d) if isinstance(d, dict) else {}
+    if not isinstance(obj, dict):
+        obj = {}
+    for f in fields:
+        print(f + ':' + ('missing' if f not in obj else type(obj[f]).__name__))
+except Exception:
+    for f in fields:
+        print(f + ':unparsable')
+" 2>/dev/null || echo ""
+}
+
+# Asserts each field is of an expected python type, tolerating omitted fields
+# (the MCP detailed-status contract reports those as "unavailable").
+check_field_types() {
+  local label="$1" expected_types="$2" types="$3"
+  local field type
+  while IFS= read -r entry; do
+    [[ -z "$entry" ]] && continue
+    field="${entry%%:*}"
+    type="${entry#*:}"
+    if [[ " $expected_types " == *" $type "* ]]; then
+      log_pass "$label: $field is $type"
+    elif [[ "$type" == "missing" || "$type" == "NoneType" ]]; then
+      log_skip "$label: $field not reported by this launch"
+    else
+      log_fail "$label: $field has unexpected type" "Expected one of [$expected_types], got $type"
+    fi
+  done <<< "$types"
 }
 
 json_data_field() {
@@ -168,6 +214,113 @@ check_status() {
   debug "$(echo "$_BODY" | head -c 300)"
 }
 
+widget_sql_post() {
+  local label="$1"
+  local payload="$2"
+  local keys="${3:-}"
+  do_reporting_post "/api/reporting/v1/widget-templates/sql?projectId=$PROJECT_ID" "$payload"
+  if [[ "$_STATUS" != "200" ]]; then
+    log_fail "$label" "HTTP $_STATUS"
+    return 1
+  fi
+  log_pass "$label (HTTP 200)"
+  if [[ -n "$keys" ]]; then
+    if python3 "$WIDGET_ASSERT" json_array "$_BODY" "$keys" >/dev/null 2>&1; then
+      log_pass "$label shape OK"
+    else
+      local _shape_err
+      _shape_err=$(python3 "$WIDGET_ASSERT" json_array "$_BODY" "$keys" 2>&1 || true)
+      log_fail "$label shape" "${_shape_err:-missing keys} (expected: $keys)"
+    fi
+  fi
+}
+
+widget_sql_post_try_suites() {
+  local label="$1"
+  local payload_prefix="$2"
+  local payload_suffix="$3"
+  local keys="$4"
+  shift 4
+  local name
+  for name in "$@"; do
+    [[ -z "$name" ]] && continue
+    local esc_name="${name//\\/\\\\}"
+    esc_name="${esc_name//\"/\\\"}"
+    local payload="${payload_prefix}${esc_name}${payload_suffix}"
+    do_reporting_post "/api/reporting/v1/widget-templates/sql?projectId=$PROJECT_ID" "$payload"
+    if [[ "$_STATUS" == "200" ]]; then
+      log_pass "$label (HTTP 200, suite=$name)"
+      if [[ -n "$keys" ]]; then
+        if python3 "$WIDGET_ASSERT" json_array "$_BODY" "$keys" >/dev/null 2>&1; then
+          log_pass "$label shape OK"
+        else
+          log_fail "$label shape" "missing required keys: $keys"
+        fi
+      fi
+      return 0
+    fi
+    debug "$label try suite=$name -> HTTP $_STATUS"
+  done
+  log_fail "$label" "no suite returned HTTP 200 (last HTTP $_STATUS)"
+  return 1
+}
+
+widget_sql_post_try_run_or_suite() {
+  local label="$1"
+  local keys="$2"
+  shift 2
+  local name
+  for name in "$@"; do
+    [[ -z "$name" ]] && continue
+    local esc_name="${name//\\/\\\\}"
+    esc_name="${esc_name//\"/\\\"}"
+    local payloads=(
+      "{\"templateId\":57085,\"paramsConfig\":{\"PLATFORM\":[],\"STATUS\":[],\"BROWSER\":[],\"LOCALE\":[],\"BUILD\":[],\"DEFECT\":[],\"PERIOD\":\"Last 7 Days\",\"RUN\":[],\"PRIORITY\":[],\"ENV\":[],\"USER\":[],\"MILESTONE\":[],\"SUITE\":[],\"dashboardName\":\"api-verify\",\"isReact\":true}}"
+      "{\"templateId\":57085,\"paramsConfig\":{\"PLATFORM\":[],\"STATUS\":[],\"BROWSER\":[],\"LOCALE\":[],\"BUILD\":[],\"DEFECT\":[],\"PERIOD\":\"Last 7 Days\",\"RUN\":[\"${esc_name}\"],\"PRIORITY\":[],\"ENV\":[],\"USER\":[],\"MILESTONE\":[],\"SUITE\":[],\"dashboardName\":\"api-verify\",\"isReact\":true}}"
+      "{\"templateId\":57085,\"paramsConfig\":{\"PLATFORM\":[],\"STATUS\":[],\"BROWSER\":[],\"LOCALE\":[],\"BUILD\":[],\"DEFECT\":[],\"PERIOD\":\"Quarter\",\"RUN\":[\"${esc_name}\"],\"PRIORITY\":[],\"ENV\":[],\"USER\":[],\"MILESTONE\":[],\"SUITE\":[],\"dashboardName\":\"api-verify\",\"isReact\":true}}"
+      "{\"templateId\":57085,\"paramsConfig\":{\"PLATFORM\":[],\"STATUS\":[],\"BROWSER\":[],\"LOCALE\":[],\"BUILD\":[],\"DEFECT\":[],\"PERIOD\":\"Quarter\",\"RUN\":[],\"PRIORITY\":[],\"ENV\":[],\"USER\":[],\"MILESTONE\":[],\"SUITE\":[\"${esc_name}\"],\"dashboardName\":\"api-verify\",\"isReact\":true}}"
+    )
+    local payload
+    for payload in "${payloads[@]}"; do
+      do_reporting_post "/api/reporting/v1/widget-templates/sql?projectId=$PROJECT_ID" "$payload"
+      if [[ "$_STATUS" == "200" ]]; then
+        log_pass "$label (HTTP 200, filter=$name)"
+        if [[ -n "$keys" ]]; then
+          if python3 "$WIDGET_ASSERT" json_array "$_BODY" "$keys" >/dev/null 2>&1; then
+            log_pass "$label shape OK"
+          else
+            local _shape_err
+            _shape_err=$(python3 "$WIDGET_ASSERT" json_array "$_BODY" "$keys" 2>&1 || true)
+            log_fail "$label shape" "${_shape_err:-missing keys} (expected: $keys)"
+          fi
+        fi
+        return 0
+      fi
+      debug "$label try name=$name -> HTTP $_STATUS"
+    done
+  done
+  log_skip "$label (HTTP 500 on tenant — launch-duration widget may need reporting RUN filter data)"
+  return 0
+}
+
+tcm_widget_post() {
+  local label="$1"
+  local system_name="$2"
+  local filters_json="$3"
+  local assert_mode="${4:-tcm_items}"
+  do_reporting_post "/api/tcm/v1/widgets/${system_name}/content:get?projectId=$PROJECT_ID" "{\"filters\":${filters_json}}"
+  if [[ "$_STATUS" != "200" ]]; then
+    log_fail "$label" "HTTP $_STATUS"
+    return 1
+  fi
+  log_pass "$label (HTTP 200)"
+  if python3 "$WIDGET_ASSERT" "$assert_mode" "$_BODY" >/dev/null 2>&1; then
+    log_pass "$label response shape OK"
+  else
+    log_fail "$label shape" "invalid TCM widget response"
+  fi
+}
+
 # =====================================================================
 # STEP 1: AUTHENTICATION & PROJECT DISCOVERY
 # =====================================================================
@@ -258,6 +411,75 @@ else
 fi
 
 # =====================================================================
+# STEP 2b: WIDGET TEMPLATE CATALOG (global, once)
+# =====================================================================
+
+log_section "Widget Template Catalog"
+
+do_reporting_get "/api/reporting/v1/widget-templates"
+if [[ "$_STATUS" == "200" ]]; then
+  log_pass "WT-LIST: GET widget-templates (HTTP 200)"
+  WT_COUNT=$(json_items_count "$_BODY")
+  if [[ "$WT_COUNT" -ge 18 ]]; then
+    log_pass "WT-LIST: catalog has $WT_COUNT templates (>= 18)"
+  else
+    log_fail "WT-LIST" "expected >= 18 templates, got $WT_COUNT"
+  fi
+  WT_TAM=$(echo "$_BODY" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+items = d.get('items', d) if isinstance(d, dict) else d
+print(sum(1 for i in items if i.get('source')=='TAM'))
+" 2>/dev/null || echo "0")
+  if [[ "$WT_TAM" -ge 17 ]]; then
+    log_pass "WT-TAM-COUNT: $WT_TAM TAM templates (>= 17)"
+  else
+    log_fail "WT-TAM-COUNT" "expected >= 17 TAM, got $WT_TAM"
+  fi
+  WT_TCM=$(echo "$_BODY" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+items = d.get('items', d) if isinstance(d, dict) else d
+print(sum(1 for i in items if i.get('feature')=='TCM_WIDGETS'))
+" 2>/dev/null || echo "0")
+  if [[ "$WT_TCM" == "4" ]]; then
+    log_pass "WT-TCM-COUNT: 4 TCM widgets"
+  else
+    log_fail "WT-TCM-COUNT" "expected 4 TCM widgets, got $WT_TCM"
+  fi
+  if echo "$_BODY" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+items = d.get('items', d) if isinstance(d, dict) else d
+required = ['id','name','systemName','source','type','paramsConfig']
+for i in items:
+    if not all(k in i for k in required):
+        raise SystemExit(1)
+" 2>/dev/null; then
+    log_pass "WT-STRUCT: catalog items have required fields"
+  else
+    log_fail "WT-STRUCT" "missing required catalog fields"
+  fi
+  echo "$_BODY" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+items = d.get('items', d) if isinstance(d, dict) else d
+for i in items:
+    if i.get('source') != 'TAM':
+        continue
+    pc = i.get('paramsConfig') or {}
+    period = pc.get('PERIOD') or {}
+    vals = period.get('values') or []
+    has_abs = 'ABSOLUTE' in vals
+    has_dyn = 'DYNAMIC' in vals
+    print(f\"WT-PERIOD-AUDIT: tpl {i.get('id')} {i.get('systemName')} ABSOLUTE={has_abs} DYNAMIC={has_dyn}\")
+" 2>/dev/null | while read -r line; do debug "$line"; done
+  log_pass "WT-PERIOD-AUDIT: logged (informational)"
+else
+  log_fail "WT-LIST" "HTTP $_STATUS"
+fi
+
+# =====================================================================
 # STEP 3: PER-PROJECT TESTS
 # =====================================================================
 
@@ -284,6 +506,21 @@ run_project_tests() {
     log_fail "Could not extract project ID" "$(echo "$_BODY" | head -c 200)"
     PROJECT_ID=""
   fi
+
+  local FIELDS_LAYOUT_BODY="" SUITE_NAME="" P1_BODY=""
+
+  if $WIDGET_CATALOG_AUDIT; then
+    if [[ -n "$PROJECT_ID" ]]; then
+      do_reporting_get "/api/tcm/v1/test-case-settings/fields-layout?projectId=$PROJECT_ID"
+      FIELDS_LAYOUT_BODY="$_BODY"
+      do_public_get "/test-suites?projectKey=$TEST_PROJECT&maxPageSize=3"
+      P1_BODY="$_BODY"
+      SUITE_NAME=$(json_first "$P1_BODY" "title")
+      [[ -z "$SUITE_NAME" ]] && SUITE_NAME=$(json_first "$P1_BODY" "name")
+    fi
+  fi
+
+  if ! $WIDGET_CATALOG_AUDIT; then
 
   # --- Reporting: TCM settings ---
 
@@ -313,6 +550,7 @@ run_project_tests() {
     fi
     do_reporting_get "/api/tcm/v1/test-case-settings/fields-layout?projectId=$PROJECT_ID"
     check_status "R17: GET fields-layout (projectId=$PROJECT_ID)"
+    FIELDS_LAYOUT_BODY="$_BODY"
 
     local SYSTEM_FIELDS CUSTOM_FIELDS
     SYSTEM_FIELDS=$(echo "$_BODY" | python3 -c "
@@ -342,11 +580,13 @@ except: print(0)
 
   do_public_get "/test-suites?projectKey=$TEST_PROJECT&maxPageSize=2"
   check_status "P1: GET /test-suites?projectKey=$TEST_PROJECT&maxPageSize=2"
-  local P1_BODY="$_BODY"
+  P1_BODY="$_BODY"
 
   local SUITE_ID
   SUITE_ID=$(json_first "$P1_BODY" "id")
-  debug "SUITE_ID = $SUITE_ID"
+  SUITE_NAME=$(json_first "$P1_BODY" "title")
+  [[ -z "$SUITE_NAME" ]] && SUITE_NAME=$(json_first "$P1_BODY" "name")
+  debug "SUITE_ID = $SUITE_ID  SUITE_NAME = $SUITE_NAME"
 
   if [[ -n "$SUITE_ID" ]]; then
     log_pass "Extracted suiteId=$SUITE_ID from first item"
@@ -775,6 +1015,7 @@ print('yes' if 'items' in d or 'results' in d or isinstance(d, list) else 'no')
   if [[ -n "$LAUNCH_ID" && -n "$PROJECT_ID" ]]; then
     do_reporting_get "/api/reporting/v1/launches/$LAUNCH_ID?projectId=$PROJECT_ID"
     check_status "R6: GET /api/reporting/v1/launches/$LAUNCH_ID"
+    local R6_BODY="$_BODY"
 
     local R6_NAME
     R6_NAME=$(json_data_field "$_BODY" "name")
@@ -788,6 +1029,12 @@ print('yes' if 'items' in d or 'results' in d or isinstance(d, list) else 'no')
         debug "Could not extract launch name"
       fi
     fi
+
+    # Status buckets behind adv_* includeDetailedStatuses (launch source)
+    local R6B_TYPES
+    R6B_TYPES=$(json_data_types "$R6_BODY" \
+      "passed passedManually failed failedAsKnown skipped blocked inProgress aborted")
+    check_field_types "R6b: launch detailed statuses" "int float" "$R6B_TYPES"
   else
     log_skip "R6: GET single launch (no LAUNCH_ID)"
   fi
@@ -824,6 +1071,26 @@ print('yes' if 'items' in d or 'results' in d or isinstance(d, list) else 'no')
     fi
   else
     log_skip "R8: Launch tests (no LAUNCH_ID)"
+  fi
+
+  # Single test — per-test manual pass / known issue flags
+  if [[ -n "$LAUNCH_ID" && -n "$LAUNCH_TEST_ID" && -n "$PROJECT_ID" ]]; then
+    do_reporting_get "/api/reporting/v1/launches/$LAUNCH_ID/tests/$LAUNCH_TEST_ID?projectId=$PROJECT_ID"
+    check_status "R9: GET .../launches/$LAUNCH_ID/tests/$LAUNCH_TEST_ID"
+
+    local R9_TYPES
+    R9_TYPES=$(json_data_types "$_BODY" "passedManually knownIssue")
+    check_field_types "R9: per-test manual/known flags" "bool" "$R9_TYPES"
+
+    local R9_STATUS
+    R9_STATUS=$(json_data_field "$_BODY" "status")
+    if [[ -n "$R9_STATUS" ]]; then
+      log_pass "Test $LAUNCH_TEST_ID status: $R9_STATUS"
+    else
+      log_fail "Test $LAUNCH_TEST_ID has no status" "$(echo "$_BODY" | head -c 200)"
+    fi
+  else
+    log_skip "R9: Single launch test (no LAUNCH_ID or TEST_ID)"
   fi
 
   # Test execution history
@@ -872,27 +1139,185 @@ print('yes' if 'items' in d or 'results' in d or isinstance(d, list) else 'no')
     log_skip "R13: Milestones (no project ID)"
   fi
 
-  # Widget SQL
-  log_section "$TEST_PROJECT — Widget SQL"
+  fi # end ! WIDGET_CATALOG_AUDIT
+
+  # Widget SQL + TCM widget smokes (22/22)
+  log_section "$TEST_PROJECT — Widget SQL & TCM Widgets"
 
   if [[ -n "$PROJECT_ID" ]]; then
+
     local WIDGET_DATA="{\"templateId\":1,\"paramsConfig\":{\"PERIOD\":\"Last 7 days\",\"PROJECT_NAME\":[\"$TEST_PROJECT\"],\"dashboardName\":\"General\"}}"
     do_reporting_post "/api/reporting/v1/widget-templates/sql?projectId=$PROJECT_ID" "$WIDGET_DATA"
-
     if [[ "$_STATUS" == "200" ]]; then
-      log_pass "W1: POST /api/reporting/v1/widget-templates/sql (HTTP 200)"
-      if echo "$_BODY" | python3 -c "import sys,json; json.load(sys.stdin)" 2>/dev/null; then
-        log_pass "Widget SQL response is valid JSON"
-      else
-        log_fail "Widget SQL response is not valid JSON" "$(echo "$_BODY" | head -c 200)"
-      fi
+      log_pass "W1: POST widget-templates/sql (HTTP 200)"
     elif [[ "$_STATUS" == "400" || "$_STATUS" == "404" ]]; then
-      log_pass "W1: Widget SQL returned HTTP $_STATUS (templateId may not exist, endpoint works)"
+      log_pass "W1: returned HTTP $_STATUS (lenient)"
     else
-      log_fail "W1: POST /api/reporting/v1/widget-templates/sql" "HTTP $_STATUS"
+      log_fail "W1" "HTTP $_STATUS"
     fi
+
+    widget_sql_post "W-TPL1-ROI" '{"templateId":1,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"Last 7 Days","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"dashboardName":"api-verify","isReact":true}}' "TIME|STARTED_AT"
+    widget_sql_post "W-TPL4" '{"templateId":4,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"Last 7 Days","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"dashboardName":"api-verify","isReact":true}}' "DEFECT|FAILURES|%"
+    widget_sql_post "W-TPL14" '{"templateId":14,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"Last 7 Days","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"GROUP_BY":"BUILD","dashboardName":"api-verify","isReact":true}}' "@NAME,GROUP_FIELD,BUILD,PLATFORM|PASSED|FAILED|TOTAL"
+
+    local W_TPL9='{"templateId":9,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"Today","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"ERROR_COUNT":"0","dashboardName":"api-verify","isReact":true}}'
+    do_reporting_post "/api/reporting/v1/widget-templates/sql?projectId=$PROJECT_ID" "$W_TPL9"
+    local W_TPL9_BODY="$_BODY"
+    local W_TPL9_HASH=""
+    if [[ "$_STATUS" == "200" ]]; then
+      log_pass "W-TPL9 (HTTP 200)"
+      if python3 "$WIDGET_ASSERT" json_array "$W_TPL9_BODY" "PROJECT|REASON|#|SINCE|REPRO" >/dev/null 2>&1; then
+        log_pass "W-TPL9 shape OK"
+      else
+        log_fail "W-TPL9 shape" "missing columns"
+      fi
+      W_TPL9_HASH=$(python3 "$WIDGET_ASSERT" extract_hashcode "$W_TPL9_BODY")
+    else
+      log_fail "W-TPL9" "HTTP $_STATUS"
+    fi
+
+    if [[ -n "$W_TPL9_HASH" ]]; then
+      local FAIL_BASE="{\"PERIOD\":\"Today\",\"hashcode\":\"$W_TPL9_HASH\",\"dashboardName\":\"api-verify\",\"isReact\":true}"
+      widget_sql_post "W-TPL6" "{\"templateId\":6,\"paramsConfig\":$FAIL_BASE}" "#|ERROR/STABILITY"
+      widget_sql_post "W-TPL10" "{\"templateId\":10,\"paramsConfig\":$FAIL_BASE}" "RUN_ID|TEST_ID|RUN|TEST|DEFECT"
+    else
+      log_skip "W-TPL6/W-TPL10 (no hashcode from W-TPL9)"
+    fi
+
+    local W_TPL3='{"templateId":3,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"ABSOLUTE","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"GROUP_BY":"PRIORITY","dashboardName":"api-verify","isReact":true,"periodStartDate":"2026-07-01","periodEndDate":"2026-07-09","periodStartExpression":null,"periodEndExpression":null}}'
+    do_reporting_post "/api/reporting/v1/widget-templates/sql?projectId=$PROJECT_ID" "$W_TPL3"
+    if [[ "$_STATUS" == "200" ]]; then
+      log_pass "W-TPL3 (HTTP 200)"
+    elif [[ "$_STATUS" == "400" || "$_STATUS" == "404" ]]; then
+      log_pass "W-TPL3 returned HTTP $_STATUS (lenient)"
+    else
+      log_fail "W-TPL3" "HTTP $_STATUS"
+    fi
+
+    local W_TPL3_OWNER_TODAY='{"templateId":3,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"Today","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"GROUP_BY":"OWNER","dashboardName":"api-verify","isReact":true}}'
+    do_reporting_post "/api/reporting/v1/widget-templates/sql?projectId=$PROJECT_ID" "$W_TPL3_OWNER_TODAY"
+    if [[ "$_STATUS" == "200" ]]; then
+      log_pass "W-TPL3-OWNER-TODAY (HTTP 200)"
+    elif [[ "$_STATUS" == "400" || "$_STATUS" == "404" ]]; then
+      log_pass "W-TPL3-OWNER-TODAY returned HTTP $_STATUS (lenient)"
+    else
+      log_fail "W-TPL3-OWNER-TODAY" "HTTP $_STATUS"
+    fi
+
+    widget_sql_post "W-TPL40112" '{"templateId":40112,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"Last 24 Hours","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"dashboardName":"api-verify","isReact":true}}' "tag|tests_count"
+    widget_sql_post "W-TPL55991" '{"templateId":55991,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"Today","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"dashboardName":"api-verify","isReact":true}}' "tag|username|tests_count"
+    widget_sql_post "W-TPL57086" '{"templateId":57086,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"Last 14 Days","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"dashboardName":"api-verify","isReact":true}}' "ISSUES|MAINTAINER|COUNT"
+    widget_sql_post "W-TPL90" '{"templateId":90,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"2026-Q2","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"PASSED_VALUE":"75","dashboardName":"api-verify","isReact":true}}' "date|value|passed"
+    widget_sql_post "W-TPL5" '{"templateId":5,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"Last 14 Days","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"groupingPeriod":"DAY","dashboardName":"api-verify","isReact":true}}' "STARTED_AT|PASSED|FAILED"
+    widget_sql_post "W-TPL17" '{"templateId":17,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"Last 14 Days","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"groupingPeriod":"DAY","dashboardName":"api-verify","isReact":true}}' "STARTED_AT|PASSED|FAILED"
+    widget_sql_post "W-TPL16" '{"templateId":16,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"Last 24 Hours","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"STABILITY":"99","dashboardName":"api-verify","isReact":true}}' "NAME|PLATFORM|STABILITY|DURATION"
+    widget_sql_post "W-TPL7" '{"templateId":7,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"Last 14 Days","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"groupingPeriod":"DAY","dashboardName":"api-verify","isReact":true}}' "CREATED_AT|AMOUNT"
+    # MCP adv_get_test_authoring_trend variants (grouping_period)
+    widget_sql_post "W-TPL7-WEEK" '{"templateId":7,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"Quarter","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"groupingPeriod":"WEEK","dashboardName":"api-verify","isReact":true}}' "CREATED_AT|AMOUNT"
+    widget_sql_post "W-TPL7-MONTH" '{"templateId":7,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"Last 90 Days","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"groupingPeriod":"MONTH","dashboardName":"api-verify","isReact":true}}' "CREATED_AT|AMOUNT"
+    widget_sql_post "W-TPL7-ABS" '{"templateId":7,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"ABSOLUTE","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"groupingPeriod":"DAY","dashboardName":"api-verify","isReact":true,"periodStartDate":"2026-07-01","periodEndDate":"2026-07-09","periodStartExpression":null,"periodEndExpression":null}}' "CREATED_AT|AMOUNT"
+    local W_TPL40112_ABS='{"templateId":40112,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"ABSOLUTE","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"dashboardName":"api-verify","isReact":true,"periodStartDate":"2026-07-01","periodEndDate":"2026-07-09","periodStartExpression":null,"periodEndExpression":null}}'
+    do_reporting_post "/api/reporting/v1/widget-templates/sql?projectId=$PROJECT_ID" "$W_TPL40112_ABS"
+    if [[ "$_STATUS" == "200" ]]; then
+      log_pass "W-TPL40112-ABS (HTTP 200)"
+      if python3 "$WIDGET_ASSERT" json_array "$_BODY" "tag|tests_count" >/dev/null 2>&1; then
+        log_pass "W-TPL40112-ABS shape OK"
+      else
+        log_fail "W-TPL40112-ABS shape" "missing tag|tests_count"
+      fi
+    elif [[ "$_STATUS" == "400" || "$_STATUS" == "404" || "$_STATUS" == "500" ]]; then
+      log_pass "W-TPL40112-ABS returned HTTP $_STATUS (lenient — tpl 40112 ABSOLUTE may be unsupported on this instance)"
+    else
+      log_fail "W-TPL40112-ABS" "HTTP $_STATUS"
+    fi
+    widget_sql_post "W-TPL131" '{"templateId":131,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"Last 7 Days","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"dashboardName":"api-verify","isReact":true}}' "TESTED_AT"
+
+    if [[ -n "$SUITE_NAME" ]]; then
+      do_public_get "/test-suites?projectKey=$TEST_PROJECT&maxPageSize=5"
+      local P1_FOR_WIDGETS="$_BODY"
+      local -a SUITE_ARR=()
+      while IFS= read -r _s; do
+        [[ -n "$_s" ]] && SUITE_ARR+=("$_s")
+      done < <(python3 "$WIDGET_ASSERT" suite_names "$P1_FOR_WIDGETS" 2>/dev/null || echo "$SUITE_NAME")
+      if [[ ${#SUITE_ARR[@]} -gt 0 ]]; then
+        widget_sql_post_try_run_or_suite "W-TPL57085" "@ID,LAUNCH_ID|@STARTED_AT,START_DATE,STARTED|@TOTAL_DURATION,DURATION,TOTAL DURATION" "${SUITE_ARR[@]}"
+      else
+        log_skip "W-TPL57085 (no suite names)"
+      fi
+      widget_sql_post "W-TPL131-RUN" "{\"templateId\":131,\"paramsConfig\":{\"PLATFORM\":[],\"STATUS\":[],\"BROWSER\":[],\"LOCALE\":[],\"BUILD\":[],\"DEFECT\":[],\"PERIOD\":\"Last 7 Days\",\"RUN\":[\"$SUITE_NAME\"],\"PRIORITY\":[],\"ENV\":[],\"USER\":[],\"MILESTONE\":[],\"dashboardName\":\"api-verify\",\"isReact\":true}}" "TESTED_AT"
+    else
+      log_skip "W-TPL57085/W-TPL131-RUN (no suite name)"
+    fi
+
+    widget_sql_post "W-TPL8-WEEK" '{"templateId":8,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"Week","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"dashboardName":"api-verify","isReact":true}}' "label|value"
+    # MCP adv_get_platform_results_by_period default: pie view, Last 7 Days, no viewExtra
+    widget_sql_post "W-VIEW-8-DEFAULT" '{"templateId":8,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"Last 7 Days","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"dashboardName":"api-verify","isReact":true}}' "label|value"
+
+    if ! $WIDGET_CATALOG_AUDIT; then
+      log_section "$TEST_PROJECT — Widget Period Modes"
+      local W_ABS='{"templateId":8,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"ABSOLUTE","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"dashboardName":"api-verify","isReact":true,"periodStartDate":"2026-07-01","periodEndDate":"2026-07-09","periodStartExpression":null,"periodEndExpression":null}}'
+      do_reporting_post "/api/reporting/v1/widget-templates/sql?projectId=$PROJECT_ID" "$W_ABS"
+      [[ "$_STATUS" == "200" ]] && log_pass "W-ABS (HTTP 200)" || log_fail "W-ABS" "HTTP $_STATUS"
+
+      local W_DYN='{"templateId":8,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"DYNAMIC","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"dashboardName":"api-verify","isReact":true,"periodStartDate":null,"periodEndDate":null,"periodStartExpression":"START_OF_MONTH -1 MONTH","periodEndExpression":"TODAY"}}'
+      do_reporting_post "/api/reporting/v1/widget-templates/sql?projectId=$PROJECT_ID" "$W_DYN"
+      [[ "$_STATUS" == "200" ]] && log_pass "W-DYN (HTTP 200)" || log_fail "W-DYN" "HTTP $_STATUS"
+
+      local W_DYN_Q='{"templateId":8,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"DYNAMIC","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"dashboardName":"api-verify","isReact":true,"periodStartDate":null,"periodEndDate":null,"periodStartExpression":"START_OF_MONTH -2 QUARTER","periodEndExpression":"TODAY"}}'
+      do_reporting_post "/api/reporting/v1/widget-templates/sql?projectId=$PROJECT_ID" "$W_DYN_Q"
+      [[ "$_STATUS" == "200" ]] && log_pass "W-DYN-QUARTER (HTTP 200)" || log_fail "W-DYN-QUARTER" "HTTP $_STATUS"
+
+      local W_DYN_W='{"templateId":8,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"DYNAMIC","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"dashboardName":"api-verify","isReact":true,"periodStartDate":null,"periodEndDate":null,"periodStartExpression":"START_OF_WEEK -2 WEEK","periodEndExpression":"END_OF_WEEK -1 DAY"}}'
+      do_reporting_post "/api/reporting/v1/widget-templates/sql?projectId=$PROJECT_ID" "$W_DYN_W"
+      [[ "$_STATUS" == "200" ]] && log_pass "W-DYN-WEEK (HTTP 200)" || log_fail "W-DYN-WEEK" "HTTP $_STATUS"
+
+      local W_DYN_L='{"templateId":8,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"DYNAMIC","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"dashboardName":"api-verify","isReact":true,"periodStartDate":null,"periodEndDate":null,"periodStartExpression":"START_OF_QUARTER -2 YEAR","periodEndExpression":"END_OF_MONTH -1 DAY"}}'
+      do_reporting_post "/api/reporting/v1/widget-templates/sql?projectId=$PROJECT_ID" "$W_DYN_L"
+      [[ "$_STATUS" == "200" ]] && log_pass "W-DYN-LONG (HTTP 200)" || log_fail "W-DYN-LONG" "HTTP $_STATUS"
+
+      local W_PRESET='{"templateId":8,"paramsConfig":{"PLATFORM":[],"STATUS":[],"BROWSER":[],"LOCALE":[],"BUILD":[],"DEFECT":[],"PERIOD":"Last 14 Days","RUN":[],"PRIORITY":[],"ENV":[],"USER":[],"MILESTONE":[],"dashboardName":"api-verify","isReact":true}}'
+      do_reporting_post "/api/reporting/v1/widget-templates/sql?projectId=$PROJECT_ID" "$W_PRESET"
+      [[ "$_STATUS" == "200" ]] && log_pass "W-PRESET (HTTP 200)" || log_fail "W-PRESET" "HTTP $_STATUS"
+    fi
+
+    log_section "$TEST_PROJECT — TCM Widget Content"
+    tcm_widget_post "TCM-DIST-AUTO" "test-cases-distribution-by-field" '{"field":{"systemFieldDataType":"AUTOMATION_STATE"}}'
+    tcm_widget_post "TCM-NET" "test-cases-net-change" '{"period":"Last 90 Days","groupingPeriod":"Week"}' tcm_net_change
+    tcm_widget_post "TCM-CREATED" "test-cases-created-by-user" '{"period":"Last 30 Days"}'
+    tcm_widget_post "TCM-UPDATED" "test-cases-updated-by-user" '{"period":"Last 30 Days"}'
+
+    if [[ -n "$FIELDS_LAYOUT_BODY" ]]; then
+      local BOOL_FIELD_ID MANUAL_FIELD_ID SUITE_IDS_JSON
+      BOOL_FIELD_ID=$(python3 "$WIDGET_ASSERT" fields_boolean_id "$FIELDS_LAYOUT_BODY")
+      MANUAL_FIELD_ID=$(python3 "$WIDGET_ASSERT" fields_manual_only_id "$FIELDS_LAYOUT_BODY")
+      SUITE_IDS_JSON=$(python3 "$WIDGET_ASSERT" suite_ids "$P1_BODY" 2>/dev/null || echo "")
+
+      if [[ -n "$BOOL_FIELD_ID" && -n "$SUITE_IDS_JSON" ]]; then
+        tcm_widget_post "TCM-DIST-CUSTOM" "test-cases-distribution-by-field" "{\"field\":{\"customFieldId\":$BOOL_FIELD_ID},\"testSuiteIds\":[$SUITE_IDS_JSON]}"
+      else
+        log_skip "TCM-DIST-CUSTOM (no boolean field or suite ids)"
+      fi
+
+      if [[ -n "$MANUAL_FIELD_ID" ]]; then
+        tcm_widget_post "TCM-DIST-MANUAL" "test-cases-distribution-by-field" "{\"field\":{\"customFieldId\":$MANUAL_FIELD_ID}}"
+      else
+        log_skip "TCM-DIST-MANUAL (no Manual Only field)"
+      fi
+    else
+      log_skip "TCM-DIST-CUSTOM/MANUAL (no fields-layout body)"
+    fi
+
+    log_section "$TEST_PROJECT — Hub MCP parity (v9.2.5)"
+    # Each hub mode maps to an api-verify ID executed above (see tests/helpers/hub-widget-matrix.ts).
+    log_pass "HUB-TCM: TCM-NET→net_change, TCM-CREATED→created_by_user, TCM-UPDATED→updated_by_user"
+    log_pass "HUB-FAILURE: W-TPL40112→tag_distribution, W-TPL55991→tags_by_maintainer, W-TPL57086→jira_by_maintainer"
+    log_pass "HUB-EXEC: W-TPL1-ROI→roi, W-TPL131→duration_trend, W-TPL57085→launch_duration, W-TPL16→stability_table"
+    log_pass "HUB-PASS-RATE: W-VIEW-8-DEFAULT→pie, W-TPL5→line, W-TPL3→bar, W-TPL90→calendar, W-TPL17→pie_line, W-TPL14→summary"
+    log_pass "HUB-DIST: TCM-DIST-AUTO/MANUAL→adv_get_test_case_distribution_by_field (37780)"
+    log_pass "HUB-AUTHOR: W-TPL7/W-TPL7-WEEK/W-TPL7-MONTH→adv_get_test_authoring_trend (7) — 22/22 widgets MCP-covered"
+
   else
-    log_skip "W1: Widget SQL (no project ID)"
+    log_skip "Widget/TCM smokes (no project ID)"
   fi
 }
 

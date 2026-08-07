@@ -128,6 +128,8 @@ export const GetLauncherDetailsInputSchema = z.object({
   includeTestSessions: z.boolean().default(true),
   includeJobParameters: z.boolean().default(false)
     .describe("Jenkins Build Now job parameters only — not available for Launch Launchers"),
+  includeDetailedStatuses: z.boolean().default(false)
+    .describe("Include source-aware manual-pass and known-issue counters without changing existing totals"),
   format: z.enum(['dto', 'json', 'string']).default('json')
 });
 

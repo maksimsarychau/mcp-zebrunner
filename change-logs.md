@@ -1,5 +1,117 @@
 # Change Logs
 
+---
+
+## v9.2.6 — Dependency security and detailed statuses
+
+### Added
+
+- Opt-in, source-aware `includeDetailedStatuses` counters for reporting analysis.
+- Generated image/video compatibility tests and mocked OpenAI/Anthropic request tests.
+- Explicit Node `^22 || ^24` runtime contract with Node 22 declarations.
+- Detailed-status coverage across every test layer: api-verify `R6b` (launch buckets) and `R9` (per-test `passedManually` / `knownIssue`), MCP boundary tests in [`tests/e2e/detailed-statuses.test.ts`](tests/e2e/detailed-statuses.test.ts), and cloud-gated eval prompts `get_launch_test_summary.detailed_statuses`, `get_launch_test_summary.manual_known_union`, `get_launch_details.detailed_statuses`.
+- Eval prompts can assert argument values (`expectedArgValues`), not just argument keys.
+
+### Changed
+
+- Updated MCP SDK v1, HTTP/image/LLM SDKs, TypeScript, and supporting dependencies.
+- Existing totals, pass rates, charts, rerun eligibility, transport, and session behavior remain unchanged by default.
+
+### Security
+
+- `npm audit` and `npm audit --omit=dev` report zero vulnerabilities after resolving all eight baseline vulnerable package entries.
+
+### Docs
+
+- [docs/releases/v9.2.6.md](docs/releases/v9.2.6.md)
+
+---
+
+## v9.2.5 — Test authoring trend (template 7)
+
+### Added
+
+- **`adv_get_test_authoring_trend`** — TAM template 7 (`CREATED_AT` / `AMOUNT`); [`src/handlers/widget-authoring-trend-tool.ts`](src/handlers/widget-authoring-trend-tool.ts)
+- **`parseAuthoringTrendRows`** / **`sumAuthoringAmounts`** in `widget-response-parsers.ts`
+- Eval: `widget.tpl7.authoring_trend`, `hub.authoring.trend`; api-verify `HUB-AUTHOR` parity line
+
+### Changed
+
+- Tool count **68 → 69**; **22/22** dashboard widgets MCP-covered
+
+### Docs
+
+- [docs/TEST_PROMPTS.md](docs/TEST_PROMPTS.md) §18 — all 22 widgets + verify commands
+- [docs/releases/v9.2.5.md](docs/releases/v9.2.5.md) — release draft
+- Archived planning: [docs/archive/](docs/archive/)
+
+---
+
+## v9.2.4 — Widget hub tools + pass-rate view extension
+
+### Added
+
+- **`adv_get_tcm_case_analytics`** — TCM widgets 37777–37779 (`net_change`, `created_by_user`, `updated_by_user`)
+- **`adv_get_failure_analytics`** — templates 40112, 55991, 57086
+- **`adv_get_execution_analytics`** — templates 1, 131, 57085, 16
+- **`src/handlers/widget-hub-tools.ts`**, **`src/utils/widget-pass-rate-views.ts`**
+
+### Changed
+
+- **`adv_get_platform_results_by_period`** — optional `view` (`pie`|`line`|`bar`|`calendar`|`pie_line`|`summary`), `group_by`, `grouping_period`, `passed_value_threshold`; auto-selects templateId (default `pie` → 8, unchanged)
+- Tool count **65 → 68**; eval widget prompts route to hub tools where applicable
+- **Docs** — [docs/TEST_PROMPTS.md](docs/TEST_PROMPTS.md) §18 rewritten for all 22 widgets; hub tool sections in §2–§3; [TOOLS_CATALOG.md](TOOLS_CATALOG.md) pass-rate views + hub examples
+
+### Deferred (v9.2.5)
+
+- **`adv_get_test_authoring_trend`** — TAM template 7
+
+---
+
+## v9.2.3 — TCM distribution widget + widget platform verification
+
+### Added
+
+- **`adv_get_test_case_distribution_by_field`** — TCM widget 37780 (`test-cases-distribution-by-field`); field/suite resolution, pie chart output.
+- **`src/utils/tcm-widget-field.ts`**, **`src/utils/tcm-widget-client.ts`**, **`src/utils/widget-response-parsers.ts`**
+- **`ZebrunnerReportingClient`** — `getWidgetTemplates`, `getTcmWidgetContent`, `getTestCaseDistributionByField`
+- **API verification** — WT-* catalog checks; W-TPL* smokes (22/22 TAM+TCM); TCM-DIST-*; `--widget-catalog-audit` flag
+- **Unit tests** — `tcm-widget-field`, `tcm-widget-client`, `widget-response-parsers`; fixtures under `tests/fixtures/widgets/`
+- **Eval** — distribution routing prompts + pass_rate/bugs regression prompts (`tests/eval/eval-prompts.ts`)
+- **Backlog doc (archived)** — [docs/archive/TCM_TAM_WIDGET_BACKLOG.md](docs/archive/TCM_TAM_WIDGET_BACKLOG.md)
+
+### Changed
+
+- Tool count **64 → 65** (`tools.json`, registry coverage tests, TOOLS_CATALOG)
+
+### Deferred (v9.2.4+)
+
+- Hub tools and `adv_get_platform_results_by_period` view/group_by extension — see [docs/archive/TCM_TAM_WIDGET_BACKLOG.md](docs/archive/TCM_TAM_WIDGET_BACKLOG.md)
+
+---
+
+## v9.2.2 — Widget period modes (ABSOLUTE / DYNAMIC)
+
+### Added
+
+- **`src/utils/widget-period.ts`** — preset, absolute, and dynamic widget SQL period resolution; structured `period_dynamic_*` fields + raw expression escape hatch.
+- **Tier A widget tools** — `adv_get_platform_results_by_period`, `adv_get_top_bugs`, `adv_get_bug_review`, `adv_get_bug_failure_info` accept `period_mode`, absolute dates, and dynamic expressions.
+- **`adv_generate_report`** — `widget_period_*` fields for pass_rate/bugs widget legs only (flaky/runtime unchanged).
+- **API verification** — `tests/api-verify.sh` W-ABS, W-DYN, W-DYN-QUARTER, W-DYN-WEEK, W-DYN-LONG, W-PRESET, W-TPL3.
+- **Unit tests** — `tests/unit/widget-period.test.ts`; GROUP_FIELD + negative-count clamp in `parseWidgetStatusCounts`.
+
+### Changed
+
+- `buildParamsConfig`, `buildBugReviewParamsConfig`, `buildFailureWidgetParamsConfig` in `src/utils/widget-sql.ts`.
+- `zebrunner://periods` resource documents three period modes.
+
+### Backward compatibility
+
+- Default `period_mode: preset`; existing `period` enum defaults unchanged.
+- Preset-only callers produce identical widget `paramsConfig` (no new required fields).
+
+---
+
 ## v9.2.1 — LLM-visible metrics + compact expansion
 
 > **Metrics guide:** [docs/TOKEN_EFFICIENCY.md](docs/TOKEN_EFFICIENCY.md#observing-metrics-in-the-llm)
@@ -46,7 +158,7 @@
 ### Documentation
 
 - [docs/TOKEN_EFFICIENCY.md](docs/TOKEN_EFFICIENCY.md) — v9.2.0 vs v9.2.1 compact matrix, truncation note, metrics footer.
-- [docs/EVALUATION_FRAMEWORK.md](docs/EVALUATION_FRAMEWORK.md) — 64 tools, 76 cloud prompts, local 80%/70% gates.
+- [docs/EVALUATION_FRAMEWORK.md](docs/EVALUATION_FRAMEWORK.md) — 69 tools, default/cloud eval suites (~40 / ~149 prompts).
 - [TOOLS_CATALOG.md](TOOLS_CATALOG.md) — `adv_about_mcp_tools` metrics/routing params.
 - [docs/releases/v9.2.1.md](docs/releases/v9.2.1.md) — local GitHub release draft (gitignored).
 

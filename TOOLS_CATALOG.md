@@ -2,6 +2,8 @@
 
 Complete reference of all available tools with natural language usage examples.
 
+> **v9.2.5:** `adv_get_test_authoring_trend` — template 7 completes **22/22** widget MCP coverage. See [TEST_PROMPTS.md §18](docs/TEST_PROMPTS.md#18-dashboard-widgets-22-templates--v925) and [docs/releases/v9.2.5.md](docs/releases/v9.2.5.md).
+
 > **v9.2.1:** LLM-visible metrics (`include_call_metrics`, session breakdown), compact on 19 additional bulk/reporting tools, format/truncation fixes. See [docs/TOKEN_EFFICIENCY.md](docs/TOKEN_EFFICIENCY.md) and [change-logs.md](change-logs.md).
 
 > **v9.2.0:** Token/cost optimization — `adv_batch_get_test_cases`, `format:compact`, `detail:summary`, `adv_generate_report` `inline:false`. Defaults unchanged.
@@ -116,11 +118,14 @@ All tools marked with chart support accept these two parameters:
 
 **Description:** Lightweight aggregated test results with statistics, most unstable tests, and tests with issues. Optimized for large launches.
 
+**Detailed statuses:** Set `includeDetailedStatuses: true` to add source-labeled launch buckets and a per-test `manualAndKnownIssue` block with `passedManually`, `knownIssue`, overlap, and the deduplicated `eitherCondition`. Existing totals are unchanged.
+
 **Example Prompts:**
 
 - "Get test summary for launch 119783 with top 10 most unstable tests"
 - "Show me summary of launch 120906 - just failed tests"
 - "Get lightweight summary for launch 121482"
+- "For launch 134978, how many tests were passed manually, have known issues assigned, or match either condition?"
 
 ### `adv_regression_results_analyzer`
 
@@ -1160,11 +1165,26 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 
 **Description:** Get aggregated test results, pass rate, and statistics for a project over a time period (last 7 days, last 30 days, etc.). Returns total passed/failed/skipped/aborted counts and pass rate percentage. Use this when asked for "results", "pass rate", "test statistics", or "results for last N days". Accepts any Zebrunner project key (e.g. `DEF`, `MCP`) or aliases (`web`/`android`/`ios`/`api`).
 
+**Pass-rate views (v9.2.4):** `view` selects the dashboard widget template:
+
+| `view` | Template | Dashboard widget |
+|--------|----------|------------------|
+| `pie` (default) | 8 | Pass rate pie |
+| `line` | 5 | Daily pass/fail trend |
+| `bar` | 3 | Pass rate by group (default `group_by: PRIORITY`) |
+| `calendar` | 90 | Calendar heatmap (`passed_value_threshold`, default 75) |
+| `pie_line` | 17 | Pie + daily trend combo |
+| `summary` | 14 | Grouped table (default `group_by: BUILD`) |
+
+Omitting `view` preserves pre-v9.2.4 behavior (template 8 pie, `period` default `Last 7 Days`).
+
 **Supported Periods (Input):**
 
-- Today, Last 24 Hours, Week, Last 7 Days, Last 14 Days, Month, Last 30 Days, Quarter, Last 90 Days, Year, Last 365 Days, Total
+- **Preset (default):** Today, Last 24 Hours, Week, Last 7 Days, Last 14 Days, Month, Last 30 Days, Quarter, Last 90 Days, Year, Last 365 Days, Total — via `period` when `period_mode` is `preset` (default).
+- **Absolute:** `period_mode: absolute` + `period_start_date` / `period_end_date` (YYYY-MM-DD).
+- **Dynamic:** `period_mode: dynamic` + structured `period_dynamic_from_*` / `period_dynamic_to_*` (anchors: `START_OF_MONTH`, `END_OF_WEEK`, `TODAY`, etc.) **or** raw `period_start_expression` / `period_end_expression`.
 
-**Note:** Periods are passed through as-is. If a widget does not support a period, the API will return an error.
+**Note:** Chart titles use Zebrunner's resolved date-range label from widget response when available.
 
 **Example Prompts:**
 
@@ -1172,6 +1192,12 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 - "Show pass rate for MCP"
 - "Show me Android test results from last week"
 - "Get platform results for last 30 days"
+- "Pass rate bar chart by priority for Android over the last 14 days" (`view: bar`)
+- "Daily pass/fail line trend for iOS over the last 14 days" (`view: line`)
+- "Pass rate calendar heatmap for Web in 2026 Q2 with 75% threshold" (`view: calendar`)
+- "Tests summary table grouped by build for MCP last 7 days" (`view: summary`)
+
+**Widget template:** 8 (pie), 3, 5, 14, 17, 90 — see [docs/TEST_PROMPTS.md](docs/TEST_PROMPTS.md) §18.
 
 ### `adv_get_top_bugs`
 
@@ -1179,9 +1205,11 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 
 **Supported Periods (Input):**
 
-- Today, Last 24 Hours, Week, Last 7 Days, Last 14 Days, Month, Last 30 Days, Quarter, Last 90 Days, Year, Last 365 Days, Total
+- **Preset (default):** Today, Last 24 Hours, Week, Last 7 Days, Last 14 Days, Month, Last 30 Days, Quarter, Last 90 Days, Year, Last 365 Days, Total — via `period` when `period_mode` is `preset` (default).
+- **Absolute:** `period_mode: absolute` + `period_start_date` / `period_end_date` (YYYY-MM-DD).
+- **Dynamic:** `period_mode: dynamic` + structured `period_dynamic_from_*` / `period_dynamic_to_*` (anchors: `START_OF_MONTH`, `END_OF_WEEK`, `TODAY`, etc.) **or** raw `period_start_expression` / `period_end_expression`.
 
-**Note:** Periods are passed through as-is. If a widget does not support a period, the API will return an error.
+**Note:** Chart titles use Zebrunner's resolved date-range label from widget response when available.
 
 **Example Prompts:**
 
@@ -1198,7 +1226,7 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 - Detailed bug review with failure analysis
 - Defect tracking with Jira/issue tracker links
 - Historical data (first seen and last reproduction dates)
-- Configurable time periods (Today, Last 24 Hours, Week, Last 7/14/30/90 Days, Month, Quarter, Year, Last 365 Days, Total)
+- Configurable time periods — preset, absolute (ISO dates), or dynamic (relative expressions)
 - Multiple output formats (detailed, summary, json)
 - **NEW: Automatic failure detail fetching** - No need for separate calls
 - **NEW: Priority analysis** - Bugs categorized as Critical/High/Medium/Low
@@ -1245,6 +1273,99 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 
 **Usage Note:** The dashboardId and hashcode can be obtained from the `adv_get_bug_review` tool output. Each bug in the review includes these identifiers in the failure link.
 
+### `adv_get_test_case_distribution_by_field`
+
+**Description:** Pie-chart distribution of test cases by a TCM field (automation state, priority, custom field, etc.) using the dashboard widget API (template **37780**). Matches the Zebrunner UI widget **TEST CASES DISTRIBUTION BY FIELD**.
+
+**Key Features:**
+
+- Resolves field by display name via fields-layout, or by `system_field` / `custom_field_id`
+- Optional suite filter: flat `test_suite_ids` and/or expanded `root_suite_ids`
+- Returns counts with computed percentages; optional pie chart (`chart=png|html|text`)
+
+**When to use vs other tools:**
+
+| Need | Tool |
+|------|------|
+| Dashboard pie by field + suites | **This tool** |
+| Paginated case list by automation state | `adv_get_test_case_by_filter` / `adv_get_test_cases_by_automation_state` |
+| Coverage report automation breakdown | `adv_generate_report` → `coverage` |
+
+**Example Prompts:**
+
+- "Show test case distribution by automation state for project MCP"
+- "Pie chart of cases by Priority in MCP"
+- `{ project: "MCP", system_field: "AUTOMATION_STATE", format: "json" }`
+
+### `adv_get_tcm_case_analytics` *(v9.2.4 — TCM widgets 37777–37779)*
+
+**Modes:** `net_change` | `created_by_user` | `updated_by_user`
+
+| Mode | Template | TCM systemName |
+|------|----------|----------------|
+| `net_change` | 37777 | `test-cases-net-change` |
+| `updated_by_user` | 37778 | `test-cases-updated-by-user` |
+| `created_by_user` | 37779 | `test-cases-created-by-user` |
+
+**Example Prompts:**
+
+- "Show TCM net case change for project MCP over the last 90 days grouped by week"
+- "Who created the most test cases on MCP in the last 30 days?"
+- "Who updated the most test cases on Android in the last 30 days?"
+- `{ project: "MCP", mode: "net_change", period: "Last 90 Days", grouping_period: "Week" }`
+
+**Do not confuse with:** `adv_get_test_case_distribution_by_field` (template 37780 field pie).
+
+### `adv_get_failure_analytics` *(v9.2.4 — templates 40112, 55991, 57086)*
+
+**Modes:** `tag_distribution` | `tags_by_maintainer` | `jira_by_maintainer`
+
+| Mode | Template |
+|------|----------|
+| `tag_distribution` | 40112 |
+| `tags_by_maintainer` | 55991 |
+| `jira_by_maintainer` | 57086 |
+
+**Example Prompts:**
+
+- "Failure tag distribution pie for Android in the last 24 hours"
+- "Cross-tab of failure tags and maintainers for iOS today"
+- "Map Jira issues to maintainers by failure count on Web for the last 14 days"
+
+**Do not confuse with:** `adv_get_top_bugs` (template 4 top defects).
+
+### `adv_get_execution_analytics` *(v9.2.4 — templates 1, 131, 57085, 16)*
+
+**Modes:** `roi` | `duration_trend` | `launch_duration` | `stability_table`
+
+| Mode | Template |
+|------|----------|
+| `roi` | 1 |
+| `duration_trend` | 131 |
+| `launch_duration` | 57085 |
+| `stability_table` | 16 |
+
+**Example Prompts:**
+
+- "Execution ROI for Android over the last 7 days"
+- "Daily execution duration trend for MCP last week"
+- "Launch duration for suite Regression on iOS this quarter"
+- "Tests below 99% stability on Web in the last 24 hours"
+
+**Do not confuse with:** `adv_find_flaky_tests` (stability_table) or `adv_analyze_regression_runtime` (duration/ROI widgets).
+
+### `adv_get_test_authoring_trend` *(v9.2.5 — TAM template 7)*
+
+**Description:** Daily/weekly/monthly count of test cases created over time (`CREATED_AT` × `AMOUNT`). Matches dashboard widget **TEST CASES DEVELOPMENT TREND**.
+
+**Example Prompts:**
+
+- "How many test cases were created per day on MCP over the last 14 days?"
+- "Test case authoring velocity for Android this quarter by week"
+- `{ project: "MCP", period: "Last 14 Days", grouping_period: "DAY" }`
+
+**Do not confuse with:** `adv_get_tcm_case_analytics` `net_change` (TCM widget 37777) or `adv_get_test_case_distribution_by_field` (field pie 37780).
+
 ### `adv_get_project_milestones`
 
 **Description:** Get all milestones configured for a project.
@@ -1270,7 +1391,10 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 | ------------------------ | ------------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | `report_types`           | `string[]`                | Report type(s) to generate (required). See report types below.                                                   |
 | `projects`               | `string[]`                | Project aliases or keys (e.g., `["android", "ios"]`)                                                             |
-| `period`                 | `string`                  | Time period (e.g., `"Last 30 Days"`)                                                                             |
+| `period`                 | `string`                  | Preset time period for flaky/milestones and widget legs when `widget_period_mode` omitted (e.g., `"Last 30 Days"`) |
+| `widget_period_mode`     | `preset\|absolute\|dynamic?` | Widget SQL period for **pass_rate/bugs only** (does not affect flaky/runtime) |
+| `widget_period_start_date` / `widget_period_end_date` | `string?` | Absolute widget window (YYYY-MM-DD) |
+| `widget_period_*_expression` / `widget_period_dynamic_*` | various | Dynamic widget window — see widget tools |
 | `milestone`              | `string?`                 | Optional milestone filter                                                                                        |
 | `top_bugs_limit`         | `number?`                 | Top bugs count for `quality_dashboard` / `executive_dashboard` (default: 10)                                     |
 | `sections`               | `string[]?`               | Sections for `quality_dashboard`: `pass_rate`, `runtime`, `coverage`, `bugs`, `milestones`, `flaky`              |
@@ -1487,6 +1611,6 @@ For large datasets, you can specify filters and limits:
 
 ---
 
-**Last Updated:** v9.2.1 - July 2026
+**Last Updated:** v9.2.6 - August 2026
 
 For the latest features and updates, see [change-logs.md](change-logs.md).

@@ -47,10 +47,37 @@ import {
   getTemplate,
   getPlatformMap,
   buildParamsConfig as sharedBuildParamsConfig,
+  buildBugReviewParamsConfig,
+  buildFailureWidgetParamsConfig,
   createWidgetSqlCaller,
   parseWidgetStatusCounts,
+  extractResolvedPeriodLabel,
   type WidgetSqlCaller,
 } from "./utils/widget-sql.js";
+import {
+  formatWidgetPeriodLabel,
+  pickWidgetPeriodInput,
+  pickWidgetPeriodInputFromReport,
+  widgetPeriodZodFields,
+  widgetReportPeriodZodFields,
+} from "./utils/widget-period.js";
+import {
+  expandSuiteIds,
+  resolveDistributionField,
+  SYSTEM_FIELD_DATA_TYPES,
+  type SystemFieldDataType,
+} from "./utils/tcm-widget-field.js";
+import { distributionWithPercents } from "./utils/widget-response-parsers.js";
+import { TCM_WIDGET_SYSTEM_NAMES } from "./utils/tcm-widget-client.js";
+import { registerWidgetHubTools } from "./handlers/widget-hub-tools.js";
+import { registerTestAuthoringTrendTool } from "./handlers/widget-authoring-trend-tool.js";
+import {
+  buildPassRateViewExtra,
+  PASS_RATE_GROUP_BY,
+  PASS_RATE_GROUPING_PERIOD,
+  PASS_RATE_VIEWS,
+  resolvePassRateTemplateId,
+} from "./utils/widget-pass-rate-views.js";
 import { getConfig } from "./utils/config-loader.js";
 import { registerResources, getResourcesCatalog, buildMcpRoutingContent } from "./resources.js";
 import { registerPrompts, getPromptsCatalog } from "./prompts.js";
@@ -65,6 +92,10 @@ import { ToolMetrics, wrapToolHandler } from "./utils/tool-metrics.js";
 import { withCallMetricsSchema } from "./utils/tool-schema-helpers.js";
 import { enrichTestCasesWithHistory, getHistoryBulkWarning, type HistoryFilter, type AutomationStatesMap } from "./utils/testCaseHistory.js";
 import { analyzeRegressionResults, type RegressionAnalyzerInput } from "./handlers/regression-results-analyzer.js";
+import {
+  getLaunchDetailedStatusCounts,
+  getWidgetDetailedStatusCounts,
+} from "./utils/launch-status-counts.js";
 
 // Mutation tools imports
 import { ZebrunnerMutationClient } from "./api/mutation-client.js";
@@ -4920,6 +4951,8 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       .describe("Batch mode safety cap — max eligible launches to rerun (default 10, max 50)."),
     min_failed: z.number().int().min(0).default(1)
       .describe("Minimum failed+aborted test count for a launch to qualify (default 1)."),
+    includeDetailedStatuses: z.boolean().default(false)
+      .describe("Include diagnostic source-aware launch buckets in the preview; never changes rerun eligibility"),
     skip_errors: BoolParam.describe("When true (default), continue batch if one launch fails."),
     dry_run: BoolParam.describe("If true, show resolved targets and API URLs without POST."),
     confirm: BoolParam.describe("Must be true to execute. Without it, returns a preview for user approval."),
@@ -4947,7 +4980,12 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         return { targets: [], skipped };
       }
       return {
-        targets: [toLaunchRerunTarget({ ...launch, id: launch.id, name: launch.name })],
+        targets: [{
+          ...toLaunchRerunTarget({ ...launch, id: launch.id, name: launch.name }),
+          ...(args.includeDetailedStatuses ? {
+            detailedStatuses: getLaunchDetailedStatusCounts(launch, `rerun candidate ${launch.id}`)
+          } : {}),
+        }],
         skipped,
       };
     }
@@ -4970,7 +5008,12 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           skipped.push({ launchId: launch.id, name: launch.name, reason });
           continue;
         }
-        targets.push(toLaunchRerunTarget(launch));
+        targets.push({
+          ...toLaunchRerunTarget(launch),
+          ...(args.includeDetailedStatuses ? {
+            detailedStatuses: getLaunchDetailedStatusCounts(launch, `rerun candidate ${launch.id}`)
+          } : {}),
+        });
         if (targets.length >= maxLaunches) break;
       }
 
@@ -5060,6 +5103,9 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           for (const t of previewTargets) {
             lines.push(`| ${t.launchId} | ${t.name.slice(0, 40)} | ${t.failed} | ${t.aborted} | ${t.status} |`);
             lines.push(`  URL: ${baseUrl}/projects/${projectKey}/automation-launches/${t.launchId}`);
+            if (args.includeDetailedStatuses) {
+              lines.push(`  Detailed status diagnostics: ${JSON.stringify(t.detailedStatuses)}`);
+            }
           }
 
           if (!args.launch_id) {
@@ -6914,6 +6960,9 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         "Include CI job parameters from Jenkins Build Now dialog (suite path, build/locale/test_run_rules defaults). " +
         "Jenkins integration only — not available for Launch Launchers."
       ),
+      includeDetailedStatuses: z.boolean().default(false).describe(
+        "Include normalized source-aware status counters as siblings; raw launch/test-run payloads remain unchanged."
+      ),
       format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format"),
       chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
         "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
@@ -6979,6 +7028,9 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       summaryOnly: z.boolean().default(false).describe("Return only statistics without full test list (most lightweight)"),
       includeLabels: z.boolean().default(false).describe("Include labels array (increases token usage)"),
       includeTestCases: z.boolean().default(false).describe("Include testCases array (increases token usage)"),
+      includeDetailedStatuses: z.boolean().default(false).describe(
+        "Include separate launch API buckets and per-test manual-pass/known-issue classifications."
+      ),
       format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format"),
       session_resolution: z.enum(['auto', 'per_test', 'launch_level']).default('auto').describe("Session duration resolution strategy: auto (launch-level first, fallback per-test), per_test, or launch_level"),
       jira_base_url: z.string().url().optional().describe("Override JIRA base URL (e.g., 'https://myproject.atlassian.net'). If not set, resolved from Zebrunner integrations or JIRA_BASE_URL env var"),
@@ -7051,6 +7103,9 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         .describe("Optional cap for slowest-tests section: exclude test cases with duration exceeding this value (in ms). Useful to filter anomalies."),
       include_empty_suites: z.boolean().default(true)
         .describe("When true, includes test runs with 0 linked bugs in the bugs_per_suite section. Default: true"),
+      includeDetailedStatuses: z.boolean().default(false).describe(
+        "Include only status counters derivable from TCM execution summaries; unsupported fields are marked unavailable."
+      ),
       chart: z.enum(["none","png","html","text"]).default("none").describe(
         "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
       ),
@@ -7097,6 +7152,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           zebrunnerBaseUrl,
           max_test_duration_ms: args.max_test_duration_ms,
           include_empty_suites: args.include_empty_suites,
+          includeDetailedStatuses: args.includeDetailedStatuses,
         };
 
         if (args.chart && args.chart !== 'none') {
@@ -7171,6 +7227,9 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         "When true, resolves builds/suites but returns only the count of matched suites without generating the full report. " +
         "Useful for pre-checking how many suites will be included."
       ),
+      includeDetailedStatuses: z.boolean().default(false).describe(
+        "Include manual-pass and known-issue breakdowns while preserving existing weekly pass-rate math."
+      ),
       chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
         "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
       ),
@@ -7208,6 +7267,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           outputStyle: args.output_style,
           outputFormat: args.output_format,
           count_only: args.count_only,
+          includeDetailedStatuses: args.includeDetailedStatuses,
           chart: args.chart,
           chart_type: args.chart_type,
         });
@@ -7233,6 +7293,9 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       launchId: z.number().int().positive().describe("Launch ID (e.g., 118685)"),
       format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format"),
       jira_base_url: z.string().url().optional().describe("Override JIRA base URL (e.g., 'https://myproject.atlassian.net'). If not set, resolved from Zebrunner integrations or JIRA_BASE_URL env var"),
+      includeDetailedStatuses: z.boolean().default(false).describe(
+        "Include source-aware launch buckets under testResults.detailedStatuses."
+      ),
       chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
         "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
       ),
@@ -7277,6 +7340,9 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       previous_build: z.string().optional().describe("Previous build identifier for baseline comparison"),
       include_test_details: z.boolean().default(false).describe("Include per-test duration listing within each duration class"),
       include_attempts_details: z.boolean().default(true).describe("Include detailed re-run attempt breakdown per launch"),
+      includeDetailedStatuses: z.boolean().default(false).describe(
+        "Include launch/test-run classifications and attempt manual-pass fields when supplied by the API."
+      ),
       format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format"),
       session_resolution: z.enum(['auto', 'per_test', 'launch_level']).default('auto').describe("Session duration resolution strategy: auto (launch-level first, fallback per-test), per_test, or launch_level"),
       medium_threshold_seconds: z.number().int().positive().default(300).describe("Duration threshold (seconds) above which a test is classified as Medium. Default: 300 (5 min)"),
@@ -7315,6 +7381,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           previousBuild: args.previous_build,
           includeTestDetails: args.include_test_details,
           includeAttemptsDetails: args.include_attempts_details,
+          includeDetailedStatuses: args.includeDetailedStatuses,
           format: args.format,
           session_resolution: args.session_resolution,
           medium_threshold_seconds: args.medium_threshold_seconds,
@@ -7424,8 +7491,9 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         "Project aliases or keys (e.g., ['android', 'ios'] or ['MCP', 'DEF'])"
       ),
       period: z.enum(ALL_PERIODS).default("Last 30 Days").describe(
-        "Time period for the report data"
+        "Time period preset for report data (flaky/milestones always use this; widget legs use widget_period_* when set)"
       ),
+      ...widgetReportPeriodZodFields(),
       milestone: z.string().optional().describe(
         "Optional milestone filter (e.g., '25.39.0')"
       ),
@@ -7450,6 +7518,9 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       output_dir: z.string().optional().describe(
         "Directory for report artifacts when inline=false. Defaults to <tmpdir>/zebrunner-reports/"
       ),
+      includeDetailedStatuses: z.boolean().default(false).describe(
+        "Append source-aware widget or launch-fallback status counters without changing report calculations or artifacts."
+      ),
     },
       annotations: {
         readOnlyHint: true,
@@ -7465,6 +7536,17 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           report_types: args.report_types,
           projects: args.projects,
           period: args.period,
+          widget_period_mode: args.widget_period_mode,
+          widget_period_start_date: args.widget_period_start_date,
+          widget_period_end_date: args.widget_period_end_date,
+          widget_period_start_expression: args.widget_period_start_expression,
+          widget_period_end_expression: args.widget_period_end_expression,
+          widget_period_dynamic_from_anchor: args.widget_period_dynamic_from_anchor,
+          widget_period_dynamic_from_offset: args.widget_period_dynamic_from_offset,
+          widget_period_dynamic_from_unit: args.widget_period_dynamic_from_unit,
+          widget_period_dynamic_to_anchor: args.widget_period_dynamic_to_anchor,
+          widget_period_dynamic_to_offset: args.widget_period_dynamic_to_offset,
+          widget_period_dynamic_to_unit: args.widget_period_dynamic_to_unit,
           milestone: args.milestone,
           top_bugs_limit: args.top_bugs_limit,
           sections: args.sections,
@@ -7473,6 +7555,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           previous_milestone: args.previous_milestone,
           inline: args.inline,
           output_dir: args.output_dir,
+          includeDetailedStatuses: args.includeDetailedStatuses,
         });
       } catch (error: any) {
         debugLog("Error in adv_generate_report", { error: error.message, args });
@@ -7764,6 +7847,9 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         "Uses API metadata for an efficient single-request count. Bypasses MCP response size limits."
       ),
       format: z.enum(['raw', 'formatted', 'compact']).default('formatted').describe("Output format - 'raw' for pretty JSON API response, 'compact' for minified JSON, 'formatted' for user-friendly display"),
+      includeDetailedStatuses: z.boolean().default(false).describe(
+        "Include source-aware detailed counters for each list item; unsupported list fields are marked unavailable."
+      ),
       chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
         "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
       ),
@@ -7798,6 +7884,15 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           page: args.page,
           pageSize: args.pageSize
         });
+        if (args.includeDetailedStatuses) {
+          launchesData.items = launchesData.items.map((launch) => ({
+            ...launch,
+            detailedStatuses: getLaunchDetailedStatusCounts(
+              launch,
+              `launch list item ${launch.id}`
+            ),
+          })) as typeof launchesData.items;
+        }
 
         if (args.chart && args.chart !== 'none') {
           const items = launchesData.items || [];
@@ -7882,6 +7977,11 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           if (total > 0) {
             output += `   📈 Results: ${passed} passed, ${failed} failed, ${skipped} skipped (${total} total)\n`;
           }
+          if (args.includeDetailedStatuses) {
+            output += `   🔎 Detailed statuses: ${JSON.stringify(
+              getLaunchDetailedStatusCounts(launch, `launch list item ${launch.id}`)
+            )}\n`;
+          }
 
           output += '\n';
         });
@@ -7920,6 +8020,9 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         "Uses API metadata for an efficient single-request count. Bypasses MCP response size limits."
       ),
       format: z.enum(['raw', 'formatted', 'compact']).default('formatted').describe("Output format - 'raw' for pretty JSON API response, 'compact' for minified JSON, 'formatted' for user-friendly display"),
+      includeDetailedStatuses: z.boolean().default(false).describe(
+        "Include source-aware detailed counters for each list item; unsupported list fields are marked unavailable."
+      ),
       chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
         "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
       ),
@@ -7975,6 +8078,15 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           milestone: args.milestone,
           query: args.query
         });
+        if (args.includeDetailedStatuses) {
+          launchesData.items = launchesData.items.map((launch) => ({
+            ...launch,
+            detailedStatuses: getLaunchDetailedStatusCounts(
+              launch,
+              `launch list item ${launch.id}`
+            ),
+          })) as typeof launchesData.items;
+        }
 
                 if (args.chart && args.chart !== 'none') {
           const items = launchesData.items || [];
@@ -8069,6 +8181,11 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
 
           if (total > 0) {
             output += `   📈 Results: ${passed} passed, ${failed} failed, ${skipped} skipped (${total} total)\n`;
+          }
+          if (args.includeDetailedStatuses) {
+            output += `   🔎 Detailed statuses: ${JSON.stringify(
+              getLaunchDetailedStatusCounts(launch, `launch list item ${launch.id}`)
+            )}\n`;
           }
 
           output += '\n';
@@ -8306,7 +8423,8 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         .describe("Project alias ('web', 'android', 'ios', 'api'), project key, or numeric projectId"),
       period: z.enum(ALL_PERIODS)
         .default("Last 7 Days")
-        .describe("Time period (passed to widget as-is)"),
+        .describe("Time period preset (used when period_mode is preset)"),
+      ...widgetPeriodZodFields('Last 7 Days'),
       platform: z.union([z.enum(["web","android","ios","api"]), z.array(z.string())])
         .optional()
         .describe("Platform alias or explicit array for paramsConfig.PLATFORM"),
@@ -8318,10 +8436,27 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         .describe("Optional MILESTONE filter, e.g., ['25.39.0'] for milestone filtering"),
       templateId: z.number()
         .default(getTemplate().RESULTS_BY_PLATFORM)
-        .describe("Override templateId if needed"),
+        .describe("Override templateId if needed (auto-selected from view when omitted)"),
+      view: z.enum(PASS_RATE_VIEWS)
+        .default('pie')
+        .describe(
+          "Pass-rate widget view: pie (8, default), line (5), bar (3), calendar (90), pie_line (17), summary (14)",
+        ),
+      group_by: z.enum(PASS_RATE_GROUP_BY).optional().describe(
+        "GROUP_BY for bar/summary views (e.g. BUILD, PRIORITY, PLATFORM)",
+      ),
+      grouping_period: z.enum(PASS_RATE_GROUPING_PERIOD).optional().describe(
+        "Daily/weekly/monthly bucket for line and pie_line views",
+      ),
+      passed_value_threshold: z.number().int().min(0).max(100).optional().describe(
+        "Green threshold for calendar heatmap view (template 90, default 75)",
+      ),
       dashboardName: z.string().optional()
         .describe("Override dashboard title"),
       format: z.enum(['raw', 'formatted', 'compact']).default('formatted'),
+      includeDetailedStatuses: z.boolean().default(false).describe(
+        "Include widget-source known-issue counters and explicit unavailable fields without changing report math."
+      ),
       chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
         "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
       ),
@@ -8343,19 +8478,32 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         // Resolve project ID with enhanced discovery and suggestions
         const { projectId } = await resolveProjectId(args.project);
 
+        const periodInput = pickWidgetPeriodInput(args);
+
+        const templateId = resolvePassRateTemplateId(args.view, args.templateId);
+        const viewExtra = buildPassRateViewExtra(args.view, {
+          group_by: args.group_by,
+          grouping_period: args.grouping_period,
+          passed_value_threshold: args.passed_value_threshold,
+        });
+
         const paramsConfig = buildParamsConfig({
           period: args.period,
+          periodInput,
           platform: args.platform ?? (typeof args.project === 'string' ? args.project : undefined),   // default to project alias
           browser: args.browser,
           milestone: args.milestone,
-          dashboardName: args.dashboardName
+          dashboardName: args.dashboardName,
+          extra: viewExtra,
         });
 
-        const data = await callWidgetSql(projectId, args.templateId, paramsConfig);
+        const data = await callWidgetSql(projectId, templateId, paramsConfig);
+        const resolvedPeriodLabel = extractResolvedPeriodLabel(Array.isArray(data) ? data : []);
+        const displayPeriod = formatWidgetPeriodLabel(periodInput, resolvedPeriodLabel, 'Last 7 Days');
 
         if (DEBUG_MODE) {
           console.error("adv_get_platform_results_by_period ok", {
-            projectId, templateId: args.templateId, period: args.period
+            projectId, templateId, view: args.view, period: args.period
           });
         }
 
@@ -8369,14 +8517,14 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
                 : String(args.platform ?? args.project);
               const chartConfig: ChartConfig = {
                 type: args.chart_type !== 'auto' ? args.chart_type : 'stacked_bar',
-                title: `Platform Results (${args.period})`,
+                title: `Platform Results (${displayPeriod})`,
                 labels: [chartLabel],
                 datasets: buildStackedStatusChartDatasets(statusCounts),
               };
               return buildChartResponse(
                 chartConfig,
                 args.chart as 'png' | 'html' | 'text',
-                `Platform results for ${args.period}`,
+                `Platform results for ${displayPeriod}`,
               );
             }
 
@@ -8411,34 +8559,46 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
 
             const chartConfig: ChartConfig = {
               type: args.chart_type !== 'auto' ? args.chart_type : 'stacked_bar',
-              title: `Platform Results (${args.period})`,
+              title: `Platform Results (${displayPeriod})`,
               labels,
               datasets,
             };
-            return buildChartResponse(chartConfig, args.chart as 'png' | 'html' | 'text', `Platform results for ${args.period}`);
+            return buildChartResponse(chartConfig, args.chart as 'png' | 'html' | 'text', `Platform results for ${displayPeriod}`);
           }
           return { content: [{ type: "text" as const, text: "No platform data to chart." }] };
         }
 
         let result;
+        const widgetCounts = parseWidgetStatusCounts(Array.isArray(data) ? data : []);
+        const detailedStatuses = args.includeDetailedStatuses
+          ? getWidgetDetailedStatusCounts(widgetCounts || {}, `platform results for ${displayPeriod}`)
+          : undefined;
         if (args.format === 'compact') {
           return {
-            content: [{ type: "text" as const, text: JSON.stringify(data) }]
+            content: [{
+              type: "text" as const,
+              text: args.includeDetailedStatuses
+                ? JSON.stringify({ data, detailedStatuses })
+                : JSON.stringify(data)
+            }]
           };
         }
         if (args.format === 'raw') {
-          result = data;
+          result = args.includeDetailedStatuses ? { data, detailedStatuses } : data;
         } else {
           // Format the data for better readability
           result = {
             summary: {
               project: args.project,
-              period: args.period,
+              period: displayPeriod,
+              view: args.view,
+              templateId,
               platform: args.platform ?? args.project,
               browser: args.browser.length > 0 ? args.browser : undefined,
               milestone: args.milestone.length > 0 ? args.milestone : undefined
             },
-            data: data
+            data: data,
+            ...(args.includeDetailedStatuses ? { detailedStatuses } : {})
           };
         }
 
@@ -8468,7 +8628,8 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         .describe("Project alias ('web', 'android', 'ios', 'api'), project key, or numeric projectId"),
       period: z.enum(ALL_PERIODS)
         .default("Last 7 Days")
-        .describe("Time period (passed to widget as-is)"),
+        .describe("Time period preset (used when period_mode is preset)"),
+      ...widgetPeriodZodFields('Last 7 Days'),
       limit: z.number().int().positive().max(100)
         .default(10)
         .describe("How many bugs to return"),
@@ -8505,15 +8666,23 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         // Resolve project ID with enhanced discovery and suggestions
         const { projectId } = await resolveProjectId(args.project);
 
+        const periodInput = pickWidgetPeriodInput(args);
+
         // Keep PLATFORM empty by default as per your examples
         const paramsConfig = buildParamsConfig({
           period: args.period,
+          periodInput,
           platform: args.platform ?? [],
           milestone: args.milestone,
           dashboardName: "Bugs repro rate (last 7 days)"
         });
 
         const raw = await callWidgetSql(projectId, args.templateId, paramsConfig);
+        const displayPeriod = formatWidgetPeriodLabel(
+          periodInput,
+          extractResolvedPeriodLabel(Array.isArray(raw) ? raw : []),
+          'Last 7 Days',
+        );
 
         if (args.format === 'compact') {
           return {
@@ -8610,15 +8779,15 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         if (args.chart && args.chart !== 'none') {
           const chartConfig: ChartConfig = {
             type: args.chart_type !== 'auto' ? args.chart_type : 'horizontal_bar',
-            title: `Top ${top.length} Bugs (${args.period})`,
+            title: `Top ${top.length} Bugs (${displayPeriod})`,
             labels: top.map((b: any) => b.key),
             datasets: [{ label: 'Failures', values: top.map((b: any) => b.failures) }],
           };
-          return buildChartResponse(chartConfig, args.chart as 'png' | 'html' | 'text', `Top ${top.length} bugs for ${args.period}`);
+          return buildChartResponse(chartConfig, args.chart as 'png' | 'html' | 'text', `Top ${top.length} bugs for ${displayPeriod}`);
         }
 
         // Return formatted output (compact/raw handled above on raw widget payload)
-        const formatted = `📊 **Top ${top.length} Most Frequent Bugs** (${args.period})\n\n` +
+        const formatted = `📊 **Top ${top.length} Most Frequent Bugs** (${displayPeriod})\n\n` +
           top.map((bug, i) => {
             const rank = i + 1;
             const linkText = bug.link ? `[${bug.key}](${bug.link})` : bug.key;
@@ -8652,7 +8821,8 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         .describe("Project alias ('web', 'android', 'ios', 'api'), project key, or numeric projectId"),
       period: z.enum(ALL_PERIODS)
         .default("Last 7 Days")
-        .describe("Time period for bug review (passed to widget as-is)"),
+        .describe("Time period preset (used when period_mode is preset)"),
+      ...widgetPeriodZodFields('Last 7 Days'),
       limit: z.number().int().positive().max(500)
         .default(100)
         .describe("Maximum number of bugs to return (default: 100, max: 500)"),
@@ -8691,27 +8861,17 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         // Resolve project ID with enhanced discovery and suggestions
         const { projectId } = await resolveProjectId(args.project);
 
+        const periodInput = pickWidgetPeriodInput(args);
+
         // Build params config for bug review widget
-        const paramsConfig = {
-          BROWSER: [],
-          DEFECT: [],
-          APPLICATION: [],
-          BUILD: [],
-          PRIORITY: [],
-          RUN: [],
-          USER: [],
-          ENV: [],
-          MILESTONE: [],
-          PLATFORM: [],
-          STATUS: [],
-          LOCALE: [],
-          PERIOD: args.period,
-          ERROR_COUNT: "0",
-          dashboardName: "Bug review",
-          isReact: true
-        };
+        const paramsConfig = buildBugReviewParamsConfig({
+          period: args.period,
+          periodInput,
+        });
 
         const raw = await callWidgetSql(projectId, args.templateId, paramsConfig);
+        const resolvedPeriodLabel = extractResolvedPeriodLabel(Array.isArray(raw) ? raw : []);
+        const periodLabel = formatWidgetPeriodLabel(periodInput, resolvedPeriodLabel, 'Last 7 Days');
 
         // Normalize returned rows - widget returns array directly
         const rows: any[] = Array.isArray(raw) ? raw : [];
@@ -8761,19 +8921,17 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           // Fetch failure details in parallel for all bugs with hashcodes
           const detailPromises = bugsToFetch.map(async (bug) => {
             try {
-              const failureInfoParams = {
-                PERIOD: args.period,
-                dashboardName: "Failures analysis",
-                hashcode: bug.hashcode,
-                isReact: true
-              };
+              const failureInfoParams = buildFailureWidgetParamsConfig({
+                period: args.period,
+                periodInput,
+                hashcode: bug.hashcode!,
+              });
 
-              const failureDetailsParams = {
-                PERIOD: args.period,
-                dashboardName: "Failures analysis",
-                hashcode: bug.hashcode,
-                isReact: true
-              };
+              const failureDetailsParams = buildFailureWidgetParamsConfig({
+                period: args.period,
+                periodInput,
+                hashcode: bug.hashcode!,
+              });
 
               // Fetch both widgets in parallel
               const [failureInfoRaw, failureDetailsRaw] = await Promise.all([
@@ -8810,7 +8968,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
                 : [];
 
               return {
-                hashcode: bug.hashcode,
+                hashcode: bug.hashcode!,
                 summary: summaryInfo,
                 totalFailures: failureDetails.length,
                 failures: detailsInfo
@@ -8818,7 +8976,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
             } catch (error: any) {
               debugLog(`Failed to fetch details for hashcode ${bug.hashcode}`, error.message);
               return {
-                hashcode: bug.hashcode,
+                hashcode: bug.hashcode!,
                 summary: [],
                 totalFailures: 0,
                 failures: [],
@@ -8847,7 +9005,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         if (args.chart && args.chart !== 'none') {
           const chartConfig: ChartConfig = {
             type: args.chart_type !== 'auto' ? args.chart_type : 'pie',
-            title: `Bug Priority Distribution (${args.period})`,
+            title: `Bug Priority Distribution (${periodLabel})`,
             labels: ['Critical', 'High', 'Medium', 'Low'],
             datasets: [{
               label: 'Bugs',
@@ -8894,7 +9052,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
             content: [{ 
               type: "text" as const, 
               text: JSON.stringify({ 
-                period: args.period, 
+                period: periodLabel, 
                 totalBugs: rows.length,
                 returnedBugs: bugs.length,
                 includeFailureDetails: args.include_failure_details,
@@ -8921,7 +9079,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         }
 
         if (args.format === 'summary') {
-          const summary = `📋 **Bug Review Summary** (${args.period})
+          const summary = `📋 **Bug Review Summary** (${periodLabel})
 
 **Total Bugs Found:** ${rows.length}
 **Showing:** ${bugs.length} bugs
@@ -8955,7 +9113,7 @@ ${bugs.length > 10 ? `\n---\n\n*...and ${bugs.length - 10} more bugs*` : ''}`;
         }
 
         // Detailed format (default)
-        const detailed = `🔍 **Comprehensive Bug Review** (${args.period})
+        const detailed = `🔍 **Comprehensive Bug Review** (${periodLabel})
 
 ## 📊 Executive Summary
 
@@ -9042,7 +9200,8 @@ ${priorityAnalysis.statistics.withoutDefects > 0 ? `- **Tracking Gap:** ${priori
         .describe("Hashcode from bug review failure link (e.g., '1051677506')"),
       period: z.enum(ALL_PERIODS)
         .default("Last 14 Days")
-        .describe("Time period for failure analysis (passed to widget as-is)"),
+        .describe("Time period preset (used when period_mode is preset)"),
+      ...widgetPeriodZodFields('Last 14 Days'),
       format: z.enum(['detailed', 'summary', 'json']).default('detailed')
         .describe("Output format: detailed (full info), summary (concise), or json (raw data)")
     },
@@ -9060,20 +9219,21 @@ ${priorityAnalysis.statistics.withoutDefects > 0 ? `- **Tracking Gap:** ${priori
         // Resolve project ID with enhanced discovery and suggestions
         const { projectId } = await resolveProjectId(args.project);
 
-        // Build params config for both widgets
-        const failureInfoParams = {
-          PERIOD: args.period,
-          dashboardName: "Failures analysis",
-          hashcode: args.hashcode,
-          isReact: true
-        };
+        const periodInput = pickWidgetPeriodInput(args);
+        const periodLabel = formatWidgetPeriodLabel(periodInput, null, 'Last 14 Days');
 
-        const failureDetailsParams = {
-          PERIOD: args.period,
-          dashboardName: "Failures analysis",
+        // Build params config for both widgets
+        const failureInfoParams = buildFailureWidgetParamsConfig({
+          period: args.period,
+          periodInput,
           hashcode: args.hashcode,
-          isReact: true
-        };
+        });
+
+        const failureDetailsParams = buildFailureWidgetParamsConfig({
+          period: args.period,
+          periodInput,
+          hashcode: args.hashcode,
+        });
 
         // Call both widgets in parallel
         const [failureInfoRaw, failureDetailsRaw] = await Promise.all([
@@ -9123,7 +9283,7 @@ ${priorityAnalysis.statistics.withoutDefects > 0 ? `- **Tracking Gap:** ${priori
               text: JSON.stringify({ 
                 dashboardId: args.dashboardId,
                 hashcode: args.hashcode,
-                period: args.period,
+                period: periodLabel,
                 summary: summaryInfo,
                 totalFailures: detailsInfo.length,
                 failures: detailsInfo
@@ -9137,7 +9297,7 @@ ${priorityAnalysis.statistics.withoutDefects > 0 ? `- **Tracking Gap:** ${priori
 
 **Dashboard ID:** ${args.dashboardId}
 **Hashcode:** ${args.hashcode}
-**Period:** ${args.period}
+**Period:** ${periodLabel}
 
 **Overview:**
 ${summaryInfo.length > 0 ? summaryInfo.map(s => `- **${s.failureCount}** failures detected
@@ -9165,7 +9325,7 @@ ${detailsInfo.length > 5 ? `\n*...and ${detailsInfo.length - 5} more failures*` 
 
 **Dashboard ID:** ${args.dashboardId}
 **Hashcode:** ${args.hashcode}
-**Period:** ${args.period}
+**Period:** ${periodLabel}
 
 ---
 
@@ -9208,6 +9368,157 @@ ${detailsInfo.map((detail, i) => {
       }
     }
   );
+
+  // === Tool #2.3: Test case distribution by field (TCM widget 37780) ===
+  server.registerTool(
+    "get_test_case_distribution_by_field",
+    {
+      description:
+        "📊 Pie-chart distribution of test cases grouped by a TCM field (automation state, priority, custom boolean, etc.). " +
+        "Uses the dashboard widget API (template 37780) — same view as 'TEST CASES DISTRIBUTION BY FIELD' in Zebrunner UI. " +
+        "For paginated case lists or counts per automation state, use adv_get_test_cases_by_automation_state instead.",
+      inputSchema: {
+        project: z.union([z.enum(["web", "android", "ios", "api"]), z.string(), z.number()])
+          .default("web")
+          .describe("Project alias, project key, or numeric projectId"),
+        field: z.string().optional().describe(
+          "Field display name from UI (e.g. 'Automation State', 'Is Automated', 'Manual Only') — resolved via fields-layout",
+        ),
+        system_field: z.enum(SYSTEM_FIELD_DATA_TYPES as unknown as [string, ...string[]]).optional().describe(
+          "System field enum (AUTOMATION_STATE, PRIORITY, etc.) — alternative to field name",
+        ),
+        custom_field_id: z.number().int().positive().optional().describe("Raw custom field id when known"),
+        test_suite_ids: z.array(z.number().int().positive()).optional().describe(
+          "Flat list of test suite IDs to filter (matches dashboard suite selection)",
+        ),
+        root_suite_ids: z.array(z.number().int().positive()).optional().describe(
+          "Root suite IDs — expanded to all descendants when expand_descendants is true",
+        ),
+        expand_descendants: z.boolean().default(true).describe(
+          "When root_suite_ids is set, include all descendant suites in the filter",
+        ),
+        format: z.enum(['formatted', 'json', 'compact']).default('formatted'),
+        chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
+          "Optional pie chart output (png/html/text)",
+        ),
+      },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async (args) => {
+      try {
+        debugLog("adv_get_test_case_distribution_by_field called", args);
+
+        const { projectId } = await resolveProjectId(args.project);
+        const aliases = getProjectAliases();
+        const projectKey =
+          typeof args.project === 'number'
+            ? String(args.project)
+            : (aliases[args.project as string] ?? String(args.project));
+
+        const fieldsLayout = await reportingClient.getFieldsLayout(projectId);
+        const resolved = resolveDistributionField(
+          {
+            field: args.field,
+            system_field: args.system_field as SystemFieldDataType | undefined,
+            custom_field_id: args.custom_field_id,
+          },
+          fieldsLayout,
+        );
+
+        let suiteIds: number[] | undefined;
+        const explicit = args.test_suite_ids ?? [];
+        const roots = args.root_suite_ids ?? [];
+
+        if (explicit.length > 0 || roots.length > 0) {
+          const allSuites = await client.getAllTestSuites(projectKey);
+          suiteIds = expandSuiteIds(allSuites, roots, explicit, args.expand_descendants);
+        }
+
+        const items = await reportingClient.getTestCaseDistributionByField(
+          projectId,
+          resolved.filter,
+          suiteIds,
+        );
+
+        const withPct = distributionWithPercents(items);
+        const total = items.reduce((s, i) => s + i.value, 0);
+
+        const summary = {
+          project: projectKey,
+          field: resolved.fieldLabel,
+          fieldType: resolved.fieldType,
+          ...(resolved.customFieldId != null ? { customFieldId: resolved.customFieldId } : {}),
+          ...(resolved.systemFieldDataType ? { systemFieldDataType: resolved.systemFieldDataType } : {}),
+          widget: TCM_WIDGET_SYSTEM_NAMES.DISTRIBUTION_BY_FIELD,
+          suiteFilter: suiteIds
+            ? { count: suiteIds.length, mode: roots.length > 0 ? 'explicit+expanded' : 'explicit' }
+            : { count: 0, mode: 'project-wide' },
+          total,
+        };
+
+        const payload = { summary, items: withPct };
+
+        if (args.format === 'compact' || args.format === 'json') {
+          return { content: [{ type: "text" as const, text: JSON.stringify(payload) }] };
+        }
+
+        if (args.chart !== 'none' && withPct.length > 0) {
+          const chartConfig: ChartConfig = {
+            type: 'pie',
+            title: `Distribution by ${resolved.fieldLabel}`,
+            labels: withPct.map(i => i.label),
+            datasets: [{ label: 'Cases', values: withPct.map(i => i.value) }],
+          };
+          return buildChartResponse(
+            chartConfig,
+            args.chart as 'png' | 'html' | 'text',
+            `${resolved.fieldLabel} — ${total} cases`,
+          );
+        }
+
+        const lines = [
+          `# Test case distribution by field`,
+          ``,
+          `**Project:** ${projectKey}`,
+          `**Field:** ${resolved.fieldLabel} (${resolved.fieldType})`,
+          `**Total:** ${total}`,
+          ...(suiteIds && suiteIds.length > 0 ? [`**Suites filtered:** ${suiteIds.length}`] : []),
+          ``,
+          `| Label | Count | % |`,
+          `|-------|------:|--:|`,
+          ...withPct.map(i => `| ${i.label} | ${i.value} | ${i.percent}% |`),
+        ];
+
+        return { content: [{ type: "text" as const, text: lines.join('\n') }] };
+      } catch (error: any) {
+        debugLog("Error in adv_get_test_case_distribution_by_field", { error: error.message, args });
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ Error getting test case distribution: ${error?.message || error}`,
+          }],
+        };
+      }
+    }
+  );
+
+  registerWidgetHubTools(server, {
+    resolveProjectId,
+    reportingClient,
+    callWidgetSql,
+    debugLog,
+  });
+
+  registerTestAuthoringTrendTool(server, {
+    resolveProjectId,
+    callWidgetSql,
+    debugLog,
+  });
 
   // === Tool #3: Get project milestones ===
   server.registerTool(

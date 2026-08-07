@@ -1,4 +1,4 @@
-import { argKeyPresent, normalizeArgKey } from "./eval-arg-aliases.js";
+import { argKeyPresent, argValueFor, normalizeArgKey } from "./eval-arg-aliases.js";
 import { normalizeEvalToolName } from "./eval-tool-aliases.js";
 import type { EvalConfig } from "./eval-config.js";
 import type { EvalPrompt } from "./eval-prompts.js";
@@ -109,6 +109,39 @@ export function checkArgKeys(
   }
 
   return { pass: missing.length === 0, missing };
+}
+
+/**
+ * Verify argument values, not just presence. Booleans sent as "true"/"false"
+ * strings and numbers sent as strings count as matches.
+ */
+export function checkArgValues(
+  args: Record<string, unknown>,
+  expectedValues: Record<string, unknown>,
+): { pass: boolean; mismatched: string[] } {
+  const normalizedArgs = normalizeArgKeys(args);
+  const mismatched: string[] = [];
+
+  for (const [key, expected] of Object.entries(expectedValues)) {
+    const actual = argValueFor(normalizedArgs, key);
+    if (!looseValueEquals(actual, expected)) {
+      mismatched.push(`${key}=${JSON.stringify(actual)} (expected ${JSON.stringify(expected)})`);
+    }
+  }
+
+  return { pass: mismatched.length === 0, mismatched };
+}
+
+function looseValueEquals(actual: unknown, expected: unknown): boolean {
+  if (actual === expected) return true;
+  if (actual == null) return false;
+  if (typeof expected === "boolean" || typeof expected === "number") {
+    return String(actual).toLowerCase() === String(expected).toLowerCase();
+  }
+  if (typeof expected === "string" && typeof actual === "string") {
+    return actual.toLowerCase() === expected.toLowerCase();
+  }
+  return false;
 }
 
 export function checkOutputPatterns(
