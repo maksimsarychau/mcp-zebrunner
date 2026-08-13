@@ -71,6 +71,7 @@ import { distributionWithPercents } from "./utils/widget-response-parsers.js";
 import { TCM_WIDGET_SYSTEM_NAMES } from "./utils/tcm-widget-client.js";
 import { registerWidgetHubTools } from "./handlers/widget-hub-tools.js";
 import { registerTestAuthoringTrendTool } from "./handlers/widget-authoring-trend-tool.js";
+import { registerScaffoldTestCaseTool } from "./handlers/scaffold-test-case-tool.js";
 import {
   buildPassRateViewExtra,
   PASS_RATE_GROUP_BY,
@@ -9518,6 +9519,60 @@ ${detailsInfo.map((detail, i) => {
     resolveProjectId,
     callWidgetSql,
     debugLog,
+  });
+
+  registerScaffoldTestCaseTool(server, {
+    client,
+    mutationClient,
+    resolveProjectKey: (project: string) => getProjectAliases()[project] || project,
+    webBaseUrl: WIDGET_BASE_URL,
+    debugLog,
+    runQualityReview: async (projectKey: string, caseKey: string): Promise<string | null> => {
+      if (!REVIEW_FILES_AVAILABLE) return null;
+      const { ZebrunnerToolHandlers } = await import("./handlers/tools.js");
+      const { ZebrunnerApiClient } = await import("./api/client.js");
+      const basicClient = new ZebrunnerApiClient(config);
+      const toolHandlers = new ZebrunnerToolHandlers(basicClient);
+      const fieldsLayout = await getFieldsLayoutForProject(projectKey);
+      const reviewResult = await toolHandlers.validateTestCase({
+        projectKey,
+        caseKey,
+        rulesFilePath: REVIEW_RULES_FILE,
+        checkpointsFilePath: REVIEW_CHECKPOINTS_FILE,
+        format: "markdown",
+        improveIfPossible: false,
+      }, fieldsLayout);
+      return reviewResult?.content?.[0]?.text ?? null;
+    },
+    runDraftValidation: async (draft): Promise<string | null> => {
+      // Advisory, pre-creation quality check against the in-memory draft.
+      const { TestCaseValidator } = await import("./utils/test-case-validator.js");
+      let validator: InstanceType<typeof TestCaseValidator>;
+      if (REVIEW_FILES_AVAILABLE) {
+        validator = await TestCaseValidator.fromMarkdownFiles(REVIEW_RULES_FILE!, REVIEW_CHECKPOINTS_FILE!);
+      } else {
+        validator = new TestCaseValidator();
+      }
+      const previewTestCase = {
+        key: "(new draft)",
+        title: draft.title,
+        preConditions: draft.preConditions,
+        steps: draft.steps.map((s) => ({ action: s.action, expectedResult: s.expectedResult })),
+        priority: draft.priorityName ? { name: draft.priorityName } : undefined,
+        automationState: draft.automationStateName ? { name: draft.automationStateName } : undefined,
+        draft: true,
+      } as any;
+      const result = await validator.validateTestCase(previewTestCase, undefined);
+      const lines: string[] = [result.summary];
+      if (result.issues.length > 0) {
+        for (const issue of result.issues) {
+          lines.push(`- [${issue.severity}] ${issue.checkpoint}: ${issue.description}${issue.suggestion ? ` → ${issue.suggestion}` : ""}`);
+        }
+      } else {
+        lines.push("- No issues found against the current rule set.");
+      }
+      return lines.join("\n");
+    },
   });
 
   // === Tool #3: Get project milestones ===

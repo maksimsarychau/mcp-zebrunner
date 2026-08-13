@@ -3,7 +3,10 @@
     "web": "MFPWEB",
     "android": "MFPAND",
     "ios": "MFPIOS",
-    "api": "MFPWEB"
+    "api": "MFPWEB",
+    "features": "FEAT",
+    "feature": "FEAT",
+    "newfeatures": "FEAT"
   },
   "testConnectionProjectKey": "MCP",
   "widgetTemplates": {

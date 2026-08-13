@@ -2243,4 +2243,4 @@ bash tests/api-verify.sh --widget-catalog-audit
 
 ---
 
-*Last Updated: v9.2.6 — August 2026*
+*Last Updated: v9.2.7 — August 2026*

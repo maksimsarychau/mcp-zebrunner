@@ -77,6 +77,9 @@ const DEFAULTS: Required<{
     android: "MFPAND",
     ios: "MFPIOS",
     api: "MFPWEB",
+    features: "FEAT",
+    feature: "FEAT",
+    newfeatures: "FEAT",
   },
   testConnectionProjectKey: "MCP",
   widgetTemplates: {

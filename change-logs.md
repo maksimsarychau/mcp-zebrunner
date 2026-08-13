@@ -2,6 +2,24 @@
 
 ---
 
+## v9.2.7 — Scaffold Test Case wizard and FEAT aliases
+
+### Added
+
+- `adv_scaffold_test_case`: a guided, best-practice wizard to author a new test case. Uses native form elicitation on clients that support it (e.g. Claude Code, Cursor) and falls back to a conversational questionnaire on clients that do not (e.g. Claude Desktop).
+- Automatic warn-only similarity check against the target + root suite (reuses the duplicate-analyzer step/title similarity); offers to reuse the closest match via `source_case_key`. Never blocks.
+- Advisory rules-based quality pre-check that validates the in-memory draft **before** creation (same rules as `adv_validate_test_case`); findings are surfaced in the confirmation but never block. The conversational fallback mirrors it with an equivalent checklist and always finishes with `review: true`, giving cross-client parity for quality feedback.
+- Test case language selection in the wizard (Gherkin vs Plain steps), defaulting to **Gherkin** (Given/When/Then, one Zebrunner step per line). Scoped to the wizard only; `adv_create_test_case` and other tools continue to use plain steps.
+- `adv_create_test_case_wizard`: a dev-friendly alias of `adv_scaffold_test_case` (same handler).
+- `scaffold-test-case` and `create-test-case-wizard` prompts (new "Authoring" category) as discoverable launchers for the wizard.
+- Project aliases `features`, `feature`, and `newfeatures` resolving to the `FEAT` project.
+
+### Changed
+
+- Created cases are always forced to `draft=true`; the existing `adv_create_test_case` handler is unchanged. The wizard has no default project — it is always chosen explicitly.
+
+---
+
 ## v9.2.6 — Dependency security and detailed statuses
 
 ### Added

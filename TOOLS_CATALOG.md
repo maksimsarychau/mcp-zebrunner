@@ -782,6 +782,31 @@ Weekly stability report for project MCP using:
 - "Create a test case with priority High and 3 steps in suite 491"
 - "Create a test case in MCP suite 20421 using source_case_key MCP-123 but override priority to Low"
 
+### `adv_scaffold_test_case`
+
+**Description:** (Beta) Guided best-practice wizard to author a NEW test case. On clients that support form elicitation (e.g. Claude Code, Cursor) it presents an interactive questionnaire; on clients without elicitation (e.g. Claude Desktop) it returns a conversational questionnaire that finishes through `adv_create_test_case`. Automatically performs a warn-only similarity check against the target + root suite and offers to reuse the closest match, then runs an **advisory** rules-based quality pre-check (using the same rules as `adv_validate_test_case`) before creation and the authoritative quality review after creation. The pre-check never blocks. Created cases are always forced to `draft=true`. There is no default project — it is always chosen explicitly (first question). Also available as the alias `adv_create_test_case_wizard`, and via the `scaffold-test-case` / `create-test-case-wizard` prompts.
+
+**Parameters:**
+
+
+| Parameter        | Type   | Required | Description                                                                                     |
+| ---------------- | ------ | -------- | ----------------------------------------------------------------------------------------------- |
+| `project`        | string |          | Target project key (e.g. `FEAT`) or alias (e.g. `features`, `android`). Asked if omitted.       |
+| `test_suite_id`  | number |          | Target test suite id. Asked if omitted.                                                         |
+
+**Behavior:**
+
+- Detects `clientCapabilities.elicitation.form`; runs the native form wizard when available, else the conversational fallback.
+- Wizard steps: target (project/suite) → basics (title, feature area, priority, automation state, **test case language**) → context (preconditions, steps, optional source case) → similarity warning → advisory quality pre-check → final confirm.
+- Test case language defaults to **Gherkin** (Given/When/Then, one step per line); **Plain steps** (`action => expected result`) is the alternative. This affects only the wizard; `adv_create_test_case` and other tools keep plain steps.
+- Similarity is warn-only and never blocks; choosing "reuse" suggests `adv_create_test_case` with `source_case_key` of the closest match.
+- The quality pre-check validates the in-memory draft (before creation) against `test_case_review_rules.md` / `test_case_analysis_checkpoints.md`; findings are surfaced in the confirmation but never block. The conversational fallback mirrors this with an equivalent checklist and always finishes with `review: true`.
+
+**Example Prompts:**
+
+- "Scaffold a new test case in project FEAT suite 20421"
+- "Help me write a new feature test case following best practices"
+
 ### `adv_update_test_case`
 
 **Description:** (Beta) Partially update an existing Test Case by numeric ID or string key (PATCH). Only provided fields are updated. Accepts `{file_path}` in attachments for local file upload.
@@ -1611,6 +1636,6 @@ For large datasets, you can specify filters and limits:
 
 ---
 
-**Last Updated:** v9.2.6 - August 2026
+**Last Updated:** v9.2.7 - August 2026
 
 For the latest features and updates, see [change-logs.md](change-logs.md).

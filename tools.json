@@ -40,6 +40,14 @@
     "description": "(Beta) Create a new Test Case with runtime validation of priorities, automation states, and custom fields. Accepts { file_path } in attachments for local file upload. Optional source_case_key to pre-populate from an existing test case. Requires preview approval."
   },
   {
+    "name": "adv_scaffold_test_case",
+    "description": "(Beta) Guided best-practice wizard to author a new Test Case. Uses interactive form elicitation when the client supports it (e.g. Claude Code, Cursor), otherwise returns a conversational questionnaire (e.g. Claude Desktop). Automatically warns about similar existing cases in the target + root suite (warn-only), runs an advisory rules-based quality pre-check before creation, and runs the authoritative quality review after creation. Creates a forced draft; no default project. Also available as adv_create_test_case_wizard."
+  },
+  {
+    "name": "adv_create_test_case_wizard",
+    "description": "(Beta) Dev-friendly alias of adv_scaffold_test_case — the same guided best-practice test case authoring wizard (similar-case warning + advisory quality pre-check + forced draft)."
+  },
+  {
     "name": "adv_create_test_suite",
     "description": "(Beta) Create a new Test Suite in a Zebrunner project. Requires preview approval before execution."
   },
