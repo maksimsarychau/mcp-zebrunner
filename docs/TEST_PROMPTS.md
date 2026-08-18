@@ -1328,6 +1328,35 @@ The `steeringHint()` helper in `src/helpers/steering.ts` is a pure, deterministi
 
 **Expected:** Uses `adv_create_test_case` with `draft: false`, but the preview shows `draft → true (forced for safety)`. The created test case is always a draft. The user must use `adv_update_test_case` to publish it.
 
+### `adv_scaffold_test_case` *(v9.2.7)*
+
+Guided best-practice authoring wizard. Also registered as the alias `adv_create_test_case_wizard` and exposed via the `scaffold-test-case` / `create-test-case-wizard` prompts. On elicitation-capable clients (Claude Code, Cursor) it drives an interactive form; on other clients (Claude Desktop) it returns a conversational questionnaire that finishes through `adv_create_test_case` with `review: true`. Default step language is **Gherkin** (Given/When/Then, one step per line).
+
+**Prompt 1 — Best-practice wizard**
+> I want to author a NEW test case for FEAT following our best practices, with a check for similar existing cases. Start the guided wizard.
+
+**Expected:** Selects `adv_scaffold_test_case` (or its alias `adv_create_test_case_wizard`). Asks for project first (no default), then title/feature/priority/automation state/**language**, then preconditions + Gherkin steps. Runs a warn-only similarity check and an advisory quality pre-check before creation. Does NOT use raw `adv_create_test_case` directly.
+
+**Prompt 2 — Dev-friendly alias**
+> Open the create-test-case wizard for FEAT so I can write a new case step by step.
+
+**Expected:** Selects `adv_create_test_case_wizard` (alias of `adv_scaffold_test_case`, same handler).
+
+**Prompt 3 — Project alias + suite**
+> Use the test case creation wizard to add a new case to features suite 20421.
+
+**Expected:** Selects the wizard with `project: "features"` (resolves to `FEAT`) and `test_suite_id: 20421`.
+
+**Prompt 4 — Gherkin default**
+> Scaffold a new login test case for FEAT and keep the steps in Gherkin.
+
+**Expected:** Wizard proceeds with `test_case_language: "Gherkin"`; each Given/When/Then line becomes one step with no separate expected result.
+
+**Prompt 5 — Not the raw create tool (tool confusion)**
+> Guide me through authoring a new best-practice test case for FEAT with an automatic similar-case check — use the wizard, NOT the raw adv_create_test_case call.
+
+**Expected:** Selects `adv_scaffold_test_case` / `adv_create_test_case_wizard`; must NOT select `adv_create_test_case` or `adv_generate_draft_test_by_key`.
+
 ### `adv_update_test_case`
 
 **Prompt 1 — Update priority** *(v7.0.0)*

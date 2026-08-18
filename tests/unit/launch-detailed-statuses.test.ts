@@ -235,12 +235,26 @@ describe("opt-in detailed launch statuses", () => {
         summaryOnly,
         includeDetailedStatuses: true,
       })).content[0].text);
+      assert.deepEqual(result.manualKnownIssueSummary, {
+        passedManually: 2,
+        knownIssue: 2,
+        bothConditions: 1,
+        eitherCondition: 3,
+        totalConsidered: 4,
+        scope: "allLaunchTests",
+      });
       assert.equal(result.testRunDetailedStatuses.manualAndKnownIssue.passedManually, 2);
       assert.equal(result.testRunDetailedStatuses.manualAndKnownIssue.knownIssue, 2);
       assert.equal(result.testRunDetailedStatuses.manualAndKnownIssue.bothConditions, 1);
       assert.equal(result.testRunDetailedStatuses.manualAndKnownIssue.eitherCondition, 3);
       assert.equal(result.testRunDetailedStatuses.manualAndKnownIssue.scope, "allLaunchTests");
       assert.equal(result.summary.totalTests, 4);
+
+      const serialized = JSON.stringify(result);
+      assert.ok(
+        serialized.indexOf("eitherCondition") < serialized.indexOf("byTestClass"),
+        "union counters should appear before heavy byTestClass summary",
+      );
     }
   });
 

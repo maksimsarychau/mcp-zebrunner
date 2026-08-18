@@ -11,6 +11,28 @@ import {
   getJudgeTools,
 } from "./eval-llm-client.js";
 
+const JUDGE_OUTPUT_MAX_CHARS = 6000;
+
+/** Prefer snippets around expected patterns so the judge sees answers buried in large JSON. */
+export function buildJudgeToolOutputExcerpt(toolOutput: string, patterns?: string[]): string {
+  if (!patterns?.length) {
+    return toolOutput.slice(0, JUDGE_OUTPUT_MAX_CHARS);
+  }
+
+  const slices: string[] = [toolOutput.slice(0, 1800)];
+  for (const pat of patterns) {
+    const re = new RegExp(pat, "i");
+    const match = re.exec(toolOutput);
+    if (match && match.index >= 0) {
+      const start = Math.max(0, match.index - 250);
+      const end = Math.min(toolOutput.length, match.index + 900);
+      slices.push(toolOutput.slice(start, end));
+    }
+  }
+
+  return slices.join("\n\n---\n\n").slice(0, JUDGE_OUTPUT_MAX_CHARS);
+}
+
 export interface JudgeScore {
   relevance: number;
   completeness: number;
@@ -47,7 +69,7 @@ export async function judgeToolOutput(
       `You are an evaluation judge for a QA automation tool. Score the tool output on a 1-5 scale.\n\n` +
       `User prompt: "${populatedPrompt}"\n` +
       `Tool: ${prompt.expectedTools.join(", ")}${expectedPatterns}\n\n` +
-      `Tool output (first 3000 chars):\n${toolOutput.slice(0, 3000)}`,
+      `Tool output excerpt:\n${buildJudgeToolOutputExcerpt(toolOutput, prompt.expectedOutputPatterns)}`,
   });
 
   const tokenUsage: TokenUsage = {

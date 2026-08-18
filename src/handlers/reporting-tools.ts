@@ -526,6 +526,13 @@ export class ZebrunnerReportingToolHandlers {
       if (limit && limit > 0) {
         limitedTests = filteredTests.slice(0, limit);
       }
+
+      const launchDetailedStatuses = includeDetailedStatuses
+        ? getLaunchDetailedStatusCounts(launch, `launch ${launchId}`)
+        : undefined;
+      const testRunDetailedStatuses = includeDetailedStatuses
+        ? getTestRunDetailedStatusCounts(filteredTests, detailedStatusScope)
+        : undefined;
       
       // Prepare result based on mode
       const result: any = {
@@ -540,14 +547,14 @@ export class ZebrunnerReportingToolHandlers {
         launchPlatform: launch.platform,
         launchStartedAt: launch.startedAt,
         launchEndedAt: launch.endedAt,
-        summary: stats,
         ...(includeDetailedStatuses ? {
-          launchDetailedStatuses: getLaunchDetailedStatusCounts(launch, `launch ${launchId}`),
-          testRunDetailedStatuses: getTestRunDetailedStatusCounts(
-            filteredTests,
-            detailedStatusScope
-          )
+          // Prominent union counters first so compact/summary responses surface
+          // passedManually / eitherCondition before heavy summary.byTestClass noise.
+          manualKnownIssueSummary: testRunDetailedStatuses!.manualAndKnownIssue,
+          launchDetailedStatuses,
+          testRunDetailedStatuses,
         } : {}),
+        summary: stats,
         
         // Always include top 20 most unstable tests (lightweight)
         top20MostUnstableTests: filteredTests.slice(0, 20).map(t => ({

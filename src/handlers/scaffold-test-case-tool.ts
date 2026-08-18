@@ -91,7 +91,7 @@ function titleSimilarity(a: string, b: string): number {
 }
 
 /** Supported step-writing formats for the wizard. */
-type StepFormat = "Gherkin" | "Plain steps";
+export type StepFormat = "Gherkin" | "Plain steps";
 const STEP_FORMATS: StepFormat[] = ["Gherkin", "Plain steps"];
 const DEFAULT_STEP_FORMAT: StepFormat = "Gherkin";
 
@@ -99,7 +99,7 @@ const DEFAULT_STEP_FORMAT: StepFormat = "Gherkin";
  * Parse a free-text steps block into API step objects. Each non-empty line is
  * one step; an optional expected result may follow `=>` or `|`.
  */
-function parseStepsText(stepsText: string): Array<{ action: string; expectedResult?: string }> {
+export function parseStepsText(stepsText: string): Array<{ action: string; expectedResult?: string }> {
   const steps: Array<{ action: string; expectedResult?: string }> = [];
   for (const raw of stepsText.split(/\r?\n/)) {
     const line = raw.trim().replace(/^\d+[.)]\s*/, "");
@@ -123,7 +123,7 @@ function parseStepsText(stepsText: string): Array<{ action: string; expectedResu
  * whose action is the Gherkin line (Given/When/Then/And/But preserved). Zebrunner
  * has no native expectedResult for Gherkin lines, so none is set.
  */
-function parseGherkinSteps(stepsText: string): Array<{ action: string; expectedResult?: string }> {
+export function parseGherkinSteps(stepsText: string): Array<{ action: string; expectedResult?: string }> {
   const steps: Array<{ action: string; expectedResult?: string }> = [];
   for (const raw of stepsText.split(/\r?\n/)) {
     const line = raw.trim().replace(/^\d+[.)]\s*/, "");
@@ -134,7 +134,7 @@ function parseGherkinSteps(stepsText: string): Array<{ action: string; expectedR
 }
 
 /** Dispatch to the right parser based on the selected step format. */
-function parseSteps(stepsText: string, format: StepFormat): Array<{ action: string; expectedResult?: string }> {
+export function parseSteps(stepsText: string, format: StepFormat): Array<{ action: string; expectedResult?: string }> {
   return format === "Gherkin" ? parseGherkinSteps(stepsText) : parseStepsText(stepsText);
 }
 

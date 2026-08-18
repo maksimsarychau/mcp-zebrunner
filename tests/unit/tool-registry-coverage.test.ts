@@ -58,7 +58,13 @@ describe("Tool Registry Coverage (69 tools)", () => {
 
   it("ensures tools.json stays in sync with server registrations", () => {
     const root = getProjectRoot();
-    const serverTools = extractAllRegisteredTools(root).map((t) => `adv_${t}`).sort();
+    // The scaffold wizard lives in its own DI module (shared config/handler style)
+    // and is not part of the inline-registration smoke/annotation coverage above,
+    // but it IS a real registered tool documented in tools.json — include it here.
+    const scaffoldTools = extractServerTools(
+      fs.readFileSync(path.join(root, "src", "handlers", "scaffold-test-case-tool.ts"), "utf-8"),
+    );
+    const serverTools = [...extractAllRegisteredTools(root), ...scaffoldTools].map((t) => `adv_${t}`).sort();
     const toolsCatalog = JSON.parse(fs.readFileSync(path.join(root, "tools.json"), "utf-8")) as Array<{ name: string }>;
     const toolsJsonNames = toolsCatalog.map(t => t.name).sort();
 

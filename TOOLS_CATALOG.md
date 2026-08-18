@@ -806,6 +806,9 @@ Weekly stability report for project MCP using:
 
 - "Scaffold a new test case in project FEAT suite 20421"
 - "Help me write a new feature test case following best practices"
+- "Open the create-test-case wizard for FEAT so I can write a new case step by step" (alias `adv_create_test_case_wizard`)
+- "Use the test case creation wizard to add a new case to features suite 20421" (alias `features` → `FEAT`)
+- "Scaffold a new login test case for FEAT and keep the steps in Gherkin" (default language)
 
 ### `adv_update_test_case`
 

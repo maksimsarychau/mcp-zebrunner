@@ -13,6 +13,8 @@
 - `adv_create_test_case_wizard`: a dev-friendly alias of `adv_scaffold_test_case` (same handler).
 - `scaffold-test-case` and `create-test-case-wizard` prompts (new "Authoring" category) as discoverable launchers for the wizard.
 - Project aliases `features`, `feature`, and `newfeatures` resolving to the `FEAT` project.
+- Eval routing coverage in [`tests/eval/eval-authoring-tools.ts`](tests/eval/eval-authoring-tools.ts) (5 prompts; catalog now 197) for wizard selection, the `adv_create_test_case_wizard` alias, and two `tool_confusion` negatives forbidding `adv_create_test_case` / `adv_generate_draft_test_by_key`.
+- Unit coverage in [`tests/unit/scaffold-test-case.test.ts`](tests/unit/scaffold-test-case.test.ts) for Gherkin/plain step parsing and FEAT alias resolution (unit total 1459).
 
 ### Changed
 

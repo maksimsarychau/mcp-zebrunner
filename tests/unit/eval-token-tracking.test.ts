@@ -6,6 +6,13 @@ import type { EvalConfig } from "../../tests/eval/eval-config.js";
 
 describe("Eval Token Tracking", () => {
   describe("estimateCost()", () => {
+    it("should calculate cost for claude-sonnet-5 (default anthropic eval model)", () => {
+      const cost = estimateCost("claude-sonnet-5", 100_000, 10_000);
+      assert.equal(cost.input, (100_000 / 1_000_000) * 2);
+      assert.equal(cost.output, (10_000 / 1_000_000) * 10);
+      assert.equal(cost.total, cost.input + cost.output);
+    });
+
     it("should calculate cost for claude-sonnet-4-6", () => {
       const cost = estimateCost("claude-sonnet-4-6", 100_000, 10_000);
       assert.equal(cost.input, (100_000 / 1_000_000) * 3);
@@ -27,9 +34,9 @@ describe("Eval Token Tracking", () => {
 
     it("should use default pricing for unknown models", () => {
       const cost = estimateCost("some-unknown-model", 1_000_000, 1_000_000);
-      assert.equal(cost.input, 3);
-      assert.equal(cost.output, 15);
-      assert.equal(cost.total, 18);
+      assert.equal(cost.input, 2);
+      assert.equal(cost.output, 10);
+      assert.equal(cost.total, 12);
     });
 
     it("should match model names with partial includes", () => {
@@ -38,7 +45,7 @@ describe("Eval Token Tracking", () => {
     });
 
     it("should return zero for zero tokens", () => {
-      const cost = estimateCost("claude-sonnet-4-6", 0, 0);
+      const cost = estimateCost("claude-sonnet-5", 0, 0);
       assert.equal(cost.total, 0);
     });
 
@@ -51,10 +58,12 @@ describe("Eval Token Tracking", () => {
         temperature: 0,
         maxTokens: 2048,
         thresholds: { toolSelectionAccuracy: 0.9, argCorrectness: 0.85, judgeAvgScore: 3 },
+        relaxedMode: true,
         baseUrl: "http://localhost:11434/v1",
         resultsDir: "/tmp",
         concurrency: 3,
         filter: [],
+        suite: "default",
       };
       const cost = estimateCost(config, 1_000_000, 1_000_000);
       assert.equal(cost.total, 0);

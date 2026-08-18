@@ -32,7 +32,7 @@ export interface EvalConfig {
 }
 
 const DEFAULT_MODELS: Record<EvalProvider, string> = {
-  anthropic: "claude-sonnet-4-6",
+  anthropic: "claude-sonnet-5",
   openai: "gpt-4o-mini",
   gemini: "gemini-2.0-flash",
   local: "qwen3.5:2b",

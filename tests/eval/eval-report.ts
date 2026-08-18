@@ -82,9 +82,11 @@ const GEMINI_PRICING: Record<string, { inputPer1M: number; outputPer1M: number }
 };
 
 const ANTHROPIC_PRICING: Record<string, { inputPer1M: number; outputPer1M: number }> = {
+  "claude-sonnet-5":  { inputPer1M: 2,    outputPer1M: 10 },
   "claude-sonnet-4-6":  { inputPer1M: 3,    outputPer1M: 15 },
   "claude-sonnet-4-5":  { inputPer1M: 3,    outputPer1M: 15 },
   "claude-haiku-3-5":   { inputPer1M: 0.80, outputPer1M: 4 },
+  "claude-opus-5":      { inputPer1M: 15,   outputPer1M: 50 },
   "claude-opus-4":      { inputPer1M: 15,   outputPer1M: 75 },
 };
 const DEFAULT_PRICING = { inputPer1M: 0, outputPer1M: 0 };
@@ -102,13 +104,13 @@ function lookupPricing(model: string, provider?: string): { inputPer1M: number; 
   }
 
   if (provider === "anthropic") {
-    return { inputPer1M: 3, outputPer1M: 15 };
+    return { inputPer1M: 2, outputPer1M: 10 };
   }
 
   return DEFAULT_PRICING;
 }
 
-const LEGACY_STRING_DEFAULT = { inputPer1M: 3, outputPer1M: 15 };
+const LEGACY_STRING_DEFAULT = { inputPer1M: 2, outputPer1M: 10 };
 
 export function estimateCost(
   modelOrConfig: string | EvalConfig,
