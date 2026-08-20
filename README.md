@@ -5,7 +5,7 @@ A **Model Context Protocol (MCP)** server that brings advanced analytics, report
 
 > Tool naming: every tool on this server is registered under the canonical `adv_<name>` form (e.g. `adv_create_test_case`, `adv_list_test_runs`) so it never collides with the official Zebrunner MCP. The legacy names are kept as **deprecated aliases** so prompts/scripts that called the old names continue to work for now; aliases will be removed in the next major release. 
 
-> 🆕 **v9.2.7** — New `adv_scaffold_test_case` wizard (hybrid form/conversational) to author test cases from best practices with an automatic warn-only similar-case check, plus `features`/`feature`/`newfeatures` → `FEAT` project aliases. See [release notes](docs/releases/v9.2.7.md).
+> 🆕 **v9.2.7** — New `adv_scaffold_test_case` wizard (hybrid form/conversational) to author test cases from best practices with an automatic warn-only similar-case check, plus configurable `projectAliases` in `zebrunner-config.json`. See [release notes](docs/releases/v9.2.7.md).
 >
 > 🆕 **v9.2.5** — **`adv_get_test_authoring_trend`** (TAM template 7) completes **22/22** dashboard widget MCP coverage. Hub tools, pass-rate views, period modes. See **[TEST_PROMPTS.md §18](docs/TEST_PROMPTS.md#18-dashboard-widgets-22-templates--v925)** and [change-logs.md](change-logs.md#v925--test-authoring-trend-template-7).
 

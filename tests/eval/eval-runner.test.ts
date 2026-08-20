@@ -136,6 +136,30 @@ describe("LLM Evaluation Tests", () => {
     }
     if (EVAL_FILTER_PATTERNS.length > 0) {
       console.error(`🔍 Filter: ${EVAL_FILTER_PATTERNS.join(", ")}`);
+      const matched = EVAL_PROMPTS.filter((p) => shouldRun(p.id));
+      if (matched.length === 0) {
+        const filterOnly = EVAL_PROMPTS.filter((p) =>
+          EVAL_FILTER_PATTERNS.some((f) => p.id === f || p.id.includes(f)),
+        );
+        console.error(
+          `⚠️  EVAL_FILTER matched 0 prompts in suite "${EVAL_SUITE}" (${matched.length} runnable).`,
+        );
+        if (filterOnly.length > 0 && EVAL_SUITE === "cloud") {
+          console.error(
+            `   ${filterOnly.length} prompt(s) match the filter but live in the default suite (e.g. scaffold.* authoring wizard).`,
+          );
+          console.error(
+            "   Use: EVAL_FILTER=scaffold. npm run test:eval:scaffold",
+          );
+          console.error(
+            "   Or:  EVAL_SUITE=default EVAL_FILTER=scaffold. npm run test:eval:cloud:full",
+          );
+        } else if (filterOnly.length === 0) {
+          console.error("   No prompt ids match this filter in the full catalog — check EVAL_FILTER spelling.");
+        }
+      } else {
+        console.error(`   → ${matched.length} prompt(s) in suite "${EVAL_SUITE}"`);
+      }
     }
     for (const warning of getEvalConfigWarnings(config)) {
       evalSafeStderr(`⚠️  ${warning}`);

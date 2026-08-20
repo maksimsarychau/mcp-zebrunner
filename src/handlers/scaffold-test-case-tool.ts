@@ -22,8 +22,9 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { EnhancedZebrunnerClient } from "../api/enhanced-client.js";
 import type { ZebrunnerMutationClient } from "../api/mutation-client.js";
-import type { ZebrunnerTestCase } from "../types/core.js";
+import type { ZebrunnerTestCase, ZebrunnerTestSuite } from "../types/core.js";
 import { TestCaseDuplicateAnalyzer } from "../utils/duplicate-analyzer.js";
+import { HierarchyProcessor } from "../utils/hierarchy.js";
 
 export interface ScaffoldTestCaseDeps {
   /** Enhanced (read) client — used to fetch existing cases for similarity. */
@@ -44,6 +45,8 @@ export interface ScaffoldTestCaseDeps {
    * can see quality findings and still choose to proceed (advisory, never blocks).
    */
   runDraftValidation?: (draft: DraftForValidation) => Promise<string | null>;
+  /** Configured project alias map (alias → project key), from zebrunner-config.json. */
+  projectAliases: Record<string, string>;
 }
 
 /** Minimal, not-yet-created test case shape passed to the advisory validator. */
@@ -215,15 +218,230 @@ async function findSimilarCases(
   return matches.slice(0, 5);
 }
 
+// ── Project alias picker (Form 0 + conversational fallback) ───────────────────
+
+/** Enum sentinel for "Other (enter project key)" in the project picker dropdown. */
+export const PROJECT_OTHER_SENTINEL = "Other (enter project key)";
+
+/**
+ * Invert alias map: project key → sorted list of alias names that resolve to it.
+ * Example: { PROJ1: ["alias-a", "alias-b"], PROJ2: ["alias-c"], … }
+ */
+export function groupAliasesByProjectKey(aliases: Record<string, string>): Record<string, string[]> {
+  const grouped: Record<string, string[]> = {};
+  for (const [alias, projectKey] of Object.entries(aliases)) {
+    if (!grouped[projectKey]) grouped[projectKey] = [];
+    grouped[projectKey].push(alias);
+  }
+  for (const key of Object.keys(grouped)) {
+    grouped[key].sort((a, b) => a.localeCompare(b));
+  }
+  return grouped;
+}
+
+export interface ProjectPickerFormSchema {
+  enumValues: string[];
+  description: string;
+}
+
+/**
+ * Build Form 0 project field schema: deduplicated project keys + Other sentinel.
+ * Returns null when the alias map is empty (caller should use free-text field).
+ */
+export function buildProjectPickerFormSchema(aliases: Record<string, string>): ProjectPickerFormSchema | null {
+  const keys = [...new Set(Object.values(aliases))].sort((a, b) => a.localeCompare(b));
+  if (keys.length === 0) return null;
+
+  const grouped = groupAliasesByProjectKey(aliases);
+  const hintLines = keys.map((key) => {
+    const aliasList = grouped[key]?.join(", ") ?? "";
+    return aliasList ? `${key} — ${aliasList}` : key;
+  });
+
+  return {
+    enumValues: [...keys, PROJECT_OTHER_SENTINEL],
+    description:
+      `Configured project keys (aliases shown after each key):\n${hintLines.join("\n")}\n` +
+      `Choose "${PROJECT_OTHER_SENTINEL}" to enter a raw project key not in zebrunner-config.json.`,
+  };
+}
+
+/** Grouped bullet list for the conversational fallback Step 0. */
+export function formatProjectAliasesForConversation(aliases: Record<string, string>): string {
+  const keys = [...new Set(Object.values(aliases))].sort((a, b) => a.localeCompare(b));
+  if (keys.length === 0) {
+    return "Ask the user for the target project key (e.g. PROJ1).";
+  }
+  const grouped = groupAliasesByProjectKey(aliases);
+  const lines = keys.map((key) => {
+    const aliasList = grouped[key]?.join(", ") ?? "";
+    return aliasList ? `- ${key} — ${aliasList}` : `- ${key}`;
+  });
+  return (
+    `Configured projects (from zebrunner-config aliases):\n${lines.join("\n")}\n` +
+    "You may also use any raw project key not listed in zebrunner-config.json."
+  );
+}
+
+// ── Suite picker (Form 0 + conversational fallback) ─────────────────────────
+
+/** Enum sentinel for the most recently modified suite. */
+export const SUITE_LATEST_SENTINEL = "Latest available";
+/** Enum sentinel for search / manual suite ID entry. */
+export const SUITE_OTHER_SENTINEL = "Other (search or enter suite ID)";
+/** Default number of recent suites in the shortlist (excluding Latest). */
+export const DEFAULT_SUITE_SHORTLIST_SIZE = 10;
+const SUITE_SEARCH_RESULT_LIMIT = 25;
+
+/** Parse suite recency for sorting (lastModifiedAt preferred, then createdAt). */
+export function getSuiteRecencyMs(suite: ZebrunnerTestSuite): number {
+  const raw = suite.lastModifiedAt || suite.createdAt;
+  if (!raw) return 0;
+  const ms = Date.parse(raw);
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+/** Base display name before disambiguation. */
+export function getSuiteBaseLabel(suite: ZebrunnerTestSuite): string {
+  return suite.treeNames || suite.title || suite.name || `Suite ${suite.id}`;
+}
+
+/** Assign unique enum labels; duplicate base names get an (id: …) suffix. */
+export function assignSuiteDisplayLabels(suites: ZebrunnerTestSuite[]): {
+  labelToId: Map<string, number>;
+  idToLabel: Map<number, string>;
+} {
+  const baseCounts = new Map<string, number>();
+  for (const s of suites) {
+    const base = getSuiteBaseLabel(s);
+    baseCounts.set(base, (baseCounts.get(base) ?? 0) + 1);
+  }
+  const labelToId = new Map<string, number>();
+  const idToLabel = new Map<number, string>();
+  for (const s of suites) {
+    if (s.id == null) continue;
+    const base = getSuiteBaseLabel(s);
+    const label = (baseCounts.get(base) ?? 0) > 1 ? `${base} (id: ${s.id})` : base;
+    labelToId.set(label, s.id);
+    idToLabel.set(s.id, label);
+  }
+  return { labelToId, idToLabel };
+}
+
+/** Friendly label for one suite (with disambiguation when needed). */
+export function getSuiteDisplayLabel(suite: ZebrunnerTestSuite, allSuites: ZebrunnerTestSuite[]): string {
+  const { idToLabel } = assignSuiteDisplayLabels(allSuites);
+  return idToLabel.get(suite.id!) ?? getSuiteBaseLabel(suite);
+}
+
+/** Suite with the highest recency timestamp. */
+export function pickLatestSuite(suites: ZebrunnerTestSuite[]): ZebrunnerTestSuite | null {
+  if (suites.length === 0) return null;
+  return suites.reduce((best, s) => (getSuiteRecencyMs(s) > getSuiteRecencyMs(best) ? s : best));
+}
+
+export interface SuitePickerFormSchema {
+  enumValues: string[];
+  description: string;
+  labelToId: Map<string, number>;
+  latestSuite: ZebrunnerTestSuite | null;
+}
+
+/** Build Form 0 suite enum: Latest + recent shortlist + Other. */
+export function buildSuitePickerFormSchema(
+  suites: ZebrunnerTestSuite[],
+  maxItems = DEFAULT_SUITE_SHORTLIST_SIZE,
+): SuitePickerFormSchema | null {
+  if (suites.length === 0) return null;
+
+  const latest = pickLatestSuite(suites);
+  const { labelToId, idToLabel } = assignSuiteDisplayLabels(suites);
+  const sorted = [...suites].sort((a, b) => getSuiteRecencyMs(b) - getSuiteRecencyMs(a));
+  const recentLabels: string[] = [];
+
+  for (const s of sorted) {
+    if (s.id == null) continue;
+    if (latest && s.id === latest.id) continue;
+    if (recentLabels.length >= maxItems) break;
+    const label = idToLabel.get(s.id)!;
+    if (!recentLabels.includes(label)) recentLabels.push(label);
+  }
+
+  const latestLabel = latest?.id != null ? idToLabel.get(latest.id) : undefined;
+  const latestDate = latest ? (latest.lastModifiedAt || latest.createdAt || "") : "";
+  const dateHint = latestDate ? ` (modified ${latestDate.slice(0, 10)})` : "";
+
+  const description = latestLabel
+    ? `${SUITE_LATEST_SENTINEL} → "${latestLabel}"${dateHint}\nRecently modified suites are listed below.\nChoose "${SUITE_OTHER_SENTINEL}" to search by name or enter a numeric id.`
+    : `Choose a test suite.\nChoose "${SUITE_OTHER_SENTINEL}" to search by name or enter a numeric id.`;
+
+  return {
+    enumValues: [SUITE_LATEST_SENTINEL, ...recentLabels, SUITE_OTHER_SENTINEL],
+    description,
+    labelToId,
+    latestSuite: latest,
+  };
+}
+
+/** Case-insensitive partial match on suite path/name; empty query → top by recency. */
+export function searchSuitesByName(
+  suites: ZebrunnerTestSuite[],
+  query: string,
+  limit = SUITE_SEARCH_RESULT_LIMIT,
+): ZebrunnerTestSuite[] {
+  const sorted = [...suites].sort((a, b) => getSuiteRecencyMs(b) - getSuiteRecencyMs(a));
+  const q = query.trim().toLowerCase();
+  const filtered = q ? sorted.filter((s) => getSuiteBaseLabel(s).toLowerCase().includes(q)) : sorted;
+  return filtered.slice(0, limit);
+}
+
+export interface SuiteSelectionContext {
+  labelToId: Map<string, number>;
+  latestSuite: ZebrunnerTestSuite | null;
+}
+
+/**
+ * Map a picker selection to a suite id.
+ * Returns null when selection is Other (caller runs sub-flow) or unknown label.
+ */
+export function resolveSuiteFromSelection(selection: string, ctx: SuiteSelectionContext): number | null {
+  const trimmed = selection.trim();
+  if (trimmed === SUITE_OTHER_SENTINEL) return null;
+  if (trimmed === SUITE_LATEST_SENTINEL) return ctx.latestSuite?.id ?? null;
+  return ctx.labelToId.get(trimmed) ?? null;
+}
+
+/** Conversational Step 0 guidance when suite is not pre-provided. */
+export function formatSuiteGuidanceForConversation(projectHint?: string): string {
+  if (projectHint) {
+    return (
+      `Fetch suites for ${projectHint} via adv_list_test_suites or adv_get_tcm_test_suites_by_project. ` +
+      `Present recently modified suites by hierarchy path/name. ` +
+      `Suggest the most recently modified suite as "Latest available". ` +
+      `Numeric suite IDs are also accepted if the user already knows one.`
+    );
+  }
+  return (
+    "After the project is confirmed, fetch suites via adv_list_test_suites or adv_get_tcm_test_suites_by_project. " +
+    "Let the user pick by suite name/path or numeric id."
+  );
+}
+
 // ── Conversational fallback (clients without elicitation) ─────────────────────
 
-function buildConversationalQuestionnaire(projectHint?: string, suiteHint?: number): string {
+export function buildConversationalQuestionnaire(
+  projectHint?: string,
+  suiteHint?: number,
+  projectAliases?: Record<string, string>,
+): string {
   const projectLine = projectHint
     ? `Target project: ${projectHint} (confirm with the user).`
-    : "Ask the user for the target project (a project key like FEAT, or an alias like features/android/ios/web).";
+    : projectAliases && Object.keys(projectAliases).length > 0
+      ? formatProjectAliasesForConversation(projectAliases)
+      : "Ask the user for the target project (a project key like PROJ1, or a configured alias from zebrunner-config.json).";
   const suiteLine = suiteHint
     ? `Target test suite id: ${suiteHint} (confirm with the user).`
-    : "Ask the user for the target test suite id.";
+    : formatSuiteGuidanceForConversation(projectHint);
 
   return `You are guiding a developer through authoring a NEW Zebrunner test case that follows our best practices. This client does not support interactive forms, so run the questionnaire conversationally — ask ONE question at a time and wait for the answer.
 
@@ -269,7 +487,7 @@ function textResult(text: string) {
 // ── Registration ──────────────────────────────────────────────────────────────
 
 export function registerScaffoldTestCaseTool(server: McpServer, deps: ScaffoldTestCaseDeps): void {
-  const { mutationClient, resolveProjectKey, debugLog } = deps;
+  const { mutationClient, resolveProjectKey, debugLog, projectAliases } = deps;
 
   /** Send one elicitation form; returns null on any error/decline/cancel. */
   async function elicit(
@@ -297,20 +515,22 @@ export function registerScaffoldTestCaseTool(server: McpServer, deps: ScaffoldTe
     description: `🧩 (Beta) Guided wizard to author a NEW Zebrunner test case from best practices, with an automatic warn-only check for similar existing cases and an advisory quality pre-check before creation.
 On clients that support form elicitation (e.g. Claude Code, Cursor) this presents an interactive questionnaire and creates a forced-draft case directly.
 On clients without elicitation (e.g. Claude Desktop) it returns a conversational questionnaire that finishes through adv_create_test_case.
-Optionally pass project (key like 'FEAT' or an alias like 'features') and test_suite_id to skip the first question. There is no default project — it is always chosen explicitly.
+Optionally pass project (key like 'PROJ1' or a configured alias) and test_suite_id to skip the first question. There is no default project — it is always chosen explicitly.
 Also available as the alias adv_create_test_case_wizard.
 SAFETY: created cases are always draft=true; publish later via adv_update_test_case.`,
     inputSchema: {
       project: z
         .string()
         .optional()
-        .describe("Target project key (e.g. 'FEAT') or alias (e.g. 'features', 'android'). If omitted, the wizard asks for it."),
+        .describe("Target project key (e.g. 'PROJ1') or a configured alias from zebrunner-config.json. If omitted, the wizard asks for it."),
       test_suite_id: z
         .number()
         .int()
         .positive()
         .optional()
-        .describe("Target test suite id. If omitted, the wizard asks for it."),
+        .describe(
+          "Target test suite id. If omitted, the wizard shows a named suite picker (Latest available + recent suites + search). Numeric IDs still accepted.",
+        ),
     },
     annotations: {
       readOnlyHint: false,
@@ -320,6 +540,112 @@ SAFETY: created cases are always draft=true; publish later via adv_update_test_c
     },
   };
 
+  /** Legacy numeric suite id prompt (API failure / empty list / Other fallback). */
+  async function elicitNumericSuiteId(projectLabel: string): Promise<number | undefined> {
+    const suite = await elicit(
+      `${projectLabel} Enter the numeric test suite id.`,
+      {
+        test_suite_id: {
+          type: "number",
+          title: "Test Suite ID",
+          description: "Numeric id of the target test suite",
+        },
+      },
+      ["test_suite_id"],
+    );
+    if (!suite) return undefined;
+    const id = Number(suite.test_suite_id);
+    return Number.isFinite(id) ? id : undefined;
+  }
+
+  /** Friendly suite picker with Latest / shortlist / Other; degrades to numeric on failure. */
+  async function elicitSuiteId(projectKey: string, projectLabel: string): Promise<number | undefined> {
+    let enriched: ZebrunnerTestSuite[] = [];
+    try {
+      const suites = await deps.client.getAllTestSuites(projectKey);
+      enriched = HierarchyProcessor.setRootParentsToSuites(suites);
+    } catch (err) {
+      debugLog("scaffold: failed to load suites (numeric fallback)", {
+        err: err instanceof Error ? err.message : String(err),
+      });
+    }
+
+    const picker = enriched.length > 0 ? buildSuitePickerFormSchema(enriched) : null;
+    if (!picker) {
+      const id = await elicitNumericSuiteId(`Target project: ${projectLabel}.`);
+      return id;
+    }
+
+    const pick = await elicit(
+      `Target project: ${projectLabel}. Which test suite?`,
+      {
+        test_suite: {
+          type: "string",
+          enum: picker.enumValues,
+          title: "Test Suite",
+          description: picker.description,
+        },
+      },
+      ["test_suite"],
+    );
+    if (!pick) return undefined;
+
+    const selected = String(pick.test_suite ?? "").trim();
+    const ctx: SuiteSelectionContext = { labelToId: picker.labelToId, latestSuite: picker.latestSuite };
+
+    if (selected === SUITE_OTHER_SENTINEL) {
+      const search = await elicit(
+        "Search for a suite by name (partial match), or leave blank to show the most recent suites.",
+        {
+          suite_search: {
+            type: "string",
+            title: "Suite Search",
+            description: "Optional filter — matches suite name or hierarchy path",
+          },
+        },
+        [],
+      );
+      if (!search) return undefined;
+
+      const query = String(search.suite_search ?? "").trim();
+      const matches = searchSuitesByName(enriched, query);
+      if (matches.length > 0) {
+        const { labelToId: matchLabelToId } = assignSuiteDisplayLabels(matches);
+        const matchEnumValues = [...matchLabelToId.keys()];
+
+        const matchPick = await elicit(
+          `Select a suite (${matches.length} match${matches.length === 1 ? "" : "es"}):`,
+          {
+            test_suite: {
+              type: "string",
+              enum: matchEnumValues,
+              title: "Test Suite",
+              description: "Matching suites for your search",
+            },
+          },
+          ["test_suite"],
+        );
+        if (!matchPick) return undefined;
+        const matchSelected = String(matchPick.test_suite ?? "").trim();
+        const matchId = matchLabelToId.get(matchSelected);
+        if (matchId != null) return matchId;
+      }
+
+      const id = await elicitNumericSuiteId(
+        matches.length === 0 && query
+          ? `No suites matched "${query}".`
+          : `Target project: ${projectLabel}.`,
+      );
+      return id;
+    }
+
+    const resolved = resolveSuiteFromSelection(selected, ctx);
+    if (resolved != null) return resolved;
+
+    debugLog("scaffold: unknown suite selection, falling back to numeric", { selected });
+    return elicitNumericSuiteId(`Could not resolve "${selected}".`);
+  }
+
   const scaffoldHandler = async (args: { project?: string; test_suite_id?: number }) => {
       try {
         const caps = server.server.getClientCapabilities();
@@ -328,32 +654,74 @@ SAFETY: created cases are always draft=true; publish later via adv_update_test_c
         // ── Fallback path: no form elicitation → conversational script ──────────
         if (!canForm) {
           debugLog("scaffold: no form elicitation capability — returning conversational fallback");
-          return textResult(buildConversationalQuestionnaire(args.project, args.test_suite_id));
+          return textResult(buildConversationalQuestionnaire(args.project, args.test_suite_id, projectAliases));
         }
 
         // ── Form 0: target project + suite (only what's missing) ────────────────
         let projectInput = args.project;
         let suiteId = args.test_suite_id;
-        if (!projectInput || !suiteId) {
-          const props: Record<string, PrimitiveSchema> = {};
-          const required: string[] = [];
-          if (!projectInput) {
-            props.project = { type: "string", title: "Project", description: "Project key (e.g. FEAT) or alias (e.g. features, android, ios, web)" };
-            required.push("project");
+
+        if (!projectInput) {
+          const picker = buildProjectPickerFormSchema(projectAliases);
+          if (picker) {
+            const pick = await elicit(
+              "Where should the new test case live? Choose a configured project key or Other for a raw key.",
+              {
+                project: {
+                  type: "string",
+                  enum: picker.enumValues,
+                  title: "Project",
+                  description: picker.description,
+                },
+              },
+              ["project"],
+            );
+            if (!pick) return textResult("🚫 Test case scaffolding cancelled (no target project provided).");
+            const selected = String(pick.project ?? "").trim();
+            if (selected === PROJECT_OTHER_SENTINEL) {
+              const other = await elicit(
+                "Enter the target project key. Configured aliases from zebrunner-config.json also work.",
+                {
+                  project_key: {
+                    type: "string",
+                    title: "Project Key",
+                    description: "Raw Zebrunner project key or alias",
+                  },
+                },
+                ["project_key"],
+              );
+              if (!other) return textResult("🚫 Test case scaffolding cancelled (no target project provided).");
+              projectInput = String(other.project_key ?? "").trim();
+            } else {
+              projectInput = selected;
+            }
+          } else {
+            const free = await elicit(
+              "Where should the new test case live?",
+              {
+                project: {
+                  type: "string",
+                  title: "Project",
+                  description: "Project key (e.g. PROJ1) or a configured alias from zebrunner-config.json",
+                },
+              },
+              ["project"],
+            );
+            if (!free) return textResult("🚫 Test case scaffolding cancelled (no target project provided).");
+            projectInput = String(free.project ?? "").trim();
           }
-          if (!suiteId) {
-            props.test_suite_id = { type: "number", title: "Test Suite ID", description: "Numeric id of the target test suite" };
-            required.push("test_suite_id");
-          }
-          const target = await elicit("Where should the new test case live?", props, required);
-          if (!target) return textResult("🚫 Test case scaffolding cancelled (no target project/suite provided).");
-          if (!projectInput) projectInput = String(target.project ?? "").trim();
-          if (!suiteId) suiteId = Number(target.test_suite_id);
         }
 
         if (!projectInput) return textResult("❌ A target project is required.");
-        if (!suiteId || !Number.isFinite(suiteId)) return textResult("❌ A valid numeric test_suite_id is required.");
         const projectKey = resolveProjectKey(projectInput);
+
+        if (!suiteId) {
+          const picked = await elicitSuiteId(projectKey, projectInput);
+          if (picked === undefined) return textResult("🚫 Test case scaffolding cancelled (no target suite provided).");
+          suiteId = picked;
+        }
+
+        if (!suiteId || !Number.isFinite(suiteId)) return textResult("❌ A valid numeric test_suite_id is required.");
 
         // ── Fetch enum options for priority / automation state ──────────────────
         let priorityNames: string[] = [];
@@ -412,7 +780,7 @@ SAFETY: created cases are always draft=true; publish later via adv_update_test_c
           {
             pre_conditions: { type: "string", title: "Preconditions", description: "Setup needed before the test (optional)" },
             steps_text: { type: "string", title: "Steps", description: stepsDescription },
-            source_case_key: { type: "string", title: "Source Case Key", description: "Optional existing case key to reference (e.g. FEAT-123)" },
+            source_case_key: { type: "string", title: "Source Case Key", description: "Optional existing case key to reference (e.g. PROJ1-123)" },
           },
           ["steps_text"],
         );

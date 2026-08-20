@@ -4,8 +4,34 @@ import {
   parseStepsText,
   parseGherkinSteps,
   parseSteps,
+  groupAliasesByProjectKey,
+  buildProjectPickerFormSchema,
+  formatProjectAliasesForConversation,
+  buildConversationalQuestionnaire,
+  PROJECT_OTHER_SENTINEL,
+  getSuiteRecencyMs,
+  getSuiteDisplayLabel,
+  pickLatestSuite,
+  buildSuitePickerFormSchema,
+  searchSuitesByName,
+  resolveSuiteFromSelection,
+  formatSuiteGuidanceForConversation,
+  SUITE_LATEST_SENTINEL,
+  SUITE_OTHER_SENTINEL,
 } from "../../src/handlers/scaffold-test-case-tool.js";
+import type { ZebrunnerTestSuite } from "../../src/types/core.js";
 import { reloadConfig, getConfig } from "../../src/utils/config-loader.js";
+
+/** Fixture mirroring shipped zebrunner-config.json projectAliases defaults. */
+const FIXTURE_ALIASES: Record<string, string> = {
+  web: "MFPWEB",
+  api: "MFPWEB",
+  android: "MFPAND",
+  ios: "MFPIOS",
+  features: "FEAT",
+  feature: "FEAT",
+  newfeatures: "FEAT",
+};
 
 // ── Plain step parsing ───────────────────────────────────────────────────────
 
@@ -105,5 +131,234 @@ describe("scaffold: FEAT project aliases", () => {
     assert.equal(aliases.web, "MFPWEB");
     assert.equal(aliases.android, "MFPAND");
     assert.equal(aliases.ios, "MFPIOS");
+  });
+
+  it("dedupes shipped aliases to four unique project keys", () => {
+    reloadConfig();
+    const keys = new Set(Object.values(getConfig().projectAliases));
+    assert.deepEqual([...keys].sort(), ["FEAT", "MFPAND", "MFPIOS", "MFPWEB"]);
+  });
+});
+
+// ── Project alias picker helpers ─────────────────────────────────────────────
+
+describe("scaffold: groupAliasesByProjectKey", () => {
+  it("groups features/feature/newfeatures under FEAT", () => {
+    const grouped = groupAliasesByProjectKey(FIXTURE_ALIASES);
+    assert.deepEqual(grouped.FEAT, ["feature", "features", "newfeatures"]);
+  });
+
+  it("groups web/api under MFPWEB", () => {
+    const grouped = groupAliasesByProjectKey(FIXTURE_ALIASES);
+    assert.deepEqual(grouped.MFPWEB, ["api", "web"]);
+  });
+
+  it("sorts alias names within each group", () => {
+    const grouped = groupAliasesByProjectKey(FIXTURE_ALIASES);
+    for (const aliases of Object.values(grouped)) {
+      const sorted = [...aliases].sort((a, b) => a.localeCompare(b));
+      assert.deepEqual(aliases, sorted);
+    }
+  });
+});
+
+describe("scaffold: buildProjectPickerFormSchema", () => {
+  it("enumValues contains sorted unique keys plus Other sentinel", () => {
+    const schema = buildProjectPickerFormSchema(FIXTURE_ALIASES);
+    assert.ok(schema);
+    assert.deepEqual(schema!.enumValues, [
+      "FEAT",
+      "MFPAND",
+      "MFPIOS",
+      "MFPWEB",
+      PROJECT_OTHER_SENTINEL,
+    ]);
+  });
+
+  it("does not contain raw alias names", () => {
+    const schema = buildProjectPickerFormSchema(FIXTURE_ALIASES)!;
+    assert.ok(!schema.enumValues.includes("android"));
+    assert.ok(!schema.enumValues.includes("features"));
+  });
+
+  it("description mentions alias hints per key", () => {
+    const schema = buildProjectPickerFormSchema(FIXTURE_ALIASES)!;
+    assert.match(schema.description, /FEAT.*features/);
+    assert.match(schema.description, /MFPAND.*android/);
+  });
+
+  it("returns null for empty alias map", () => {
+    assert.equal(buildProjectPickerFormSchema({}), null);
+  });
+});
+
+describe("scaffold: formatProjectAliasesForConversation", () => {
+  it("includes grouped FEAT line", () => {
+    const text = formatProjectAliasesForConversation(FIXTURE_ALIASES);
+    assert.match(text, /FEAT — feature, features, newfeatures/);
+  });
+
+  it("mentions raw project key escape hatch", () => {
+    const text = formatProjectAliasesForConversation(FIXTURE_ALIASES);
+    assert.match(text, /raw project key.*zebrunner-config/i);
+  });
+});
+
+describe("scaffold: conversational fallback includes configured projects", () => {
+  it("Step 0 lists grouped project keys when aliases are configured", () => {
+    const text = buildConversationalQuestionnaire(undefined, undefined, FIXTURE_ALIASES);
+    assert.match(text, /MFPAND — android/);
+    assert.match(text, /FEAT — feature, features, newfeatures/);
+    assert.ok(!text.includes("- android\n"));
+    assert.ok(!text.includes("- features\n"));
+  });
+});
+
+// ── Suite picker helpers ─────────────────────────────────────────────────────
+
+const SUITE_FIXTURES: ZebrunnerTestSuite[] = [
+  {
+    id: 100,
+    title: "Regression",
+    treeNames: "Root > Suite Alpha > Regression",
+    lastModifiedAt: "2026-08-10T12:00:00Z",
+  },
+  {
+    id: 200,
+    title: "Regression",
+    treeNames: "Root > Suite Beta > Regression",
+    lastModifiedAt: "2026-08-15T12:00:00Z",
+  },
+  {
+    id: 300,
+    title: "Smoke",
+    treeNames: "Root > Suite Alpha > Smoke",
+    createdAt: "2026-08-01T12:00:00Z",
+  },
+  {
+    id: 400,
+    title: "Latest Suite",
+    treeNames: "Root > Latest Suite",
+    lastModifiedAt: "2026-08-20T08:00:00Z",
+  },
+];
+
+describe("scaffold: pickLatestSuite", () => {
+  it("picks the suite with the newest lastModifiedAt", () => {
+    const latest = pickLatestSuite(SUITE_FIXTURES);
+    assert.equal(latest?.id, 400);
+  });
+
+  it("falls back to createdAt when lastModifiedAt is absent", () => {
+    const onlyCreated: ZebrunnerTestSuite[] = [
+      { id: 1, title: "A", createdAt: "2026-01-01T00:00:00Z" },
+      { id: 2, title: "B", createdAt: "2026-06-01T00:00:00Z" },
+    ];
+    assert.equal(pickLatestSuite(onlyCreated)?.id, 2);
+  });
+});
+
+describe("scaffold: getSuiteRecencyMs", () => {
+  it("prefers lastModifiedAt over createdAt", () => {
+    const suite: ZebrunnerTestSuite = {
+      id: 1,
+      createdAt: "2020-01-01T00:00:00Z",
+      lastModifiedAt: "2026-08-20T00:00:00Z",
+    };
+    assert.ok(getSuiteRecencyMs(suite) > Date.parse("2026-01-01"));
+  });
+});
+
+describe("scaffold: getSuiteDisplayLabel", () => {
+  it("uses treeNames when present", () => {
+    assert.equal(getSuiteDisplayLabel(SUITE_FIXTURES[0], SUITE_FIXTURES), "Root > Suite Alpha > Regression");
+  });
+
+  it("disambiguates duplicate base labels with id suffix", () => {
+    const dupes: ZebrunnerTestSuite[] = [
+      { id: 100, title: "Regression", treeNames: "Root > Shared Path" },
+      { id: 200, title: "Regression", treeNames: "Root > Shared Path" },
+    ];
+    const label100 = getSuiteDisplayLabel(dupes[0], dupes);
+    const label200 = getSuiteDisplayLabel(dupes[1], dupes);
+    assert.match(label100, /\(id: 100\)/);
+    assert.match(label200, /\(id: 200\)/);
+    assert.notEqual(label100, label200);
+  });
+});
+
+describe("scaffold: buildSuitePickerFormSchema", () => {
+  it("puts Latest first and Other last", () => {
+    const schema = buildSuitePickerFormSchema(SUITE_FIXTURES)!;
+    assert.equal(schema.enumValues[0], SUITE_LATEST_SENTINEL);
+    assert.equal(schema.enumValues[schema.enumValues.length - 1], SUITE_OTHER_SENTINEL);
+  });
+
+  it("does not duplicate the Latest suite in the recent tail", () => {
+    const schema = buildSuitePickerFormSchema(SUITE_FIXTURES, 10)!;
+    const latestLabel = getSuiteDisplayLabel(SUITE_FIXTURES[3], SUITE_FIXTURES);
+    const tail = schema.enumValues.slice(1, -1);
+    assert.ok(!tail.includes(latestLabel));
+  });
+
+  it("description mentions Latest target suite", () => {
+    const schema = buildSuitePickerFormSchema(SUITE_FIXTURES)!;
+    assert.match(schema.description, /Latest available/);
+    assert.match(schema.description, /Root > Latest Suite/);
+  });
+
+  it("returns null for empty suite list", () => {
+    assert.equal(buildSuitePickerFormSchema([]), null);
+  });
+});
+
+describe("scaffold: searchSuitesByName", () => {
+  it("matches partial hierarchy path", () => {
+    const hits = searchSuitesByName(SUITE_FIXTURES, "Suite Alpha");
+    assert.ok(hits.some((s) => s.id === 100));
+    assert.ok(hits.some((s) => s.id === 300));
+    assert.ok(!hits.some((s) => s.id === 400));
+  });
+
+  it("returns top recency results when query is empty", () => {
+    const hits = searchSuitesByName(SUITE_FIXTURES, "", 2);
+    assert.equal(hits.length, 2);
+    assert.equal(hits[0].id, 400);
+  });
+});
+
+describe("scaffold: resolveSuiteFromSelection", () => {
+  const schema = buildSuitePickerFormSchema(SUITE_FIXTURES)!;
+  const ctx = { labelToId: schema.labelToId, latestSuite: schema.latestSuite };
+
+  it("resolves Latest available to the newest suite id", () => {
+    assert.equal(resolveSuiteFromSelection(SUITE_LATEST_SENTINEL, ctx), 400);
+  });
+
+  it("resolves a named label to its id", () => {
+    const label = getSuiteDisplayLabel(SUITE_FIXTURES[2], SUITE_FIXTURES);
+    assert.equal(resolveSuiteFromSelection(label, ctx), 300);
+  });
+
+  it("returns null for Other sentinel", () => {
+    assert.equal(resolveSuiteFromSelection(SUITE_OTHER_SENTINEL, ctx), null);
+  });
+
+  it("returns null for unknown label", () => {
+    assert.equal(resolveSuiteFromSelection("does-not-exist", ctx), null);
+  });
+});
+
+describe("scaffold: conversational fallback suite guidance", () => {
+  it("mentions adv_list_test_suites when no suite hint", () => {
+    const text = buildConversationalQuestionnaire("PROJ1", undefined, FIXTURE_ALIASES);
+    assert.match(text, /adv_list_test_suites|adv_get_tcm_test_suites_by_project/);
+    assert.match(text, /Latest available/i);
+    assert.ok(!text.includes("Ask the user for the target test suite id"));
+  });
+
+  it("formatSuiteGuidanceForConversation references list tools", () => {
+    const text = formatSuiteGuidanceForConversation("PROJ1");
+    assert.match(text, /adv_list_test_suites/);
   });
 });

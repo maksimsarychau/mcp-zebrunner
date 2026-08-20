@@ -43,7 +43,7 @@ The Evaluation Framework automatically tests all three of these steps using a re
 | Tool Selection Accuracy | 97.7% |
 | Argument Correctness | 98.4% |
 | Output Quality (Judge) | 4.73 / 5.0 |
-| Prompts in catalog | **197** (`default` ~45 + `cloud` ~149) |
+| Prompts in catalog | **204** (`default` ~45 + `cloud` ~156) |
 | Default suite (local Ollama) | ~40 prompts, relaxed aggregate (80% tool / 70% arg) |
 | Cloud suite (release gate) | ~149 prompts, strict per-prompt (90% tool / 85% arg) |
 | Duration (cloud full L3) | ~8–9 minutes |
@@ -75,7 +75,7 @@ When a user asks a natural-language question, the LLM must navigate this ambigui
 
 ### What the Eval Framework Does
 
-- Sends **197 structured prompts** (partitioned into default vs cloud suites) to the configured LLM
+- Sends **204 structured prompts** (partitioned into default vs cloud suites) to the configured LLM
 - Verifies the LLM picks the correct tool, provides correct arguments, and produces quality output
 - Tests robustness against out-of-scope requests, ambiguous prompts, invalid data, tool confusion, and prompt injection
 - Generates a **scorecard** showing accuracy percentages by category
@@ -404,13 +404,13 @@ The framework uses **real Zebrunner project data** — not hardcoded values. At 
 
 ### Prompt catalog (v9.2.7)
 
-The full catalog lives in `tests/eval/eval-prompts.ts` (**197 prompts**). Counts shift slightly as prompts are added; suite sizes are fixed in `tests/eval/eval-cloud-suite.ts`.
+The full catalog lives in `tests/eval/eval-prompts.ts` (**204 prompts**). Counts shift slightly as prompts are added; suite sizes are fixed in `tests/eval/eval-cloud-suite.ts`.
 
 | Suite | Prompts | When to run | Thresholds |
 |-------|---------|-------------|------------|
 | **`default`** | ~45 | `npm run test:eval` with local Ollama | Relaxed aggregate: 80% tool / 70% arg |
 | **`cloud`** | ~149 | `npm run test:eval:cloud` (sets `EVAL_PROVIDER=anthropic`) | Strict per-prompt: 90% tool / 85% arg |
-| **`all`** | ~197 | `EVAL_SUITE=all npm run test:eval` | Legacy full catalog |
+| **`all`** | ~204 | `EVAL_SUITE=all npm run test:eval` | Legacy full catalog |
 
 Categories include TCM, launch, analysis (widgets/hubs/flaky), chart, field_filter, report, resource, mutation, e2e_metric, and negatives (refusal, tool confusion, invalid data).
 
@@ -468,7 +468,7 @@ EVAL_SUITE=all npm run test:eval
 
 ### v9.2.7 eval changes — authoring wizard routing
 
-Routing coverage for the guided test-case authoring wizard (`adv_scaffold_test_case` and its dev-friendly alias `adv_create_test_case_wizard`) lives in `tests/eval/eval-authoring-tools.ts` (`AUTHORING_TOOLS_EVAL_PROMPTS`, **5 prompts**). These check **tool routing only** — the interactive elicitation flow, Gherkin parsing, and advisory pre-check are covered by unit tests (`tests/unit/scaffold-test-case.test.ts`). Layers 1–2 never execute the tool (single LLM call), so no test cases are created.
+Routing coverage for the guided test-case authoring wizard (`adv_scaffold_test_case` and its dev-friendly alias `adv_create_test_case_wizard`) lives in `tests/eval/eval-authoring-tools.ts` (`AUTHORING_TOOLS_EVAL_PROMPTS`, **12 prompts**). These check **tool routing only** — the interactive elicitation flow (Form 0 project-key dropdown, Form 0 suite picker with Latest/recent/search, Other mini-elicits), Gherkin parsing, and advisory pre-check are covered by unit tests (`tests/unit/scaffold-test-case.test.ts`). Layers 1–2 never execute the tool (single LLM call), so no test cases are created.
 
 Because the judge's `checkToolSelection` matches with `.some(...)`, alias prompts list both tool names and either is accepted.
 
@@ -479,10 +479,28 @@ Because the judge's `checkToolSelection` matches with `.some(...)`, alias prompt
 | `scaffold.alias_wizard` | 2 | The `adv_create_test_case_wizard` alias routes to the same handler |
 | `scaffold.neg.not_raw_create` | 2 | Picks the wizard; **forbids** `adv_create_test_case` (tool confusion) |
 | `scaffold.neg.not_generate_draft` | 2 | Picks the wizard; **forbids** `adv_generate_draft_test_by_key` (tool confusion) |
+| `scaffold.features_alias` | 2 | User says configured **alias-a** → wizard with `project: "alias-a"` (alias, not resolved key) |
+| `scaffold.feat_project_key` | 2 | User says project **PROJ1** + suite → wizard with `project: "PROJ1"` and `test_suite_id` |
+| `scaffold.android_alias` | 2 | User says **alias-b** → wizard with `project: "alias-b"` |
+| `scaffold.neg.not_list_projects` | 2 | Wizard for **alias-a**; **forbids** `adv_get_available_projects` (uses configured aliases) |
+| `scaffold.with_suite_id_skip_list` | 2 | Wizard with `project` + `test_suite_id`; **forbids** listing suites first |
+| `scaffold.project_only_no_suite_arg` | 2 | Wizard with `project` only; suite chosen inside the wizard |
+| `scaffold.neg.not_list_suites_wizard` | 2 | Wizard for {{project_key}}; **forbids** `adv_list_test_suites` |
+
+### v9.2.7 eval changes — suite picker routing
+
+Suite picker UI (Latest available, recent shortlist, search, Other) is **unit-tested only** (`tests/unit/scaffold-test-case.test.ts`). Eval prompts above verify the model passes `test_suite_id` when known and routes to the wizard without pre-listing suites.
+
+**Eval regression subset** (authoring wizard prompts are in the **default** suite, not cloud):
+```bash
+npm run test:eval:scaffold
+# equivalent:
+EVAL_SUITE=default EVAL_LAYER=2 EVAL_FILTER=scaffold. npm run test:eval:cloud:full
+```
 
 **Example (positive routing):**
 ```
-Prompt: "I want to author a NEW test case for MFPWEB following our best
+Prompt: "I want to author a NEW test case for PROJ1 following our best
          practices, with a check for similar existing cases. Start the
          guided wizard."
 Expected: adv_scaffold_test_case OR adv_create_test_case_wizard ✅
@@ -490,7 +508,7 @@ Expected: adv_scaffold_test_case OR adv_create_test_case_wizard ✅
 
 **Example (tool confusion negative):**
 ```
-Prompt: "Guide me through authoring a new best-practice test case for MFPWEB
+Prompt: "Guide me through authoring a new best-practice test case for PROJ1
          with an automatic similar-case check — use the wizard, NOT the raw
          adv_create_test_case call."
 Expected:  adv_scaffold_test_case / adv_create_test_case_wizard ✅

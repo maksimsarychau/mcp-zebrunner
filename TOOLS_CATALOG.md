@@ -791,24 +791,26 @@ Weekly stability report for project MCP using:
 
 | Parameter        | Type   | Required | Description                                                                                     |
 | ---------------- | ------ | -------- | ----------------------------------------------------------------------------------------------- |
-| `project`        | string |          | Target project key (e.g. `FEAT`) or alias (e.g. `features`, `android`). Asked if omitted.       |
-| `test_suite_id`  | number |          | Target test suite id. Asked if omitted.                                                         |
+| `project`        | string |          | Target project key (e.g. `PROJ1`) or a configured alias (see `zebrunner-config.json`). Asked if omitted.       |
+| `test_suite_id`  | number |          | Target test suite id. If omitted, wizard shows Latest + recent named suites + search. Numeric ids still accepted. |
 
 **Behavior:**
 
 - Detects `clientCapabilities.elicitation.form`; runs the native form wizard when available, else the conversational fallback.
 - Wizard steps: target (project/suite) → basics (title, feature area, priority, automation state, **test case language**) → context (preconditions, steps, optional source case) → similarity warning → advisory quality pre-check → final confirm.
+- **Form 0 project picker:** when `project` is omitted and `zebrunner-config.json` defines `projectAliases`, the wizard shows a dropdown of **deduplicated project keys** (e.g. `PROJ1`, `PROJ2`, …) with configured alias hints in the field description (e.g. `PROJ1 — alias-a, alias-b`). **Other (enter project key)** opens a follow-up prompt for raw keys not in the map. The conversational fallback (Claude Desktop) lists the same grouped keys in Step 0. Actual keys and aliases live only in `zebrunner-config.json`.
+- **Form 0 suite picker:** when `test_suite_id` is omitted, the wizard fetches suites for the selected project and shows **Latest available** (most recently modified), a shortlist of recently modified suites by hierarchy path/name, and **Other (search or enter suite ID)**. Passing `test_suite_id` skips the picker entirely. API failure or an empty suite list falls back to a numeric id prompt.
 - Test case language defaults to **Gherkin** (Given/When/Then, one step per line); **Plain steps** (`action => expected result`) is the alternative. This affects only the wizard; `adv_create_test_case` and other tools keep plain steps.
 - Similarity is warn-only and never blocks; choosing "reuse" suggests `adv_create_test_case` with `source_case_key` of the closest match.
 - The quality pre-check validates the in-memory draft (before creation) against `test_case_review_rules.md` / `test_case_analysis_checkpoints.md`; findings are surfaced in the confirmation but never block. The conversational fallback mirrors this with an equivalent checklist and always finishes with `review: true`.
 
 **Example Prompts:**
 
-- "Scaffold a new test case in project FEAT suite 20421"
+- "Scaffold a new test case in project PROJ1 suite 20421"
 - "Help me write a new feature test case following best practices"
-- "Open the create-test-case wizard for FEAT so I can write a new case step by step" (alias `adv_create_test_case_wizard`)
-- "Use the test case creation wizard to add a new case to features suite 20421" (alias `features` → `FEAT`)
-- "Scaffold a new login test case for FEAT and keep the steps in Gherkin" (default language)
+- "Open the create-test-case wizard for PROJ1 so I can write a new case step by step" (alias `adv_create_test_case_wizard`)
+- "Use the test case creation wizard to add a new case to alias-a suite 20421" (alias resolves per `zebrunner-config.json`)
+- "Scaffold a new login test case for PROJ1 and keep the steps in Gherkin" (default language)
 
 ### `adv_update_test_case`
 

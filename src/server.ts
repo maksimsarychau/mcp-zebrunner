@@ -9525,6 +9525,7 @@ ${detailsInfo.map((detail, i) => {
     client,
     mutationClient,
     resolveProjectKey: (project: string) => getProjectAliases()[project] || project,
+    projectAliases: getProjectAliases(),
     webBaseUrl: WIDGET_BASE_URL,
     debugLog,
     runQualityReview: async (projectKey: string, caseKey: string): Promise<string | null> => {
