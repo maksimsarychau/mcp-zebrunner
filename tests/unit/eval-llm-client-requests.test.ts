@@ -3,6 +3,7 @@ import { strict as assert } from "node:assert";
 import {
   AnthropicEvalClient,
   OpenAiEvalClient,
+  anthropicSupportsTemperature,
   type EvalLlmChatOptions,
 } from "../eval/eval-llm-client.js";
 
@@ -105,5 +106,30 @@ describe("eval LLM SDK request compatibility", () => {
     assert.equal(capturedBody.max_tokens, 321);
     assert.deepEqual(response.toolCalls, [{ name: "adv_get_available_projects", input: {} }]);
     assert.deepEqual(response.usage, { inputTokens: 10, outputTokens: 3 });
+  });
+
+  it("omits temperature for Anthropic Sonnet/Opus 5 models", async () => {
+    let capturedBody: Record<string, unknown> = {};
+    const fetchImpl: typeof fetch = async (input, init) => {
+      capturedBody = await requestBody(input, init);
+      return new Response(JSON.stringify({
+        id: "msg-test",
+        type: "message",
+        role: "assistant",
+        model: "claude-sonnet-5",
+        content: [{ type: "text", text: "ok" }],
+        stop_reason: "end_turn",
+        stop_sequence: null,
+        usage: { input_tokens: 1, output_tokens: 1 },
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    };
+
+    const client = new AnthropicEvalClient("test-key", fetchImpl);
+    await client.chatWithTools({ ...options, model: "claude-sonnet-5", toolChoice: "auto" });
+
+    assert.equal("temperature" in capturedBody, false);
+    assert.equal(anthropicSupportsTemperature("claude-sonnet-4-6"), true);
+    assert.equal(anthropicSupportsTemperature("claude-sonnet-5"), false);
+    assert.equal(anthropicSupportsTemperature("claude-opus-5-20260201"), false);
   });
 });

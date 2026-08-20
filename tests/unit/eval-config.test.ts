@@ -150,7 +150,7 @@ describe("eval-config", () => {
     const { getEvalConfig, getEvalConfigWarnings } = await import("../eval/eval-config.js");
     const config = getEvalConfig();
     assert.equal(config.apiKey, "sk-ant-test");
-    assert.equal(config.model, "claude-sonnet-4-6");
+    assert.equal(config.model, "claude-sonnet-5");
     assert.equal(config.baseUrl, undefined);
     assert.ok(getEvalConfigWarnings(config).length >= 2);
   });
@@ -164,7 +164,7 @@ describe("eval-config", () => {
   it("cloud suite + local provider + cloud model fails fast", async () => {
     process.env.EVAL_SUITE = "cloud";
     process.env.EVAL_PROVIDER = "local";
-    process.env.EVAL_MODEL = "claude-sonnet-4-6";
+    process.env.EVAL_MODEL = "claude-sonnet-5";
     process.env.EVAL_BASE_URL = "http://localhost:11434/v1";
 
     const { getEvalConfig } = await import("../eval/eval-config.js");

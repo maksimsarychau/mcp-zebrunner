@@ -44,7 +44,7 @@ describe("Prompt Registry Coverage", () => {
   const registeredPrompts = extractPromptRegistrations(promptSource);
 
   it("registers the expected number of prompts", () => {
-    assert.equal(registeredPrompts.length, 17, `Expected 17 prompts, got ${registeredPrompts.length}: ${registeredPrompts.join(", ")}`);
+    assert.equal(registeredPrompts.length, 19, `Expected 19 prompts, got ${registeredPrompts.length}: ${registeredPrompts.join(", ")}`);
   });
 
   it("has unique prompt names", () => {
@@ -68,6 +68,8 @@ describe("Prompt Registry Coverage", () => {
       "daily-qa-standup",
       "automation-gaps",
       "project-overview",
+      "scaffold-test-case",
+      "create-test-case-wizard",
     ];
     for (const name of expected) {
       assert.ok(registeredPrompts.includes(name), `Missing prompt: ${name}`);
@@ -463,8 +465,8 @@ describe("Project Overview Prompt", () => {
 describe("getPromptsCatalog()", () => {
   const catalog = getPromptsCatalog();
 
-  it("returns exactly 17 prompts matching registered count", () => {
-    assert.equal(catalog.length, 17);
+  it("returns exactly 19 prompts matching registered count", () => {
+    assert.equal(catalog.length, 19);
   });
 
   it("every entry has required fields", () => {

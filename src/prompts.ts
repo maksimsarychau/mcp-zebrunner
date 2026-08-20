@@ -221,6 +221,24 @@ Present a structured report with:
 - Recommendations: which test cases to merge, retire, or differentiate`;
 }
 
+export function buildScaffoldTestCasePrompt(project?: string, suiteId?: string): string {
+  const args: string[] = [];
+  if (project) args.push(`project: "${project}"`);
+  if (suiteId) args.push(`test_suite_id: ${suiteId}`);
+  const argClause = args.length ? ` with ${args.join(", ")}` : "";
+  return `Author a NEW Zebrunner test case using our best-practice wizard.
+
+Call the adv_scaffold_test_case tool${argClause} (also available as adv_create_test_case_wizard).
+- On clients that support interactive forms (e.g. Claude Code, Cursor), it presents a questionnaire, automatically warns about similar existing cases in the target + root suite, runs an advisory rules-based quality pre-check before creating, and creates a draft (then runs the authoritative quality review).
+- On clients without forms (e.g. Claude Desktop), it returns a conversational questionnaire to follow that includes the quality pre-check and finishes via adv_create_test_case with review: true.
+
+Notes:
+- There is no default project — provide one (a project key like 'FEAT', or an alias like 'features'/'android'/'ios'/'web') or the wizard will ask for it.
+- The wizard asks for the test case language and defaults to Gherkin (Given/When/Then); 'Plain steps' (action => expected result) is also available.
+- The quality pre-check is advisory and never blocks creation.
+- New cases are always created as drafts; publish later with adv_update_test_case.`;
+}
+
 // ── Role-specific prompt builders ────────────────────────────────────────────
 
 export function buildDailyQaStandupPrompt(projects: string): string {
@@ -600,6 +618,8 @@ export function getPromptsCatalog(): PromptMeta[] {
     { name: "feature-scoped-launch", title: "Feature-Scoped Build Now", description: "Find tests by feature keyword, build test_run_rules per root suite, preview and trigger adv_start_launch (suite_path resolved dynamically)", category: "Analysis", args: ["project", "feature", "suite_name?", "suite_path?", "build?", "locale?", "template_query?"] },
     { name: "flaky-review", title: "Flaky Test Review", description: "Find flaky tests, analyze execution history, and recommend stabilization priorities", category: "Analysis", args: ["project"] },
     { name: "find-duplicates", title: "Find Duplicate Test Cases", description: "Analyze test cases for duplicates using structural and optional semantic analysis", category: "Analysis", args: ["project", "suite_id?"] },
+    { name: "scaffold-test-case", title: "Scaffold Test Case", description: "Guided best-practice wizard to author a new test case, with an automatic warn-only similar-case check and an advisory quality pre-check", category: "Authoring", args: ["project?", "suite_id?"] },
+    { name: "create-test-case-wizard", title: "Create Test Case Wizard", description: "Dev-friendly alias of the Scaffold Test Case wizard (best-practice authoring + similar-case warning + advisory quality pre-check)", category: "Authoring", args: ["project?", "suite_id?"] },
     { name: "daily-qa-standup", title: "Daily QA Standup", description: "Prepare a concise daily QA standup summary with pass rates, blockers, flaky tests, and action items", category: "Role-Specific", args: ["projects"] },
     { name: "automation-gaps", title: "Automation Gaps Analysis", description: "Identify suites and test cases with lowest automation coverage and prioritize automation work", category: "Role-Specific", args: ["projects"] },
     { name: "project-overview", title: "Project Overview", description: "Comprehensive project health card: suites, coverage, recent launches, milestones, flaky tests", category: "Role-Specific", args: ["project"] },
@@ -903,6 +923,44 @@ export function registerPrompts(server: McpServer): void {
       messages: [{
         role: "user" as const,
         content: { type: "text" as const, text: buildProjectOverviewPrompt(project) },
+      }],
+    }),
+  );
+
+  // ── Authoring Prompts ────────────────────────────────────────────────────
+
+  server.registerPrompt(
+    "scaffold-test-case",
+    {
+      title: "Scaffold Test Case",
+      description: "Guided best-practice wizard to author a new test case, with an automatic warn-only similar-case check",
+      argsSchema: {
+        project: z.string().optional().describe("Target project key (e.g. 'FEAT') or alias (e.g. 'features'). Optional — the wizard asks if omitted."),
+        suite_id: z.string().optional().describe("Target test suite id (optional)."),
+      },
+    },
+    async ({ project, suite_id }) => ({
+      messages: [{
+        role: "user" as const,
+        content: { type: "text" as const, text: buildScaffoldTestCasePrompt(project, suite_id) },
+      }],
+    }),
+  );
+
+  server.registerPrompt(
+    "create-test-case-wizard",
+    {
+      title: "Create Test Case Wizard",
+      description: "Dev-friendly alias of the Scaffold Test Case wizard (best-practice authoring + similar-case warning + advisory quality pre-check)",
+      argsSchema: {
+        project: z.string().optional().describe("Target project key (e.g. 'FEAT') or alias (e.g. 'features'). Optional — the wizard asks if omitted."),
+        suite_id: z.string().optional().describe("Target test suite id (optional)."),
+      },
+    },
+    async ({ project, suite_id }) => ({
+      messages: [{
+        role: "user" as const,
+        content: { type: "text" as const, text: buildScaffoldTestCasePrompt(project, suite_id) },
       }],
     }),
   );

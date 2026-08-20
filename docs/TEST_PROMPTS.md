@@ -1328,6 +1328,74 @@ The `steeringHint()` helper in `src/helpers/steering.ts` is a pure, deterministi
 
 **Expected:** Uses `adv_create_test_case` with `draft: false`, but the preview shows `draft → true (forced for safety)`. The created test case is always a draft. The user must use `adv_update_test_case` to publish it.
 
+### `adv_scaffold_test_case` *(v9.2.7)*
+
+Guided best-practice authoring wizard. Also registered as the alias `adv_create_test_case_wizard` and exposed via the `scaffold-test-case` / `create-test-case-wizard` prompts. On elicitation-capable clients (Claude Code, Cursor) it drives an interactive form; on other clients (Claude Desktop) it returns a conversational questionnaire that finishes through `adv_create_test_case` with `review: true`. Default step language is **Gherkin** (Given/When/Then, one step per line).
+
+**Form 0 — configured project keys:** when `project` is omitted, the wizard shows deduplicated keys from `zebrunner-config.json` (e.g. `PROJ1`, `PROJ2`, …) with alias hints in the description, plus **Other (enter project key)** for raw keys not in the map. Claude Desktop fallback lists the same grouped keys in Step 0. See `zebrunner-config.json` for your deployment's actual keys and aliases.
+
+**Form 0 — suite picker:** when `test_suite_id` is omitted, the wizard fetches suites for the selected project and shows **Latest available** (most recently modified), a shortlist of recent suites by hierarchy path/name, and **Other (search or enter suite ID)**. Passing `test_suite_id` skips the picker. Claude Desktop fallback instructs the model to call `adv_list_test_suites` and suggest recent suites by name.
+
+**Prompt 1 — Best-practice wizard**
+> I want to author a NEW test case for PROJ1 following our best practices, with a check for similar existing cases. Start the guided wizard.
+
+**Expected:** Selects `adv_scaffold_test_case` (or its alias `adv_create_test_case_wizard`). Asks for project first (no default), then title/feature/priority/automation state/**language**, then preconditions + Gherkin steps. Runs a warn-only similarity check and an advisory quality pre-check before creation. Does NOT use raw `adv_create_test_case` directly.
+
+**Prompt 2 — Dev-friendly alias**
+> Open the create-test-case wizard for PROJ1 so I can write a new case step by step.
+
+**Expected:** Selects `adv_create_test_case_wizard` (alias of `adv_scaffold_test_case`, same handler).
+
+**Prompt 3 — Project alias + suite**
+> Use the test case creation wizard to add a new case to alias-a suite 20421.
+
+**Expected:** Selects the wizard with `project: "alias-a"` (resolves per `zebrunner-config.json`) and `test_suite_id: 20421`.
+
+**Prompt 4 — Gherkin default**
+> Scaffold a new login test case for PROJ1 and keep the steps in Gherkin.
+
+**Expected:** Wizard proceeds with `test_case_language: "Gherkin"`; each Given/When/Then line becomes one step with no separate expected result.
+
+**Prompt 5 — Not the raw create tool (tool confusion)**
+> Guide me through authoring a new best-practice test case for PROJ1 with an automatic similar-case check — use the wizard, NOT the raw adv_create_test_case call.
+
+**Expected:** Selects `adv_scaffold_test_case` / `adv_create_test_case_wizard`; must NOT select `adv_create_test_case` or `adv_generate_draft_test_by_key`.
+
+**Prompt 6 — Alias routing (eval: `scaffold.features_alias`)**
+> Start the test case creation wizard for **alias-a** (new feature work).
+
+**Expected:** Selects the wizard with `project: "alias-a"` (alias preserved in args; resolves per `zebrunner-config.json` at runtime).
+
+**Prompt 7 — Project key + suite (eval: `scaffold.feat_project_key`)**
+> Open the create-test-case wizard for project **PROJ1** suite 20421.
+
+**Expected:** Selects the wizard with `project: "PROJ1"` and `test_suite_id: 20421`.
+
+**Prompt 8 — Another alias (eval: `scaffold.android_alias`)**
+> Use the guided wizard to add a test case to **alias-b**.
+
+**Expected:** Selects the wizard with `project: "alias-b"`.
+
+**Prompt 9 — Do not list projects (eval: `scaffold.neg.not_list_projects`)**
+> I want the test case wizard for **alias-a** — do NOT call adv_get_available_projects to pick the project.
+
+**Expected:** Selects the wizard; must NOT call `adv_get_available_projects` (configured aliases are sufficient).
+
+**Prompt 10 — Suite id in args, skip list (eval: `scaffold.with_suite_id_skip_list`)**
+> Use the test case creation wizard for PROJ1 suite 20421 — pass the suite id in wizard args, do NOT call adv_list_test_suites first.
+
+**Expected:** Selects the wizard with `project` + `test_suite_id`; must NOT call `adv_list_test_suites` or `adv_get_tcm_test_suites_by_project`.
+
+**Prompt 11 — Project only, suite picked in wizard (eval: `scaffold.project_only_no_suite_arg`)**
+> Start the guided wizard to author a new test case in PROJ1 (I'll pick the suite inside the wizard).
+
+**Expected:** Selects the wizard with `project` only; `test_suite_id` not required in the initial tool call.
+
+**Prompt 12 — Do not list suites (eval: `scaffold.neg.not_list_suites_wizard`)**
+> Open the create-test-case wizard for PROJ1 — do NOT call adv_list_test_suites to choose the suite.
+
+**Expected:** Selects the wizard; must NOT call `adv_list_test_suites` (form-capable clients load suites inside the wizard).
+
 ### `adv_update_test_case`
 
 **Prompt 1 — Update priority** *(v7.0.0)*
@@ -2243,4 +2311,4 @@ bash tests/api-verify.sh --widget-catalog-audit
 
 ---
 
-*Last Updated: v9.2.6 — August 2026*
+*Last Updated: v9.2.7 — August 2026*

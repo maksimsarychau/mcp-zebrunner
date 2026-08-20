@@ -18,6 +18,11 @@ export interface EvalLlmResponse {
 
 export type EvalLlmToolChoice = "auto" | { name: string };
 
+/** Anthropic Sonnet/Opus 5+ reject explicit `temperature`; use API default instead. */
+export function anthropicSupportsTemperature(model: string): boolean {
+  return !/(?:sonnet|opus)-5(?:$|[-.])/i.test(model);
+}
+
 export interface EvalLlmChatOptions {
   model: string;
   system?: string;
@@ -60,7 +65,7 @@ export class AnthropicEvalClient implements EvalLlmClient {
     const response = await this.client.messages.create({
       model: opts.model,
       max_tokens: opts.maxTokens,
-      temperature: opts.temperature,
+      ...(anthropicSupportsTemperature(opts.model) ? { temperature: opts.temperature } : {}),
       system: opts.system,
       tools: opts.tools as Anthropic.Tool[],
       tool_choice: toolChoice,

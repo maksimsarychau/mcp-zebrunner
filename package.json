@@ -1,6 +1,6 @@
 {
   "name": "mcp-zebrunner",
-  "version": "9.2.6",
+  "version": "9.2.7",
   "type": "module",
   "description": "Advanced Zebrunner MCP Server — analytics, reporting, and safe mutations for Zebrunner. Complements the official Zebrunner MCP (beta). Tools registered as adv_<name> with legacy aliases kept for backward compatibility.",
   "mcpName": "io.github.maksimsarychau/mcp-zebrunner",
@@ -56,7 +56,9 @@
     "test:eval:l2": "EVAL_LAYER=2 tsx tests/test-runner.ts eval",
     "test:eval:l3": "EVAL_LAYER=3 tsx tests/test-runner.ts eval",
     "test:eval:debug": "tsx tests/test-runner.ts eval",
+    "test:eval:cloud:full": "EVAL_PROVIDER=anthropic EVAL_STRICT=true tsx tests/test-runner.ts eval",
     "test:eval:cloud": "EVAL_SUITE=cloud EVAL_PROVIDER=anthropic EVAL_STRICT=true tsx tests/test-runner.ts eval",
+    "test:eval:scaffold": "EVAL_SUITE=default EVAL_LAYER=2 EVAL_FILTER=scaffold. EVAL_PROVIDER=anthropic EVAL_STRICT=true tsx tests/test-runner.ts eval",
     "test:eval:cloud:l2": "EVAL_SUITE=cloud EVAL_LAYER=2 EVAL_PROVIDER=anthropic EVAL_STRICT=true tsx tests/test-runner.ts eval",
     "test:verbose": "tsx tests/test-runner.ts all --verbose",
     "lint": "tsc --noEmit",

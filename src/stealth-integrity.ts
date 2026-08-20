@@ -259,15 +259,19 @@ async function remoteHealthCheck(root: string): Promise<{ ok: boolean; message: 
 
   // Network failed - check cache
   let cacheExists = false;
+  let staleCacheResult: { ok: boolean; message: string } | null = null;
   try {
     const cacheData = await fs.readFile(cacheFile, 'utf-8');
     cacheExists = true;
     const cached: unknown = JSON.parse(cacheData);
     if (isValidControlFile(cached) && typeof (cached as CacheEntry).cachedAt === 'string') {
+      const payloadResult = evaluatePayload(cached.payload, currentVersion);
       const age = Date.now() - new Date((cached as CacheEntry).cachedAt).getTime();
       if (age < CACHE_TTL_MS) {
-        return evaluatePayload(cached.payload, currentVersion);
+        return payloadResult;
       }
+      // Keep last verified remote payload for use if refresh fails (e.g. GitHub 429).
+      staleCacheResult = payloadResult;
     }
   } catch { /* no cache or corrupt */ }
 
@@ -286,6 +290,11 @@ async function remoteHealthCheck(root: string): Promise<{ ok: boolean; message: 
         }
       }
     } catch { /* no local file or corrupt */ }
+  }
+
+  // Remote unreachable and cache TTL expired — reuse last signed remote payload.
+  if (staleCacheResult) {
+    return staleCacheResult;
   }
 
   return { ok: false, message: 'cannot verify' };

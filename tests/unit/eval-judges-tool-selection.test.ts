@@ -4,6 +4,7 @@ import {
   canonicalToolName,
   checkToolSelection,
   checkForbiddenToolNotUsed,
+  buildJudgeToolOutputExcerpt,
 } from "../eval/eval-judges.js";
 
 describe("eval-judges tool selection (v9 adv_* names)", () => {
@@ -38,5 +39,15 @@ describe("eval-judges tool selection (v9 adv_* names)", () => {
       checkForbiddenToolNotUsed("adv_list_test_suites", ["get_launch_details"]),
       { pass: true },
     );
+  });
+});
+
+describe("buildJudgeToolOutputExcerpt", () => {
+  it("includes pattern matches even when they appear late in large JSON", () => {
+    const padding = "x".repeat(5000);
+    const output = `${padding}{"eitherCondition": 3, "passedManually": 2}`;
+    const excerpt = buildJudgeToolOutputExcerpt(output, ["eitherCondition", "passedManually"]);
+    assert.match(excerpt, /eitherCondition/);
+    assert.match(excerpt, /passedManually/);
   });
 });

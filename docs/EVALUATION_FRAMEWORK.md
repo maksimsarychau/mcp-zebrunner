@@ -2,7 +2,7 @@
 
 **Author:** Maksim Sarychau  
 **Version:** 1.1  
-**Last Updated:** v9.2.6 - August 2026
+**Last Updated:** v9.2.7 - August 2026
 
 ---
 
@@ -39,11 +39,11 @@ The Evaluation Framework automatically tests all three of these steps using a re
 
 | Metric | Value (cloud suite, Jul 2026) |
 |--------|-------|
-| Model | Claude Sonnet 4.6 (`claude-sonnet-4-6`) |
+| Model | Claude Sonnet 5 (`claude-sonnet-5`) |
 | Tool Selection Accuracy | 97.7% |
 | Argument Correctness | 98.4% |
 | Output Quality (Judge) | 4.73 / 5.0 |
-| Prompts in catalog | **189** (`default` ~40 + `cloud` ~149) |
+| Prompts in catalog | **204** (`default` ~45 + `cloud` ~156) |
 | Default suite (local Ollama) | ~40 prompts, relaxed aggregate (80% tool / 70% arg) |
 | Cloud suite (release gate) | ~149 prompts, strict per-prompt (90% tool / 85% arg) |
 | Duration (cloud full L3) | ~8–9 minutes |
@@ -75,7 +75,7 @@ When a user asks a natural-language question, the LLM must navigate this ambigui
 
 ### What the Eval Framework Does
 
-- Sends **189 structured prompts** (partitioned into default vs cloud suites) to the configured LLM
+- Sends **204 structured prompts** (partitioned into default vs cloud suites) to the configured LLM
 - Verifies the LLM picks the correct tool, provides correct arguments, and produces quality output
 - Tests robustness against out-of-scope requests, ambiguous prompts, invalid data, tool confusion, and prompt injection
 - Generates a **scorecard** showing accuracy percentages by category
@@ -402,15 +402,15 @@ The framework uses **real Zebrunner project data** — not hardcoded values. At 
 
 ## 6. What Gets Tested
 
-### Prompt catalog (v9.2.5)
+### Prompt catalog (v9.2.7)
 
-The full catalog lives in `tests/eval/eval-prompts.ts` (**189 prompts**). Counts shift slightly as prompts are added; suite sizes are fixed in `tests/eval/eval-cloud-suite.ts`.
+The full catalog lives in `tests/eval/eval-prompts.ts` (**204 prompts**). Counts shift slightly as prompts are added; suite sizes are fixed in `tests/eval/eval-cloud-suite.ts`.
 
 | Suite | Prompts | When to run | Thresholds |
 |-------|---------|-------------|------------|
-| **`default`** | ~40 | `npm run test:eval` with local Ollama | Relaxed aggregate: 80% tool / 70% arg |
+| **`default`** | ~45 | `npm run test:eval` with local Ollama | Relaxed aggregate: 80% tool / 70% arg |
 | **`cloud`** | ~149 | `npm run test:eval:cloud` (sets `EVAL_PROVIDER=anthropic`) | Strict per-prompt: 90% tool / 85% arg |
-| **`all`** | ~189 | `EVAL_SUITE=all npm run test:eval` | Legacy full catalog |
+| **`all`** | ~204 | `EVAL_SUITE=all npm run test:eval` | Legacy full catalog |
 
 Categories include TCM, launch, analysis (widgets/hubs/flaky), chart, field_filter, report, resource, mutation, e2e_metric, and negatives (refusal, tool confusion, invalid data).
 
@@ -466,11 +466,60 @@ EVAL_FILTER=widget.tpl7,authoring npm run test:eval:cloud
 EVAL_SUITE=all npm run test:eval
 ```
 
+### v9.2.7 eval changes — authoring wizard routing
+
+Routing coverage for the guided test-case authoring wizard (`adv_scaffold_test_case` and its dev-friendly alias `adv_create_test_case_wizard`) lives in `tests/eval/eval-authoring-tools.ts` (`AUTHORING_TOOLS_EVAL_PROMPTS`, **12 prompts**). These check **tool routing only** — the interactive elicitation flow (Form 0 project-key dropdown, Form 0 suite picker with Latest/recent/search, Other mini-elicits), Gherkin parsing, and advisory pre-check are covered by unit tests (`tests/unit/scaffold-test-case.test.ts`). Layers 1–2 never execute the tool (single LLM call), so no test cases are created.
+
+Because the judge's `checkToolSelection` matches with `.some(...)`, alias prompts list both tool names and either is accepted.
+
+| Prompt ID | Layer | What it checks |
+|-----------|-------|----------------|
+| `scaffold.best_practice` | 1 | "Author a new best-practice test case for {{project_key}}" → `adv_scaffold_test_case` / `adv_create_test_case_wizard` |
+| `scaffold.with_suite` | 2 | Wizard with `project` + `test_suite_id` args when a suite is named |
+| `scaffold.alias_wizard` | 2 | The `adv_create_test_case_wizard` alias routes to the same handler |
+| `scaffold.neg.not_raw_create` | 2 | Picks the wizard; **forbids** `adv_create_test_case` (tool confusion) |
+| `scaffold.neg.not_generate_draft` | 2 | Picks the wizard; **forbids** `adv_generate_draft_test_by_key` (tool confusion) |
+| `scaffold.features_alias` | 2 | User says configured **alias-a** → wizard with `project: "alias-a"` (alias, not resolved key) |
+| `scaffold.feat_project_key` | 2 | User says project **PROJ1** + suite → wizard with `project: "PROJ1"` and `test_suite_id` |
+| `scaffold.android_alias` | 2 | User says **alias-b** → wizard with `project: "alias-b"` |
+| `scaffold.neg.not_list_projects` | 2 | Wizard for **alias-a**; **forbids** `adv_get_available_projects` (uses configured aliases) |
+| `scaffold.with_suite_id_skip_list` | 2 | Wizard with `project` + `test_suite_id`; **forbids** listing suites first |
+| `scaffold.project_only_no_suite_arg` | 2 | Wizard with `project` only; suite chosen inside the wizard |
+| `scaffold.neg.not_list_suites_wizard` | 2 | Wizard for {{project_key}}; **forbids** `adv_list_test_suites` |
+
+### v9.2.7 eval changes — suite picker routing
+
+Suite picker UI (Latest available, recent shortlist, search, Other) is **unit-tested only** (`tests/unit/scaffold-test-case.test.ts`). Eval prompts above verify the model passes `test_suite_id` when known and routes to the wizard without pre-listing suites.
+
+**Eval regression subset** (authoring wizard prompts are in the **default** suite, not cloud):
+```bash
+npm run test:eval:scaffold
+# equivalent:
+EVAL_SUITE=default EVAL_LAYER=2 EVAL_FILTER=scaffold. npm run test:eval:cloud:full
+```
+
+**Example (positive routing):**
+```
+Prompt: "I want to author a NEW test case for PROJ1 following our best
+         practices, with a check for similar existing cases. Start the
+         guided wizard."
+Expected: adv_scaffold_test_case OR adv_create_test_case_wizard ✅
+```
+
+**Example (tool confusion negative):**
+```
+Prompt: "Guide me through authoring a new best-practice test case for PROJ1
+         with an automatic similar-case check — use the wizard, NOT the raw
+         adv_create_test_case call."
+Expected:  adv_scaffold_test_case / adv_create_test_case_wizard ✅
+Forbidden: adv_create_test_case ✅ (not selected)
+```
+
 ### v9.2.5 eval changes
 
 - **Suite partition** — default ~40 / cloud ~149 (was single large default set); local Ollama passes 80% gate on core TCM/launch reads.
 - **`npm run test:eval:cloud`** — sets `EVAL_PROVIDER=anthropic` (fixes accidental Ollama + Claude model 404).
-- **Widget eval files** — `eval-widget-prompts.ts`, `eval-hub-prompts.ts`, `eval-authoring-prompts.ts`; cloud suite holds disambiguation + period-mode prompts.
+- **Widget eval files** — `eval-widget-prompts.ts`, `eval-hub-prompts.ts`, `eval-authoring-prompts.ts`, `eval-authoring-tools.ts` (v9.2.7 wizard routing); cloud suite holds disambiguation + period-mode prompts.
 - **Distribution disambiguation** — `forbiddenTools` + prompt wording for chart/report/e2e vs `adv_get_test_case_distribution_by_field`.
 - **`field` arg alias** — eval accepts `system_field` / `custom_field_id` for distribution tool.
 
@@ -638,7 +687,7 @@ cost = (84 × 14,000 × $0.000003) + (8 × 17,000 × $0.000003)
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `EVAL_PROVIDER` | No | auto-detect | `anthropic`, `openai`, `gemini`, or `local` (Ollama/LM Studio) |
-| `EVAL_MODEL` | No | provider default | Model name (e.g. `claude-sonnet-4-6`, `qwen3.5:2b`, `gpt-4o-mini`) |
+| `EVAL_MODEL` | No | provider default | Model name (e.g. `claude-sonnet-5`, `qwen3.5:2b`, `gpt-4o-mini`) |
 | `EVAL_JUDGE_MODEL` | No | Same as `EVAL_MODEL` | Model for Layer 3 LLM judge |
 | `EVAL_BASE_URL` | For `local` override | `http://localhost:11434/v1` when `local` | OpenAI-compatible base URL |
 | `EVAL_API_KEY` | Provider-dependent | provider keys / `ollama` | Unified API key override |
@@ -669,7 +718,7 @@ EVAL_LAYER=1
 # Claude (release gating / targeted re-runs)
 # EVAL_PROVIDER=anthropic
 # ANTHROPIC_API_KEY=sk-ant-api03-YOUR_KEY_HERE
-# EVAL_MODEL=claude-sonnet-4-6
+# EVAL_MODEL=claude-sonnet-5
 # EVAL_STRICT=true
 # EVAL_FILTER=field_filter.custom_field_exact,report.pass_rate
 ```
@@ -745,7 +794,7 @@ Each run produces three outputs:
 
 ```
 ╔════════════════════════════════════════════════════╗
-║  LLM Eval Report — 2026-03-26 — claude-sonnet-4-6 ║
+║  LLM Eval Report — 2026-03-26 — claude-sonnet-5 ║
 ╠════════════════════════════════════════════════════╣
 ║  Layer:                    3                       ║
 ║  Tool Selection Accuracy:  ✅ 97.6%   (n=83)       ║
@@ -834,7 +883,11 @@ Test Failed
 tests/eval/
 ├── eval-config.ts          # Configuration: API keys, model, thresholds
 ├── eval-discovery.ts       # Dynamic data discovery from Zebrunner
-├── eval-prompts.ts         # 189 structured prompt definitions (default + cloud suites)
+├── eval-prompts.ts         # 197 structured prompt definitions (default + cloud suites)
+├── eval-widget-prompts.ts  # Widget routing prompts (v9.2.3+)
+├── eval-hub-prompts.ts     # Hub tools + pass-rate views (v9.2.4)
+├── eval-authoring-prompts.ts # Authoring trend widget (v9.2.5)
+├── eval-authoring-tools.ts # Authoring wizard routing (v9.2.7)
 ├── eval-mcp-client.ts      # MCP server lifecycle + JSON-RPC client
 ├── eval-judges.ts          # Tool selection, arg check, LLM judge
 ├── eval-report.ts          # Result aggregation, scorecard, JSON/MD output
@@ -882,4 +935,4 @@ The eval suite is **excluded from `npm run test:all`** to prevent accidental LLM
 
 ---
 
-*Last Updated: v9.2.6 - August 2026*
+*Last Updated: v9.2.7 - August 2026*

@@ -9,7 +9,7 @@
 # ══════════════════════════════════════════════════════════════════════════════
 
 name: zebrunner-mcp
-version: "9.2.6"
+version: "9.2.7"
 description: |
   Zebrunner MCP Server - Comprehensive test management integration for AI assistants.
   
