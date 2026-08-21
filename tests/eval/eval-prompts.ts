@@ -185,6 +185,50 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
     requiredContext: ["testCaseKey"],
   },
   {
+    id: "get_test_case_by_key.url_caseId",
+    toolSection: "1. TCM — URL input",
+    promptTemplate:
+      "Fetch full details for this Zebrunner test case URL: https://mfp.zebrunner.com/projects/{{project_key}}/test-cases?caseId={{test_case_id}}",
+    expectedTools: ["adv_get_test_case_by_key"],
+    expectedArgKeys: ["case_key"],
+    category: "tcm",
+    layer: 2,
+    requiredContext: ["projectKey", "testCaseId"],
+  },
+  {
+    id: "get_test_case_by_key.url_caseKey",
+    toolSection: "1. TCM — URL input",
+    promptTemplate:
+      "Open test case from pasted URL https://mfp.zebrunner.com/projects/{{project_key}}/test-cases?caseKey={{test_case_key}}",
+    expectedTools: ["adv_get_test_case_by_key"],
+    expectedArgKeys: ["case_key"],
+    category: "tcm",
+    layer: 2,
+    requiredContext: ["projectKey", "testCaseKey"],
+  },
+  {
+    id: "batch_get_test_cases.url_mixed",
+    toolSection: "1. TCM — URL input",
+    promptTemplate:
+      "Batch fetch {{test_case_key}} and https://mfp.zebrunner.com/projects/{{project_key}}/test-cases?caseId={{test_case_id}} in one call for {{project_key}}.",
+    expectedTools: ["adv_batch_get_test_cases"],
+    expectedArgKeys: ["case_keys", "project_key"],
+    category: "tcm",
+    layer: 2,
+    requiredContext: ["projectKey", "testCaseKey", "testCaseId"],
+  },
+  {
+    id: "create_test_case.source_url",
+    toolSection: "1. TCM — URL input",
+    promptTemplate:
+      "Create a new draft test case in {{project_key}} suite {{suite_id}} copied from source URL https://mfp.zebrunner.com/projects/{{project_key}}/test-cases?caseId={{test_case_id}} with title 'Copy of source'.",
+    expectedTools: ["adv_create_test_case"],
+    expectedArgKeys: ["source_case_key", "project_key", "test_suite_id"],
+    category: "mutation",
+    layer: 2,
+    requiredContext: ["projectKey", "suiteId", "testCaseId"],
+  },
+  {
     id: "get_all_subsuites.flat",
     toolSection: "1. TCM",
     promptTemplate:

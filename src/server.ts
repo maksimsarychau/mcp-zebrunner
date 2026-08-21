@@ -24,7 +24,13 @@ import { mapWithConcurrency } from "./utils/batch-concurrency.js";
 import { HierarchyProcessor } from "./utils/hierarchy.js";
 import { RulesParser } from "./utils/rules-parser.js";
 import { TestGenerator } from "./utils/test-generator.js";
-import { getClickableLinkConfig, generateTestCaseLink, addTestCaseWebUrl, generateSuiteLink, addSuiteWebUrl } from "./utils/clickable-links.js";
+import { getClickableLinkConfig, generateTestCaseLink, addTestCaseWebUrl, generateSuiteLink, addSuiteWebUrl, buildTestCaseWebUrl } from "./utils/clickable-links.js";
+import {
+  normalizeTestCaseInput,
+  fetchTestCaseByNormalizedInput,
+  lookupUsesNumericId,
+  prependHostWarning,
+} from "./utils/zebrunner-test-case-ref.js";
 import { ZebrunnerConfig } from "./types/api.js";
 import { ZebrunnerReportingConfig, ZebrunnerReportingAuthError } from "./types/reporting.js";
 import {
@@ -1324,19 +1330,25 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
     async (args) => {
       const { case_key, format, detail, fields, include_debug, include_suite_hierarchy, include_clickable_links, include_execution_history, include_history, history_filter, history_limit } = args;
 
-      const isNumericId = /^\d+$/.test(case_key.trim());
+      const webBaseUrl = ZEBRUNNER_URL.replace(/\/api\/public\/v1\/?$/, "").replace(/\/+$/, "");
+      const normalized = normalizeTestCaseInput(case_key, {
+        projectKeyHint: args.project_key,
+        configuredWebUrl: webBaseUrl,
+      });
+      const lookupKey = normalized.lookupKey;
+      const isNumericId = lookupUsesNumericId(normalized);
 
-      let project_key = args.project_key;
-      if (!isNumericId) {
+      let project_key = normalized.projectKey || args.project_key;
+      if (!isNumericId && !project_key) {
         try {
-          const resolved = FormatProcessor.resolveProjectKey(args);
+          const resolved = FormatProcessor.resolveProjectKey({ ...args, case_key: lookupKey });
           project_key = resolved.project_key;
         } catch (error: any) {
           return {
             content: [{
               type: "text" as const,
-              text: `❌ Error resolving project key: ${error.message}`
-            }]
+              text: prependHostWarning(`❌ Error resolving project key: ${error.message}`, normalized.hostMismatchWarning),
+            }],
           };
         }
       }
@@ -1345,25 +1357,28 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
         return {
           content: [{
             type: "text" as const,
-            text: `❌ Error: project_key is required when case_key is a numeric ID. Provide the project key (e.g., 'MCP') along with the numeric ID.`
-          }]
+            text: prependHostWarning(
+              `❌ Error: project_key is required when case_key is a numeric ID or Zebrunner URL without an embedded project. Provide the project key (e.g., 'MCP') along with the reference.`,
+              normalized.hostMismatchWarning,
+            ),
+          }],
         };
       }
 
       try {
-        debugLog("Getting test case", { project_key, case_key, isNumericId, format, include_suite_hierarchy, include_clickable_links });
+        debugLog("Getting test case", { project_key, case_key: lookupKey, isNumericId, format, include_suite_hierarchy, include_clickable_links });
 
         const clickableLinkConfig = getClickableLinkConfig(include_clickable_links, ZEBRUNNER_URL);
 
         let testCase;
         if (isNumericId) {
-          testCase = await client.getTestCaseById(project_key, parseInt(case_key, 10), { includeSuiteHierarchy: include_suite_hierarchy });
+          testCase = await client.getTestCaseById(project_key, parseInt(lookupKey, 10), { includeSuiteHierarchy: include_suite_hierarchy });
         } else {
-          testCase = await client.getTestCaseByKey(project_key, case_key, { includeSuiteHierarchy: include_suite_hierarchy });
+          testCase = await client.getTestCaseByKey(project_key, lookupKey, { includeSuiteHierarchy: include_suite_hierarchy });
         }
 
         if (!testCase) {
-          throw new Error(`Test case ${case_key} not found`);
+          throw new Error(`Test case ${lookupKey} not found`);
         }
 
         // Fetch execution history if requested
@@ -1423,8 +1438,8 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
           return {
             content: [{
               type: "text" as const,
-              text: markdown
-            }]
+              text: prependHostWarning(markdown, normalized.hostMismatchWarning),
+            }],
           };
         }
 
@@ -1435,20 +1450,21 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
         const fieldsLayout = await getFieldsLayoutForProject(project_key);
         const projected = projectTestCases(enhancedTestCase, detail, fields);
         const formattedData = FormatProcessor.format(projected, format, fieldsLayout);
+        const body = typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2);
 
         return {
           content: [{
             type: "text" as const,
-            text: typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2)
-          }]
+            text: prependHostWarning(body, normalized.hostMismatchWarning),
+          }],
         };
       } catch (error: any) {
-        debugLog("Error getting test case", { error: error.message, project_key, case_key });
+        debugLog("Error getting test case", { error: error.message, project_key, case_key: lookupKey });
         return {
           content: [{
             type: "text" as const,
-            text: `❌ Error getting test case ${case_key}: ${error.message}`
-          }]
+            text: prependHostWarning(`❌ Error getting test case ${lookupKey}: ${error.message}`, normalized.hostMismatchWarning),
+          }],
         };
       }
     }
@@ -1459,10 +1475,10 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
     {
       description:
         "📦 Fetch multiple test cases by key in one call (partial success). " +
-        "Missing keys land in notFound[]. Use after a filter/list to read a shortlist without N round-trips.",
+        "Missing keys land in notFound[]. Accepts plain keys, numeric IDs, or full Zebrunner test-case URLs.",
       inputSchema: {
         project_key: z.string().min(1).describe("Project key (e.g., 'MCP', 'android')"),
-        case_keys: z.array(z.string().min(1)).min(1).max(50).describe("Test case keys to fetch (max 50)"),
+        case_keys: z.array(z.string().min(1)).min(1).max(50).describe("Test case keys, numeric IDs, or Zebrunner URLs (max 50)"),
         detail: z.enum(['summary', 'full']).default('summary').describe("summary (default) trims rows; full returns every field."),
         fields: z.array(z.string()).optional().describe("Optional explicit field allow-list (overrides detail)."),
         format: z.enum(['dto', 'json', 'compact', 'string']).default('compact').describe("Output format"),
@@ -1478,11 +1494,26 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
       const { project_key, case_keys, detail, fields, format } = args;
       const notFound: string[] = [];
       const found: ZebrunnerTestCase[] = [];
+      const hostWarnings: string[] = [];
+      const webBaseUrl = ZEBRUNNER_URL.replace(/\/api\/public\/v1\/?$/, "").replace(/\/+$/, "");
 
       const settled = await mapWithConcurrency(case_keys, 5, async (key) => {
         const trimmed = key.trim();
+        const normalized = normalizeTestCaseInput(trimmed, {
+          projectKeyHint: project_key,
+          configuredWebUrl: webBaseUrl,
+        });
+        if (normalized.hostMismatchWarning) {
+          hostWarnings.push(normalized.hostMismatchWarning);
+        }
+        const resolvedProject = normalized.projectKey || project_key;
         try {
-          const tc = await client.getTestCaseByKey(project_key, trimmed, { includeSuiteHierarchy: false });
+          const tc = await fetchTestCaseByNormalizedInput<ZebrunnerTestCase>(
+            client,
+            normalized,
+            resolvedProject,
+            { includeSuiteHierarchy: false },
+          );
           if (tc) found.push(tc);
           else notFound.push(trimmed);
         } catch {
@@ -1494,11 +1525,13 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
       const projected = projectTestCases(found, detail, fields);
       const payload = { requested: case_keys.length, found: found.length, notFound, results: projected };
       const formatted = FormatProcessor.format(payload, format as any);
+      const body = typeof formatted === 'string' ? formatted : JSON.stringify(formatted, null, 2);
+      const uniqueWarnings = [...new Set(hostWarnings)];
 
       return {
         content: [{
           type: "text" as const,
-          text: typeof formatted === 'string' ? formatted : JSON.stringify(formatted, null, 2),
+          text: uniqueWarnings.length ? `${uniqueWarnings.join("\n")}\n\n${body}` : body,
         }],
       };
     }
@@ -3220,8 +3253,16 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
     },
     async (args) => {
       try {
-        // Auto-detect project key if not provided
-        const resolvedArgs = FormatProcessor.resolveProjectKey(args);
+        const webBaseUrl = ZEBRUNNER_URL.replace(/\/api\/public\/v1\/?$/, "").replace(/\/+$/, "");
+        const normalized = normalizeTestCaseInput(args.case_key, {
+          projectKeyHint: args.project_key,
+          configuredWebUrl: webBaseUrl,
+        });
+        const resolvedArgs = FormatProcessor.resolveProjectKey({
+          ...args,
+          project_key: normalized.projectKey || args.project_key,
+          case_key: normalized.lookupKey,
+        });
         const { project_key, case_key, implementation_context, analysis_scope, output_format, include_recommendations, include_suite_hierarchy, file_path, include_clickable_links } = resolvedArgs;
 
         debugLog("Analyzing test coverage", { project_key, case_key, analysis_scope, output_format, include_suite_hierarchy, include_clickable_links });
@@ -3230,7 +3271,9 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
         const clickableLinkConfig = getClickableLinkConfig(include_clickable_links, ZEBRUNNER_URL);
 
         // Get the detailed test case
-        const testCase = await client.getTestCaseByKey(project_key, case_key, { includeSuiteHierarchy: include_suite_hierarchy });
+        const testCase = lookupUsesNumericId(normalized)
+          ? await client.getTestCaseById(project_key, parseInt(case_key, 10), { includeSuiteHierarchy: include_suite_hierarchy })
+          : await client.getTestCaseByKey(project_key, case_key, { includeSuiteHierarchy: include_suite_hierarchy });
 
         if (!testCase) {
           throw new Error(`Test case ${case_key} not found in project ${project_key}`);
@@ -5539,14 +5582,29 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         let fileTransferReport = "";
 
         if (args.source_case_key) {
-          const keyMatch = args.source_case_key.match(/^([A-Za-z][A-Za-z0-9_]*)-(\d+)$/);
-          if (!keyMatch) {
-            return { content: [{ type: "text" as const, text: "❌ source_case_key must be in format 'PROJECT-123'" }] };
+          const webBaseUrl = ZEBRUNNER_URL.replace(/\/api\/public\/v1\/?$/, "").replace(/\/+$/, "");
+          const sourceNormalized = normalizeTestCaseInput(args.source_case_key, {
+            projectKeyHint: projectKey,
+            configuredWebUrl: webBaseUrl,
+          });
+          if (sourceNormalized.source === "passthrough" && !sourceNormalized.caseKey) {
+            return { content: [{ type: "text" as const, text: "❌ source_case_key must be a test case key, numeric ID, or Zebrunner URL" }] };
           }
-          sourceProjectKey = keyMatch[1];
+          sourceProjectKey = sourceNormalized.projectKey || projectKey;
+          if (!sourceProjectKey) {
+            return { content: [{ type: "text" as const, text: "❌ project_key is required when source_case_key is a numeric ID or URL without embedded project" }] };
+          }
 
-          const sourceResp = await mutationClient.getTestCaseByKey(sourceProjectKey, args.source_case_key);
-          sourceData = sourceResp.data ?? {};
+          if (lookupUsesNumericId(sourceNormalized)) {
+            const sourceResp = await mutationClient.getTestCaseById(
+              sourceProjectKey,
+              parseInt(sourceNormalized.lookupKey, 10),
+            );
+            sourceData = sourceResp.data ?? {};
+          } else {
+            const sourceResp = await mutationClient.getTestCaseByKey(sourceProjectKey, sourceNormalized.lookupKey);
+            sourceData = sourceResp.data ?? {};
+          }
         }
 
         // Merge source fields with explicit args (explicit args win)
@@ -5575,9 +5633,10 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         if (args.source_case_key && sourceData) {
           const baseWebUrl = ZEBRUNNER_URL.replace("/api/public/v1", "");
           const sourceId = sourceData.id;
+          const sourceKeyLabel = (sourceData.key as string | undefined) ?? args.source_case_key;
           const sourceLink = sourceId
-            ? `[${args.source_case_key}](${baseWebUrl}/projects/${sourceProjectKey}/test-cases?caseId=${sourceId})`
-            : args.source_case_key;
+            ? `[${sourceKeyLabel}](${buildTestCaseWebUrl(baseWebUrl, sourceProjectKey!, { id: sourceId as number, key: sourceKeyLabel })})`
+            : sourceKeyLabel;
           const sourceHeader = `**Source:** ${sourceLink}`;
           eff.description = eff.description ? `${sourceHeader}\n\n${eff.description}` : sourceHeader;
         }
@@ -5896,7 +5955,20 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           return { content: [{ type: "text" as const, text: "❌ identifier is required (numeric ID or string key)" }] };
         }
         const projectKey = args.project_key || String(args.project_id);
-        const isKeyIdentifier = typeof args.identifier === "string";
+        let identifier: number | string = args.identifier;
+        let identifierHostWarning: string | undefined;
+        if (typeof identifier === "string") {
+          const webBaseUrl = ZEBRUNNER_URL.replace(/\/api\/public\/v1\/?$/, "").replace(/\/+$/, "");
+          const normalized = normalizeTestCaseInput(identifier, {
+            projectKeyHint: projectKey,
+            configuredWebUrl: webBaseUrl,
+          });
+          identifierHostWarning = normalized.hostMismatchWarning;
+          identifier = lookupUsesNumericId(normalized)
+            ? parseInt(normalized.lookupKey, 10)
+            : normalized.lookupKey;
+        }
+        const isKeyIdentifier = typeof identifier === "string";
 
         // Build payload (only include explicitly provided fields)
         const payload: Record<string, unknown> = {};
@@ -5919,17 +5991,18 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         }
 
         const resourcePath = isKeyIdentifier
-          ? `/test-cases/key:${args.identifier}`
-          : `/test-cases/${args.identifier}`;
+          ? `/test-cases/key:${identifier}`
+          : `/test-cases/${identifier}`;
         const url = `${resourcePath}?projectKey=${encodeURIComponent(projectKey)}`;
         const identifierType = isKeyIdentifier ? "key" : "ID";
 
         // Branch A: dry_run
         if (args.dry_run) {
           return {
-            content: [{ type: "text" as const, text:
-              `DRY RUN — adv_update_test_case (by ${identifierType})\nPATCH ${url}\n\nPayload:\n${JSON.stringify(payload, null, 2)}`
-            }]
+            content: [{ type: "text" as const, text: prependHostWarning(
+              `DRY RUN — adv_update_test_case (by ${identifierType})\nPATCH ${url}\n\nPayload:\n${JSON.stringify(payload, null, 2)}`,
+              identifierHostWarning,
+            ) }],
           };
         }
 
@@ -5937,8 +6010,8 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         let beforeData: Record<string, unknown> = {};
         try {
           const before = isKeyIdentifier
-            ? await mutationClient.getTestCaseByKey(projectKey, args.identifier as string)
-            : await mutationClient.getTestCaseById(projectKey, args.identifier as number);
+            ? await mutationClient.getTestCaseByKey(projectKey, identifier as string)
+            : await mutationClient.getTestCaseById(projectKey, identifier as number);
           beforeData = before.data ?? {};
         } catch {
           // Non-fatal
@@ -5967,14 +6040,15 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
 
           const token = generateConfirmationToken(JSON.stringify(args));
           return {
-            content: [{ type: "text" as const, text:
+            content: [{ type: "text" as const, text: prependHostWarning(
               `📋 Preview — adv_update_test_case (by ${identifierType})\nPATCH ${url}\n\n` +
               `Current record:\n${JSON.stringify(beforeData, null, 2)}\n\n` +
               `Proposed changes:\n${JSON.stringify(payload, null, 2)}\n` +
               stepsWarning + reqsWarning + filePathSection + `\n` +
               `confirmation_token: ${token}\n` +
-              `⚠️ To proceed, call again with ONLY: { "confirm": true, "confirmation_token": "${token}" }`
-            }]
+              `⚠️ To proceed, call again with ONLY: { "confirm": true, "confirmation_token": "${token}" }`,
+              identifierHostWarning,
+            ) }],
           };
         }
 
@@ -6023,8 +6097,8 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         });
 
         const body = isKeyIdentifier
-          ? await mutationClient.updateTestCaseByKey(projectKey, args.identifier as string, payload)
-          : await mutationClient.updateTestCaseById(projectKey, args.identifier as number, payload);
+          ? await mutationClient.updateTestCaseByKey(projectKey, identifier as string, payload)
+          : await mutationClient.updateTestCaseById(projectKey, identifier as number, payload);
         debugLog("adv_update_test_case: API call done", { elapsed: `${Date.now() - t0}ms`, totalElapsed: `${Date.now() - handlerStart}ms` });
 
         const afterData = body.data ?? {};
@@ -6074,7 +6148,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         }
 
         return {
-          content: [{ type: "text" as const, text: resultText }]
+          content: [{ type: "text" as const, text: prependHostWarning(resultText, identifierHostWarning) }],
         };
       } catch (error: any) {
         const hint = error.statusCode === 404
@@ -9919,16 +9993,33 @@ ${detailsInfo.map((detail, i) => {
     },
     async (args) => {
       try {
-        debugLog("adv_validate_test_case called", args);
+        const webBaseUrl = ZEBRUNNER_URL.replace(/\/api\/public\/v1\/?$/, "").replace(/\/+$/, "");
+        const normalized = normalizeTestCaseInput(args.caseKey, {
+          projectKeyHint: args.projectKey,
+          configuredWebUrl: webBaseUrl,
+        });
+        const resolvedArgs = FormatProcessor.resolveProjectKey({
+          ...args,
+          project_key: normalized.projectKey || args.projectKey,
+          case_key: normalized.lookupKey,
+        });
+        debugLog("adv_validate_test_case called", resolvedArgs);
 
-        // Import handlers here to avoid circular dependencies
         const { ZebrunnerToolHandlers } = await import("./handlers/tools.js");
         const { ZebrunnerApiClient } = await import("./api/client.js");
         const basicClient = new ZebrunnerApiClient(config);
         const toolHandlers = new ZebrunnerToolHandlers(basicClient);
 
-        const fieldsLayout = await getFieldsLayoutForProject(args.projectKey);
-        return await toolHandlers.validateTestCase(args, fieldsLayout);
+        const fieldsLayout = await getFieldsLayoutForProject(resolvedArgs.project_key);
+        const result = await toolHandlers.validateTestCase({
+          ...args,
+          projectKey: resolvedArgs.project_key,
+          caseKey: normalized.lookupKey,
+        }, fieldsLayout);
+        if (normalized.hostMismatchWarning && result.content?.[0]?.type === "text") {
+          result.content[0].text = prependHostWarning(result.content[0].text, normalized.hostMismatchWarning);
+        }
+        return result;
       } catch (error: any) {
         debugLog("Error in adv_validate_test_case", { error: error.message, args });
         return {
@@ -9963,16 +10054,33 @@ ${detailsInfo.map((detail, i) => {
     },
     async (args) => {
       try {
-        debugLog("adv_improve_test_case called", args);
+        const webBaseUrl = ZEBRUNNER_URL.replace(/\/api\/public\/v1\/?$/, "").replace(/\/+$/, "");
+        const normalized = normalizeTestCaseInput(args.caseKey, {
+          projectKeyHint: args.projectKey,
+          configuredWebUrl: webBaseUrl,
+        });
+        const resolvedArgs = FormatProcessor.resolveProjectKey({
+          ...args,
+          project_key: normalized.projectKey || args.projectKey,
+          case_key: normalized.lookupKey,
+        });
+        debugLog("adv_improve_test_case called", resolvedArgs);
 
-        // Import handlers here to avoid circular dependencies
         const { ZebrunnerToolHandlers } = await import("./handlers/tools.js");
         const { ZebrunnerApiClient } = await import("./api/client.js");
         const basicClient = new ZebrunnerApiClient(config);
         const toolHandlers = new ZebrunnerToolHandlers(basicClient);
 
-        const fieldsLayout = await getFieldsLayoutForProject(args.projectKey);
-        return await toolHandlers.improveTestCase(args, fieldsLayout);
+        const fieldsLayout = await getFieldsLayoutForProject(resolvedArgs.project_key);
+        const result = await toolHandlers.improveTestCase({
+          ...args,
+          projectKey: resolvedArgs.project_key,
+          caseKey: normalized.lookupKey,
+        }, fieldsLayout);
+        if (normalized.hostMismatchWarning && result.content?.[0]?.type === "text") {
+          result.content[0].text = prependHostWarning(result.content[0].text, normalized.hostMismatchWarning);
+        }
+        return result;
       } catch (error: any) {
         debugLog("Error in adv_improve_test_case", { error: error.message, args });
         return {

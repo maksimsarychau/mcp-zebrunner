@@ -155,4 +155,15 @@ export const AUTHORING_TOOLS_EVAL_PROMPTS: EvalPrompt[] = [
     expectedBehavior: "should_select_tool",
     requiredContext: ["projectKey"],
   },
+  {
+    id: "scaffold.source_case_url",
+    toolSection: "1. TCM — Authoring wizard (v9.2.7)",
+    promptTemplate:
+      "Start the test case wizard for {{project_key}} and use https://mfp.zebrunner.com/projects/{{project_key}}/test-cases?caseId={{test_case_id}} as the source case to reference.",
+    expectedTools: ["adv_scaffold_test_case", "adv_create_test_case_wizard"],
+    expectedArgKeys: ["source_case_key"],
+    category: "mutation",
+    layer: 2,
+    requiredContext: ["projectKey", "testCaseId"],
+  },
 ];

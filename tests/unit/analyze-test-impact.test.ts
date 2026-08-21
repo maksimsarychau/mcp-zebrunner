@@ -87,13 +87,26 @@ describe("test-impact scorer", () => {
     assert.notEqual(scored!.confidence, "HIGH");
   });
 
-  it("detects coverage gaps", () => {
+  it("detects coverage gaps with suggested draft test cases", () => {
     const gaps = detectCoverageGaps(
       ["session-gated upsell frequency"],
       [],
+      {
+        ctx: normalizeChangeContext({
+          features: ["Meal Planner"],
+          behaviors: ["session-gated upsell frequency"],
+        }),
+        matchedSuites: [{ id: 17441, name: "10. Meal Planner", matchReason: "feature" }],
+        featureAreaKeywords: { meal: "Meal Management" },
+        includeSuggestedDrafts: true,
+      },
     );
     assert.equal(gaps.length, 1);
     assert.equal(gaps[0].status, "POTENTIAL_GAP");
+    assert.ok(gaps[0].suggestedTestCase);
+    assert.match(gaps[0].suggestedTestCase!.title, /Verify/i);
+    assert.ok(gaps[0].suggestedTestCase!.steps.length >= 3);
+    assert.equal(gaps[0].suggestedTestCase!.suggestedSuite, "Meal Planner");
   });
 
   it("confidence thresholds", () => {

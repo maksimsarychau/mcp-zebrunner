@@ -11,7 +11,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { EnhancedZebrunnerClient } from "../api/enhanced-client.js";
 import type { ZebrunnerShortTestCase, ZebrunnerTestCase } from "../types/core.js";
 import { mapWithConcurrency } from "../utils/batch-concurrency.js";
-import { addTestCaseWebUrl } from "../utils/clickable-links.js";
+import { addTestCaseWebUrl, buildTestCaseWebUrl } from "../utils/clickable-links.js";
 import { FormatProcessor } from "../utils/formatter.js";
 import { getConfig } from "../utils/config-loader.js";
 import { sanitizeRqlString } from "../utils/security.js";
@@ -77,7 +77,17 @@ export interface ImpactAnalysisResult {
       low: number;
     };
   };
-  newCoverageNeeded: Array<{ behavior: string; status: string; reason: string }>;
+  newCoverageNeeded: Array<{
+    behavior: string;
+    status: string;
+    reason: string;
+    suggestedTestCase?: {
+      title: string;
+      steps: string[];
+      suggestedSuite?: string;
+      suggestedTheme?: string;
+    };
+  }>;
   recommendedSmokeSuites: Array<{ rootSuiteId: number; name: string; reason: string }>;
   informationalMatches: Array<Record<string, unknown>>;
   scopingNotes: string[];
@@ -155,7 +165,10 @@ export function buildHybridOutput(
       automationState: c.automationState,
       suite: c.suiteName,
       reasons: c.reasons,
-      webUrl: `${webBaseUrl.replace(/\/+$/, "")}/projects/${projectKey}/test-cases/${c.testCase.id ?? c.key}`,
+      webUrl: buildTestCaseWebUrl(webBaseUrl, projectKey, {
+        id: c.testCase.id,
+        key: c.key,
+      }),
     };
     if (includeSteps && c.testCase.steps) {
       row.steps = c.testCase.steps;
@@ -216,7 +229,12 @@ export function buildHybridOutput(
       summary: { automated, manual, high, medium, low },
     },
     newCoverageNeeded: options.includeCoverageGaps
-      ? detectCoverageGaps(ctx.behaviors, sorted)
+      ? detectCoverageGaps(ctx.behaviors, sorted, {
+          ctx,
+          matchedSuites,
+          featureAreaKeywords: cfg.featureAreaKeywords,
+          includeSuggestedDrafts: true,
+        })
       : [],
     recommendedSmokeSuites: smoke,
     informationalMatches: informational.map((c) => ({

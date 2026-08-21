@@ -35,7 +35,7 @@ The client should:
 |---------|---------|
 | `regression.byTheme` | Existing cases to re-run, grouped by theme |
 | `regression.byTheme[].automated` / `.manual` | Split by automation state |
-| `newCoverageNeeded` | Potential coverage gaps (not proof of absence) |
+| `newCoverageNeeded` | Potential coverage gaps (not proof of absence); includes `suggestedTestCase` draft (title + steps + suite/theme) |
 | `recommendedSmokeSuites` | When infra keywords match config |
 | `scopingNotes` | Why full suites were not recommended |
 

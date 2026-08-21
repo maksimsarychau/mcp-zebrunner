@@ -159,17 +159,82 @@ export function scoreTestCase(
   };
 }
 
+export interface SuggestedTestCaseDraft {
+  title: string;
+  steps: string[];
+  suggestedSuite?: string;
+  suggestedTheme?: string;
+}
+
 export interface CoverageGap {
   behavior: string;
   status: "POTENTIAL_GAP";
   reason: string;
+  suggestedTestCase?: SuggestedTestCaseDraft;
+}
+
+function titleCaseBehavior(behavior: string): string {
+  const cleaned = behavior.replace(/\s+/g, " ").trim();
+  if (!cleaned) return "new behavior";
+  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+}
+
+function resolveThemeFromBehavior(
+  behavior: string,
+  ctx: NormalizedChangeContext,
+  matchedSuites: MatchedSuite[],
+  featureAreaKeywords: Record<string, string>,
+): string {
+  const blob = normalizeText(behavior);
+  for (const [kw, label] of Object.entries(featureAreaKeywords)) {
+    if (blob.includes(kw.toLowerCase())) return label;
+  }
+  for (const f of ctx.features) {
+    const fn = normalizeText(f);
+    for (const [kw, label] of Object.entries(featureAreaKeywords)) {
+      if (fn.includes(kw.toLowerCase())) return label;
+    }
+  }
+  if (matchedSuites[0]) {
+    return matchedSuites[0].name.replace(/^\d+\.\s*/, "").trim();
+  }
+  return "General";
+}
+
+export function suggestTestCaseDraft(
+  behavior: string,
+  ctx: NormalizedChangeContext,
+  matchedSuites: MatchedSuite[],
+  featureAreaKeywords: Record<string, string>,
+): SuggestedTestCaseDraft {
+  const feature = ctx.features[0];
+  const theme = resolveThemeFromBehavior(behavior, ctx, matchedSuites, featureAreaKeywords);
+  const suggestedSuite = matchedSuites[0]?.name.replace(/^\d+\.\s*/, "").trim();
+  const title = feature
+    ? `Verify ${titleCaseBehavior(behavior)} (${feature})`
+    : `Verify ${titleCaseBehavior(behavior)}`;
+  const contextLabel = feature ?? theme;
+  const steps = [
+    `Precondition: User has access to ${contextLabel} and required test data is available.`,
+    `Action: Perform the flow that exercises "${behavior}".`,
+    `Expected: The system behaves correctly for "${behavior}" with no errors or data loss.`,
+    `Regression: Related ${contextLabel} flows remain unaffected.`,
+  ];
+  return { title, steps, suggestedSuite, suggestedTheme: theme };
 }
 
 export function detectCoverageGaps(
   behaviors: string[],
   scored: ScoredCandidate[],
+  options?: {
+    ctx?: NormalizedChangeContext;
+    matchedSuites?: MatchedSuite[];
+    featureAreaKeywords?: Record<string, string>;
+    includeSuggestedDrafts?: boolean;
+  },
 ): CoverageGap[] {
   const gaps: CoverageGap[] = [];
+  const includeDrafts = options?.includeSuggestedDrafts !== false;
   for (const behavior of behaviors) {
     const matched = scored.some(
       (c) =>
@@ -179,11 +244,20 @@ export function detectCoverageGaps(
           containsPhrase(stepText(c.testCase), behavior)),
     );
     if (!matched) {
-      gaps.push({
+      const gap: CoverageGap = {
         behavior,
         status: "POTENTIAL_GAP",
         reason: "No sufficiently relevant Zebrunner test case was found.",
-      });
+      };
+      if (includeDrafts && options?.ctx) {
+        gap.suggestedTestCase = suggestTestCaseDraft(
+          behavior,
+          options.ctx,
+          options.matchedSuites ?? [],
+          options.featureAreaKeywords ?? {},
+        );
+      }
+      gaps.push(gap);
     }
   }
   return gaps;

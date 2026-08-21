@@ -330,7 +330,7 @@ Do NOT chain adv_get_root_suites, adv_get_suite_hierarchy, adv_get_test_cases_by
 
 ## Step 4 — Present results (informational)
 A. **Regression** — existing cases to re-run, grouped by theme, split automated vs manual, with confidence and links
-B. **New functionality to verify** — newCoverageNeeded / potential coverage gaps
+B. **New functionality to verify** — newCoverageNeeded / potential coverage gaps (includes suggestedTestCase drafts: title + high-level steps + suggested suite/theme when a behavior has no match)
 C. **Recommended smoke suites** (if any)
 D. **Scoping notes** — explain what was excluded
 
