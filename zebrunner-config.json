@@ -46,5 +46,29 @@
   "relaunchFailures": {
     "excludeLaunchNamePatterns": ["Performance"],
     "maxLaunchesPerPlatform": 50
-  }
+  },
+  "repositoryProjectMap": {
+    "mfp-android": "MFPAND",
+    "mfp-ios": "MFPIOS",
+    "web-apps": "MFPWEB"
+  },
+  "testImpactSmokeSuites": {
+    "MFPAND": [
+      {
+        "rootSuiteId": 66,
+        "name": "Minimal Acceptance",
+        "reason": "Core navigation, tab bar, or ViewModel/MVI changes"
+      }
+    ]
+  },
+  "testImpactInfraKeywords": [
+    "navigation",
+    "bottom nav",
+    "viewmodel",
+    "mvi",
+    "tab bar",
+    "app launch",
+    "deep link handler",
+    "application class"
+  ]
 }

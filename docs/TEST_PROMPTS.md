@@ -1328,6 +1328,16 @@ The `steeringHint()` helper in `src/helpers/steering.ts` is a pure, deterministi
 
 **Expected:** Uses `adv_create_test_case` with `draft: false`, but the preview shows `draft → true (forced for safety)`. The created test case is always a draft. The user must use `adv_update_test_case` to publish it.
 
+### `adv_analyze_test_impact` *(v9.2.8)*
+
+**Example prompts (eval IDs: `test_impact.*`):**
+
+- "Analyze test impact for my PR code changes on {{project_key}}"
+- "Which Zebrunner tests might my code changes affect?"
+- "/test-impact project: {{project_key}}"
+
+See [TEST_IMPACT_WORKFLOW.md](TEST_IMPACT_WORKFLOW.md).
+
 ### `adv_scaffold_test_case` *(v9.2.7)*
 
 Guided best-practice authoring wizard. Also registered as the alias `adv_create_test_case_wizard` and exposed via the `scaffold-test-case` / `create-test-case-wizard` prompts. On elicitation-capable clients (Claude Code, Cursor) it drives an interactive form; on other clients (Claude Desktop) it returns a conversational questionnaire that finishes through `adv_create_test_case` with `review: true`. Default step language is **Gherkin** (Given/When/Then, one step per line).
@@ -2311,4 +2321,4 @@ bash tests/api-verify.sh --widget-catalog-audit
 
 ---
 
-*Last Updated: v9.2.7 — August 2026*
+*Last Updated: v9.2.8 — August 2026*

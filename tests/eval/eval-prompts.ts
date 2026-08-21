@@ -3,6 +3,7 @@ import type { EvalLayer } from "./eval-config.js";
 import { HUB_EVAL_PROMPTS } from "./eval-hub-prompts.js";
 import { AUTHORING_EVAL_PROMPTS } from "./eval-authoring-prompts.js";
 import { AUTHORING_TOOLS_EVAL_PROMPTS } from "./eval-authoring-tools.js";
+import { TEST_IMPACT_EVAL_PROMPTS } from "./eval-test-impact-tools.js";
 import { WIDGET_EVAL_PROMPTS } from "./eval-widget-prompts.js";
 
 export type PromptCategory =
@@ -784,6 +785,9 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
 
   // Authoring wizard tools (v9.2.7) — see eval-authoring-tools.ts
   ...AUTHORING_TOOLS_EVAL_PROMPTS,
+
+  // Test impact analysis (v9.2.8) — see eval-test-impact-tools.ts
+  ...TEST_IMPACT_EVAL_PROMPTS,
 
   // ── Section 4: Utility / Connection Tools ──
 

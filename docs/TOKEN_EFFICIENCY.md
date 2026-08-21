@@ -50,6 +50,7 @@ Large Zebrunner exports (thousands of test cases with steps, preconditions, and 
 | `adv_get_test_cases_by_automation_state` | Bulk by automation state |
 | `adv_get_test_case_by_filter` | Filtered bulk |
 | `adv_get_test_case_by_title` | Search results |
+| `adv_analyze_test_impact` | Bounded impact report (~1–5k tokens); prefer over chaining title search + full suite export |
 | `adv_get_all_subsuites` | Suite tree payloads |
 | `adv_get_suite_hierarchy` | Hierarchy JSON |
 | `adv_get_root_suites` | Root suite lists |

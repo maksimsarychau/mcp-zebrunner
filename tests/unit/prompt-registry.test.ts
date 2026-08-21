@@ -17,6 +17,7 @@ import {
   buildFindDuplicatesPrompt,
   buildDailyQaStandupPrompt,
   buildAutomationGapsPrompt,
+  buildTestImpactPrompt,
   buildProjectOverviewPrompt,
   getPromptsCatalog,
   type PromptMeta,
@@ -44,7 +45,7 @@ describe("Prompt Registry Coverage", () => {
   const registeredPrompts = extractPromptRegistrations(promptSource);
 
   it("registers the expected number of prompts", () => {
-    assert.equal(registeredPrompts.length, 19, `Expected 19 prompts, got ${registeredPrompts.length}: ${registeredPrompts.join(", ")}`);
+    assert.equal(registeredPrompts.length, 20, `Expected 20 prompts, got ${registeredPrompts.length}: ${registeredPrompts.join(", ")}`);
   });
 
   it("has unique prompt names", () => {
@@ -65,6 +66,7 @@ describe("Prompt Registry Coverage", () => {
       "feature-scoped-launch",
       "flaky-review",
       "find-duplicates",
+      "test-impact",
       "daily-qa-standup",
       "automation-gaps",
       "project-overview",
@@ -460,13 +462,30 @@ describe("Project Overview Prompt", () => {
   });
 });
 
+describe("Test Impact Prompt", () => {
+  const text = buildTestImpactPrompt("PROJ2", "repo-android", "https://github.com/org/repo/pull/1");
+
+  it("references adv_analyze_test_impact", () => {
+    assert.ok(text.includes("adv_analyze_test_impact"));
+  });
+
+  it("includes gh pr view workflow", () => {
+    assert.ok(text.includes("gh pr view"));
+  });
+
+  it("forbids suite_smart chain by default", () => {
+    assert.ok(text.includes("adv_get_test_cases_by_suite_smart"));
+    assert.ok(text.includes("Do NOT chain"));
+  });
+});
+
 // ── Prompt Catalog API ───────────────────────────────────────────────────────
 
 describe("getPromptsCatalog()", () => {
   const catalog = getPromptsCatalog();
 
-  it("returns exactly 19 prompts matching registered count", () => {
-    assert.equal(catalog.length, 19);
+  it("returns exactly 20 prompts matching registered count", () => {
+    assert.equal(catalog.length, 20);
   });
 
   it("every entry has required fields", () => {

@@ -2,7 +2,7 @@
 
 **Author:** Maksim Sarychau  
 **Version:** 1.1  
-**Last Updated:** v9.2.7 - August 2026
+**Last Updated:** v9.2.8 - August 2026
 
 ---
 
@@ -402,9 +402,9 @@ The framework uses **real Zebrunner project data** — not hardcoded values. At 
 
 ## 6. What Gets Tested
 
-### Prompt catalog (v9.2.7)
+### Prompt catalog (v9.2.8)
 
-The full catalog lives in `tests/eval/eval-prompts.ts` (**204 prompts**). Counts shift slightly as prompts are added; suite sizes are fixed in `tests/eval/eval-cloud-suite.ts`.
+The full catalog lives in `tests/eval/eval-prompts.ts` (**212 prompts**). Counts shift slightly as prompts are added; suite sizes are fixed in `tests/eval/eval-cloud-suite.ts`.
 
 | Suite | Prompts | When to run | Thresholds |
 |-------|---------|-------------|------------|
@@ -464,6 +464,25 @@ EVAL_FILTER=widget.tpl7,authoring npm run test:eval:cloud
 
 # Legacy: entire catalog
 EVAL_SUITE=all npm run test:eval
+```
+
+### v9.2.8 eval changes — test impact routing
+
+Routing for **`adv_analyze_test_impact`** lives in `tests/eval/eval-test-impact-tools.ts` (**8 prompts**). Layers 1–2 only; scoring/output covered by `tests/unit/analyze-test-impact.test.ts`.
+
+| Prompt ID | Layer | What it checks |
+|-----------|-------|----------------|
+| `test_impact.pr_regression` | 1 | PR regression wording → impact tool |
+| `test_impact.code_changes` | 1 | Natural-language discovery |
+| `test_impact.with_behaviors` | 2 | Passes `behaviors` arg keys |
+| `test_impact.repository_slug` | 2 | Repo folder → `repository_slug` |
+| `test_impact.neg.not_suite_smart` | 2 | Forbids full suite_smart chain |
+| `test_impact.neg.not_aggregate_feature` | 2 | Forbids aggregate_by_feature |
+| `test_impact.neg.not_title_chain` | 2 | Forbids multiple title searches |
+| `test_impact.slash_prompt` | 2 | `/test-impact` → impact tool |
+
+```bash
+npm run test:eval:test-impact
 ```
 
 ### v9.2.7 eval changes — authoring wizard routing
@@ -888,6 +907,7 @@ tests/eval/
 ├── eval-hub-prompts.ts     # Hub tools + pass-rate views (v9.2.4)
 ├── eval-authoring-prompts.ts # Authoring trend widget (v9.2.5)
 ├── eval-authoring-tools.ts # Authoring wizard routing (v9.2.7)
+├── eval-test-impact-tools.ts # Test impact routing (v9.2.8)
 ├── eval-mcp-client.ts      # MCP server lifecycle + JSON-RPC client
 ├── eval-judges.ts          # Tool selection, arg check, LLM judge
 ├── eval-report.ts          # Result aggregation, scorecard, JSON/MD output
@@ -935,4 +955,4 @@ The eval suite is **excluded from `npm run test:all`** to prevent accidental LLM
 
 ---
 
-*Last Updated: v9.2.7 - August 2026*
+*Last Updated: v9.2.8 - August 2026*

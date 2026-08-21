@@ -72,6 +72,7 @@ import { TCM_WIDGET_SYSTEM_NAMES } from "./utils/tcm-widget-client.js";
 import { registerWidgetHubTools } from "./handlers/widget-hub-tools.js";
 import { registerTestAuthoringTrendTool } from "./handlers/widget-authoring-trend-tool.js";
 import { registerScaffoldTestCaseTool } from "./handlers/scaffold-test-case-tool.js";
+import { registerAnalyzeTestImpactTool } from "./handlers/analyze-test-impact-tool.js";
 import {
   buildPassRateViewExtra,
   PASS_RATE_GROUP_BY,
@@ -9574,6 +9575,12 @@ ${detailsInfo.map((detail, i) => {
       }
       return lines.join("\n");
     },
+  });
+
+  registerAnalyzeTestImpactTool(server, {
+    client,
+    webBaseUrl: WIDGET_BASE_URL,
+    debugLog,
   });
 
   // === Tool #3: Get project milestones ===

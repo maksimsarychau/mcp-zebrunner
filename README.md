@@ -5,6 +5,8 @@ A **Model Context Protocol (MCP)** server that brings advanced analytics, report
 
 > Tool naming: every tool on this server is registered under the canonical `adv_<name>` form (e.g. `adv_create_test_case`, `adv_list_test_runs`) so it never collides with the official Zebrunner MCP. The legacy names are kept as **deprecated aliases** so prompts/scripts that called the old names continue to work for now; aliases will be removed in the next major release. 
 
+> 🆕 **v9.2.8** — New `adv_analyze_test_impact` + `/test-impact` prompt for PR/code-change test planning (regression + coverage gaps). See [TEST_IMPACT_WORKFLOW.md](docs/TEST_IMPACT_WORKFLOW.md) and [release notes](docs/releases/v9.2.8.md).
+>
 > 🆕 **v9.2.7** — New `adv_scaffold_test_case` wizard (hybrid form/conversational) to author test cases from best practices with an automatic warn-only similar-case check, plus configurable `projectAliases` in `zebrunner-config.json`. See [release notes](docs/releases/v9.2.7.md).
 >
 > 🆕 **v9.2.5** — **`adv_get_test_authoring_trend`** (TAM template 7) completes **22/22** dashboard widget MCP coverage. Hub tools, pass-rate views, period modes. See **[TEST_PROMPTS.md §18](docs/TEST_PROMPTS.md#18-dashboard-widgets-22-templates--v925)** and [change-logs.md](change-logs.md#v925--test-authoring-trend-template-7).
@@ -655,6 +657,13 @@ Most test case tools support optional **change history enrichment** — fetching
 | `adv_update_test_case` | (Beta) Partially update a Test Case by ID or key (PATCH). Accepts `{file_path}` in attachments for local file upload. | `"Attach /Users/me/screenshot.png to test case MCP-42"` | QA, SDETs |
 
 ### 🔍 Test Coverage & Analysis
+
+#### **Test Impact (PR / code changes)** *(v9.2.8)*
+| Tool | Description | Example Usage | Best For |
+|------|-------------|---------------|----------|
+| `adv_analyze_test_impact` | Rank Zebrunner cases affected by code changes from compact semantic context | `"Analyze test impact for diary edit + serving size changes on PROJ2"` | **Developers, SDETs** |
+
+Use the **`/test-impact`** MCP prompt (optional `pr_url`) for guided workflow. See [TEST_IMPACT_WORKFLOW.md](docs/TEST_IMPACT_WORKFLOW.md). Configure `repositoryProjectMap` via `.env.example`.
 
 #### **Coverage Analysis**
 | Tool | Description | Example Usage | Best For |

@@ -32,6 +32,10 @@
     "description": "Deep forensic analysis of failed tests including logs, screenshots, error classification, and comparison with last passed execution"
   },
   {
+    "name": "adv_analyze_test_impact",
+    "description": "Analyze which Zebrunner test cases may be affected by production code changes. Pass compact semantic change context (features, behaviors, symbols, keywords) — not raw git diffs. Returns regression candidates by theme (automated vs manual), potential coverage gaps, and optional smoke-suite recommendations."
+  },
+  {
     "name": "adv_batch_get_test_cases",
     "description": "Fetch multiple test cases by key in one call (partial success). Use detail=summary and format=compact for token-efficient shortlists."
   },

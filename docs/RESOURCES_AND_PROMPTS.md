@@ -567,6 +567,7 @@ The AI knows exactly which custom fields and automation states exist, avoiding t
 | `/feature-scoped-launch` | Analysis | `project`, `feature`, `suite_name?`, `suite_path?`, `build?`, `locale?`, `template_query?` | Yes | Feature keyword → test_run_rules → Build Now per root suite |
 | `/flaky-review` | Analysis | `project` | Yes | Flaky test detection + plan |
 | `/find-duplicates` | Analysis | `project`, `suite_id?` | Yes | Structural + semantic duplicates |
+| `/test-impact` | Analysis | `project?`, `repository_slug?`, `pr_url?` | Yes | PR/code-change test impact via `adv_analyze_test_impact` — client reads git/gh locally |
 | `/daily-qa-standup` | Role | `projects` | Yes | Daily standup summary |
 | `/automation-gaps` | Role | `projects` | Yes | Automation backlog prioritization |
 | `/project-overview` | Role | `project` | Yes | Comprehensive project health card |
