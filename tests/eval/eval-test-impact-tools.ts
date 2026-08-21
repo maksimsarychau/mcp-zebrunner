@@ -3,14 +3,18 @@ import type { EvalPrompt } from "./eval-prompts.js";
 /**
  * Eval routing for test impact analysis (v9.2.8): adv_analyze_test_impact
  * Tool-selection layers 1–2 only; scoring/output covered by unit tests.
+ *
+ * Prompts include minimal change metadata so the model can call the tool
+ * (it requires ≥1 change signal — features/behaviors/keywords/etc.).
  */
 export const TEST_IMPACT_EVAL_PROMPTS: EvalPrompt[] = [
   {
     id: "test_impact.pr_regression",
     toolSection: "1. TCM — Test impact (v9.2.8)",
     promptTemplate:
-      "Analyze test impact for my PR code changes on {{project_key}} — which Zebrunner cases should I run for regression?",
+      "Analyze test impact for my PR on {{project_key}} — changes affect diary note editing and serving size display. Which Zebrunner cases should I run for regression?",
     expectedTools: ["adv_analyze_test_impact"],
+    expectedArgKeys: ["project_key"],
     category: "analysis",
     layer: 1,
     requiredContext: ["projectKey"],
@@ -19,8 +23,9 @@ export const TEST_IMPACT_EVAL_PROMPTS: EvalPrompt[] = [
     id: "test_impact.code_changes",
     toolSection: "1. TCM — Test impact (v9.2.8)",
     promptTemplate:
-      "Which Zebrunner tests might my code changes affect in project {{project_key}}?",
+      "Which Zebrunner tests might my {{project_key}} code changes affect? I changed diary entry validation and quick-log serving size.",
     expectedTools: ["adv_analyze_test_impact"],
+    expectedArgKeys: ["project_key"],
     category: "analysis",
     layer: 1,
     requiredContext: ["projectKey"],
@@ -40,7 +45,7 @@ export const TEST_IMPACT_EVAL_PROMPTS: EvalPrompt[] = [
     id: "test_impact.repository_slug",
     toolSection: "1. TCM — Test impact (v9.2.8)",
     promptTemplate:
-      "I'm working in the repo-android codebase — analyze test impact for my changes.",
+      "I'm in repo-android — analyze test impact for my changes to bottom navigation and ViewModel state (meal planner tab).",
     expectedTools: ["adv_analyze_test_impact"],
     expectedArgKeys: ["repository_slug"],
     category: "analysis",
@@ -50,7 +55,7 @@ export const TEST_IMPACT_EVAL_PROMPTS: EvalPrompt[] = [
     id: "test_impact.neg.not_suite_smart",
     toolSection: "1. TCM — Test impact (v9.2.8)",
     promptTemplate:
-      "For test impact on {{project_key}}, use adv_analyze_test_impact — do NOT pull the full suite via adv_get_test_cases_by_suite_smart.",
+      "For {{project_key}} diary note changes, use adv_analyze_test_impact — do NOT pull the full suite via adv_get_test_cases_by_suite_smart.",
     expectedTools: ["adv_analyze_test_impact"],
     forbiddenTools: ["adv_get_test_cases_by_suite_smart"],
     category: "negative",
@@ -64,7 +69,7 @@ export const TEST_IMPACT_EVAL_PROMPTS: EvalPrompt[] = [
     id: "test_impact.neg.not_aggregate_feature",
     toolSection: "1. TCM — Test impact (v9.2.8)",
     promptTemplate:
-      "Analyze which tests my {{project_key}} code change affects using the dedicated impact tool, not adv_aggregate_test_cases_by_feature.",
+      "Analyze which tests my {{project_key}} diary editing code change affects — use adv_analyze_test_impact, not adv_aggregate_test_cases_by_feature.",
     expectedTools: ["adv_analyze_test_impact"],
     forbiddenTools: ["adv_aggregate_test_cases_by_feature"],
     category: "negative",
@@ -91,8 +96,10 @@ export const TEST_IMPACT_EVAL_PROMPTS: EvalPrompt[] = [
   {
     id: "test_impact.slash_prompt",
     toolSection: "1. TCM — Test impact (v9.2.8)",
-    promptTemplate: "/test-impact project: {{project_key}}",
+    promptTemplate:
+      "/test-impact project: {{project_key}} — my changes touch diary notes and serving size recalculation.",
     expectedTools: ["adv_analyze_test_impact"],
+    expectedArgKeys: ["project_key"],
     category: "analysis",
     layer: 2,
     requiredContext: ["projectKey"],

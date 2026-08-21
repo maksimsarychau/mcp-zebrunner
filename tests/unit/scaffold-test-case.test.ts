@@ -16,6 +16,7 @@ import {
   searchSuitesByName,
   resolveSuiteFromSelection,
   formatSuiteGuidanceForConversation,
+  resolveScaffoldSourceCaseRef,
   SUITE_LATEST_SENTINEL,
   SUITE_OTHER_SENTINEL,
 } from "../../src/handlers/scaffold-test-case-tool.js";
@@ -360,5 +361,25 @@ describe("scaffold: conversational fallback suite guidance", () => {
   it("formatSuiteGuidanceForConversation references list tools", () => {
     const text = formatSuiteGuidanceForConversation("PROJ1");
     assert.match(text, /adv_list_test_suites/);
+  });
+});
+
+describe("scaffold: source_case_key URL normalization", () => {
+  const web = "https://mfp.zebrunner.com";
+
+  it("resolves ?caseId= URL to numeric lookup key", () => {
+    const r = resolveScaffoldSourceCaseRef(
+      "https://mfp.zebrunner.com/projects/MFPAND/test-cases?caseId=112",
+      "MFPAND",
+      web,
+    );
+    assert.equal(r.lookupKey, "112");
+    assert.equal(r.projectKey, "MFPAND");
+  });
+
+  it("passes through plain keys unchanged", () => {
+    const r = resolveScaffoldSourceCaseRef("MFPAND-1", "MFPAND", web);
+    assert.equal(r.lookupKey, "MFPAND-1");
+    assert.equal(r.projectKey, "MFPAND");
   });
 });

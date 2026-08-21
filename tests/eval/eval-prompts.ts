@@ -318,8 +318,8 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
     id: "get_test_case_by_filter.date_range",
     toolSection: "1. TCM",
     promptTemplate:
-      "Get test cases in the {{project_key}} project created in the last 30 days.",
-    expectedTools: [ "adv_get_test_case_by_filter", "adv_get_test_cases_advanced"],
+      "Use adv_get_test_case_by_filter on the {{project_key}} project to list test cases created in the last 30 days (created-date filter).",
+    expectedTools: ["adv_get_test_case_by_filter", "adv_get_test_cases_advanced"],
     expectedArgKeys: ["project_key"],
     category: "tcm",
     layer: 1,

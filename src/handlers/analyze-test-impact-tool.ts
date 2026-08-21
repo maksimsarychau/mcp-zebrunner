@@ -381,10 +381,11 @@ export async function runTestImpactAnalysis(
 export function registerAnalyzeTestImpactTool(server: McpServer, deps: AnalyzeTestImpactDeps): void {
   const toolConfig = {
     description:
-      "🎯 Analyze which Zebrunner test cases may be affected by production code changes. " +
+      "🎯 TEST IMPACT ANALYSIS — primary MCP tool when the user asks which Zebrunner tests a PR or code change affects, " +
+      "test impact analysis, regression test planning, what tests to run after changes, or /test-impact. " +
       "Pass compact semantic change context (features, behaviors, symbols, keywords) — NOT raw git diffs. " +
-      "Returns regression candidates grouped by theme (automated vs manual), potential coverage gaps, and optional smoke-suite recommendations. " +
-      "Use for: 'Which tests does my PR affect?', 'test impact analysis', 'what regression tests should I run?'. " +
+      "Returns regression candidates grouped by theme (automated vs manual), potential coverage gaps with suggested draft cases, and optional smoke-suite recommendations. " +
+      "Call this tool even with partial change metadata; do not chain adv_get_test_case_by_title or adv_get_test_cases_by_suite_smart for impact analysis. " +
       "Repository-aware clients should inspect git/PR locally and send summarized change metadata only.",
     inputSchema: {
       project_key: z.string().optional().describe("Zebrunner project key (e.g. PROJ2) or configured alias"),
