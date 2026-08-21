@@ -221,9 +221,10 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
     id: "create_test_case.source_url",
     toolSection: "1. TCM — URL input",
     promptTemplate:
-      "Create a new draft test case in {{project_key}} suite {{suite_id}} copied from source URL https://zebrunner.example.com/projects/{{project_key}}/test-cases?caseId={{test_case_id}} with title 'Copy of source'.",
+      "Call adv_create_test_case for {{project_key}} suite {{suite_id}} with title 'Copy of source' — pass source_case_key as this Zebrunner URL (do NOT call adv_get_test_case_by_key first): https://zebrunner.example.com/projects/{{project_key}}/test-cases?caseId={{test_case_id}}",
     expectedTools: ["adv_create_test_case"],
     expectedArgKeys: ["source_case_key", "project_key", "test_suite_id"],
+    forbiddenTools: ["adv_get_test_case_by_key"],
     category: "mutation",
     layer: 2,
     requiredContext: ["projectKey", "suiteId", "testCaseId"],
