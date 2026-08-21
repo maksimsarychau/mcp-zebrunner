@@ -2,6 +2,24 @@
 
 ---
 
+## v9.2.8 — Test Impact Analysis
+
+### Added
+
+- **`adv_analyze_test_impact`**: bounded test impact analysis from compact semantic change context (features, behaviors, symbols, keywords). Returns hybrid output — regression by theme (automated/manual, confidence) + potential coverage gaps (with **suggestedTestCase** drafts) + optional smoke-suite recommendations.
+- **`/test-impact`** MCP prompt with optional `pr_url`, `project`, and `repository_slug` args; instructs client-side `gh pr view` / git diff before calling the tool.
+- **Test-case URL input**: paste full Zebrunner URLs (`?caseId=`, `?caseKey=`, path form) into get/batch/create/update/validate/improve/coverage tools — shared parser in `zebrunner-test-case-ref.ts`; host mismatch warns only.
+- Optional config keys: `repositoryProjectMap`, `testImpactSmokeSuites`, `testImpactInfraKeywords` (shipped in `zebrunner-config.json` for MFP).
+- Docs: [TEST_IMPACT_WORKFLOW.md](docs/TEST_IMPACT_WORKFLOW.md), [skill template](docs/skills/zebrunner-test-impact-SKILL.md).
+- Eval: 8 new `test_impact.*` routing prompts; 5 new test-case URL prompts; `npm run test:eval:test-impact`.
+
+### Notes
+
+- Additive only — existing tools and prompts unchanged.
+- Does not run git/GitHub inside MCP; does not invent automation class/method mappings.
+
+---
+
 ## v9.2.7 — Scaffold Test Case wizard and project aliases
 
 ### Added
@@ -19,7 +37,7 @@
 ### Changed
 
 - Form 0 suite selection: named picker (Latest available + recent suites + search) replaces raw numeric id prompt when `test_suite_id` is omitted; numeric fallback preserved on API failure.
-- Created cases are always forced to `draft=true`; the existing `adv_create_test_case` handler is unchanged. The wizard has no default project — it is always chosen explicitly.
+- Created cases are always forced to `draft=true`; the existing `adv_create_test_case` handler is unchanged. The wizard has no defapmult project — it is always chosen explicitly.
 
 ---
 

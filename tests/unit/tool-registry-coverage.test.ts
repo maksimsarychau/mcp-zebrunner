@@ -29,12 +29,20 @@ function extractServerTools(serverSource: string): string[] {
 }
 
 function extractAllRegisteredTools(root: string): string[] {
-  const files = [
+    const files = [
     path.join(root, "src", "server.ts"),
     path.join(root, "src", "handlers", "widget-hub-tools.ts"),
     path.join(root, "src", "handlers", "widget-authoring-trend-tool.ts"),
   ];
   return files.flatMap(f => extractServerTools(fs.readFileSync(f, "utf-8")));
+}
+
+function extractHandlerModuleTools(root: string): string[] {
+  const handlerFiles = [
+    path.join(root, "src", "handlers", "scaffold-test-case-tool.ts"),
+    path.join(root, "src", "handlers", "analyze-test-impact-tool.ts"),
+  ];
+  return handlerFiles.flatMap((f) => extractServerTools(fs.readFileSync(f, "utf-8")));
 }
 
 describe("Tool Registry Coverage (69 tools)", () => {
@@ -61,10 +69,8 @@ describe("Tool Registry Coverage (69 tools)", () => {
     // The scaffold wizard lives in its own DI module (shared config/handler style)
     // and is not part of the inline-registration smoke/annotation coverage above,
     // but it IS a real registered tool documented in tools.json — include it here.
-    const scaffoldTools = extractServerTools(
-      fs.readFileSync(path.join(root, "src", "handlers", "scaffold-test-case-tool.ts"), "utf-8"),
-    );
-    const serverTools = [...extractAllRegisteredTools(root), ...scaffoldTools].map((t) => `adv_${t}`).sort();
+    const handlerModuleTools = extractHandlerModuleTools(root);
+    const serverTools = [...extractAllRegisteredTools(root), ...handlerModuleTools].map((t) => `adv_${t}`).sort();
     const toolsCatalog = JSON.parse(fs.readFileSync(path.join(root, "tools.json"), "utf-8")) as Array<{ name: string }>;
     const toolsJsonNames = toolsCatalog.map(t => t.name).sort();
 

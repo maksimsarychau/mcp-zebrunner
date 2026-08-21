@@ -44,6 +44,26 @@ All tools marked with chart support accept these two parameters:
 
 ---
 
+## Test Impact Analysis *(v9.2.8)*
+
+### `adv_analyze_test_impact`
+
+**Description:** Discover and rank Zebrunner test cases likely affected by production-code changes. Accepts compact semantic change context (features, behaviors, symbols, keywords) — **not** raw git diffs. Returns regression candidates by theme (automated vs manual, confidence), potential coverage gaps, optional smoke-suite recommendations, and scoping notes.
+
+**Key parameters:** `project_key` or `repository_slug`, `change_summary`, `features`, `behaviors`, `changed_symbols`, `changed_files`, `keywords`, `max_candidates` (default 50), `max_results` (default 20), `format: compact`.
+
+**Example prompts:**
+
+- "Analyze test impact for my PR changes on PROJ2 — diary editing and serving size"
+- "Which Zebrunner tests might my code changes affect?"
+- `/test-impact` with `pr_url` and `project`
+
+**Token efficiency:** Bounded title search + shortlist enrichment only; never full-project or full-suite export on the normal path.
+
+**Workflow guide:** [docs/TEST_IMPACT_WORKFLOW.md](docs/TEST_IMPACT_WORKFLOW.md)
+
+---
+
 ## Test Failure Analysis & Debugging
 
 ### `adv_analyze_test_failure`
@@ -1641,6 +1661,6 @@ For large datasets, you can specify filters and limits:
 
 ---
 
-**Last Updated:** v9.2.7 - August 2026
+**Last Updated:** v9.2.8 - August 2026
 
 For the latest features and updates, see [change-logs.md](change-logs.md).

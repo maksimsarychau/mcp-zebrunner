@@ -3,6 +3,7 @@ import type { EvalLayer } from "./eval-config.js";
 import { HUB_EVAL_PROMPTS } from "./eval-hub-prompts.js";
 import { AUTHORING_EVAL_PROMPTS } from "./eval-authoring-prompts.js";
 import { AUTHORING_TOOLS_EVAL_PROMPTS } from "./eval-authoring-tools.js";
+import { TEST_IMPACT_EVAL_PROMPTS } from "./eval-test-impact-tools.js";
 import { WIDGET_EVAL_PROMPTS } from "./eval-widget-prompts.js";
 
 export type PromptCategory =
@@ -184,6 +185,51 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
     requiredContext: ["testCaseKey"],
   },
   {
+    id: "get_test_case_by_key.url_caseId",
+    toolSection: "1. TCM — URL input",
+    promptTemplate:
+      "Fetch full details for this Zebrunner test case URL: https://zebrunner.example.com/projects/{{project_key}}/test-cases?caseId={{test_case_id}}",
+    expectedTools: ["adv_get_test_case_by_key"],
+    expectedArgKeys: ["case_key"],
+    category: "tcm",
+    layer: 2,
+    requiredContext: ["projectKey", "testCaseId"],
+  },
+  {
+    id: "get_test_case_by_key.url_caseKey",
+    toolSection: "1. TCM — URL input",
+    promptTemplate:
+      "Open test case from pasted URL https://zebrunner.example.com/projects/{{project_key}}/test-cases?caseKey={{test_case_key}}",
+    expectedTools: ["adv_get_test_case_by_key"],
+    expectedArgKeys: ["case_key"],
+    category: "tcm",
+    layer: 2,
+    requiredContext: ["projectKey", "testCaseKey"],
+  },
+  {
+    id: "batch_get_test_cases.url_mixed",
+    toolSection: "1. TCM — URL input",
+    promptTemplate:
+      "Batch fetch {{test_case_key}} and https://zebrunner.example.com/projects/{{project_key}}/test-cases?caseId={{test_case_id}} in one call for {{project_key}}.",
+    expectedTools: ["adv_batch_get_test_cases"],
+    expectedArgKeys: ["case_keys", "project_key"],
+    category: "tcm",
+    layer: 2,
+    requiredContext: ["projectKey", "testCaseKey", "testCaseId"],
+  },
+  {
+    id: "create_test_case.source_url",
+    toolSection: "1. TCM — URL input",
+    promptTemplate:
+      "Call adv_create_test_case for {{project_key}} suite {{suite_id}} with title 'Copy of source' — pass source_case_key as this Zebrunner URL (do NOT call adv_get_test_case_by_key first): https://zebrunner.example.com/projects/{{project_key}}/test-cases?caseId={{test_case_id}}",
+    expectedTools: ["adv_create_test_case"],
+    expectedArgKeys: ["source_case_key", "project_key", "test_suite_id"],
+    forbiddenTools: ["adv_get_test_case_by_key"],
+    category: "mutation",
+    layer: 2,
+    requiredContext: ["projectKey", "suiteId", "testCaseId"],
+  },
+  {
     id: "get_all_subsuites.flat",
     toolSection: "1. TCM",
     promptTemplate:
@@ -273,8 +319,8 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
     id: "get_test_case_by_filter.date_range",
     toolSection: "1. TCM",
     promptTemplate:
-      "Get test cases in the {{project_key}} project created in the last 30 days.",
-    expectedTools: [ "adv_get_test_case_by_filter", "adv_get_test_cases_advanced"],
+      "Use adv_get_test_case_by_filter on the {{project_key}} project to list test cases created in the last 30 days (created-date filter).",
+    expectedTools: ["adv_get_test_case_by_filter", "adv_get_test_cases_advanced"],
     expectedArgKeys: ["project_key"],
     category: "tcm",
     layer: 1,
@@ -784,6 +830,9 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
 
   // Authoring wizard tools (v9.2.7) — see eval-authoring-tools.ts
   ...AUTHORING_TOOLS_EVAL_PROMPTS,
+
+  // Test impact analysis (v9.2.8) — see eval-test-impact-tools.ts
+  ...TEST_IMPACT_EVAL_PROMPTS,
 
   // ── Section 4: Utility / Connection Tools ──
 

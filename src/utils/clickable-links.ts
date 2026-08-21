@@ -2,6 +2,10 @@
  * Utility functions for generating clickable links to Zebrunner web UI
  */
 
+import { buildTestCaseWebUrl as buildTestCaseWebUrlFromRef } from "./zebrunner-test-case-ref.js";
+
+export { buildTestCaseWebUrlFromRef as buildTestCaseWebUrl };
+
 export interface ClickableLinkOptions {
   includeClickableLinks?: boolean;
   baseWebUrl?: string;
@@ -45,7 +49,7 @@ export function generateTestCaseLink(
   }
   
   try {
-    const url = `${baseWebUrl}/projects/${projectKey}/test-cases?caseId=${testCaseId}`;
+    const url = buildTestCaseWebUrlFromRef(baseWebUrl, projectKey, { id: testCaseId });
     return `[${testCaseKey}](${url})`;
   } catch (error) {
     console.error('Failed to generate test case link:', error);
@@ -101,7 +105,10 @@ export function addTestCaseWebUrl(
   }
   
   try {
-    const webUrl = `${baseWebUrl}/projects/${projectKey}/test-cases?caseId=${testCase.id}`;
+    const webUrl = buildTestCaseWebUrlFromRef(baseWebUrl, projectKey, {
+      id: testCase.id,
+      key: testCase.key,
+    });
     return {
       ...testCase,
       webUrl

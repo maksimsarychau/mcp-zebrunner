@@ -46,9 +46,36 @@ const ZebrunnerConfigSchema = z.object({
     excludeLaunchNamePatterns: z.array(z.string()).optional(),
     maxLaunchesPerPlatform: z.number().int().positive().max(50).optional(),
   }).optional(),
+  repositoryProjectMap: z.record(z.string(), z.string()).optional(),
+  testImpactSmokeSuites: z.record(
+    z.string(),
+    z.array(z.object({
+      rootSuiteId: z.number().int().positive(),
+      name: z.string(),
+      reason: z.string().optional(),
+    })),
+  ).optional(),
+  testImpactInfraKeywords: z.array(z.string()).optional(),
 }).strict().partial();
 
+export type TestImpactSmokeSuite = {
+  rootSuiteId: number;
+  name: string;
+  reason?: string;
+};
+
 export type ZebrunnerConfig = z.infer<typeof ZebrunnerConfigSchema>;
+
+const DEFAULT_TEST_IMPACT_INFRA_KEYWORDS = [
+  "navigation",
+  "bottom nav",
+  "viewmodel",
+  "mvi",
+  "tab bar",
+  "app launch",
+  "deep link handler",
+  "application class",
+];
 
 // ---------------------------------------------------------------------------
 // Built-in defaults (shipped with the MCP server)
@@ -71,6 +98,9 @@ const DEFAULTS: Required<{
     excludeLaunchNamePatterns: string[];
     maxLaunchesPerPlatform: number;
   };
+  repositoryProjectMap: Record<string, string>;
+  testImpactSmokeSuites: Record<string, TestImpactSmokeSuite[]>;
+  testImpactInfraKeywords: string[];
 }> = {
   projectAliases: {
     web: "MFPWEB",
@@ -120,6 +150,9 @@ const DEFAULTS: Required<{
     excludeLaunchNamePatterns: ["Performance"],
     maxLaunchesPerPlatform: 50,
   },
+  repositoryProjectMap: {},
+  testImpactSmokeSuites: {},
+  testImpactInfraKeywords: [...DEFAULT_TEST_IMPACT_INFRA_KEYWORDS],
 };
 
 // ---------------------------------------------------------------------------
@@ -152,6 +185,9 @@ export interface ResolvedConfig {
     excludeLaunchNamePatterns: string[];
     maxLaunchesPerPlatform: number;
   };
+  repositoryProjectMap: Record<string, string>;
+  testImpactSmokeSuites: Record<string, TestImpactSmokeSuite[]>;
+  testImpactInfraKeywords: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -261,6 +297,14 @@ function mergeConfig(overrides: ZebrunnerConfig | null): ResolvedConfig {
       maxLaunchesPerPlatform: overrides.relaunchFailures?.maxLaunchesPerPlatform
         ?? DEFAULTS.relaunchFailures.maxLaunchesPerPlatform,
     },
+    repositoryProjectMap: overrides.repositoryProjectMap
+      ? { ...DEFAULTS.repositoryProjectMap, ...overrides.repositoryProjectMap }
+      : { ...DEFAULTS.repositoryProjectMap },
+    testImpactSmokeSuites: overrides.testImpactSmokeSuites
+      ? { ...DEFAULTS.testImpactSmokeSuites, ...overrides.testImpactSmokeSuites }
+      : { ...DEFAULTS.testImpactSmokeSuites },
+    testImpactInfraKeywords: overrides.testImpactInfraKeywords
+      ?? [...DEFAULTS.testImpactInfraKeywords],
   };
 }
 

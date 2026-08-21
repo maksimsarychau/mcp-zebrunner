@@ -16,6 +16,7 @@ import {
   searchSuitesByName,
   resolveSuiteFromSelection,
   formatSuiteGuidanceForConversation,
+  resolveScaffoldSourceCaseRef,
   SUITE_LATEST_SENTINEL,
   SUITE_OTHER_SENTINEL,
 } from "../../src/handlers/scaffold-test-case-tool.js";
@@ -360,5 +361,25 @@ describe("scaffold: conversational fallback suite guidance", () => {
   it("formatSuiteGuidanceForConversation references list tools", () => {
     const text = formatSuiteGuidanceForConversation("PROJ1");
     assert.match(text, /adv_list_test_suites/);
+  });
+});
+
+describe("scaffold: source_case_key URL normalization", () => {
+  const web = "https://zebrunner.example.com";
+
+  it("resolves ?caseId= URL to numeric lookup key", () => {
+    const r = resolveScaffoldSourceCaseRef(
+      `${web}/projects/PROJ2/test-cases?caseId=112`,
+      "PROJ2",
+      web,
+    );
+    assert.equal(r.lookupKey, "112");
+    assert.equal(r.projectKey, "PROJ2");
+  });
+
+  it("passes through plain keys unchanged", () => {
+    const r = resolveScaffoldSourceCaseRef("PROJ2-1", "PROJ2", web);
+    assert.equal(r.lookupKey, "PROJ2-1");
+    assert.equal(r.projectKey, "PROJ2");
   });
 });

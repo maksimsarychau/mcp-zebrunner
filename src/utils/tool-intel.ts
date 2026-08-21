@@ -31,6 +31,7 @@ const TOKEN_RANGE_BY_TOOL: Record<string, string> = {
   adv_analyze_test_cases_duplicates: "Medium (3k-6k tokens)",
   adv_analyze_test_cases_duplicates_semantic: "High (6k-12k tokens)",
   adv_aggregate_test_cases_by_feature: "High (6k-12k tokens)",
+  adv_analyze_test_impact: "Low (1k-4k tokens)",
   adv_get_all_tcm_test_cases_by_project: "High (6k-12k tokens)",
   adv_get_all_tcm_test_cases_with_root_suite_id: "High (6k-12k tokens)",
   adv_get_all_launches_for_project: "Medium (3k-6k tokens)",

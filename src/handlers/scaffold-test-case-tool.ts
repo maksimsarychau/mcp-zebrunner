@@ -25,6 +25,11 @@ import type { ZebrunnerMutationClient } from "../api/mutation-client.js";
 import type { ZebrunnerTestCase, ZebrunnerTestSuite } from "../types/core.js";
 import { TestCaseDuplicateAnalyzer } from "../utils/duplicate-analyzer.js";
 import { HierarchyProcessor } from "../utils/hierarchy.js";
+import {
+  buildTestCaseWebUrl,
+  lookupUsesNumericId,
+  normalizeTestCaseInput,
+} from "../utils/zebrunner-test-case-ref.js";
 
 export interface ScaffoldTestCaseDeps {
   /** Enhanced (read) client — used to fetch existing cases for similarity. */
@@ -484,6 +489,69 @@ function textResult(text: string) {
   return { content: [{ type: "text" as const, text }] };
 }
 
+/** Normalize source_case_key / URL for scaffold wizard (exported for unit tests). */
+export function resolveScaffoldSourceCaseRef(
+  raw: string,
+  projectKey: string,
+  webBaseUrl: string,
+): {
+  lookupKey: string;
+  projectKey: string;
+  hostMismatchWarning?: string;
+  displayInput: string;
+} {
+  const trimmed = raw.trim();
+  const normalized = normalizeTestCaseInput(trimmed, {
+    projectKeyHint: projectKey,
+    configuredWebUrl: webBaseUrl,
+  });
+  return {
+    lookupKey: normalized.lookupKey,
+    projectKey: normalized.projectKey || projectKey,
+    hostMismatchWarning: normalized.hostMismatchWarning,
+    displayInput: trimmed,
+  };
+}
+
+async function formatScaffoldSourceDescription(
+  raw: string,
+  projectKey: string,
+  webBaseUrl: string,
+  mutationClient: ZebrunnerMutationClient,
+): Promise<{ line: string; hostMismatchWarning?: string }> {
+  const trimmed = raw.trim();
+  if (!trimmed) return { line: "" };
+
+  const normalized = normalizeTestCaseInput(trimmed, {
+    projectKeyHint: projectKey,
+    configuredWebUrl: webBaseUrl,
+  });
+  if (!normalized.lookupKey) {
+    return { line: "", hostMismatchWarning: normalized.hostMismatchWarning };
+  }
+
+  const resolvedProject = normalized.projectKey || projectKey;
+  try {
+    const data = lookupUsesNumericId(normalized)
+      ? (await mutationClient.getTestCaseById(resolvedProject, parseInt(normalized.lookupKey, 10))).data
+      : (await mutationClient.getTestCaseByKey(resolvedProject, normalized.lookupKey)).data;
+    const key = (data?.key as string | undefined) ?? normalized.lookupKey;
+    const link = buildTestCaseWebUrl(webBaseUrl, resolvedProject, {
+      id: data?.id as number | string | undefined,
+      key,
+    });
+    return {
+      line: `Source: [${key}](${link})`,
+      hostMismatchWarning: normalized.hostMismatchWarning,
+    };
+  } catch {
+    return {
+      line: `Source: ${trimmed}`,
+      hostMismatchWarning: normalized.hostMismatchWarning,
+    };
+  }
+}
+
 // ── Registration ──────────────────────────────────────────────────────────────
 
 export function registerScaffoldTestCaseTool(server: McpServer, deps: ScaffoldTestCaseDeps): void {
@@ -517,6 +585,7 @@ On clients that support form elicitation (e.g. Claude Code, Cursor) this present
 On clients without elicitation (e.g. Claude Desktop) it returns a conversational questionnaire that finishes through adv_create_test_case.
 Optionally pass project (key like 'PROJ1' or a configured alias) and test_suite_id to skip the first question. There is no default project — it is always chosen explicitly.
 Also available as the alias adv_create_test_case_wizard.
+Optionally pass source_case_key (plain key, numeric id, or full Zebrunner URL) to reference an existing case in the new draft description.
 SAFETY: created cases are always draft=true; publish later via adv_update_test_case.`,
     inputSchema: {
       project: z
@@ -530,6 +599,12 @@ SAFETY: created cases are always draft=true; publish later via adv_update_test_c
         .optional()
         .describe(
           "Target test suite id. If omitted, the wizard shows a named suite picker (Latest available + recent suites + search). Numeric IDs still accepted.",
+        ),
+      source_case_key: z
+        .string()
+        .optional()
+        .describe(
+          "Optional source case to reference: plain key (PROJ1-123), numeric id with project, or full Zebrunner test-case URL (?caseId= / ?caseKey=).",
         ),
     },
     annotations: {
@@ -646,7 +721,11 @@ SAFETY: created cases are always draft=true; publish later via adv_update_test_c
     return elicitNumericSuiteId(`Could not resolve "${selected}".`);
   }
 
-  const scaffoldHandler = async (args: { project?: string; test_suite_id?: number }) => {
+  const scaffoldHandler = async (args: {
+    project?: string;
+    test_suite_id?: number;
+    source_case_key?: string;
+  }) => {
       try {
         const caps = server.server.getClientCapabilities();
         const canForm = !!caps?.elicitation?.form;
@@ -780,14 +859,14 @@ SAFETY: created cases are always draft=true; publish later via adv_update_test_c
           {
             pre_conditions: { type: "string", title: "Preconditions", description: "Setup needed before the test (optional)" },
             steps_text: { type: "string", title: "Steps", description: stepsDescription },
-            source_case_key: { type: "string", title: "Source Case Key", description: "Optional existing case key to reference (e.g. PROJ1-123)" },
+            source_case_key: { type: "string", title: "Source Case Key", description: "Optional existing case key, numeric id, or Zebrunner URL (e.g. PROJ1-123 or ?caseId= URL)" },
           },
           ["steps_text"],
         );
         if (!context) return textResult("🚫 Test case scaffolding cancelled.");
         const preConditions = String(context.pre_conditions ?? "").trim();
         const stepsText = String(context.steps_text ?? "").trim();
-        const sourceCaseKey = String(context.source_case_key ?? "").trim();
+        const sourceCaseKeyRaw = String(args.source_case_key ?? context.source_case_key ?? "").trim();
         const steps = parseSteps(stepsText, stepFormat);
         if (steps.length === 0) return textResult("❌ At least one step is required.");
 
@@ -855,7 +934,15 @@ SAFETY: created cases are always draft=true; publish later via adv_update_test_c
 
         // ── Build payload + create (forced draft) ───────────────────────────────
         const descParts: string[] = [];
-        if (sourceCaseKey) descParts.push(`Source: ${sourceCaseKey}`);
+        if (sourceCaseKeyRaw) {
+          const sourceDesc = await formatScaffoldSourceDescription(
+            sourceCaseKeyRaw,
+            projectKey,
+            deps.webBaseUrl,
+            mutationClient,
+          );
+          if (sourceDesc.line) descParts.push(sourceDesc.line);
+        }
         if (featureArea) descParts.push(`Feature area: ${featureArea}`);
         if (isGherkin) descParts.push(`Format: Gherkin (BDD)`);
         const description = descParts.length ? descParts.join("\n") : undefined;
@@ -884,7 +971,8 @@ SAFETY: created cases are always draft=true; publish later via adv_update_test_c
           `Suite: ${suiteId}\n` +
           `Draft: ${tc.draft ?? true} (publish later with adv_update_test_case)`;
         if (tc.key) {
-          resultText += `\nLink: ${deps.webBaseUrl}/projects/${projectKey}/test-cases?caseKey=${tc.key}`;
+          const tcId = tc.id as number | string | undefined;
+          resultText += `\nLink: ${buildTestCaseWebUrl(deps.webBaseUrl, projectKey, { id: tcId, key: tc.key as string })}`;
         }
         if (similar.length > 0) {
           resultText += `\n\nℹ️ Note: created despite ${similar.length} similar case(s) — review for possible consolidation.`;

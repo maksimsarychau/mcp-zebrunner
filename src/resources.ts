@@ -236,6 +236,7 @@ export function buildMcpRoutingContent(): object {
           "Video + screenshot AI (adv_analyze_test_execution_video, adv_analyze_screenshot)",
           "Preview/confirm safe mutations (adv_create_test_case, adv_update_test_case, adv_manage_test_run, adv_import_launch_results_to_test_run, adv_rerun_launch_failures, adv_start_launch [Jenkins Build Now only])",
           "Guided test-case authoring wizard with similar-case warnings (adv_scaffold_test_case)",
+          "Test impact analysis for PR/code changes (adv_analyze_test_impact, /test-impact prompt)",
           "Charts, role-specific prompts, session metrics, suite hierarchy navigation",
         ],
       },

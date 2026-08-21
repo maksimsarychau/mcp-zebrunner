@@ -42,4 +42,26 @@ describe("zebrunner-config relaunchFailures + localeTestRunRules", () => {
       reloadConfig();
     }
   });
+
+  it("merges test impact config from ZEBRUNNER_CONFIG_JSON override", () => {
+    const prev = process.env.ZEBRUNNER_CONFIG_JSON;
+    process.env.ZEBRUNNER_CONFIG_JSON = JSON.stringify({
+      repositoryProjectMap: { "repo-android": "PROJ2" },
+      testImpactSmokeSuites: {
+        PROJ2: [{ rootSuiteId: 100, name: "Smoke", reason: "nav changes" }],
+      },
+      testImpactInfraKeywords: ["navigation"],
+    });
+    try {
+      reloadConfig();
+      const cfg = getConfig();
+      assert.equal(cfg.repositoryProjectMap["repo-android"], "PROJ2");
+      assert.equal(cfg.testImpactSmokeSuites.PROJ2?.[0]?.rootSuiteId, 100);
+      assert.deepEqual(cfg.testImpactInfraKeywords, ["navigation"]);
+    } finally {
+      if (prev === undefined) delete process.env.ZEBRUNNER_CONFIG_JSON;
+      else process.env.ZEBRUNNER_CONFIG_JSON = prev;
+      reloadConfig();
+    }
+  });
 });

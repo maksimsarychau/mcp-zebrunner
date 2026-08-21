@@ -10,6 +10,11 @@ export type EvalSuite = "default" | "cloud" | "all";
 const CLOUD_EVAL_PROMPT_IDS = [
   // v9.2 token-efficient reads — small models miss detail/format or pick list_test_suites
   "batch_get_test_cases.two_keys",
+  "batch_get_test_cases.url_mixed",
+  "get_test_case_by_key.url_caseId",
+  "get_test_case_by_key.url_caseKey",
+  "create_test_case.source_url",
+  "scaffold.source_case_url",
   "get_all_tcm_test_cases_by_project.compact_summary",
   "get_all_tcm_test_cases_by_project.with_call_metrics",
   "get_test_cases_by_suite_smart.summary",
