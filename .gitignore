@@ -19,6 +19,7 @@ mcp-mutation-safety.md
 .cursor/mcp.json
 private.pem
 RELEASE_SIGNING_GUIDE.md
+publish-release.sh
 TODO-code-review.md
 docs/DOCKER_USAGE.md
 docs/DOCKER_RELEASE.md
