@@ -159,7 +159,7 @@ export const AUTHORING_TOOLS_EVAL_PROMPTS: EvalPrompt[] = [
     id: "scaffold.source_case_url",
     toolSection: "1. TCM — Authoring wizard (v9.2.7)",
     promptTemplate:
-      "Call adv_scaffold_test_case for {{project_key}} now — pass source_case_key as this Zebrunner URL (do NOT call adv_get_test_case_by_key first): https://mfp.zebrunner.com/projects/{{project_key}}/test-cases?caseId={{test_case_id}}",
+      "Call adv_scaffold_test_case for {{project_key}} now — pass source_case_key as this Zebrunner URL (do NOT call adv_get_test_case_by_key first): https://zebrunner.example.com/projects/{{project_key}}/test-cases?caseId={{test_case_id}}",
     expectedTools: ["adv_scaffold_test_case", "adv_create_test_case_wizard"],
     expectedArgKeys: ["source_case_key"],
     forbiddenTools: ["adv_get_test_case_by_key"],

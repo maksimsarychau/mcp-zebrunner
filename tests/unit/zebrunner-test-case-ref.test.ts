@@ -9,13 +9,14 @@ import {
   parseZebrunnerTestCaseRef,
 } from "../../src/utils/zebrunner-test-case-ref.js";
 
-const CONFIG_WEB = "https://mfp.zebrunner.com";
+const CONFIG_WEB = "https://zebrunner.example.com";
+const CONFIG_HOST = "zebrunner.example.com";
 
 describe("zebrunner-test-case-ref", () => {
   it("detects URL-like inputs", () => {
     assert.equal(isUrlLikeTestCaseInput("MCP-315"), false);
     assert.equal(
-      isUrlLikeTestCaseInput("https://mfp.zebrunner.com/projects/MCP/test-cases?caseId=90857"),
+      isUrlLikeTestCaseInput(`${CONFIG_WEB}/projects/MCP/test-cases?caseId=90857`),
       true,
     );
     assert.equal(isUrlLikeTestCaseInput("/projects/MCP/test-cases/90857"), true);
@@ -23,17 +24,17 @@ describe("zebrunner-test-case-ref", () => {
 
   it("parses ?caseId= URLs", () => {
     const ref = parseZebrunnerTestCaseRef(
-      "https://mfp.zebrunner.com/projects/MFPIOS/test-cases?caseId=85628",
+      `${CONFIG_WEB}/projects/PROJ2/test-cases?caseId=85628`,
     );
     assert.ok(ref);
-    assert.equal(ref!.projectKey, "MFPIOS");
+    assert.equal(ref!.projectKey, "PROJ2");
     assert.equal(ref!.lookupKey, "85628");
     assert.equal(ref!.source, "url_caseId");
   });
 
   it("parses ?caseKey= URLs", () => {
     const ref = parseZebrunnerTestCaseRef(
-      "https://mfp.zebrunner.com/projects/MCP/test-cases?caseKey=MCP-315",
+      `${CONFIG_WEB}/projects/MCP/test-cases?caseKey=MCP-315`,
     );
     assert.ok(ref);
     assert.equal(ref!.caseKey, "MCP-315");
@@ -71,8 +72,22 @@ describe("zebrunner-test-case-ref", () => {
     );
     assert.equal(n.projectKey, "MCP");
     assert.equal(n.lookupKey, "90857");
-    assert.ok(n.hostMismatchWarning?.includes("other.example.com"));
-    assert.ok(n.hostMismatchWarning?.includes("mfp.zebrunner.com"));
+    assert.equal(
+      n.hostMismatchWarning,
+      formatHostMismatchWarning("other.example.com", CONFIG_HOST),
+    );
+  });
+
+  it("compares parsed hostnames only (path segments do not affect host check)", () => {
+    const n = normalizeTestCaseInput(
+      "https://evil.example.com/projects/MCP/test-cases?caseId=90857",
+      { configuredWebUrl: "https://not-evil.example.com/zebrunner.example.com/path" },
+    );
+    assert.equal(n.lookupKey, "90857");
+    assert.equal(
+      n.hostMismatchWarning,
+      formatHostMismatchWarning("evil.example.com", "not-evil.example.com"),
+    );
   });
 
   it("does not mis-parse unrelated URLs", () => {
@@ -95,7 +110,9 @@ describe("zebrunner-test-case-ref", () => {
 
   it("formatHostMismatchWarning is stable", () => {
     const msg = formatHostMismatchWarning("a.com", "b.com");
-    assert.match(msg, /a\.com/);
-    assert.match(msg, /b\.com/);
+    assert.equal(
+      msg,
+      "⚠️ URL host (a.com) differs from configured Zebrunner web URL (b.com). Parsed reference anyway.",
+    );
   });
 });

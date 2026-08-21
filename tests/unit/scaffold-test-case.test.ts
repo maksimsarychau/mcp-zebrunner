@@ -365,21 +365,21 @@ describe("scaffold: conversational fallback suite guidance", () => {
 });
 
 describe("scaffold: source_case_key URL normalization", () => {
-  const web = "https://mfp.zebrunner.com";
+  const web = "https://zebrunner.example.com";
 
   it("resolves ?caseId= URL to numeric lookup key", () => {
     const r = resolveScaffoldSourceCaseRef(
-      "https://mfp.zebrunner.com/projects/MFPAND/test-cases?caseId=112",
-      "MFPAND",
+      `${web}/projects/PROJ2/test-cases?caseId=112`,
+      "PROJ2",
       web,
     );
     assert.equal(r.lookupKey, "112");
-    assert.equal(r.projectKey, "MFPAND");
+    assert.equal(r.projectKey, "PROJ2");
   });
 
   it("passes through plain keys unchanged", () => {
-    const r = resolveScaffoldSourceCaseRef("MFPAND-1", "MFPAND", web);
-    assert.equal(r.lookupKey, "MFPAND-1");
-    assert.equal(r.projectKey, "MFPAND");
+    const r = resolveScaffoldSourceCaseRef("PROJ2-1", "PROJ2", web);
+    assert.equal(r.lookupKey, "PROJ2-1");
+    assert.equal(r.projectKey, "PROJ2");
   });
 });
