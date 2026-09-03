@@ -33,6 +33,7 @@ import {
   detectCoverageGaps,
   isAutomated,
   scoreTestCase,
+  scoreToConfidence,
   type ScoredCandidate,
 } from "../utils/test-impact-scorer.js";
 
@@ -301,7 +302,7 @@ export async function runTestImpactAnalysis(
   let batchCtxs: ReturnType<typeof normalizeChangeContext>[] = [];
 
   if (batchMode) {
-    batches = input.change_batches!.slice(0, MAX_CHANGE_BATCHES);
+    batches = input.change_batches!;
     const merged = mergeBatchChangeContexts(batches);
     ctx = merged.merged;
     batchSummary = { count: merged.batchCount, labels: merged.batchLabels };
@@ -407,6 +408,11 @@ export async function runTestImpactAnalysis(
       if (sources.length) {
         sourceByKey.set(s.key, sources);
         s.score = applyMultiSourceBoost(s.score, sources.length);
+        const boostedConfidence = scoreToConfidence(s.score);
+        if (boostedConfidence) {
+          s.confidence =
+            s.deprecated && boostedConfidence === "HIGH" ? "MEDIUM" : boostedConfidence;
+        }
         if (sources.length > 1) {
           s.reasons = [...new Set([...s.reasons, `matched ${sources.length} change batches`])].slice(0, 5);
         }

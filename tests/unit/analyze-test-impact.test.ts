@@ -169,6 +169,13 @@ describe("test-impact scorer", () => {
     assert.equal(applyMultiSourceBoost(0.5, 1), 0.5);
     assert.equal(applyMultiSourceBoost(0.5, 2), 0.55);
   });
+
+  it("multi-source boost can cross confidence threshold (0.71 → HIGH at 0.76)", () => {
+    const boosted = applyMultiSourceBoost(0.71, 2);
+    assert.equal(boosted, 0.76);
+    assert.equal(scoreToConfidence(0.71), "MEDIUM");
+    assert.equal(scoreToConfidence(boosted), "HIGH");
+  });
 });
 
 describe("test-impact project resolution", () => {
