@@ -287,6 +287,7 @@ export function buildTestImpactPrompt(
   project?: string,
   repositorySlug?: string,
   prUrl?: string,
+  prUrls?: string,
 ): string {
   const projectLine = project
     ? `Target project: **${project}** (project key or alias).`
@@ -294,19 +295,34 @@ export function buildTestImpactPrompt(
       ? `Target platform from repository folder: **${repositorySlug}** (pass as repository_slug).`
       : `Resolve the platform from the workspace folder name (repository_slug) or ask the user for the project key.`;
 
-  const prSection = prUrl
-    ? `## Step 1 — Read the pull request (client-side)
-PR URL: ${prUrl}
+  const urlList = [prUrl, ...(prUrls?.split(/[\s,]+/).filter(Boolean) ?? [])].filter(
+    (u, i, arr) => u && arr.indexOf(u) === i,
+  ) as string[];
 
-Run locally (never ask Zebrunner MCP to access GitHub):
+  const prSection =
+    urlList.length > 0
+      ? `## Step 1 — Read pull request(s) (client-side)
+${urlList.length === 1 ? `PR URL: ${urlList[0]}` : `PR URLs (${urlList.length}):\n${urlList.map((u) => `- ${u}`).join("\n")}`}
+
+Resolve PR metadata using the **first available** option (never ask Zebrunner MCP to access GitHub):
+1. **GitHub MCP** — fetch PR title, body, and changed files for each URL
+2. **gh CLI** — for each URL:
 \`\`\`bash
-gh pr view "${prUrl}" --json title,body,files,additions,deletions
+gh pr view "<url>" --json title,body,files,additions,deletions
 \`\`\`
+3. **Manual** — ask the user for PR title, description, and changed files per PR
 
-If \`gh\` is unavailable, ask the user for PR title, description, and changed files.`
-    : `## Step 1 — Understand local changes
-If repository tools are available: inspect git diff / changed files vs the appropriate base branch.
-If not (e.g. Claude Desktop): ask for PR description, diff snippet, changed files/symbols, or behavior list.`;
+If \`gh\` and GitHub MCP are both unavailable, manual paste is valid — do not fail solely because \`gh\` is missing.`
+      : `## Step 1 — Understand local changes
+Resolve changes using the **first available** option:
+1. **Git** — inspect diff vs base branch when repository tools are available
+2. **GitHub MCP** or **gh** — when the user provides PR URL(s)
+3. **Manual** — ask for PR description, diff snippet, changed files/symbols, or behavior list`;
+
+  const batchStep =
+    urlList.length > 1
+      ? `When multiple PRs: build one compact context per PR and call **once** with \`change_batches[]\` (not one tool call per PR). Each batch may include \`id\`, \`label\`, \`source_url\`, and the semantic fields below.`
+      : `Send a single change context (top-level fields) or one entry in \`change_batches[]\` when attribution helps.`;
 
   return `Analyze test impact for code changes and identify Zebrunner test cases to review or run.
 
@@ -323,16 +339,84 @@ Derive and send ONLY semantic metadata to Zebrunner (do NOT send full raw diffs)
 - changed_files
 - keywords
 
+${batchStep}
+
 ## Step 3 — Call adv_analyze_test_impact ONCE
 Use conservative defaults: include_automation=true, include_coverage_gaps=true, max_candidates≈50, max_results≈20, format=compact.
 
 Do NOT chain adv_get_root_suites, adv_get_suite_hierarchy, adv_get_test_cases_by_suite_smart, or adv_aggregate_test_cases_by_feature unless the impact tool returns insufficient results.
 
 ## Step 4 — Present results (informational)
-A. **Regression** — existing cases to re-run, grouped by theme, split automated vs manual, with confidence and links
+A. **Regression** — existing cases to re-run, grouped by theme, split automated vs manual, with confidence, \`sources\` (when batch mode), and links
 B. **New functionality to verify** — newCoverageNeeded / potential coverage gaps (includes suggestedTestCase drafts: title + high-level steps + suggested suite/theme when a behavior has no match)
 C. **Recommended smoke suites** (if any)
-D. **Scoping notes** — explain what was excluded
+D. **Scoping notes** — explain what was excluded; note merged batch count when applicable
+
+Never claim a behavior is untested — only "potential coverage gap".`;
+}
+
+export function buildTestImpactPeriodPrompt(
+  repo?: string,
+  since?: string,
+  until?: string,
+  prState?: string,
+  maxPrs?: string,
+  project?: string,
+  repositorySlug?: string,
+): string {
+  const projectLine = project
+    ? `Target project: **${project}**.`
+    : repositorySlug
+      ? `Target platform from repository folder: **${repositorySlug}** (pass as repository_slug).`
+      : `Resolve platform from repo folder name or ask the user for project_key.`;
+
+  const repoLine = repo
+    ? `Repository: **${repo}** (org/name, e.g. org/repo-android).`
+    : `Infer repository from workspace remote or ask the user for org/name.`;
+
+  const sinceLine = since ? `Since: **${since}**` : "Since: ask user or default to sprint/start date";
+  const untilLine = until ? `Until: **${until}**` : "Until: today or ask user";
+  const stateLine = prState
+    ? `PR state filter: **${prState}** (merged | open | all)`
+    : "PR state: default **merged** unless user asked for open or all PRs";
+  const limitLine = maxPrs ? `Max PRs: **${maxPrs}**` : "Max PRs: cap at 20 before calling the tool (server max_batches)";
+
+  return `Analyze test impact for a **period** of pull requests and identify Zebrunner tests to review or run.
+
+${projectLine}
+${repoLine}
+${sinceLine}
+${untilLine}
+${stateLine}
+${limitLine}
+
+## Step 1 — List PRs in the period (client-side)
+Zebrunner MCP does **not** run git or GitHub. Use the first available resolver:
+
+1. **gh CLI** (merged example):
+\`\`\`bash
+gh pr list --repo ${repo ?? "org/repo"} --state merged \\
+  --search "merged:>=${since ?? "YYYY-MM-DD"} merged:<=${until ?? "YYYY-MM-DD"}" \\
+  --limit ${maxPrs ?? "20"} \\
+  --json number,title,url,mergedAt,files
+\`\`\`
+For **open** PRs use \`--state open\` and \`created:>=...\` search qualifiers.
+
+2. **GitHub MCP** — list/search PRs with equivalent date and state filters.
+
+3. **Manual** — user pastes PR URLs or a sprint changelog.
+
+## Step 2 — Build change_batches[]
+For each PR (up to 20), derive compact metadata per PR:
+\`id\`, \`label\`, \`source_url\`, \`merged_at\` (when known), plus \`change_summary\`, \`features\`, \`behaviors\`, \`changed_symbols\`, \`changed_files\`, \`keywords\`.
+
+Filter noisy PRs client-side (chore/deps labels, unrelated paths) before sending.
+
+## Step 3 — Call adv_analyze_test_impact ONCE
+Pass \`change_batches\` with \`repository_slug\` or \`project_key\`. Defaults: format=compact, max_results≈20, omit include_steps_in_output in batch mode.
+
+## Step 4 — Present results
+Same sections as /test-impact: regression (with \`sources\` per case), newCoverageNeeded, smoke, scoping notes including merged batch labels.
 
 Never claim a behavior is untested — only "potential coverage gap".`;
 }
@@ -672,7 +756,8 @@ export function getPromptsCatalog(): PromptMeta[] {
     { name: "feature-scoped-launch", title: "Feature-Scoped Build Now", description: "Find tests by feature keyword, build test_run_rules per root suite, preview and trigger adv_start_launch (suite_path resolved dynamically)", category: "Analysis", args: ["project", "feature", "suite_name?", "suite_path?", "build?", "locale?", "template_query?"] },
     { name: "flaky-review", title: "Flaky Test Review", description: "Find flaky tests, analyze execution history, and recommend stabilization priorities", category: "Analysis", args: ["project"] },
     { name: "find-duplicates", title: "Find Duplicate Test Cases", description: "Analyze test cases for duplicates using structural and optional semantic analysis", category: "Analysis", args: ["project", "suite_id?"] },
-    { name: "test-impact", title: "Test Impact Analysis", description: "Analyze code/PR changes and find Zebrunner test cases for regression and new coverage gaps", category: "Analysis", args: ["project?", "repository_slug?", "pr_url?"] },
+    { name: "test-impact", title: "Test Impact Analysis", description: "Analyze code/PR changes and find Zebrunner test cases for regression and new coverage gaps", category: "Analysis", args: ["project?", "repository_slug?", "pr_url?", "pr_urls?"] },
+    { name: "test-impact-period", title: "Test Impact — PR Period", description: "Analyze test impact for merged/open PRs in a date range via change_batches", category: "Analysis", args: ["repo?", "since?", "until?", "pr_state?", "max_prs?", "project?", "repository_slug?"] },
     { name: "scaffold-test-case", title: "Scaffold Test Case", description: "Guided best-practice wizard to author a new test case, with an automatic warn-only similar-case check and an advisory quality pre-check", category: "Authoring", args: ["project?", "suite_id?"] },
     { name: "create-test-case-wizard", title: "Create Test Case Wizard", description: "Dev-friendly alias of the Scaffold Test Case wizard (best-practice authoring + similar-case warning + advisory quality pre-check)", category: "Authoring", args: ["project?", "suite_id?"] },
     { name: "daily-qa-standup", title: "Daily QA Standup", description: "Prepare a concise daily QA standup summary with pass rates, blockers, flaky tests, and action items", category: "Role-Specific", args: ["projects"] },
@@ -937,15 +1022,48 @@ export function registerPrompts(server: McpServer): void {
       argsSchema: {
         project: z.string().optional().describe("Platform/project key or alias, e.g. 'android' or 'PROJ2'"),
         repository_slug: z.string().optional().describe("Repo folder name for repositoryProjectMap lookup, e.g. 'repo-android'"),
-        pr_url: z.string().optional().describe("GitHub PR URL — client runs gh pr view locally"),
+        pr_url: z.string().optional().describe("Single GitHub PR URL — client resolves via gh or GitHub MCP"),
+        pr_urls: z
+          .string()
+          .optional()
+          .describe("Comma- or space-separated PR URLs for multi-PR batch analysis"),
       },
     },
-    async ({ project, repository_slug, pr_url }) => ({
+    async ({ project, repository_slug, pr_url, pr_urls }) => ({
       messages: [{
         role: "user" as const,
         content: {
           type: "text" as const,
-          text: buildTestImpactPrompt(project, repository_slug, pr_url),
+          text: buildTestImpactPrompt(project, repository_slug, pr_url, pr_urls),
+        },
+      }],
+    }),
+  );
+
+  server.registerPrompt(
+    "test-impact-period",
+    {
+      title: "Test Impact — PR Period",
+      description: "List PRs in a date window (merged/open/all), build change_batches, and run test impact once",
+      argsSchema: {
+        repo: z.string().optional().describe("GitHub org/repo, e.g. 'org/repo-android'"),
+        since: z.string().optional().describe("Start date (YYYY-MM-DD) for PR search"),
+        until: z.string().optional().describe("End date (YYYY-MM-DD) for PR search"),
+        pr_state: z
+          .enum(["merged", "open", "all"])
+          .optional()
+          .describe("Which PRs to include in the period"),
+        max_prs: z.string().optional().describe("Max PRs to analyze (cap at 20 for tool)"),
+        project: z.string().optional().describe("Zebrunner project key or alias"),
+        repository_slug: z.string().optional().describe("Repo folder for repositoryProjectMap lookup"),
+      },
+    },
+    async ({ repo, since, until, pr_state, max_prs, project, repository_slug }) => ({
+      messages: [{
+        role: "user" as const,
+        content: {
+          type: "text" as const,
+          text: buildTestImpactPeriodPrompt(repo, since, until, pr_state, max_prs, project, repository_slug),
         },
       }],
     }),

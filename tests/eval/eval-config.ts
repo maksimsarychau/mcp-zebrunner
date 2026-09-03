@@ -279,6 +279,79 @@ export function isLocalEvalEndpoint(config: EvalConfig): boolean {
   return isLocalEvalProvider(config.provider, config.baseUrl);
 }
 
+/** Ollama native API root from OpenAI-compatible base URL (e.g. .../v1 → origin). */
+export function ollamaApiRoot(baseUrl?: string): string {
+  const raw = baseUrl ?? DEFAULT_LOCAL_EVAL_BASE_URL;
+  try {
+    const u = new URL(raw);
+    const path = u.pathname.replace(/\/v1\/?$/, "");
+    return `${u.origin}${path === "/" ? "" : path}`;
+  } catch {
+    return "http://localhost:11434";
+  }
+}
+
+function ollamaHasModel(available: string[], wanted: string): boolean {
+  if (available.includes(wanted)) return true;
+  const wantedBase = wanted.split(":")[0];
+  return available.some(
+    (name) =>
+      name === wanted ||
+      name.startsWith(`${wanted}:`) ||
+      wanted.startsWith(`${name}:`) ||
+      name.split(":")[0] === wantedBase,
+  );
+}
+
+/**
+ * Fail fast when local Ollama/LM Studio is down or the configured model is missing.
+ * Skipped for cloud providers.
+ */
+export async function assertLocalEvalLlmReachable(
+  config: EvalConfig,
+  fetchImpl: typeof fetch = fetch,
+): Promise<void> {
+  if (!isLocalEvalEndpoint(config)) return;
+
+  const tagsUrl = `${ollamaApiRoot(config.baseUrl)}/api/tags`;
+  let res: Response;
+  try {
+    res = await fetchImpl(tagsUrl, { signal: AbortSignal.timeout(8_000) });
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `Local eval LLM unreachable at ${tagsUrl} (${detail}).\n` +
+        "  Start Ollama:  ollama serve\n" +
+        `  Pull model:    ollama pull ${config.model}\n` +
+        "  Cloud gate:    npm run test:eval:cloud",
+    );
+  }
+
+  if (!res.ok) {
+    throw new Error(
+      `Local eval LLM returned HTTP ${res.status} from ${tagsUrl}.\n` +
+        "  Check Ollama is running: ollama serve",
+    );
+  }
+
+  const body = (await res.json()) as { models?: Array<{ name: string }> };
+  const names = (body.models ?? []).map((m) => m.name).filter(Boolean);
+  if (names.length === 0) {
+    throw new Error(
+      `No models loaded in Ollama at ${tagsUrl}.\n` +
+        `  Pull model: ollama pull ${config.model}`,
+    );
+  }
+
+  if (!ollamaHasModel(names, config.model)) {
+    const sample = names.slice(0, 6).join(", ");
+    throw new Error(
+      `Model "${config.model}" not found in Ollama (available: ${sample}${names.length > 6 ? ", ..." : ""}).\n` +
+        `  Pull it: ollama pull ${config.model}`,
+    );
+  }
+}
+
 /**
  * Parse EVAL_MIN_PASS_RATE: accepts 0–1 (0.85) or 0–100 (85).
  */

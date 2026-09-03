@@ -1328,15 +1328,82 @@ The `steeringHint()` helper in `src/helpers/steering.ts` is a pure, deterministi
 
 **Expected:** Uses `adv_create_test_case` with `draft: false`, but the preview shows `draft → true (forced for safety)`. The created test case is always a draft. The user must use `adv_update_test_case` to publish it.
 
-### `adv_analyze_test_impact` *(v9.2.8)*
+### `adv_analyze_test_impact` *(v9.2.8, extended v9.3.0)*
 
-**Example prompts (eval IDs: `test_impact.*`):**
+Bounded test impact analysis from **compact semantic change context** (features, behaviors, symbols, keywords) — not raw git diffs. Client resolves PR/git metadata locally; Zebrunner MCP does not call GitHub or run `gh`.
+
+**v9.3.0:** optional `change_batches[]` (max 20) for multi-PR / sprint rollups; regression rows may include `sources` (e.g. `PR#10630`). Omit `change_batches` for v9.2.8 single-context behavior.
+
+See [TEST_IMPACT_WORKFLOW.md](TEST_IMPACT_WORKFLOW.md) and [TEST_IMPACT_PR_PERIOD_DESIGN.md](TEST_IMPACT_PR_PERIOD_DESIGN.md).
+
+**Prompt 1 — Single PR / local diff (v9.2.8)** *(eval: `test_impact.pr_regression`)*
+> Analyze test impact for my PR code changes on {{project_key}} — diary note editing and serving size display. Which Zebrunner cases should I run for regression?
+
+**Expected:** One call to `adv_analyze_test_impact` with `project_key` and semantic fields (`behaviors`, `features`, or `keywords`). Does NOT chain `adv_get_test_cases_by_suite_smart`, `adv_aggregate_test_cases_by_feature`, or multiple `adv_get_test_case_by_title`.
+
+**Prompt 2 — Behaviors explicit (v9.2.8)** *(eval: `test_impact.with_behaviors`)*
+> Use adv_analyze_test_impact for {{project_key}} with behaviors about diary editing and serving size recalculation.
+
+**Expected:** `adv_analyze_test_impact` with `project_key` and `behaviors` array. `format: compact` by default.
+
+**Prompt 3 — Repository slug (v9.2.8)** *(eval: `test_impact.repository_slug`)*
+> I'm in repo-android — analyze test impact for my changes to bottom navigation and ViewModel state (meal planner tab).
+
+**Expected:** `adv_analyze_test_impact` with `repository_slug: "repo-android"` (resolved via `repositoryProjectMap`) plus change metadata. Not a full suite export.
+
+**Prompt 4 — Multi-PR batch (v9.3.0)** *(eval: `test_impact.multi_pr_urls`)*
+> Analyze test impact for these two {{project_key}} PRs in one call — diary editing and serving size changes. Use change_batches, not separate tool calls.
+
+**Expected:** Client resolves each PR (GitHub MCP, `gh pr view`, or manual paste), then **one** `adv_analyze_test_impact` with:
+
+```json
+{
+  "project_key": "PROJ2",
+  "change_batches": [
+    {
+      "id": "10630",
+      "source_url": "https://github.com/org/repo-android/pull/10630",
+      "behaviors": ["edit diary note"],
+      "changed_files": ["DiaryViewModel.kt"]
+    },
+    {
+      "id": "10612",
+      "behaviors": ["serving size recalculation"],
+      "changed_symbols": ["ServingSizeCalculator"]
+    }
+  ],
+  "format": "compact"
+}
+```
+
+Regression rows may include `sources: ["PR#10630"]` or multiple PR labels when both batches match.
+
+**Prompt 5 — Period / merged PRs (v9.3.0)** *(eval: `test_impact.period_merged`)*
+> Merged PRs on {{project_key}} since last sprint touched meal planner and diary — run period test impact with change_batches from gh pr list.
+
+**Expected:** Client runs `gh pr list` (or GitHub MCP) for the date window, builds `change_batches[]` per PR (cap 20), then one `adv_analyze_test_impact` call. Prefer `/test-impact-period` MCP prompt for guided workflow.
+
+**Prompt 6 — Tool confusion: not suite_smart (v9.2.8)** *(eval: `test_impact.neg.not_suite_smart`)*
+> For {{project_key}} diary note changes, use adv_analyze_test_impact — do NOT pull the full suite via adv_get_test_cases_by_suite_smart.
+
+**Expected:** `adv_analyze_test_impact` only; must NOT call `adv_get_test_cases_by_suite_smart`.
+
+**Prompt 7 — Slash prompt (v9.2.8)** *(eval: `test_impact.slash_prompt`)*
+> /test-impact project: {{project_key}} — my changes touch diary notes and serving size recalculation.
+
+**Expected:** MCP client injects `/test-impact` instructions; ends in one `adv_analyze_test_impact` call with `project_key` and change metadata.
+
+**Prompt 8 — Multi-PR slash (v9.3.0)**
+> /test-impact project: {{project_key}} pr_urls: https://github.com/org/repo/pull/10630, https://github.com/org/repo/pull/10612
+
+**Expected:** Prompt guides client to resolve both URLs, build `change_batches[]`, single impact call.
+
+**Example prompts (quick reference):**
 
 - "Analyze test impact for my PR code changes on {{project_key}}"
 - "Which Zebrunner tests might my code changes affect?"
 - "/test-impact project: {{project_key}}"
-
-See [TEST_IMPACT_WORKFLOW.md](TEST_IMPACT_WORKFLOW.md).
+- "/test-impact-period repo: org/repo-android since: 2026-08-01 until: 2026-08-21 pr_state: merged project: {{project_key}}"
 
 ### `adv_scaffold_test_case` *(v9.2.7)*
 
@@ -1601,9 +1668,9 @@ MCP resources provide read-only reference data accessible via the `@` menu in MC
 
 ---
 
-## 15. MCP Prompts *(v9.1.0)*
+## 15. MCP Prompts *(v9.1.0, test impact v9.2.8 / v9.3.0)*
 
-> **17 prompts** registered. v9.1.0 adds `/relaunch-regression-failures` and `/feature-scoped-launch`. See [GitHub Release v9.1.0](https://github.com/maksimsarychau/mcp-zebrunner/releases/tag/v9.1.0).
+> **21 prompts** registered (was 17 in v9.1.0). v9.2.8 adds `/test-impact`; v9.3.0 adds `/test-impact-period` and extends `/test-impact` with `pr_urls` and multi-PR `change_batches` guidance. See [GitHub Release v9.3.0](releases/v9.3.0.md).
 
 MCP prompts provide pre-built, tested workflow instructions accessible via the `/` command in MCP clients. Each prompt injects expert-crafted multi-step instructions that guide Claude through complex multi-tool workflows.
 
@@ -1677,6 +1744,21 @@ MCP prompts provide pre-built, tested workflow instructions accessible via the `
 > Use `/find-duplicates` with project: "android", suite_id: "42"
 
 **Expected:** Prompt drives structural (and optionally semantic) duplicate analysis within the specified scope. Claude should present duplicate groups with similarity scores and merge recommendations.
+
+**Prompt 10b — Test impact via /test-impact (single PR)** *(v9.2.8)*
+> Use `/test-impact` with project: "PROJ2", pr_url: "https://github.com/org/repo-android/pull/10630"
+
+**Expected:** Prompt instructs client to resolve PR metadata locally (GitHub MCP → `gh pr view` → manual). Claude derives compact `features` / `behaviors` / `changed_symbols` / `keywords`, then calls `adv_analyze_test_impact` **once** with `format: compact`. Must not ask Zebrunner MCP to access GitHub.
+
+**Prompt 10c — Test impact via /test-impact (multiple PR URLs)** *(v9.3.0)*
+> Use `/test-impact` with project: "PROJ2", pr_urls: "https://github.com/org/repo/pull/10630, https://github.com/org/repo/pull/10612"
+
+**Expected:** Client resolves each URL, builds `change_batches[]` (one object per PR with `id`, `source_url`, semantic fields), single `adv_analyze_test_impact` call. Output regression rows may include `sources` per case.
+
+**Prompt 10d — Period test impact via /test-impact-period** *(v9.3.0)*
+> Use `/test-impact-period` with repo: "org/repo-android", since: "2026-08-01", until: "2026-08-21", pr_state: "merged", max_prs: "20", project: "PROJ2"
+
+**Expected:** Prompt instructs client to list merged PRs in the window (`gh pr list` or GitHub MCP), filter noisy PRs client-side, build up to 20 `change_batches[]` entries, then one `adv_analyze_test_impact` call. Presents regression (with `sources` when applicable), `newCoverageNeeded`, smoke suites, scoping notes.
 
 ### Role-Specific Prompts
 

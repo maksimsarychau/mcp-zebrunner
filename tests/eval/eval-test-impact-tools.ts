@@ -104,4 +104,26 @@ export const TEST_IMPACT_EVAL_PROMPTS: EvalPrompt[] = [
     layer: 2,
     requiredContext: ["projectKey"],
   },
+  {
+    id: "test_impact.multi_pr_urls",
+    toolSection: "1. TCM — Test impact (v9.3.0)",
+    promptTemplate:
+      "Analyze test impact for these two {{project_key}} PRs in one call — diary editing and serving size changes. Use change_batches, not separate tool calls.",
+    expectedTools: ["adv_analyze_test_impact"],
+    expectedArgKeys: ["change_batches", "project_key"],
+    category: "analysis",
+    layer: 2,
+    requiredContext: ["projectKey"],
+  },
+  {
+    id: "test_impact.period_merged",
+    toolSection: "1. TCM — Test impact (v9.3.0)",
+    promptTemplate:
+      "Merged PRs on {{project_key}} since last sprint touched meal planner and diary — run period test impact with change_batches from gh pr list.",
+    expectedTools: ["adv_analyze_test_impact"],
+    expectedArgKeys: ["change_batches", "project_key"],
+    category: "analysis",
+    layer: 2,
+    requiredContext: ["projectKey"],
+  },
 ];

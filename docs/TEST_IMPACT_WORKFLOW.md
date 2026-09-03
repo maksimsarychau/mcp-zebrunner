@@ -1,6 +1,6 @@
-# Test Impact Analysis Workflow (v9.2.8)
+# Test Impact Analysis Workflow (v9.3.0)
 
-Guide for developers using **`adv_analyze_test_impact`** and the **`/test-impact`** MCP prompt.
+Guide for developers using **`adv_analyze_test_impact`**, **`/test-impact`**, and **`/test-impact-period`** MCP prompts.
 
 ## Quick start
 
@@ -29,12 +29,39 @@ The client should:
 
 **Do not** ask Zebrunner MCP to access Git or GitHub.
 
+## Multi-PR workflow
+
+Paste multiple PR URLs or invoke `/test-impact` with `pr_urls`:
+
+```
+/test-impact
+project: PROJ2
+pr_urls: https://github.com/org/repo-android/pull/10630, https://github.com/org/repo-android/pull/10612
+```
+
+Resolve each PR client-side (GitHub MCP, `gh pr view`, or manual), then call **`adv_analyze_test_impact` once** with `change_batches[]` — one object per PR (`id`, `source_url`, semantic fields).
+
+## Period workflow (merged PRs in a sprint)
+
+```
+/test-impact-period
+repo: org/repo-android
+since: 2026-08-01
+until: 2026-08-21
+pr_state: merged
+project: PROJ2
+max_prs: 20
+```
+
+Client runs `gh pr list` or GitHub MCP, builds `change_batches[]`, single tool call.
+
 ## Output sections
 
 | Section | Meaning |
 |---------|---------|
 | `regression.byTheme` | Existing cases to re-run, grouped by theme |
-| `regression.byTheme[].automated` / `.manual` | Split by automation state |
+| `regression.byTheme[].automated` / `.manual` | Split by automation state; `sources` when using `change_batches` |
+| `changeBatches` | Count and labels when batch mode was used |
 | `newCoverageNeeded` | Potential coverage gaps (not proof of absence); includes `suggestedTestCase` draft (title + steps + suite/theme) |
 | `recommendedSmokeSuites` | When infra keywords match config |
 | `scopingNotes` | Why full suites were not recommended |
@@ -78,3 +105,7 @@ Copy [docs/skills/zebrunner-test-impact-SKILL.md](skills/zebrunner-test-impact-S
 - No git/GitHub inside MCP.
 - Returns `automationState` only — no invented test class/method mappings.
 - Title search may miss step-only matches; enrichment uses steps for scoring when cases are in the shortlist.
+
+## Multi-PR / period analysis (design)
+
+For sprint rollups, multiple pasted PR URLs, or merged/open PR lists — see [TEST_IMPACT_PR_PERIOD_DESIGN.md](TEST_IMPACT_PR_PERIOD_DESIGN.md). Supports `gh`, GitHub MCP, or manual metadata; Zebrunner tool contract unchanged in v9.2.9.

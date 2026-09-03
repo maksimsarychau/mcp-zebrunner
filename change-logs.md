@@ -1,5 +1,55 @@
 # Change Logs
 
+## v9.3.0 — Multi-PR and period test impact
+
+### Added
+
+- **`change_batches[]`** on `adv_analyze_test_impact` — merge up to 20 PR/change contexts in one retrieval pass; regression rows include `sources`; multi-batch score boost.
+- **`/test-impact-period`** MCP prompt — client lists PRs in a date window (`gh` / GitHub MCP), builds batches, single tool call.
+- Extended **`/test-impact`** — `pr_urls` arg, GitHub MCP resolver path, `change_batches` guidance for multiple PRs.
+- Eval: `test_impact.multi_pr_urls`, `test_impact.period_merged` (10 test-impact routing prompts total).
+
+### Notes
+
+- Additive — omit `change_batches` for v9.2.8 single-context behavior.
+- Zebrunner MCP still does not fetch GitHub URLs or run git.
+
+---
+
+## v9.2.9 — Tool intel bundle fix
+
+### Fixed
+
+- **`adv_about_mcp_tools`** reported `Total tools: 0` in **npm** and **Docker** installs because `tools.json` / `TOOLS_CATALOG.md` were not shipped. Published builds now embed `tool-intel-bundle.json` in `dist/` with filesystem-first fallback for git-clone dev.
+
+### Added
+
+- `npm run generate:tool-intel-bundle` — regenerates bundle from catalog sources at build time.
+- Design doc: [TEST_IMPACT_PR_PERIOD_DESIGN.md](docs/TEST_IMPACT_PR_PERIOD_DESIGN.md) — multi-PR / period test impact (gh, GitHub MCP, pasted URLs).
+
+### Notes
+
+- No breaking changes — live tool registration, `adv_analyze_test_impact`, and `/test-impact` unchanged.
+- `TOOL_INTEL_FORCE_BUNDLE=1` forces bundle path (tests / npm layout simulation).
+
+---
+
+## v9.2.8 — Test Impact Analysis
+
+### Added
+
+- **`adv_analyze_test_impact`**: bounded test impact analysis from compact semantic change context (features, behaviors, symbols, keywords). Returns hybrid output — regression by theme (automated/manual, confidence) + potential coverage gaps (with **suggestedTestCase** drafts) + optional smoke-suite recommendations.
+- **`/test-impact`** MCP prompt with optional `pr_url`, `project`, and `repository_slug` args; instructs client-side `gh pr view` / git diff before calling the tool.
+- **Test-case URL input**: paste full Zebrunner URLs (`?caseId=`, `?caseKey=`, path form) into get/batch/create/update/validate/improve/coverage tools — shared parser in `zebrunner-test-case-ref.ts`; host mismatch warns only.
+- Optional config keys: `repositoryProjectMap`, `testImpactSmokeSuites`, `testImpactInfraKeywords` (shipped in `zebrunner-config.json` for MFP).
+- Docs: [TEST_IMPACT_WORKFLOW.md](docs/TEST_IMPACT_WORKFLOW.md), [skill template](docs/skills/zebrunner-test-impact-SKILL.md).
+- Eval: 8 new `test_impact.*` routing prompts; 5 new test-case URL prompts; `npm run test:eval:test-impact`.
+
+### Notes
+
+- Additive only — existing tools and prompts unchanged.
+- Does not run git/GitHub inside MCP; does not invent automation class/method mappings.
+
 ---
 
 ## v9.2.8 — Test Impact Analysis

@@ -5,7 +5,7 @@ A **Model Context Protocol (MCP)** server that brings advanced analytics, report
 
 > Tool naming: every tool on this server is registered under the canonical `adv_<name>` form (e.g. `adv_create_test_case`, `adv_list_test_runs`) so it never collides with the official Zebrunner MCP. The legacy names are kept as **deprecated aliases** so prompts/scripts that called the old names continue to work for now; aliases will be removed in the next major release. 
 
-> 🆕 **v9.2.8** — New `adv_analyze_test_impact` + `/test-impact` prompt for PR/code-change test planning (regression + coverage gaps). See [TEST_IMPACT_WORKFLOW.md](docs/TEST_IMPACT_WORKFLOW.md) and [release notes](docs/releases/v9.2.8.md).
+> 🆕 **v9.3.0** — Multi-PR / period test impact: `change_batches[]`, `/test-impact-period`, extended `/test-impact`. See [TEST_IMPACT_WORKFLOW.md](docs/TEST_IMPACT_WORKFLOW.md) and [TEST_IMPACT_PR_PERIOD_DESIGN.md](docs/TEST_IMPACT_PR_PERIOD_DESIGN.md).
 >
 > 🆕 **v9.2.7** — New `adv_scaffold_test_case` wizard (hybrid form/conversational) to author test cases from best practices with an automatic warn-only similar-case check, plus configurable `projectAliases` in `zebrunner-config.json`. See [release notes](docs/releases/v9.2.7.md).
 >
@@ -1469,6 +1469,10 @@ npm run test:e2e           # End-to-end tests
 - ✅ Check that the project built successfully (`npm run build`)
 - ✅ Ensure environment variables are set in MCP configuration
 - ✅ Look at Claude Desktop/Code logs for error messages
+
+#### `adv_about_mcp_tools` shows "Total tools: 0"
+- ✅ Upgrade to **v9.2.9+** (embeds tool catalog in `dist/` for npm/Docker installs)
+- ✅ Rebuild after upgrade: `npm run build` (git clone) or reinstall the package / pull the Docker image
 
 #### Rules engine not working
 - ✅ Check that `ENABLE_RULES_ENGINE=true` in your `.env` file

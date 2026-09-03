@@ -16,17 +16,24 @@ import { FormatProcessor } from "../utils/formatter.js";
 import { getConfig } from "../utils/config-loader.js";
 import { sanitizeRqlString } from "../utils/security.js";
 import {
+  hasMeaningfulBatchContexts,
   hasMeaningfulChangeContext,
   matchesInfraKeyword,
+  mergeBatchChangeContexts,
   normalizeChangeContext,
+  type ChangeContextBatch,
   type ChangeContextInput,
+  MAX_CHANGE_BATCHES,
 } from "../utils/test-impact-normalizer.js";
 import { resolveImpactProjectKey } from "../utils/test-impact-project.js";
 import { matchRootSuites, type MatchedSuite } from "../utils/test-impact-suite-matcher.js";
 import {
+  applyMultiSourceBoost,
+  collectBatchSources,
   detectCoverageGaps,
   isAutomated,
   scoreTestCase,
+  scoreToConfidence,
   type ScoredCandidate,
 } from "../utils/test-impact-scorer.js";
 
@@ -39,6 +46,7 @@ export interface AnalyzeTestImpactDeps {
 export interface ImpactToolInput extends ChangeContextInput {
   project_key?: string;
   repository_slug?: string;
+  change_batches?: ChangeContextBatch[];
   suite_ids?: number[];
   include_automation?: boolean;
   include_coverage_gaps?: boolean;
@@ -66,6 +74,7 @@ export interface ImpactAnalysisResult {
     keywords: string[];
     summary?: string;
   };
+  changeBatches?: { count: number; labels: string[] };
   matchedSuites: MatchedSuite[];
   regression: {
     byTheme: ThemeGroup[];
@@ -127,6 +136,8 @@ export function buildHybridOutput(
     partialFailures: string[];
     enrichNotFound: string[];
     projectResolution?: string;
+    sourceByKey?: Map<string, string[]>;
+    batchSummary?: { count: number; labels: string[] };
   },
 ): ImpactAnalysisResult {
   const sorted = [...scored].sort(
@@ -173,6 +184,10 @@ export function buildHybridOutput(
     if (includeSteps && c.testCase.steps) {
       row.steps = c.testCase.steps;
     }
+    const sources = options.sourceByKey?.get(c.key);
+    if (sources?.length) {
+      row.sources = sources;
+    }
 
     const group = ensureTheme(c.theme);
     if (isAutomated(c.automationState)) {
@@ -197,6 +212,11 @@ export function buildHybridOutput(
   }
   if (options.truncated) {
     scopingNotes.push(`Results truncated to max ${maxResults} regression case(s).`);
+  }
+  if (options.batchSummary && options.batchSummary.count > 1) {
+    scopingNotes.push(
+      `Merged ${options.batchSummary.count} change batch(es): ${options.batchSummary.labels.join(", ")}.`,
+    );
   }
 
   const cfg = getConfig();
@@ -223,6 +243,7 @@ export function buildHybridOutput(
       keywords: ctx.keywords,
       summary: ctx.changeSummary,
     },
+    changeBatches: options.batchSummary,
     matchedSuites,
     regression: {
       byTheme: [...themeMap.values()],
@@ -260,10 +281,11 @@ export async function runTestImpactAnalysis(
   deps: AnalyzeTestImpactDeps,
   input: ImpactToolInput,
 ): Promise<ImpactAnalysisResult | { error: string }> {
-  if (!hasMeaningfulChangeContext(input)) {
+  const batchMode = hasMeaningfulBatchContexts(input.change_batches);
+  if (!batchMode && !hasMeaningfulChangeContext(input)) {
     return {
       error:
-        "At least one meaningful change signal is required: change_summary, features, behaviors, changed_symbols, changed_files, or keywords.",
+        "At least one meaningful change signal is required: change_summary, features, behaviors, changed_symbols, changed_files, keywords, or change_batches.",
     };
   }
 
@@ -273,7 +295,22 @@ export async function runTestImpactAnalysis(
   const projectKey = resolved.projectKey;
   const maxCandidates = input.max_candidates ?? 50;
   const maxResults = input.max_results ?? 20;
-  const ctx = normalizeChangeContext(input);
+
+  let ctx: ReturnType<typeof normalizeChangeContext>;
+  let batchSummary: { count: number; labels: string[] } | undefined;
+  let batches: ChangeContextBatch[] = [];
+  let batchCtxs: ReturnType<typeof normalizeChangeContext>[] = [];
+
+  if (batchMode) {
+    batches = input.change_batches!;
+    const merged = mergeBatchChangeContexts(batches);
+    ctx = merged.merged;
+    batchSummary = { count: merged.batchCount, labels: merged.batchLabels };
+    batchCtxs = batches.map((b) => normalizeChangeContext(b));
+  } else {
+    ctx = normalizeChangeContext(input);
+  }
+
   const cfg = getConfig();
 
   let matchedSuites: MatchedSuite[] = [];
@@ -356,9 +393,32 @@ export async function runTestImpactAnalysis(
   });
 
   const scored: ScoredCandidate[] = [];
+  const sourceByKey = new Map<string, string[]>();
   for (const tc of enriched) {
     const s = scoreTestCase(tc, ctx, matchedSuites, cfg.featureAreaKeywords);
-    if (s) scored.push(s);
+    if (!s) continue;
+    if (batchMode) {
+      const sources = collectBatchSources(
+        tc,
+        batches,
+        batchCtxs,
+        matchedSuites,
+        cfg.featureAreaKeywords,
+      );
+      if (sources.length) {
+        sourceByKey.set(s.key, sources);
+        s.score = applyMultiSourceBoost(s.score, sources.length);
+        const boostedConfidence = scoreToConfidence(s.score);
+        if (boostedConfidence) {
+          s.confidence =
+            s.deprecated && boostedConfidence === "HIGH" ? "MEDIUM" : boostedConfidence;
+        }
+        if (sources.length > 1) {
+          s.reasons = [...new Set([...s.reasons, `matched ${sources.length} change batches`])].slice(0, 5);
+        }
+      }
+    }
+    scored.push(s);
   }
 
   const infraHit = cfg.testImpactInfraKeywords.some((kw) =>
@@ -375,6 +435,8 @@ export async function runTestImpactAnalysis(
     partialFailures,
     enrichNotFound,
     projectResolution: resolved.source,
+    sourceByKey: batchMode ? sourceByKey : undefined,
+    batchSummary,
   });
 }
 
@@ -384,6 +446,7 @@ export function registerAnalyzeTestImpactTool(server: McpServer, deps: AnalyzeTe
       "🎯 TEST IMPACT ANALYSIS — primary MCP tool when the user asks which Zebrunner tests a PR or code change affects, " +
       "test impact analysis, regression test planning, what tests to run after changes, or /test-impact. " +
       "Pass compact semantic change context (features, behaviors, symbols, keywords) — NOT raw git diffs. " +
+      "Optional change_batches[] for multi-PR / period rollups (client resolves PR metadata; MCP does not fetch URLs). " +
       "Returns regression candidates grouped by theme (automated vs manual), potential coverage gaps with suggested draft cases, and optional smoke-suite recommendations. " +
       "Call this tool even with partial change metadata; do not chain adv_get_test_case_by_title or adv_get_test_cases_by_suite_smart for impact analysis. " +
       "Repository-aware clients should inspect git/PR locally and send summarized change metadata only.",
@@ -399,6 +462,29 @@ export function registerAnalyzeTestImpactTool(server: McpServer, deps: AnalyzeTe
       changed_symbols: z.array(z.string()).optional().describe("Classes, methods, or symbols changed"),
       changed_files: z.array(z.string()).optional().describe("Changed file names or paths"),
       keywords: z.array(z.string()).optional().describe("Additional search keywords"),
+      change_batches: z
+        .array(
+          z.object({
+            id: z.string().optional().describe("PR number or batch id, e.g. '10630'"),
+            label: z.string().optional().describe("Display label, e.g. 'PR#10630' or title snippet"),
+            source_url: z
+              .string()
+              .optional()
+              .describe("Attribution only — MCP does not fetch this URL"),
+            merged_at: z.string().optional().describe("ISO merge timestamp when known"),
+            change_summary: z.string().optional(),
+            features: z.array(z.string()).optional(),
+            behaviors: z.array(z.string()).optional(),
+            changed_symbols: z.array(z.string()).optional(),
+            changed_files: z.array(z.string()).optional(),
+            keywords: z.array(z.string()).optional(),
+          }),
+        )
+        .max(MAX_CHANGE_BATCHES)
+        .optional()
+        .describe(
+          "Multiple PR/change contexts in one call (max 20). Omit for single-context mode.",
+        ),
       suite_ids: z.array(z.number().int().positive()).optional().describe("Optional root/feature suite IDs to scope discovery"),
       include_automation: z.boolean().default(true),
       include_coverage_gaps: z.boolean().default(true),

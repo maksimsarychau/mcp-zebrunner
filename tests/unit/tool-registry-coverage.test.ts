@@ -277,6 +277,18 @@ describe("about_mcp_tools summary includes prompts and resources", () => {
     assert.ok(summary.includes(`Total tools:`), "summary should include tool count");
   });
 
+  it("summary Total tools is non-zero (regression for npm/Docker)", () => {
+    const snapshot = loadToolIntelSnapshot();
+    assert.ok(snapshot.tools.length >= 65, "snapshot should include all tools");
+    const summary = markdownForAllTools(snapshot, {
+      includeExamples: true,
+      includeTokenEstimates: true,
+      includeRoleBenefits: true,
+    });
+    const match = summary.match(/Total tools: (\d+)/);
+    assert.ok(match && Number(match[1]) >= 65, "summary should report non-zero tool count");
+  });
+
   it("about_mcp_tools schema includes all 4 modes", () => {
     const root = getProjectRoot();
     const source = fs.readFileSync(path.join(root, "src", "server.ts"), "utf-8");

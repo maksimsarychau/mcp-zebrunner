@@ -182,4 +182,36 @@ describe("eval-config", () => {
     assert.equal(config.provider, "local");
     assert.equal(config.model, "qwen3.5:2b");
   });
+
+  it("ollamaApiRoot strips /v1 from OpenAI-compatible base URL", async () => {
+    const { ollamaApiRoot } = await import("../eval/eval-config.js");
+    assert.equal(ollamaApiRoot("http://localhost:11434/v1"), "http://localhost:11434");
+    assert.equal(ollamaApiRoot("http://127.0.0.1:11434/v1/"), "http://127.0.0.1:11434");
+  });
+
+  it("assertLocalEvalLlmReachable throws when Ollama is unreachable", async () => {
+    process.env.EVAL_PROVIDER = "local";
+    process.env.EVAL_MODEL = "qwen3.5:2b";
+
+    const { getEvalConfig, assertLocalEvalLlmReachable } = await import("../eval/eval-config.js");
+    const config = getEvalConfig();
+
+    await assert.rejects(
+      () =>
+        assertLocalEvalLlmReachable(config, async () => {
+          throw new Error("fetch failed");
+        }),
+      /Local eval LLM unreachable/,
+    );
+  });
+
+  it("assertLocalEvalLlmReachable skips cloud providers", async () => {
+    process.env.ANTHROPIC_API_KEY = "sk-ant-test";
+
+    const { getEvalConfig, assertLocalEvalLlmReachable } = await import("../eval/eval-config.js");
+    const config = getEvalConfig();
+    await assertLocalEvalLlmReachable(config, async () => {
+      throw new Error("should not be called");
+    });
+  });
 });
