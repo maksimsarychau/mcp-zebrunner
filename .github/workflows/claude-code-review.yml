@@ -2,7 +2,7 @@ name: Claude Code Review
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, ready_for_review]
 
 jobs:
   claude-review:
@@ -13,9 +13,8 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-      issues: read
+      issues: write
       id-token: write
-      actions: read
 
     steps:
       - name: Checkout repository
@@ -27,8 +26,15 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          # Automation mode: `prompt` set on pull_request → runs without @claude mention
+          # Use workflow token — avoids OIDC GitHub App exchange (401 unless Claude App installed)
+          # and ensures comments post when this workflow file is in the PR diff.
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          # Visible tracking comment + full PR context (diff, files, comments) like v0.x agent mode.
+          track_progress: true
           prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
             You are a senior TypeScript/Node.js engineer reviewing this MCP (Model Context Protocol) server for Zebrunner integration.
 
             **Context:**
@@ -50,6 +56,7 @@ jobs:
             - Files in `tests/` (test files)
 
             **Output:**
+            - Always post a review summary comment on this PR (even if you also leave inline comments)
             - Summarize changes succinctly
             - Highlight critical security issues (if any)
             - Identify bugs or edge cases
@@ -58,7 +65,7 @@ jobs:
 
             Provide a detailed but concise review with clear recommendations.
           claude_args: |
-            --model claude-sonnet-4-6
+            --model claude-sonnet-5
             --max-turns 20
             --disallowedTools WebSearch,WebFetch
 
