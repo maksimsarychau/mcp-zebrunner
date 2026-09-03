@@ -1,5 +1,37 @@
 # Change Logs
 
+## v9.3.0 — Multi-PR and period test impact
+
+### Added
+
+- **`change_batches[]`** on `adv_analyze_test_impact` — merge up to 20 PR/change contexts in one retrieval pass; regression rows include `sources`; multi-batch score boost.
+- **`/test-impact-period`** MCP prompt — client lists PRs in a date window (`gh` / GitHub MCP), builds batches, single tool call.
+- Extended **`/test-impact`** — `pr_urls` arg, GitHub MCP resolver path, `change_batches` guidance for multiple PRs.
+- Eval: `test_impact.multi_pr_urls`, `test_impact.period_merged` (10 test-impact routing prompts total).
+
+### Notes
+
+- Additive — omit `change_batches` for v9.2.8 single-context behavior.
+- Zebrunner MCP still does not fetch GitHub URLs or run git.
+
+---
+
+## v9.2.9 — Tool intel bundle fix
+
+### Fixed
+
+- **`adv_about_mcp_tools`** reported `Total tools: 0` in **npm** and **Docker** installs because `tools.json` / `TOOLS_CATALOG.md` were not shipped. Published builds now embed `tool-intel-bundle.json` in `dist/` with filesystem-first fallback for git-clone dev.
+
+### Added
+
+- `npm run generate:tool-intel-bundle` — regenerates bundle from catalog sources at build time.
+- Design doc: [TEST_IMPACT_PR_PERIOD_DESIGN.md](docs/TEST_IMPACT_PR_PERIOD_DESIGN.md) — multi-PR / period test impact (gh, GitHub MCP, pasted URLs).
+
+### Notes
+
+- No breaking changes — live tool registration, `adv_analyze_test_impact`, and `/test-impact` unchanged.
+- `TOOL_INTEL_FORCE_BUNDLE=1` forces bundle path (tests / npm layout simulation).
+
 ---
 
 ## v9.2.8 — Test Impact Analysis

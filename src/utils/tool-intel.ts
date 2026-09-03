@@ -1,20 +1,26 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import bundle from "../generated/tool-intel-bundle.json" with { type: "json" };
 import type { PromptMeta } from "../prompts.js";
 import type { ResourceMeta } from "../resources.js";
+import {
+  buildExpandedTools,
+  catalogRecordToMap,
+  parseRoleBenefits,
+  parseToolsCatalog,
+  parseToolsJson,
+  shouldRegisterLegacyAliases,
+  type RoleBenefit,
+  type ToolCatalogEntry,
+} from "./tool-intel-parse.js";
 
-export type ToolCatalogEntry = {
-  name: string;
-  description: string;
-  category?: string | null;
-  examples?: string[];
-};
+export type { ToolCatalogEntry } from "./tool-intel-parse.js";
 
 export type ToolIntelSnapshot = {
   mcpVersion: string;
   tools: ToolCatalogEntry[];
-  roleBenefits: Array<{ role: string; value: string }>;
+  roleBenefits: RoleBenefit[];
 };
 
 const TOKEN_RANGE_DEFAULT = "Low (<=1k tokens)";
@@ -37,7 +43,7 @@ const TOKEN_RANGE_BY_TOOL: Record<string, string> = {
   adv_get_all_launches_for_project: "Medium (3k-6k tokens)",
   adv_get_all_launches_with_filter: "Medium (3k-6k tokens)",
   adv_list_test_runs: "Medium (3k-6k tokens)",
-  adv_list_test_run_test_cases: "Medium (3k-6k tokens)"
+  adv_list_test_run_test_cases: "Medium (3k-6k tokens)",
 };
 
 function projectRoot(): string {
@@ -53,165 +59,69 @@ function readTextSafe(filePath: string): string {
   }
 }
 
-function parseToolsJson(raw: string): ToolCatalogEntry[] {
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter((item: any) => item && typeof item.name === "string")
-      .map((item: any) => ({
-        name: item.name,
-        description: typeof item.description === "string" ? item.description : ""
-      }));
-  } catch {
-    return [];
-  }
-}
-
-function parseToolsCatalog(raw: string): Map<string, ToolCatalogEntry> {
-  const result = new Map<string, ToolCatalogEntry>();
-  if (!raw) return result;
-
-  const lines = raw.split(/\r?\n/);
-  let category: string | null = null;
-  let current: ToolCatalogEntry | null = null;
-  let inExamples = false;
-
-  const flush = () => {
-    if (current) result.set(current.name, current);
-  };
-
-  for (const line of lines) {
-    if (line.startsWith("## ")) {
-      category = line.replace(/^##\s+/, "").trim();
-      continue;
-    }
-
-    const toolMatch = line.match(/^###\s+`([^`]+)`/);
-    if (toolMatch) {
-      flush();
-      current = {
-        name: toolMatch[1],
-        description: "",
-        category,
-        examples: []
-      };
-      inExamples = false;
-      continue;
-    }
-
-    if (!current) continue;
-
-    if (line.startsWith("**Description:**")) {
-      current.description = line.replace("**Description:**", "").trim();
-      continue;
-    }
-
-    if (line.startsWith("**Example Prompts:**")) {
-      inExamples = true;
-      continue;
-    }
-
-    if (line.startsWith("**") && !line.startsWith("**Example Prompts:**")) {
-      inExamples = false;
-      continue;
-    }
-
-    if (inExamples && line.trim().startsWith("- ")) {
-      current.examples?.push(line.trim().replace(/^- /, ""));
-    }
-  }
-
-  flush();
-  return result;
-}
-
-function parseRoleBenefits(raw: string): Array<{ role: string; value: string }> {
-  if (!raw) return [];
-  const lines = raw.split(/\r?\n/);
-  const entries: Array<{ role: string; value: string }> = [];
-  let tableActive = false;
-
-  for (const line of lines) {
-    if (line.startsWith("| Role |")) {
-      tableActive = true;
-      continue;
-    }
-    if (!tableActive) continue;
-    if (!line.startsWith("|")) break;
-    const cells = line.split("|").map(cell => cell.trim()).filter(Boolean);
-    if (cells.length < 2 || cells[0] === "Role" || cells[0].startsWith("------")) continue;
-    entries.push({
-      role: cells[0].replace(/\*\*/g, ""),
-      value: cells[1].replace(/\*\*/g, "")
-    });
-  }
-
-  return entries;
-}
-
-export function loadToolIntelSnapshot(): ToolIntelSnapshot {
-  const root = projectRoot();
+function readVersionFromPackageJson(root: string): string {
   const packageRaw = readTextSafe(path.join(root, "package.json"));
-  const tools = parseToolsJson(readTextSafe(path.join(root, "tools.json")));
-  const catalogByTool = parseToolsCatalog(readTextSafe(path.join(root, "TOOLS_CATALOG.md")));
-  const roleBenefits = parseRoleBenefits(readTextSafe(path.join(root, "docs", "AI_MCP_BENEFITS.md")));
-  let mcpVersion = "unknown";
   try {
     const parsed = JSON.parse(packageRaw);
     if (typeof parsed?.version === "string" && parsed.version.length > 0) {
-      mcpVersion = parsed.version;
+      return parsed.version;
     }
   } catch {
     // keep "unknown"
   }
+  return "unknown";
+}
 
-  // tools.json lists canonical adv_<name> entries. TOOLS_CATALOG.md uses the same
-  // names. Optionally duplicate legacy short names when ZEBRUNNER_REGISTER_LEGACY_ALIASES=true.
-  const ADV_PREFIX = "adv_";
-  const ADV_DESC_PREFIX = "[Advanced Zebrunner MCP] ";
-  const LEGACY_ALIAS_TRUTHY = ["1", "true", "yes", "on"];
-  const registerLegacyAliases = LEGACY_ALIAS_TRUTHY.includes(
-    (process.env.ZEBRUNNER_REGISTER_LEGACY_ALIASES ?? "").trim().toLowerCase()
+function shouldUseBundleFallback(): boolean {
+  return (process.env.TOOL_INTEL_FORCE_BUNDLE ?? "").trim().toLowerCase() === "1";
+}
+
+function snapshotFromFilesystem(root: string, mcpVersion: string): ToolIntelSnapshot | null {
+  const toolsJson = parseToolsJson(readTextSafe(path.join(root, "tools.json")));
+  if (toolsJson.length === 0) return null;
+
+  const catalogByTool = parseToolsCatalog(readTextSafe(path.join(root, "TOOLS_CATALOG.md")));
+  const roleBenefits = parseRoleBenefits(
+    readTextSafe(path.join(root, "docs", "AI_MCP_BENEFITS.md")),
   );
-  const expanded: ToolCatalogEntry[] = [];
-  for (const tool of tools) {
-    const advName = tool.name.startsWith(ADV_PREFIX) ? tool.name : `${ADV_PREFIX}${tool.name}`;
-    const legacyName = advName.slice(ADV_PREFIX.length);
-    const catalog = catalogByTool.get(advName) ?? catalogByTool.get(legacyName);
-    const baseDescription = catalog?.description || tool.description || "";
-    const category = catalog?.category ?? null;
-    const examples = catalog?.examples ?? [];
-
-    expanded.push({
-      name: advName,
-      description: baseDescription.startsWith(ADV_DESC_PREFIX)
-        ? baseDescription
-        : `${ADV_DESC_PREFIX}${baseDescription}`,
-      category,
-      examples
-    });
-    if (registerLegacyAliases) {
-      expanded.push({
-        name: legacyName,
-        description: `[deprecated alias — use ${advName}] ${baseDescription.replace(ADV_DESC_PREFIX, "")}`,
-        category,
-        examples
-      });
-    }
-  }
 
   return {
     mcpVersion,
-    tools: expanded,
-    roleBenefits
+    tools: buildExpandedTools(toolsJson, catalogByTool, shouldRegisterLegacyAliases()),
+    roleBenefits,
   };
 }
 
+/** Load snapshot from embedded bundle (npm/Docker path). Exported for unit tests. */
+export function loadToolIntelSnapshotFromBundle(mcpVersion: string): ToolIntelSnapshot {
+  const catalogByTool = catalogRecordToMap(
+    bundle.catalogByTool as Record<string, ToolCatalogEntry>,
+  );
+  const toolsJson: ToolCatalogEntry[] = (bundle.tools as ToolCatalogEntry[]).map((tool) => ({
+    name: tool.name,
+    description: tool.description,
+  }));
+
+  return {
+    mcpVersion,
+    tools: buildExpandedTools(toolsJson, catalogByTool, shouldRegisterLegacyAliases()),
+    roleBenefits: (bundle.roleBenefits as RoleBenefit[]) ?? [],
+  };
+}
+
+export function loadToolIntelSnapshot(): ToolIntelSnapshot {
+  const root = projectRoot();
+  const mcpVersion = readVersionFromPackageJson(root);
+
+  if (!shouldUseBundleFallback()) {
+    const fromFs = snapshotFromFilesystem(root, mcpVersion);
+    if (fromFs) return fromFs;
+  }
+
+  return loadToolIntelSnapshotFromBundle(mcpVersion);
+}
+
 export function tokenEstimateForTool(toolName: string): string {
-  // Token estimates are keyed by the legacy (un-prefixed) tool name; if the
-  // caller passes the `adv_<name>` form, strip the prefix before looking up.
   const legacyName = toolName.startsWith("adv_") ? toolName.slice("adv_".length) : toolName;
   return TOKEN_RANGE_BY_TOOL[toolName] || TOKEN_RANGE_BY_TOOL[legacyName] || TOKEN_RANGE_DEFAULT;
 }

@@ -1,8 +1,13 @@
 import type { ZebrunnerTestCase } from "../types/core.js";
-import type { NormalizedChangeContext } from "./test-impact-normalizer.js";
+import type {
+  ChangeContextBatch,
+  NormalizedChangeContext,
+} from "./test-impact-normalizer.js";
+import { batchSourceLabel } from "./test-impact-normalizer.js";
 import type { MatchedSuite } from "./test-impact-suite-matcher.js";
 import { caseInMatchedSuites } from "./test-impact-suite-matcher.js";
 
+export const MULTI_SOURCE_SCORE_BOOST = 0.05;
 export const SCORE_WEIGHT_TITLE_BEHAVIOR = 0.35;
 export const SCORE_WEIGHT_STEP_BEHAVIOR = 0.30;
 export const SCORE_WEIGHT_SUITE_FEATURE = 0.15;
@@ -76,6 +81,28 @@ export function scoreToConfidence(score: number): ConfidenceLevel | null {
   if (score >= CONFIDENCE_MEDIUM) return "MEDIUM";
   if (score >= CONFIDENCE_LOW) return "LOW";
   return null;
+}
+
+export function applyMultiSourceBoost(score: number, sourceCount: number): number {
+  if (sourceCount < 2) return score;
+  return Math.min(1, Math.round((score + MULTI_SOURCE_SCORE_BOOST) * 1000) / 1000);
+}
+
+export function collectBatchSources(
+  tc: ZebrunnerTestCase,
+  batches: ChangeContextBatch[],
+  batchCtxs: NormalizedChangeContext[],
+  matchedSuites: MatchedSuite[],
+  featureAreaKeywords: Record<string, string>,
+): string[] {
+  const sources: string[] = [];
+  for (let i = 0; i < batches.length; i++) {
+    const s = scoreTestCase(tc, batchCtxs[i], matchedSuites, featureAreaKeywords);
+    if (s && s.confidence !== "LOW") {
+      sources.push(batchSourceLabel(batches[i], i));
+    }
+  }
+  return sources;
 }
 
 export function isAutomated(stateName: string | undefined): boolean {

@@ -1,0 +1,1560 @@
+{
+  "generatedAt": "2026-09-03T22:31:08.470Z",
+  "sourceHashes": {
+    "toolsJson": "cb800b58e7571a74",
+    "catalog": "ce053e397703d598",
+    "benefits": "1c7370f3df9e2d38"
+  },
+  "tools": [
+    {
+      "name": "adv_about_mcp_tools",
+      "description": "[Advanced Zebrunner MCP] Discover and understand Zebrunner MCP capabilities — tools, prompts, resources, and session metrics.",
+      "category": "Project Discovery",
+      "examples": [
+        "\"Using Zebrunner MCP make a summary of all tools with examples\"",
+        "\"Using Zebrunner MCP give info for tool adv_analyze_test_execution_video with examples\"",
+        "\"Show detailed info for adv_get_bug_review including token usage estimation\"",
+        "\"What prompts are available in Zebrunner MCP?\"",
+        "\"What MCP resources are available?\"",
+        "\"Show me tool usage metrics for this session\"",
+        "Extract parameters from your question",
+        "Choose the right tool",
+        "Format the output appropriately",
+        "Project key: MCP",
+        "Launch ID: 120906",
+        "Test ID: 5455325",
+        "`string` (markdown) - Human-readable, default",
+        "`json` - Structured data",
+        "`dto` - Detailed structured object",
+        "`jira` - Ready-to-paste Jira tickets",
+        "**Installation Guide:** [INSTALL-GUIDE.md](INSTALL-GUIDE.md)",
+        "**Security Features:** [change-logs.md](change-logs.md#v5100---security-comprehensive-security-hardening-high--medium-severity-fixes)",
+        "**Changelog:** [change-logs.md](change-logs.md)",
+        "**Screenshot Analysis:** [docs/archive/SCREENSHOT_ANALYSIS.md](docs/archive/SCREENSHOT_ANALYSIS.md)"
+      ]
+    },
+    {
+      "name": "adv_aggregate_test_cases_by_feature",
+      "description": "[Advanced Zebrunner MCP] Find ALL test cases related to a specific feature keyword across the entire project. Searches in title, description, preconditions, post-conditions, and test steps (case-insensitive, partial match). Groups results by Root Suite and Feature Suite hierarchy.",
+      "category": "Feature-Based Test Case Aggregation",
+      "examples": [
+        "\"Find all test cases related to 'login' feature in project MCP\"",
+        "\"Aggregate test cases for 'payment' in project MCPAND with detailed output\"",
+        "\"Get automation tags for all test cases mentioning 'diary' feature\"",
+        "\"Show me all 'food search' related test cases grouped by suite\"",
+        "\"Generate test run rules for 'onboarding' feature\""
+      ]
+    },
+    {
+      "name": "adv_analyze_regression_runtime",
+      "description": "[Advanced Zebrunner MCP] Comprehensive Regression Runtime Efficiency analysis. Collects per-launch elapsed time, attempt/re-run breakdown, per-test duration classification (Short / Medium / Long), and calculates metrics from both **test** and **test case** perspectives: Average Runtime, Weighted Runtime Index (WRI), and duration distribution. Supports configurable duration thresholds and optional baseline comparison with delta tracking.",
+      "category": "Launch Analysis & Reporting",
+      "examples": [
+        "\"Analyze regression runtime for the iOS project on the latest milestone. Show both average runtime per test and per test case, plus WRI and WRI per test case.\"",
+        "\"Analyze regression runtime for the Android project with include_test_details: true. For each duration class, show number of tests, test cases covered, and avgDuration per test vs per test case.\"",
+        "\"Run regression runtime analysis for all three projects on their latest milestones. Compare how many test cases fall into Short vs Medium vs Long buckets per team.\"",
+        "\"Analyze regression runtime for the iOS project, latest vs previous milestone. Show WRI and WRI per test case for both. Has the WRI per test case improved or degraded?\"",
+        "\"Analyze regression runtime for the Web project with medium_threshold_seconds: 120 and long_threshold_seconds: 300. Show which tests fall into each bucket.\"",
+        "\"Analyze regression runtime for the Android project on the latest milestone. What is the average time cost per test case in each duration bucket? Are long-running tests covering proportionally more test cases?\""
+      ]
+    },
+    {
+      "name": "adv_analyze_screenshot",
+      "description": "[Advanced Zebrunner MCP] Visual analysis of screenshots with OCR, UI element detection, and Claude Vision analysis.",
+      "category": "Video & Screenshot Analysis",
+      "examples": [
+        "\"Analyze screenshot [https://your-workspace.zebrunner.com/files/abc123](https://your-workspace.zebrunner.com/files/abc123) with OCR\"",
+        "\"Analyze this screenshot and tell me what UI elements are visible\"",
+        "\"Analyze screenshot /files/xyz789 and extract text with OCR\""
+      ]
+    },
+    {
+      "name": "adv_analyze_test_cases_duplicates",
+      "description": "[Advanced Zebrunner MCP] Find and group similar test cases by step similarity with configurable threshold.",
+      "category": "Duplicate Detection",
+      "examples": [
+        "\"Analyze suite 17470 for duplicates with 80% similarity threshold\"",
+        "\"Find duplicate test cases in suite 18697\"",
+        "\"Check suite 491 for similar test cases\""
+      ]
+    },
+    {
+      "name": "adv_analyze_test_cases_duplicates_semantic",
+      "description": "[Advanced Zebrunner MCP] Advanced semantic analysis with LLM-powered step clustering and medoid selection.",
+      "category": "Duplicate Detection",
+      "examples": [
+        "\"Semantic analysis of suite 17470 with step clustering\"",
+        "\"Find semantically similar test cases in suite 18697 using AI\"",
+        "\"Analyze suite 491 for duplicates with semantic clustering\""
+      ]
+    },
+    {
+      "name": "adv_analyze_test_execution_video",
+      "description": "[Advanced Zebrunner MCP] Download and analyze test execution video with Claude Vision. Extracts frames, compares with test case steps, and predicts if failure is bug or test issue.",
+      "category": "Video & Screenshot Analysis",
+      "examples": [
+        "\"Analyze video for test 5455325 from launch 120906\"",
+        "\"Download and analyze test execution video for test 5478492 with smart frame extraction\"",
+        "\"Analyze video for failed test 5451420 and compare with test case steps\""
+      ]
+    },
+    {
+      "name": "adv_analyze_test_failure",
+      "description": "[Advanced Zebrunner MCP] Deep forensic analysis of failed tests including logs, screenshots, error classification, similar failures, and optionally comparison with last passed execution.",
+      "category": "Test Failure Analysis & Debugging",
+      "examples": [
+        "\"Analyze test failure 5451420 from launch 120806\"",
+        "\"Analyze test 5478492 and compare with the last time it passed\"",
+        "\"Deep dive into why test 5455325 failed in launch 120906, include video and compare with last successful run\""
+      ]
+    },
+    {
+      "name": "adv_analyze_test_impact",
+      "description": "[Advanced Zebrunner MCP] Discover and rank Zebrunner test cases likely affected by production-code changes. Accepts compact semantic change context (features, behaviors, symbols, keywords) — **not** raw git diffs. Returns regression candidates by theme (automated vs manual, confidence), potential coverage gaps, optional smoke-suite recommendations, and scoping notes.",
+      "category": "Test Impact Analysis *(v9.2.8)*",
+      "examples": []
+    },
+    {
+      "name": "adv_batch_get_test_cases",
+      "description": "[Advanced Zebrunner MCP] Fetch multiple test cases by key in one call. Missing keys appear in `notFound[]` (partial success). Defaults: `detail=summary`, `format=compact`, max 50 keys, concurrency 5.",
+      "category": "Test Case Management",
+      "examples": [
+        "\"Fetch test cases MCP-1, MCP-2, and MCP-3 in one call\"",
+        "\"Batch-get these keys with full detail: MCP-10, MCP-11\""
+      ]
+    },
+    {
+      "name": "adv_create_test_case",
+      "description": "[Advanced Zebrunner MCP] (Beta) Create a new Test Case in a Zebrunner project. Validates priority, automation state, and custom fields against project settings at runtime. Optionally accepts `source_case_key` to pre-populate fields from an existing test case.",
+      "category": "Mutation Tools (Beta)",
+      "examples": [
+        "\"Create a test case 'Verify login with valid credentials' in suite 17470 for project MCP\"",
+        "\"Create a test case with priority High and 3 steps in suite 491\"",
+        "\"Create a test case in MCP suite 20421 using source_case_key MCP-123 but override priority to Low\""
+      ]
+    },
+    {
+      "name": "adv_scaffold_test_case",
+      "description": "[Advanced Zebrunner MCP] (Beta) Guided best-practice wizard to author a NEW test case. On clients that support form elicitation (e.g. Claude Code, Cursor) it presents an interactive questionnaire; on clients without elicitation (e.g. Claude Desktop) it returns a conversational questionnaire that finishes through `adv_create_test_case`. Automatically performs a warn-only similarity check against the target + root suite and offers to reuse the closest match, then runs an **advisory** rules-based quality pre-check (using the same rules as `adv_validate_test_case`) before creation and the authoritative quality review after creation. The pre-check never blocks. Created cases are always forced to `draft=true`. There is no default project — it is always chosen explicitly (first question). Also available as the alias `adv_create_test_case_wizard`, and via the `scaffold-test-case` / `create-test-case-wizard` prompts.",
+      "category": "Mutation Tools (Beta)",
+      "examples": [
+        "\"Scaffold a new test case in project PROJ1 suite 20421\"",
+        "\"Help me write a new feature test case following best practices\"",
+        "\"Open the create-test-case wizard for PROJ1 so I can write a new case step by step\" (alias `adv_create_test_case_wizard`)",
+        "\"Use the test case creation wizard to add a new case to alias-a suite 20421\" (alias resolves per `zebrunner-config.json`)",
+        "\"Scaffold a new login test case for PROJ1 and keep the steps in Gherkin\" (default language)"
+      ]
+    },
+    {
+      "name": "adv_create_test_case_wizard",
+      "description": "[Advanced Zebrunner MCP] (Beta) Dev-friendly alias of adv_scaffold_test_case — the same guided best-practice test case authoring wizard (similar-case warning + advisory quality pre-check + forced draft).",
+      "category": null,
+      "examples": []
+    },
+    {
+      "name": "adv_create_test_suite",
+      "description": "[Advanced Zebrunner MCP] (Beta) Create a new Test Suite in a Zebrunner project. Requires Engineer role or higher.",
+      "category": "Mutation Tools (Beta)",
+      "examples": [
+        "\"Create a new root test suite called 'Payments' in project MCP\"",
+        "\"Create a child suite 'Edge Cases' under suite 18697 in project android\""
+      ]
+    },
+    {
+      "name": "adv_detailed_analyze_launch_failures",
+      "description": "[Advanced Zebrunner MCP] Analyze ALL failures in a launch with intelligent grouping, executive summary, timeline analysis, and pattern detection. Automatically filters tests without linked issues by default.",
+      "category": "Test Failure Analysis & Debugging",
+      "examples": [
+        "\"Analyze all failures in launch 120806\"",
+        "\"Show me what failed in launch 120906 with executive summary and patterns\"",
+        "\"Generate Jira tickets for all failures in launch 120814 in jira format\""
+      ]
+    },
+    {
+      "name": "adv_download_test_screenshot",
+      "description": "[Advanced Zebrunner MCP] Download protected screenshots from Zebrunner with authentication.",
+      "category": "Video & Screenshot Analysis",
+      "examples": [
+        "\"Download screenshot from [https://your-workspace.zebrunner.com/files/abc123](https://your-workspace.zebrunner.com/files/abc123)\"",
+        "\"Download screenshot /files/xyz789 for test 5451420\"",
+        "\"Get screenshot from URL [https://your-workspace.zebrunner.com/files/screenshot123](https://your-workspace.zebrunner.com/files/screenshot123)\""
+      ]
+    },
+    {
+      "name": "adv_find_flaky_tests",
+      "description": "[Advanced Zebrunner MCP] Find flaky tests across launches using a 3-phase approach: cross-launch flip-flop analysis for automated tests, manual test case scan via TCM execution history, and optional dual-perspective enrichment correlating both data sources.",
+      "category": "Launch Analysis & Reporting",
+      "examples": [
+        "\"Find flaky tests in the Android project over the last 14 days\"",
+        "\"How many flaky tests are in the iOS project? Use count_only\"",
+        "\"Find the top 10 most flaky tests in the Web project with full history details\"",
+        "\"Find flaky tests in the Android project and show me a chart\""
+      ]
+    },
+    {
+      "name": "adv_generate_draft_test_by_key",
+      "description": "[Advanced Zebrunner MCP] Generate test automation code with framework detection (Java/Carina, Python/Pytest, etc.).",
+      "category": "Test Code Generation",
+      "examples": [
+        "\"Generate Java/Carina test for MCP-2107 based on this implementation\"",
+        "\"Create Python pytest for test case MCP-1921\"",
+        "\"Generate automation code for MCP-88 using Java and Carina framework\""
+      ]
+    },
+    {
+      "name": "adv_generate_report",
+      "description": "[Advanced Zebrunner MCP] Universal report generator that supports 6 report types. Can generate a single report or combine multiple in one call. Replaces the former `generate_quality_dashboard` tool (use `report_types: [\"quality_dashboard\"]` for equivalent behavior).",
+      "category": "Universal Report Generator",
+      "examples": [
+        "\"Generate a quality dashboard for Android and iOS for the last 30 days\"",
+        "\"Build a test coverage report for all three platforms\"",
+        "\"Show pass rate for Android, iOS, and Web for milestone 25.40.0\"",
+        "\"Compare runtime efficiency for Android between milestone 25.40.0 and 25.39.0\"",
+        "\"Generate an executive dashboard for all platforms this quarter\"",
+        "\"Assess release readiness for Android on milestone 25.40.0 vs previous 25.39.0\"",
+        "\"Generate coverage and pass rate reports together for all platforms\""
+      ]
+    },
+    {
+      "name": "adv_generate_weekly_regression_stability_report",
+      "description": "[Advanced Zebrunner MCP] Generate a Jira-ready weekly regression stability report across multiple suites with pass rate, week-over-week delta, and stability classification.",
+      "category": "Launch Analysis & Reporting",
+      "examples": [
+        "\"Weekly stability report for MCP: Manage My Day (120906 vs 120814), Diary AA (120901 vs 120809)\"",
+        "\"Generate Jira-ready weekly regression stability report for MCP with thresholds stable 92, watch 88\"",
+        "\"Give me a JSON stability snapshot for MCP: Premium Hub (121001 vs 120901)\""
+      ]
+    },
+    {
+      "name": "adv_get_all_launches_for_project",
+      "description": "[Advanced Zebrunner MCP] List individual launch executions for a project with pagination. Use to browse launches, NOT for aggregated results/pass rates (use `adv_get_platform_results_by_period` for that).",
+      "category": "Launch Analysis & Reporting",
+      "examples": [
+        "\"List launches for project MCP from last month\"",
+        "\"Show me recent launches for project MCP\"",
+        "\"Browse launches for MCP\""
+      ]
+    },
+    {
+      "name": "adv_get_all_launches_with_filter",
+      "description": "[Advanced Zebrunner MCP] Search and filter individual launch executions by milestone, build number, or name. NOT for aggregated results/pass rates (use `adv_get_platform_results_by_period` for that).",
+      "category": "Launch Analysis & Reporting",
+      "examples": [
+        "\"Find launches for milestone 2.1.0\"",
+        "\"Show me launches for build 'mcp-app-2.1.0'\"",
+        "\"Search launches for milestone 2.1.0 and build 'release-46975'\""
+      ]
+    },
+    {
+      "name": "adv_get_all_subsuites",
+      "description": "[Advanced Zebrunner MCP] Get all child suites recursively from a parent suite.",
+      "category": "Test Suite Hierarchy",
+      "examples": [
+        "\"Get all subsuites from root suite 18697\"",
+        "\"Show me all child suites under suite 17470\"",
+        "\"List all subsuites for suite 491\""
+      ]
+    },
+    {
+      "name": "adv_get_all_tcm_test_case_suites_by_project",
+      "description": "[Advanced Zebrunner MCP] Retrieve all TCM test case suites in a project using comprehensive pagination, with optional hierarchy enrichment.",
+      "category": "Test Suite Hierarchy",
+      "examples": [
+        "\"Get all TCM test case suites for project MCP\"",
+        "\"Export all suites for MCP in markdown format\"",
+        "\"List all suites for android with hierarchy enabled\""
+      ]
+    },
+    {
+      "name": "adv_get_all_tcm_test_cases_by_project",
+      "description": "[Advanced Zebrunner MCP] Get ALL test cases for a project with automatic pagination handling.",
+      "category": "Test Case Management",
+      "examples": [
+        "\"Get all test cases for project MCP\"",
+        "\"Show me every test case in the MCP project\"",
+        "\"Export all test cases from project MCP\""
+      ]
+    },
+    {
+      "name": "adv_get_all_tcm_test_cases_with_root_suite_id",
+      "description": "[Advanced Zebrunner MCP] Get all test cases with their root suite hierarchy information.",
+      "category": "Test Case Management",
+      "examples": [
+        "\"Get all test cases with their root suite information for project MCP\"",
+        "\"Show me test cases with hierarchy info\"",
+        "\"List all test cases with their parent suites\""
+      ]
+    },
+    {
+      "name": "adv_get_automation_priorities",
+      "description": "[Advanced Zebrunner MCP] List all available priority levels with their IDs.",
+      "category": "Test Case Management",
+      "examples": [
+        "\"Show me all priority levels for project MCP\"",
+        "\"What priorities are available?\"",
+        "\"List all test case priorities\""
+      ]
+    },
+    {
+      "name": "adv_get_automation_states",
+      "description": "[Advanced Zebrunner MCP] List all available automation states for a project.",
+      "category": "Test Case Management",
+      "examples": [
+        "\"What automation states are available for project MCP?\"",
+        "\"Show me all automation states\"",
+        "\"List automation states for MCP\""
+      ]
+    },
+    {
+      "name": "adv_get_available_projects",
+      "description": "[Advanced Zebrunner MCP] Discover all projects you have access to in Zebrunner.",
+      "category": "Project Discovery",
+      "examples": [
+        "\"What projects can I access?\"",
+        "\"Show me all available projects\"",
+        "\"List all projects I have access to\""
+      ]
+    },
+    {
+      "name": "adv_get_bug_failure_info",
+      "description": "[Advanced Zebrunner MCP] Get comprehensive failure information for a specific bug/hashcode, including high-level failure summary and detailed list of affected test runs. This tool combines data from multiple SQL widgets to provide complete failure analysis.",
+      "category": "Platform & Results Analysis",
+      "examples": [
+        "\"Get failure info for hashcode 1051677506 on dashboard 99\"",
+        "\"Show me detailed failures for this bug hashcode\"",
+        "\"Analyze failure information for hashcode X from last 14 days\"",
+        "\"Give me a summary of test runs affected by this failure\""
+      ]
+    },
+    {
+      "name": "adv_get_bug_review",
+      "description": "[Advanced Zebrunner MCP] Get comprehensive bug review with detailed failure information, defect tracking, reproduction dates, and **automatic failure detail fetching** for single-call analysis.",
+      "category": "Platform & Results Analysis",
+      "examples": [
+        "\"Show me detailed bug review for last 7 days\"",
+        "\"Get bug review for Android project from last 14 days with failure details\"",
+        "\"Show me top 10 bugs with full failure analysis for iOS\"",
+        "\"Give me a comprehensive bug analysis for IOS with priority breakdown\"",
+        "`{ project: \"ios\", period: \"Last 7 Days\", limit: 10, include_failure_details: true, failure_detail_level: \"full\" }`"
+      ]
+    },
+    {
+      "name": "adv_get_enhanced_test_coverage_with_rules",
+      "description": "[Advanced Zebrunner MCP] Rules-based coverage analysis with framework detection and intelligent validation.",
+      "category": "Test Coverage & Validation",
+      "examples": [
+        "\"Enhanced coverage analysis for MCP-2107 with framework detection\"",
+        "\"Analyze MCP-1921 coverage with rules validation\"",
+        "\"Check test case MCP-88 implementation with enhanced rules\""
+      ]
+    },
+    {
+      "name": "adv_get_execution_analytics",
+      "description": "[Advanced Zebrunner MCP] Execution dashboard widgets: ROI (1), duration trend (131), launch duration (57085), stability table (16)",
+      "category": "Platform & Results Analysis",
+      "examples": [
+        "\"Execution ROI for Android over the last 7 days\"",
+        "\"Daily execution duration trend for MCP last week\"",
+        "\"Launch duration for suite Regression on iOS this quarter\"",
+        "\"Tests below 99% stability on Web in the last 24 hours\""
+      ]
+    },
+    {
+      "name": "adv_get_failure_analytics",
+      "description": "[Advanced Zebrunner MCP] Failure tag/Jira analytics widgets: tag pie (40112), tags×maintainer (55991), Jira×maintainer (57086)",
+      "category": "Platform & Results Analysis",
+      "examples": [
+        "\"Failure tag distribution pie for Android in the last 24 hours\"",
+        "\"Cross-tab of failure tags and maintainers for iOS today\"",
+        "\"Map Jira issues to maintainers by failure count on Web for the last 14 days\""
+      ]
+    },
+    {
+      "name": "adv_get_launch_details",
+      "description": "[Advanced Zebrunner MCP] Get comprehensive information about a specific launch including test results, environment, build, and execution metadata. Set `includeJobParameters: true` to fetch CI job parameters from **Jenkins Build Now** (suite path, build, locale, test_run_rules, and full param schema). **Not available for Launch Launchers** — Jenkins integration only.",
+      "category": "Launch Analysis & Reporting",
+      "examples": [
+        "\"Get launch details for launch 120906\"",
+        "\"Show job parameters for launch 132452 to plan a Build now\"",
+        "\"What happened in launch 120814?\""
+      ]
+    },
+    {
+      "name": "adv_get_launch_summary",
+      "description": "[Advanced Zebrunner MCP] Quick launch overview with key metrics and status.",
+      "category": "Launch Analysis & Reporting",
+      "examples": [
+        "\"Give me a quick summary of launch 120906\"",
+        "\"Summarize launch 121482 results\"",
+        "\"What's the overall status of launch 120814?\""
+      ]
+    },
+    {
+      "name": "adv_get_launch_test_summary",
+      "description": "[Advanced Zebrunner MCP] Lightweight aggregated test results with statistics, most unstable tests, and tests with issues. Optimized for large launches.",
+      "category": "Launch Analysis & Reporting",
+      "examples": [
+        "\"Get test summary for launch 119783 with top 10 most unstable tests\"",
+        "\"Show me summary of launch 120906 - just failed tests\"",
+        "\"Get lightweight summary for launch 121482\"",
+        "\"For launch 134978, how many tests were passed manually, have known issues assigned, or match either condition?\""
+      ]
+    },
+    {
+      "name": "adv_get_platform_results_by_period",
+      "description": "[Advanced Zebrunner MCP] Get aggregated test results, pass rate, and statistics for a project over a time period (last 7 days, last 30 days, etc.). Returns total passed/failed/skipped/aborted counts and pass rate percentage. Use this when asked for \"results\", \"pass rate\", \"test statistics\", or \"results for last N days\". Accepts any Zebrunner project key (e.g. `DEF`, `MCP`) or aliases (`web`/`android`/`ios`/`api`).",
+      "category": "Platform & Results Analysis",
+      "examples": [
+        "\"Get results for MCP during last 7 days\"",
+        "\"Show pass rate for MCP\"",
+        "\"Show me Android test results from last week\"",
+        "\"Get platform results for last 30 days\"",
+        "\"Pass rate bar chart by priority for Android over the last 14 days\" (`view: bar`)",
+        "\"Daily pass/fail line trend for iOS over the last 14 days\" (`view: line`)",
+        "\"Pass rate calendar heatmap for Web in 2026 Q2 with 75% threshold\" (`view: calendar`)",
+        "\"Tests summary table grouped by build for MCP last 7 days\" (`view: summary`)"
+      ]
+    },
+    {
+      "name": "adv_get_project_milestones",
+      "description": "[Advanced Zebrunner MCP] Get all milestones configured for a project.",
+      "category": "Platform & Results Analysis",
+      "examples": [
+        "\"Get all milestones for project MCP\"",
+        "\"Show me available milestones\"",
+        "\"List milestones for MCP\""
+      ]
+    },
+    {
+      "name": "adv_get_root_id_by_suite_id",
+      "description": "[Advanced Zebrunner MCP] Find the root suite for any given suite ID.",
+      "category": "Test Suite Hierarchy",
+      "examples": [
+        "\"What's the root suite for suite 12345?\"",
+        "\"Find root suite for suite 491\"",
+        "\"Get parent root for suite 17470\""
+      ]
+    },
+    {
+      "name": "adv_get_root_suites",
+      "description": "[Advanced Zebrunner MCP] Get all top-level (root) test suites.",
+      "category": "Test Suite Hierarchy",
+      "examples": [
+        "\"Show me all root suites for project MCP\"",
+        "\"Get top-level test suites\"",
+        "\"List root suites\""
+      ]
+    },
+    {
+      "name": "adv_get_suite_hierarchy",
+      "description": "[Advanced Zebrunner MCP] Get hierarchical tree view of test suites with configurable depth.",
+      "category": "Test Suite Hierarchy",
+      "examples": [
+        "\"Show me the hierarchy of test suites with depth 3\"",
+        "\"Get suite hierarchy for project MCP\"",
+        "\"Display test suite tree structure\""
+      ]
+    },
+    {
+      "name": "adv_get_tcm_case_analytics",
+      "description": "[Advanced Zebrunner MCP] TCM case analytics widgets: net change (37777), created by user (37779), updated by user (37778)",
+      "category": "Platform & Results Analysis",
+      "examples": [
+        "\"Show TCM net case change for project MCP over the last 90 days grouped by week\"",
+        "\"Who created the most test cases on MCP in the last 30 days?\"",
+        "\"Who updated the most test cases on Android in the last 30 days?\"",
+        "`{ project: \"MCP\", mode: \"net_change\", period: \"Last 90 Days\", grouping_period: \"Week\" }`"
+      ]
+    },
+    {
+      "name": "adv_get_tcm_suite_by_id",
+      "description": "[Advanced Zebrunner MCP] Get test suite by its numeric ID. This is the primary tool for any \"show me suite\", \"get suite by ID\", or \"find suite\" request.",
+      "category": "Test Suite Hierarchy",
+      "examples": [
+        "\"Show me suite in project MCP by id 20421\"",
+        "\"Get details for suite 17470\"",
+        "\"Show me suite 18697 with full hierarchy\"",
+        "\"What's in test suite 491?\""
+      ]
+    },
+    {
+      "name": "adv_get_tcm_test_suites_by_project",
+      "description": "[Advanced Zebrunner MCP] Get comprehensive list of all suites for a project with hierarchy information.",
+      "category": "Test Suite Hierarchy",
+      "examples": [
+        "\"Get all suites for project MCP with hierarchy\"",
+        "\"Show me all test suites in project MCP\"",
+        "\"List all suites for MCP\""
+      ]
+    },
+    {
+      "name": "adv_get_test_authoring_trend",
+      "description": "[Advanced Zebrunner MCP] Daily/weekly/monthly count of test cases created over time (`CREATED_AT` × `AMOUNT`). Matches dashboard widget **TEST CASES DEVELOPMENT TREND**.",
+      "category": "Platform & Results Analysis",
+      "examples": [
+        "\"How many test cases were created per day on MCP over the last 14 days?\"",
+        "\"Test case authoring velocity for Android this quarter by week\"",
+        "`{ project: \"MCP\", period: \"Last 14 Days\", grouping_period: \"DAY\" }`"
+      ]
+    },
+    {
+      "name": "adv_get_test_case_distribution_by_field",
+      "description": "[Advanced Zebrunner MCP] Pie-chart distribution of test cases by a TCM field (automation state, priority, custom field, etc.) using the dashboard widget API (template **37780**). Matches the Zebrunner UI widget **TEST CASES DISTRIBUTION BY FIELD**.",
+      "category": "Platform & Results Analysis",
+      "examples": [
+        "\"Show test case distribution by automation state for project MCP\"",
+        "\"Pie chart of cases by Priority in MCP\"",
+        "`{ project: \"MCP\", system_field: \"AUTOMATION_STATE\", format: \"json\" }`"
+      ]
+    },
+    {
+      "name": "adv_get_test_case_by_filter",
+      "description": "[Advanced Zebrunner MCP] Advanced filtering by suite, dates, priority, automation state, and status. Also supports **generic field-path filtering** via `field_path`, `field_value`, and `field_match` (same parameters as `adv_get_test_cases_advanced`).",
+      "category": "Test Case Management",
+      "examples": [
+        "\"Get test cases from suite 491 created after 2025-01-01 with high priority\"",
+        "\"Show me test cases from suite 17470 with status 'Approved'\"",
+        "\"Find test cases in suite 18697 that were updated last week\"",
+        "\"Find test cases in MCP where customField.caseStatus equals 'Active'\""
+      ]
+    },
+    {
+      "name": "adv_get_test_case_by_key",
+      "description": "[Advanced Zebrunner MCP] Get detailed information for a specific test case by its key (e.g., MCP-123).",
+      "category": "Test Case Management",
+      "examples": [
+        "\"Get test case MCP-2107 details\"",
+        "\"Show me test case MCP-1921\"",
+        "\"What does test case MCP-88 test?\"",
+        "\"Get test case MCP-29 with change history\"",
+        "\"Show MCP-29 history, events only\""
+      ]
+    },
+    {
+      "name": "adv_get_test_case_by_title",
+      "description": "[Advanced Zebrunner MCP] Search for test cases by title (partial match supported).",
+      "category": "Test Case Management",
+      "examples": [
+        "\"Find test cases with 'login' in the title\"",
+        "\"Search for test cases containing 'diary'\"",
+        "\"Find test cases about 'food search'\""
+      ]
+    },
+    {
+      "name": "adv_get_test_cases_advanced",
+      "description": "[Advanced Zebrunner MCP] Advanced filtering with automation states, dates, priority, and more. Supports **generic field-path filtering** via `field_path`, `field_value`, and `field_match` parameters for any field including custom fields.",
+      "category": "Test Case Management",
+      "examples": [
+        "\"Get test cases created after 2025-01-01 with automation state 'Manual'\"",
+        "\"Show me high priority test cases from last month\"",
+        "\"Find test cases updated after 2025-11-01 that are not automated\"",
+        "\"Get all test cases in MCP where customField.manualOnly is 'Yes'\"",
+        "\"Find test cases whose priority.name contains 'High'\"",
+        "\"Get manual test cases from last month with their change history\""
+      ]
+    },
+    {
+      "name": "adv_get_test_cases_by_automation_state",
+      "description": "[Advanced Zebrunner MCP] Filter test cases by specific automation state (Manual, Automated, etc.).",
+      "category": "Test Case Management",
+      "examples": [
+        "\"Show me all 'Not Automated' test cases in project MCP\"",
+        "\"Get all manual test cases\"",
+        "\"Find test cases with automation state 'Automated'\"",
+        "\"Get all automated test cases with their last 5 changes\""
+      ]
+    },
+    {
+      "name": "adv_get_test_cases_by_suite_smart",
+      "description": "[Advanced Zebrunner MCP] Smart suite-based test case retrieval. Automatically detects whether the suite is root or child and uses the right filtering strategy.",
+      "category": "Test Case Management",
+      "examples": [
+        "\"Get test cases from suite 18824 in project MCP using smart mode\"",
+        "\"Show all test cases for suite 17470 including sub-suites\"",
+        "\"Retrieve test cases for suite 491 in markdown format\""
+      ]
+    },
+    {
+      "name": "adv_get_test_coverage_by_test_case_steps_by_key",
+      "description": "[Advanced Zebrunner MCP] Analyze how well automation code implements test case steps.",
+      "category": "Test Coverage & Validation",
+      "examples": [
+        "\"Analyze coverage for MCP-2107 against this implementation code: [paste code]\"",
+        "\"Check if test case MCP-1921 is implemented correctly in this code\"",
+        "\"Validate coverage for MCP-88 with this automation code\""
+      ]
+    },
+    {
+      "name": "adv_get_test_execution_history",
+      "description": "[Advanced Zebrunner MCP] Compare current failure with last successful execution. Shows differences in logs, duration, environment, and screenshots.",
+      "category": "Test Execution History & Comparison",
+      "examples": [
+        "\"Show me execution history for test 5478492\"",
+        "\"Has test 5455325 been failing consistently?\"",
+        "\"When was the last time test 5478492 passed?\"",
+        "\"Analyze test 5478492 failure and compare logs with last passed run\"",
+        "\"Compare test 5455325 with last passed execution - check if duration or environment changed\"",
+        "\"Analyze test failure and show me what changed since it last passed\""
+      ]
+    },
+    {
+      "name": "adv_get_test_run_by_id",
+      "description": "[Advanced Zebrunner MCP] Get detailed information for a specific test run.",
+      "category": "Test Run Management",
+      "examples": [
+        "\"Get details for test run 12345\"",
+        "\"Show me test run 67890\"",
+        "\"What happened in test run 54321?\""
+      ]
+    },
+    {
+      "name": "adv_get_test_run_configuration_groups",
+      "description": "[Advanced Zebrunner MCP] Get configuration options and groups for test runs.",
+      "category": "Test Run Management",
+      "examples": [
+        "\"Show me configuration groups for project MCP\"",
+        "\"What test run configurations are available?\"",
+        "\"List configuration groups\""
+      ]
+    },
+    {
+      "name": "adv_get_test_run_result_statuses",
+      "description": "[Advanced Zebrunner MCP] Get available result statuses configured for a project.",
+      "category": "Test Run Management",
+      "examples": [
+        "\"What result statuses are configured for project MCP?\"",
+        "\"Show me available test run statuses\"",
+        "\"List result statuses for MCP\""
+      ]
+    },
+    {
+      "name": "adv_get_top_bugs",
+      "description": "[Advanced Zebrunner MCP] Get most frequent defects/bugs from test executions.",
+      "category": "Platform & Results Analysis",
+      "examples": [
+        "\"Show me top 10 bugs from last week\"",
+        "\"What are the most common bugs?\"",
+        "\"Get top bugs from last 30 days\""
+      ]
+    },
+    {
+      "name": "adv_import_launch_results_to_test_run",
+      "description": "[Advanced Zebrunner MCP] (Beta) Import automation launch results into a TCM Test Run. Bridges the Reporting API (launches/tests) to the Public API (test runs/test cases). Reads test results from a launch, maps test case keys and statuses, and imports them via the `:import` endpoint.",
+      "category": "Mutation Tools (Beta)",
+      "examples": [
+        "\"Import results from launch 98765 into test run 123 for project MCP\"",
+        "\"Import only MCP-82 and MCP-83 results from launch 98765 to test run 123\"",
+        "\"Sync launch 45000 results to test run 789 in project MCP, map ABORTED to Skipped\""
+      ]
+    },
+    {
+      "name": "adv_rerun_launch_failures",
+      "description": "[Advanced Zebrunner MCP] (Beta) Rerun failed/aborted tests for one or more automation launches via the Reporting API. Triggers real CI/automation reruns. Single mode: provide `launch_id`. Batch mode: omit `launch_id` and optionally filter by `milestone` or `query`; capped by `max_launches` (default 10).",
+      "category": "Launch mutations & instance configuration",
+      "examples": [
+        "\"Rerun failures for launch 132522 in project MCP\"",
+        "\"Rerun failed tests for the latest 5 launches in milestone 26.19.0 for android\"",
+        "\"Preview which launches in project android have failures and can be rerun\""
+      ]
+    },
+    {
+      "name": "adv_start_launch",
+      "description": "[Advanced Zebrunner MCP] (Beta) Trigger Zebrunner **Build Now** (Jenkins integration only) — start a new automation launch via Reporting API `job/parameters` + `job:build`. **Does NOT work with Launch Launchers.** Resolves a template launch by `launch_id`, launch name query, and/or `suite_path`; merges validated parameter overrides; preview/confirm before triggering CI.",
+      "category": "Launch mutations & instance configuration",
+      "examples": [
+        "\"Start Minimal-Acceptance launch for latest build in project MCP\"",
+        "\"Build now Critical flow with build .* and locale en_US\"",
+        "\"Build now regression for locale de_DE when localeTestRunRules is enabled for the project (see zebrunner-config.json)\"",
+        "\"Preview adv_start_launch for template launch 132452 with test_run_rules PRIORITY=>P0||P1;;\""
+      ]
+    },
+    {
+      "name": "adv_improve_test_case",
+      "description": "[Advanced Zebrunner MCP] Dedicated tool for improving test case quality with specific suggestions.",
+      "category": "Test Coverage & Validation",
+      "examples": [
+        "\"Improve test case MCP-2107 with specific suggestions\"",
+        "\"Help me improve test case MCP-1921\"",
+        "\"Suggest improvements for MCP-88\""
+      ]
+    },
+    {
+      "name": "adv_list_test_run_test_cases",
+      "description": "[Advanced Zebrunner MCP] Get all test cases associated with a specific test run.",
+      "category": "Test Run Management",
+      "examples": [
+        "\"Show me all test cases in test run 12345\"",
+        "\"List test cases for test run 67890\"",
+        "\"What test cases were in test run 54321?\""
+      ]
+    },
+    {
+      "name": "adv_list_test_runs",
+      "description": "[Advanced Zebrunner MCP] Advanced filtering of test runs by date range, status, platform, and more.",
+      "category": "Test Run Management",
+      "examples": [
+        "\"Get test runs from last 30 days with status 'FAILED'\"",
+        "\"Show me test runs from last week for iOS platform\"",
+        "\"Find test runs from November 2025 that failed\""
+      ]
+    },
+    {
+      "name": "adv_list_test_suites",
+      "description": "[Advanced Zebrunner MCP] List test suites with pagination.",
+      "category": "Test Suite Hierarchy",
+      "examples": [
+        "\"List test suites for project MCP\"",
+        "\"Show me all test suites\"",
+        "\"Get first 50 test suites for project MCP\""
+      ]
+    },
+    {
+      "name": "adv_manage_test_run",
+      "description": "[Advanced Zebrunner MCP] (Beta) Create, update, or add test cases to a Zebrunner Test Run. Requires Engineer role or higher.",
+      "category": "Mutation Tools (Beta)",
+      "examples": [
+        "\"Create a test run called 'Sprint 42 Regression' in project MCP\"",
+        "\"Create a test run 'Browser Matrix' with configurations Browser:Chrome and Browser:Firefox in project MCP\"",
+        "\"Update test run 123 in project MCP to set the milestone to 'Release 3.0'\"",
+        "\"Add test cases MCP-1, MCP-2, MCP-3 to test run 123 in project MCP\"",
+        "\"Add all test cases from suite 456 to test run 123 in project MCP\""
+      ]
+    },
+    {
+      "name": "adv_regression_results_analyzer",
+      "description": "[Advanced Zebrunner MCP] Analyze regression test results for a milestone or build number. Produces a comprehensive report with summary table, test run overview with coverage status, new bugs with affected test case context, top bugs ranked by frequency, bugs per suite, and slowest tests. All data sourced from TCM Public API test runs.",
+      "category": "Launch Analysis & Reporting",
+      "examples": [
+        "\"Analyze regression results for iOS milestone 26.19.0\"",
+        "\"Show regression results for build 73614 on MCPIOS\"",
+        "\"Analyze regression for iOS 26.19.0 and compare bugs with previous milestone 26.18.0\"",
+        "\"How many test runs are in milestone 26.19.0 for iOS? (use count_only)\"",
+        "\"Get top 10 bugs for Android milestone 25.40.0 in JSON format\""
+      ]
+    },
+    {
+      "name": "adv_test_reporting_connection",
+      "description": "[Advanced Zebrunner MCP] Test API connectivity and authentication with Zebrunner Reporting API.",
+      "category": "Project Discovery",
+      "examples": [
+        "\"Test my connection to Zebrunner\"",
+        "\"Check if I can connect to Zebrunner reporting\"",
+        "\"Verify my Zebrunner API access\""
+      ]
+    },
+    {
+      "name": "adv_update_test_case",
+      "description": "[Advanced Zebrunner MCP] (Beta) Partially update an existing Test Case by numeric ID or string key (PATCH). Only provided fields are updated. Accepts `{file_path}` in attachments for local file upload.",
+      "category": "Mutation Tools (Beta)",
+      "examples": [
+        "\"Update test case MCP-42 title to 'Verify login with SSO'\"",
+        "\"Change automation state to 'Automated' for test case 12345 in project android\"",
+        "\"Move test case MCP-100 to suite 18824\"",
+        "\"Attach /Users/me/screenshot.png to test case MCP-42\""
+      ]
+    },
+    {
+      "name": "adv_update_test_suite",
+      "description": "[Advanced Zebrunner MCP] (Beta) Update an existing Test Suite by numeric ID (full PUT replacement). Requires Engineer role or higher.",
+      "category": "Mutation Tools (Beta)",
+      "examples": [
+        "\"Rename suite 18697 to 'Login & Registration' in project MCP\"",
+        "\"Move suite 491 under parent suite 18697 in project android\""
+      ]
+    },
+    {
+      "name": "adv_validate_test_case",
+      "description": "[Advanced Zebrunner MCP] Quality validation with automated improvement suggestions using intelligent rules.",
+      "category": "Test Coverage & Validation",
+      "examples": [
+        "\"Validate test case MCP-2107 and suggest improvements\"",
+        "\"Check quality of test case MCP-1921\"",
+        "\"Validate MCP-88 and tell me what needs to be improved\""
+      ]
+    }
+  ],
+  "catalogByTool": {
+    "adv_analyze_test_impact": {
+      "name": "adv_analyze_test_impact",
+      "description": "Discover and rank Zebrunner test cases likely affected by production-code changes. Accepts compact semantic change context (features, behaviors, symbols, keywords) — **not** raw git diffs. Returns regression candidates by theme (automated vs manual, confidence), potential coverage gaps, optional smoke-suite recommendations, and scoping notes.",
+      "category": "Test Impact Analysis *(v9.2.8)*",
+      "examples": []
+    },
+    "adv_analyze_test_failure": {
+      "name": "adv_analyze_test_failure",
+      "description": "Deep forensic analysis of failed tests including logs, screenshots, error classification, similar failures, and optionally comparison with last passed execution.",
+      "category": "Test Failure Analysis & Debugging",
+      "examples": [
+        "\"Analyze test failure 5451420 from launch 120806\"",
+        "\"Analyze test 5478492 and compare with the last time it passed\"",
+        "\"Deep dive into why test 5455325 failed in launch 120906, include video and compare with last successful run\""
+      ]
+    },
+    "adv_detailed_analyze_launch_failures": {
+      "name": "adv_detailed_analyze_launch_failures",
+      "description": "Analyze ALL failures in a launch with intelligent grouping, executive summary, timeline analysis, and pattern detection. Automatically filters tests without linked issues by default.",
+      "category": "Test Failure Analysis & Debugging",
+      "examples": [
+        "\"Analyze all failures in launch 120806\"",
+        "\"Show me what failed in launch 120906 with executive summary and patterns\"",
+        "\"Generate Jira tickets for all failures in launch 120814 in jira format\""
+      ]
+    },
+    "adv_get_test_execution_history": {
+      "name": "adv_get_test_execution_history",
+      "description": "Compare current failure with last successful execution. Shows differences in logs, duration, environment, and screenshots.",
+      "category": "Test Execution History & Comparison",
+      "examples": [
+        "\"Show me execution history for test 5478492\"",
+        "\"Has test 5455325 been failing consistently?\"",
+        "\"When was the last time test 5478492 passed?\"",
+        "\"Analyze test 5478492 failure and compare logs with last passed run\"",
+        "\"Compare test 5455325 with last passed execution - check if duration or environment changed\"",
+        "\"Analyze test failure and show me what changed since it last passed\""
+      ]
+    },
+    "adv_get_launch_details": {
+      "name": "adv_get_launch_details",
+      "description": "Get comprehensive information about a specific launch including test results, environment, build, and execution metadata. Set `includeJobParameters: true` to fetch CI job parameters from **Jenkins Build Now** (suite path, build, locale, test_run_rules, and full param schema). **Not available for Launch Launchers** — Jenkins integration only.",
+      "category": "Launch Analysis & Reporting",
+      "examples": [
+        "\"Get launch details for launch 120906\"",
+        "\"Show job parameters for launch 132452 to plan a Build now\"",
+        "\"What happened in launch 120814?\""
+      ]
+    },
+    "adv_get_launch_summary": {
+      "name": "adv_get_launch_summary",
+      "description": "Quick launch overview with key metrics and status.",
+      "category": "Launch Analysis & Reporting",
+      "examples": [
+        "\"Give me a quick summary of launch 120906\"",
+        "\"Summarize launch 121482 results\"",
+        "\"What's the overall status of launch 120814?\""
+      ]
+    },
+    "adv_get_launch_test_summary": {
+      "name": "adv_get_launch_test_summary",
+      "description": "Lightweight aggregated test results with statistics, most unstable tests, and tests with issues. Optimized for large launches.",
+      "category": "Launch Analysis & Reporting",
+      "examples": [
+        "\"Get test summary for launch 119783 with top 10 most unstable tests\"",
+        "\"Show me summary of launch 120906 - just failed tests\"",
+        "\"Get lightweight summary for launch 121482\"",
+        "\"For launch 134978, how many tests were passed manually, have known issues assigned, or match either condition?\""
+      ]
+    },
+    "adv_regression_results_analyzer": {
+      "name": "adv_regression_results_analyzer",
+      "description": "Analyze regression test results for a milestone or build number. Produces a comprehensive report with summary table, test run overview with coverage status, new bugs with affected test case context, top bugs ranked by frequency, bugs per suite, and slowest tests. All data sourced from TCM Public API test runs.",
+      "category": "Launch Analysis & Reporting",
+      "examples": [
+        "\"Analyze regression results for iOS milestone 26.19.0\"",
+        "\"Show regression results for build 73614 on MCPIOS\"",
+        "\"Analyze regression for iOS 26.19.0 and compare bugs with previous milestone 26.18.0\"",
+        "\"How many test runs are in milestone 26.19.0 for iOS? (use count_only)\"",
+        "\"Get top 10 bugs for Android milestone 25.40.0 in JSON format\""
+      ]
+    },
+    "adv_generate_weekly_regression_stability_report": {
+      "name": "adv_generate_weekly_regression_stability_report",
+      "description": "Generate a Jira-ready weekly regression stability report across multiple suites with pass rate, week-over-week delta, and stability classification.",
+      "category": "Launch Analysis & Reporting",
+      "examples": [
+        "\"Weekly stability report for MCP: Manage My Day (120906 vs 120814), Diary AA (120901 vs 120809)\"",
+        "\"Generate Jira-ready weekly regression stability report for MCP with thresholds stable 92, watch 88\"",
+        "\"Give me a JSON stability snapshot for MCP: Premium Hub (121001 vs 120901)\""
+      ]
+    },
+    "adv_get_all_launches_for_project": {
+      "name": "adv_get_all_launches_for_project",
+      "description": "List individual launch executions for a project with pagination. Use to browse launches, NOT for aggregated results/pass rates (use `adv_get_platform_results_by_period` for that).",
+      "category": "Launch Analysis & Reporting",
+      "examples": [
+        "\"List launches for project MCP from last month\"",
+        "\"Show me recent launches for project MCP\"",
+        "\"Browse launches for MCP\""
+      ]
+    },
+    "adv_get_all_launches_with_filter": {
+      "name": "adv_get_all_launches_with_filter",
+      "description": "Search and filter individual launch executions by milestone, build number, or name. NOT for aggregated results/pass rates (use `adv_get_platform_results_by_period` for that).",
+      "category": "Launch Analysis & Reporting",
+      "examples": [
+        "\"Find launches for milestone 2.1.0\"",
+        "\"Show me launches for build 'mcp-app-2.1.0'\"",
+        "\"Search launches for milestone 2.1.0 and build 'release-46975'\""
+      ]
+    },
+    "adv_analyze_regression_runtime": {
+      "name": "adv_analyze_regression_runtime",
+      "description": "Comprehensive Regression Runtime Efficiency analysis. Collects per-launch elapsed time, attempt/re-run breakdown, per-test duration classification (Short / Medium / Long), and calculates metrics from both **test** and **test case** perspectives: Average Runtime, Weighted Runtime Index (WRI), and duration distribution. Supports configurable duration thresholds and optional baseline comparison with delta tracking.",
+      "category": "Launch Analysis & Reporting",
+      "examples": [
+        "\"Analyze regression runtime for the iOS project on the latest milestone. Show both average runtime per test and per test case, plus WRI and WRI per test case.\"",
+        "\"Analyze regression runtime for the Android project with include_test_details: true. For each duration class, show number of tests, test cases covered, and avgDuration per test vs per test case.\"",
+        "\"Run regression runtime analysis for all three projects on their latest milestones. Compare how many test cases fall into Short vs Medium vs Long buckets per team.\"",
+        "\"Analyze regression runtime for the iOS project, latest vs previous milestone. Show WRI and WRI per test case for both. Has the WRI per test case improved or degraded?\"",
+        "\"Analyze regression runtime for the Web project with medium_threshold_seconds: 120 and long_threshold_seconds: 300. Show which tests fall into each bucket.\"",
+        "\"Analyze regression runtime for the Android project on the latest milestone. What is the average time cost per test case in each duration bucket? Are long-running tests covering proportionally more test cases?\""
+      ]
+    },
+    "adv_find_flaky_tests": {
+      "name": "adv_find_flaky_tests",
+      "description": "Find flaky tests across launches using a 3-phase approach: cross-launch flip-flop analysis for automated tests, manual test case scan via TCM execution history, and optional dual-perspective enrichment correlating both data sources.",
+      "category": "Launch Analysis & Reporting",
+      "examples": [
+        "\"Find flaky tests in the Android project over the last 14 days\"",
+        "\"How many flaky tests are in the iOS project? Use count_only\"",
+        "\"Find the top 10 most flaky tests in the Web project with full history details\"",
+        "\"Find flaky tests in the Android project and show me a chart\""
+      ]
+    },
+    "adv_analyze_test_execution_video": {
+      "name": "adv_analyze_test_execution_video",
+      "description": "Download and analyze test execution video with Claude Vision. Extracts frames, compares with test case steps, and predicts if failure is bug or test issue.",
+      "category": "Video & Screenshot Analysis",
+      "examples": [
+        "\"Analyze video for test 5455325 from launch 120906\"",
+        "\"Download and analyze test execution video for test 5478492 with smart frame extraction\"",
+        "\"Analyze video for failed test 5451420 and compare with test case steps\""
+      ]
+    },
+    "adv_download_test_screenshot": {
+      "name": "adv_download_test_screenshot",
+      "description": "Download protected screenshots from Zebrunner with authentication.",
+      "category": "Video & Screenshot Analysis",
+      "examples": [
+        "\"Download screenshot from [https://your-workspace.zebrunner.com/files/abc123](https://your-workspace.zebrunner.com/files/abc123)\"",
+        "\"Download screenshot /files/xyz789 for test 5451420\"",
+        "\"Get screenshot from URL [https://your-workspace.zebrunner.com/files/screenshot123](https://your-workspace.zebrunner.com/files/screenshot123)\""
+      ]
+    },
+    "adv_analyze_screenshot": {
+      "name": "adv_analyze_screenshot",
+      "description": "Visual analysis of screenshots with OCR, UI element detection, and Claude Vision analysis.",
+      "category": "Video & Screenshot Analysis",
+      "examples": [
+        "\"Analyze screenshot [https://your-workspace.zebrunner.com/files/abc123](https://your-workspace.zebrunner.com/files/abc123) with OCR\"",
+        "\"Analyze this screenshot and tell me what UI elements are visible\"",
+        "\"Analyze screenshot /files/xyz789 and extract text with OCR\""
+      ]
+    },
+    "adv_batch_get_test_cases": {
+      "name": "adv_batch_get_test_cases",
+      "description": "Fetch multiple test cases by key in one call. Missing keys appear in `notFound[]` (partial success). Defaults: `detail=summary`, `format=compact`, max 50 keys, concurrency 5.",
+      "category": "Test Case Management",
+      "examples": [
+        "\"Fetch test cases MCP-1, MCP-2, and MCP-3 in one call\"",
+        "\"Batch-get these keys with full detail: MCP-10, MCP-11\""
+      ]
+    },
+    "adv_get_test_case_by_key": {
+      "name": "adv_get_test_case_by_key",
+      "description": "Get detailed information for a specific test case by its key (e.g., MCP-123).",
+      "category": "Test Case Management",
+      "examples": [
+        "\"Get test case MCP-2107 details\"",
+        "\"Show me test case MCP-1921\"",
+        "\"What does test case MCP-88 test?\"",
+        "\"Get test case MCP-29 with change history\"",
+        "\"Show MCP-29 history, events only\""
+      ]
+    },
+    "adv_get_test_case_by_title": {
+      "name": "adv_get_test_case_by_title",
+      "description": "Search for test cases by title (partial match supported).",
+      "category": "Test Case Management",
+      "examples": [
+        "\"Find test cases with 'login' in the title\"",
+        "\"Search for test cases containing 'diary'\"",
+        "\"Find test cases about 'food search'\""
+      ]
+    },
+    "adv_get_test_cases_advanced": {
+      "name": "adv_get_test_cases_advanced",
+      "description": "Advanced filtering with automation states, dates, priority, and more. Supports **generic field-path filtering** via `field_path`, `field_value`, and `field_match` parameters for any field including custom fields.",
+      "category": "Test Case Management",
+      "examples": [
+        "\"Get test cases created after 2025-01-01 with automation state 'Manual'\"",
+        "\"Show me high priority test cases from last month\"",
+        "\"Find test cases updated after 2025-11-01 that are not automated\"",
+        "\"Get all test cases in MCP where customField.manualOnly is 'Yes'\"",
+        "\"Find test cases whose priority.name contains 'High'\"",
+        "\"Get manual test cases from last month with their change history\""
+      ]
+    },
+    "adv_get_test_cases_by_automation_state": {
+      "name": "adv_get_test_cases_by_automation_state",
+      "description": "Filter test cases by specific automation state (Manual, Automated, etc.).",
+      "category": "Test Case Management",
+      "examples": [
+        "\"Show me all 'Not Automated' test cases in project MCP\"",
+        "\"Get all manual test cases\"",
+        "\"Find test cases with automation state 'Automated'\"",
+        "\"Get all automated test cases with their last 5 changes\""
+      ]
+    },
+    "adv_get_test_case_by_filter": {
+      "name": "adv_get_test_case_by_filter",
+      "description": "Advanced filtering by suite, dates, priority, automation state, and status. Also supports **generic field-path filtering** via `field_path`, `field_value`, and `field_match` (same parameters as `adv_get_test_cases_advanced`).",
+      "category": "Test Case Management",
+      "examples": [
+        "\"Get test cases from suite 491 created after 2025-01-01 with high priority\"",
+        "\"Show me test cases from suite 17470 with status 'Approved'\"",
+        "\"Find test cases in suite 18697 that were updated last week\"",
+        "\"Find test cases in MCP where customField.caseStatus equals 'Active'\""
+      ]
+    },
+    "adv_get_automation_states": {
+      "name": "adv_get_automation_states",
+      "description": "List all available automation states for a project.",
+      "category": "Test Case Management",
+      "examples": [
+        "\"What automation states are available for project MCP?\"",
+        "\"Show me all automation states\"",
+        "\"List automation states for MCP\""
+      ]
+    },
+    "adv_get_automation_priorities": {
+      "name": "adv_get_automation_priorities",
+      "description": "List all available priority levels with their IDs.",
+      "category": "Test Case Management",
+      "examples": [
+        "\"Show me all priority levels for project MCP\"",
+        "\"What priorities are available?\"",
+        "\"List all test case priorities\""
+      ]
+    },
+    "adv_get_all_tcm_test_cases_by_project": {
+      "name": "adv_get_all_tcm_test_cases_by_project",
+      "description": "Get ALL test cases for a project with automatic pagination handling.",
+      "category": "Test Case Management",
+      "examples": [
+        "\"Get all test cases for project MCP\"",
+        "\"Show me every test case in the MCP project\"",
+        "\"Export all test cases from project MCP\""
+      ]
+    },
+    "adv_get_all_tcm_test_cases_with_root_suite_id": {
+      "name": "adv_get_all_tcm_test_cases_with_root_suite_id",
+      "description": "Get all test cases with their root suite hierarchy information.",
+      "category": "Test Case Management",
+      "examples": [
+        "\"Get all test cases with their root suite information for project MCP\"",
+        "\"Show me test cases with hierarchy info\"",
+        "\"List all test cases with their parent suites\""
+      ]
+    },
+    "adv_get_test_cases_by_suite_smart": {
+      "name": "adv_get_test_cases_by_suite_smart",
+      "description": "Smart suite-based test case retrieval. Automatically detects whether the suite is root or child and uses the right filtering strategy.",
+      "category": "Test Case Management",
+      "examples": [
+        "\"Get test cases from suite 18824 in project MCP using smart mode\"",
+        "\"Show all test cases for suite 17470 including sub-suites\"",
+        "\"Retrieve test cases for suite 491 in markdown format\""
+      ]
+    },
+    "adv_list_test_suites": {
+      "name": "adv_list_test_suites",
+      "description": "List test suites with pagination.",
+      "category": "Test Suite Hierarchy",
+      "examples": [
+        "\"List test suites for project MCP\"",
+        "\"Show me all test suites\"",
+        "\"Get first 50 test suites for project MCP\""
+      ]
+    },
+    "adv_get_suite_hierarchy": {
+      "name": "adv_get_suite_hierarchy",
+      "description": "Get hierarchical tree view of test suites with configurable depth.",
+      "category": "Test Suite Hierarchy",
+      "examples": [
+        "\"Show me the hierarchy of test suites with depth 3\"",
+        "\"Get suite hierarchy for project MCP\"",
+        "\"Display test suite tree structure\""
+      ]
+    },
+    "adv_get_root_suites": {
+      "name": "adv_get_root_suites",
+      "description": "Get all top-level (root) test suites.",
+      "category": "Test Suite Hierarchy",
+      "examples": [
+        "\"Show me all root suites for project MCP\"",
+        "\"Get top-level test suites\"",
+        "\"List root suites\""
+      ]
+    },
+    "adv_get_all_subsuites": {
+      "name": "adv_get_all_subsuites",
+      "description": "Get all child suites recursively from a parent suite.",
+      "category": "Test Suite Hierarchy",
+      "examples": [
+        "\"Get all subsuites from root suite 18697\"",
+        "\"Show me all child suites under suite 17470\"",
+        "\"List all subsuites for suite 491\""
+      ]
+    },
+    "adv_get_tcm_suite_by_id": {
+      "name": "adv_get_tcm_suite_by_id",
+      "description": "Get test suite by its numeric ID. This is the primary tool for any \"show me suite\", \"get suite by ID\", or \"find suite\" request.",
+      "category": "Test Suite Hierarchy",
+      "examples": [
+        "\"Show me suite in project MCP by id 20421\"",
+        "\"Get details for suite 17470\"",
+        "\"Show me suite 18697 with full hierarchy\"",
+        "\"What's in test suite 491?\""
+      ]
+    },
+    "adv_get_tcm_test_suites_by_project": {
+      "name": "adv_get_tcm_test_suites_by_project",
+      "description": "Get comprehensive list of all suites for a project with hierarchy information.",
+      "category": "Test Suite Hierarchy",
+      "examples": [
+        "\"Get all suites for project MCP with hierarchy\"",
+        "\"Show me all test suites in project MCP\"",
+        "\"List all suites for MCP\""
+      ]
+    },
+    "adv_get_all_tcm_test_case_suites_by_project": {
+      "name": "adv_get_all_tcm_test_case_suites_by_project",
+      "description": "Retrieve all TCM test case suites in a project using comprehensive pagination, with optional hierarchy enrichment.",
+      "category": "Test Suite Hierarchy",
+      "examples": [
+        "\"Get all TCM test case suites for project MCP\"",
+        "\"Export all suites for MCP in markdown format\"",
+        "\"List all suites for android with hierarchy enabled\""
+      ]
+    },
+    "adv_get_root_id_by_suite_id": {
+      "name": "adv_get_root_id_by_suite_id",
+      "description": "Find the root suite for any given suite ID.",
+      "category": "Test Suite Hierarchy",
+      "examples": [
+        "\"What's the root suite for suite 12345?\"",
+        "\"Find root suite for suite 491\"",
+        "\"Get parent root for suite 17470\""
+      ]
+    },
+    "adv_create_test_suite": {
+      "name": "adv_create_test_suite",
+      "description": "(Beta) Create a new Test Suite in a Zebrunner project. Requires Engineer role or higher.",
+      "category": "Mutation Tools (Beta)",
+      "examples": [
+        "\"Create a new root test suite called 'Payments' in project MCP\"",
+        "\"Create a child suite 'Edge Cases' under suite 18697 in project android\""
+      ]
+    },
+    "adv_update_test_suite": {
+      "name": "adv_update_test_suite",
+      "description": "(Beta) Update an existing Test Suite by numeric ID (full PUT replacement). Requires Engineer role or higher.",
+      "category": "Mutation Tools (Beta)",
+      "examples": [
+        "\"Rename suite 18697 to 'Login & Registration' in project MCP\"",
+        "\"Move suite 491 under parent suite 18697 in project android\""
+      ]
+    },
+    "adv_create_test_case": {
+      "name": "adv_create_test_case",
+      "description": "(Beta) Create a new Test Case in a Zebrunner project. Validates priority, automation state, and custom fields against project settings at runtime. Optionally accepts `source_case_key` to pre-populate fields from an existing test case.",
+      "category": "Mutation Tools (Beta)",
+      "examples": [
+        "\"Create a test case 'Verify login with valid credentials' in suite 17470 for project MCP\"",
+        "\"Create a test case with priority High and 3 steps in suite 491\"",
+        "\"Create a test case in MCP suite 20421 using source_case_key MCP-123 but override priority to Low\""
+      ]
+    },
+    "adv_scaffold_test_case": {
+      "name": "adv_scaffold_test_case",
+      "description": "(Beta) Guided best-practice wizard to author a NEW test case. On clients that support form elicitation (e.g. Claude Code, Cursor) it presents an interactive questionnaire; on clients without elicitation (e.g. Claude Desktop) it returns a conversational questionnaire that finishes through `adv_create_test_case`. Automatically performs a warn-only similarity check against the target + root suite and offers to reuse the closest match, then runs an **advisory** rules-based quality pre-check (using the same rules as `adv_validate_test_case`) before creation and the authoritative quality review after creation. The pre-check never blocks. Created cases are always forced to `draft=true`. There is no default project — it is always chosen explicitly (first question). Also available as the alias `adv_create_test_case_wizard`, and via the `scaffold-test-case` / `create-test-case-wizard` prompts.",
+      "category": "Mutation Tools (Beta)",
+      "examples": [
+        "\"Scaffold a new test case in project PROJ1 suite 20421\"",
+        "\"Help me write a new feature test case following best practices\"",
+        "\"Open the create-test-case wizard for PROJ1 so I can write a new case step by step\" (alias `adv_create_test_case_wizard`)",
+        "\"Use the test case creation wizard to add a new case to alias-a suite 20421\" (alias resolves per `zebrunner-config.json`)",
+        "\"Scaffold a new login test case for PROJ1 and keep the steps in Gherkin\" (default language)"
+      ]
+    },
+    "adv_update_test_case": {
+      "name": "adv_update_test_case",
+      "description": "(Beta) Partially update an existing Test Case by numeric ID or string key (PATCH). Only provided fields are updated. Accepts `{file_path}` in attachments for local file upload.",
+      "category": "Mutation Tools (Beta)",
+      "examples": [
+        "\"Update test case MCP-42 title to 'Verify login with SSO'\"",
+        "\"Change automation state to 'Automated' for test case 12345 in project android\"",
+        "\"Move test case MCP-100 to suite 18824\"",
+        "\"Attach /Users/me/screenshot.png to test case MCP-42\""
+      ]
+    },
+    "adv_manage_test_run": {
+      "name": "adv_manage_test_run",
+      "description": "(Beta) Create, update, or add test cases to a Zebrunner Test Run. Requires Engineer role or higher.",
+      "category": "Mutation Tools (Beta)",
+      "examples": [
+        "\"Create a test run called 'Sprint 42 Regression' in project MCP\"",
+        "\"Create a test run 'Browser Matrix' with configurations Browser:Chrome and Browser:Firefox in project MCP\"",
+        "\"Update test run 123 in project MCP to set the milestone to 'Release 3.0'\"",
+        "\"Add test cases MCP-1, MCP-2, MCP-3 to test run 123 in project MCP\"",
+        "\"Add all test cases from suite 456 to test run 123 in project MCP\""
+      ]
+    },
+    "adv_import_launch_results_to_test_run": {
+      "name": "adv_import_launch_results_to_test_run",
+      "description": "(Beta) Import automation launch results into a TCM Test Run. Bridges the Reporting API (launches/tests) to the Public API (test runs/test cases). Reads test results from a launch, maps test case keys and statuses, and imports them via the `:import` endpoint.",
+      "category": "Mutation Tools (Beta)",
+      "examples": [
+        "\"Import results from launch 98765 into test run 123 for project MCP\"",
+        "\"Import only MCP-82 and MCP-83 results from launch 98765 to test run 123\"",
+        "\"Sync launch 45000 results to test run 789 in project MCP, map ABORTED to Skipped\""
+      ]
+    },
+    "adv_rerun_launch_failures": {
+      "name": "adv_rerun_launch_failures",
+      "description": "(Beta) Rerun failed/aborted tests for one or more automation launches via the Reporting API. Triggers real CI/automation reruns. Single mode: provide `launch_id`. Batch mode: omit `launch_id` and optionally filter by `milestone` or `query`; capped by `max_launches` (default 10).",
+      "category": "Launch mutations & instance configuration",
+      "examples": [
+        "\"Rerun failures for launch 132522 in project MCP\"",
+        "\"Rerun failed tests for the latest 5 launches in milestone 26.19.0 for android\"",
+        "\"Preview which launches in project android have failures and can be rerun\""
+      ]
+    },
+    "adv_start_launch": {
+      "name": "adv_start_launch",
+      "description": "(Beta) Trigger Zebrunner **Build Now** (Jenkins integration only) — start a new automation launch via Reporting API `job/parameters` + `job:build`. **Does NOT work with Launch Launchers.** Resolves a template launch by `launch_id`, launch name query, and/or `suite_path`; merges validated parameter overrides; preview/confirm before triggering CI.",
+      "category": "Launch mutations & instance configuration",
+      "examples": [
+        "\"Start Minimal-Acceptance launch for latest build in project MCP\"",
+        "\"Build now Critical flow with build .* and locale en_US\"",
+        "\"Build now regression for locale de_DE when localeTestRunRules is enabled for the project (see zebrunner-config.json)\"",
+        "\"Preview adv_start_launch for template launch 132452 with test_run_rules PRIORITY=>P0||P1;;\""
+      ]
+    },
+    "adv_get_test_coverage_by_test_case_steps_by_key": {
+      "name": "adv_get_test_coverage_by_test_case_steps_by_key",
+      "description": "Analyze how well automation code implements test case steps.",
+      "category": "Test Coverage & Validation",
+      "examples": [
+        "\"Analyze coverage for MCP-2107 against this implementation code: [paste code]\"",
+        "\"Check if test case MCP-1921 is implemented correctly in this code\"",
+        "\"Validate coverage for MCP-88 with this automation code\""
+      ]
+    },
+    "adv_get_enhanced_test_coverage_with_rules": {
+      "name": "adv_get_enhanced_test_coverage_with_rules",
+      "description": "Rules-based coverage analysis with framework detection and intelligent validation.",
+      "category": "Test Coverage & Validation",
+      "examples": [
+        "\"Enhanced coverage analysis for MCP-2107 with framework detection\"",
+        "\"Analyze MCP-1921 coverage with rules validation\"",
+        "\"Check test case MCP-88 implementation with enhanced rules\""
+      ]
+    },
+    "adv_validate_test_case": {
+      "name": "adv_validate_test_case",
+      "description": "Quality validation with automated improvement suggestions using intelligent rules.",
+      "category": "Test Coverage & Validation",
+      "examples": [
+        "\"Validate test case MCP-2107 and suggest improvements\"",
+        "\"Check quality of test case MCP-1921\"",
+        "\"Validate MCP-88 and tell me what needs to be improved\""
+      ]
+    },
+    "adv_improve_test_case": {
+      "name": "adv_improve_test_case",
+      "description": "Dedicated tool for improving test case quality with specific suggestions.",
+      "category": "Test Coverage & Validation",
+      "examples": [
+        "\"Improve test case MCP-2107 with specific suggestions\"",
+        "\"Help me improve test case MCP-1921\"",
+        "\"Suggest improvements for MCP-88\""
+      ]
+    },
+    "adv_generate_draft_test_by_key": {
+      "name": "adv_generate_draft_test_by_key",
+      "description": "Generate test automation code with framework detection (Java/Carina, Python/Pytest, etc.).",
+      "category": "Test Code Generation",
+      "examples": [
+        "\"Generate Java/Carina test for MCP-2107 based on this implementation\"",
+        "\"Create Python pytest for test case MCP-1921\"",
+        "\"Generate automation code for MCP-88 using Java and Carina framework\""
+      ]
+    },
+    "adv_analyze_test_cases_duplicates": {
+      "name": "adv_analyze_test_cases_duplicates",
+      "description": "Find and group similar test cases by step similarity with configurable threshold.",
+      "category": "Duplicate Detection",
+      "examples": [
+        "\"Analyze suite 17470 for duplicates with 80% similarity threshold\"",
+        "\"Find duplicate test cases in suite 18697\"",
+        "\"Check suite 491 for similar test cases\""
+      ]
+    },
+    "adv_analyze_test_cases_duplicates_semantic": {
+      "name": "adv_analyze_test_cases_duplicates_semantic",
+      "description": "Advanced semantic analysis with LLM-powered step clustering and medoid selection.",
+      "category": "Duplicate Detection",
+      "examples": [
+        "\"Semantic analysis of suite 17470 with step clustering\"",
+        "\"Find semantically similar test cases in suite 18697 using AI\"",
+        "\"Analyze suite 491 for duplicates with semantic clustering\""
+      ]
+    },
+    "adv_aggregate_test_cases_by_feature": {
+      "name": "adv_aggregate_test_cases_by_feature",
+      "description": "Find ALL test cases related to a specific feature keyword across the entire project. Searches in title, description, preconditions, post-conditions, and test steps (case-insensitive, partial match). Groups results by Root Suite and Feature Suite hierarchy.",
+      "category": "Feature-Based Test Case Aggregation",
+      "examples": [
+        "\"Find all test cases related to 'login' feature in project MCP\"",
+        "\"Aggregate test cases for 'payment' in project MCPAND with detailed output\"",
+        "\"Get automation tags for all test cases mentioning 'diary' feature\"",
+        "\"Show me all 'food search' related test cases grouped by suite\"",
+        "\"Generate test run rules for 'onboarding' feature\""
+      ]
+    },
+    "adv_list_test_runs": {
+      "name": "adv_list_test_runs",
+      "description": "Advanced filtering of test runs by date range, status, platform, and more.",
+      "category": "Test Run Management",
+      "examples": [
+        "\"Get test runs from last 30 days with status 'FAILED'\"",
+        "\"Show me test runs from last week for iOS platform\"",
+        "\"Find test runs from November 2025 that failed\""
+      ]
+    },
+    "adv_get_test_run_by_id": {
+      "name": "adv_get_test_run_by_id",
+      "description": "Get detailed information for a specific test run.",
+      "category": "Test Run Management",
+      "examples": [
+        "\"Get details for test run 12345\"",
+        "\"Show me test run 67890\"",
+        "\"What happened in test run 54321?\""
+      ]
+    },
+    "adv_list_test_run_test_cases": {
+      "name": "adv_list_test_run_test_cases",
+      "description": "Get all test cases associated with a specific test run.",
+      "category": "Test Run Management",
+      "examples": [
+        "\"Show me all test cases in test run 12345\"",
+        "\"List test cases for test run 67890\"",
+        "\"What test cases were in test run 54321?\""
+      ]
+    },
+    "adv_get_test_run_result_statuses": {
+      "name": "adv_get_test_run_result_statuses",
+      "description": "Get available result statuses configured for a project.",
+      "category": "Test Run Management",
+      "examples": [
+        "\"What result statuses are configured for project MCP?\"",
+        "\"Show me available test run statuses\"",
+        "\"List result statuses for MCP\""
+      ]
+    },
+    "adv_get_test_run_configuration_groups": {
+      "name": "adv_get_test_run_configuration_groups",
+      "description": "Get configuration options and groups for test runs.",
+      "category": "Test Run Management",
+      "examples": [
+        "\"Show me configuration groups for project MCP\"",
+        "\"What test run configurations are available?\"",
+        "\"List configuration groups\""
+      ]
+    },
+    "adv_get_platform_results_by_period": {
+      "name": "adv_get_platform_results_by_period",
+      "description": "Get aggregated test results, pass rate, and statistics for a project over a time period (last 7 days, last 30 days, etc.). Returns total passed/failed/skipped/aborted counts and pass rate percentage. Use this when asked for \"results\", \"pass rate\", \"test statistics\", or \"results for last N days\". Accepts any Zebrunner project key (e.g. `DEF`, `MCP`) or aliases (`web`/`android`/`ios`/`api`).",
+      "category": "Platform & Results Analysis",
+      "examples": [
+        "\"Get results for MCP during last 7 days\"",
+        "\"Show pass rate for MCP\"",
+        "\"Show me Android test results from last week\"",
+        "\"Get platform results for last 30 days\"",
+        "\"Pass rate bar chart by priority for Android over the last 14 days\" (`view: bar`)",
+        "\"Daily pass/fail line trend for iOS over the last 14 days\" (`view: line`)",
+        "\"Pass rate calendar heatmap for Web in 2026 Q2 with 75% threshold\" (`view: calendar`)",
+        "\"Tests summary table grouped by build for MCP last 7 days\" (`view: summary`)"
+      ]
+    },
+    "adv_get_top_bugs": {
+      "name": "adv_get_top_bugs",
+      "description": "Get most frequent defects/bugs from test executions.",
+      "category": "Platform & Results Analysis",
+      "examples": [
+        "\"Show me top 10 bugs from last week\"",
+        "\"What are the most common bugs?\"",
+        "\"Get top bugs from last 30 days\""
+      ]
+    },
+    "adv_get_bug_review": {
+      "name": "adv_get_bug_review",
+      "description": "Get comprehensive bug review with detailed failure information, defect tracking, reproduction dates, and **automatic failure detail fetching** for single-call analysis.",
+      "category": "Platform & Results Analysis",
+      "examples": [
+        "\"Show me detailed bug review for last 7 days\"",
+        "\"Get bug review for Android project from last 14 days with failure details\"",
+        "\"Show me top 10 bugs with full failure analysis for iOS\"",
+        "\"Give me a comprehensive bug analysis for IOS with priority breakdown\"",
+        "`{ project: \"ios\", period: \"Last 7 Days\", limit: 10, include_failure_details: true, failure_detail_level: \"full\" }`"
+      ]
+    },
+    "adv_get_bug_failure_info": {
+      "name": "adv_get_bug_failure_info",
+      "description": "Get comprehensive failure information for a specific bug/hashcode, including high-level failure summary and detailed list of affected test runs. This tool combines data from multiple SQL widgets to provide complete failure analysis.",
+      "category": "Platform & Results Analysis",
+      "examples": [
+        "\"Get failure info for hashcode 1051677506 on dashboard 99\"",
+        "\"Show me detailed failures for this bug hashcode\"",
+        "\"Analyze failure information for hashcode X from last 14 days\"",
+        "\"Give me a summary of test runs affected by this failure\""
+      ]
+    },
+    "adv_get_test_case_distribution_by_field": {
+      "name": "adv_get_test_case_distribution_by_field",
+      "description": "Pie-chart distribution of test cases by a TCM field (automation state, priority, custom field, etc.) using the dashboard widget API (template **37780**). Matches the Zebrunner UI widget **TEST CASES DISTRIBUTION BY FIELD**.",
+      "category": "Platform & Results Analysis",
+      "examples": [
+        "\"Show test case distribution by automation state for project MCP\"",
+        "\"Pie chart of cases by Priority in MCP\"",
+        "`{ project: \"MCP\", system_field: \"AUTOMATION_STATE\", format: \"json\" }`"
+      ]
+    },
+    "adv_get_tcm_case_analytics": {
+      "name": "adv_get_tcm_case_analytics",
+      "description": "",
+      "category": "Platform & Results Analysis",
+      "examples": [
+        "\"Show TCM net case change for project MCP over the last 90 days grouped by week\"",
+        "\"Who created the most test cases on MCP in the last 30 days?\"",
+        "\"Who updated the most test cases on Android in the last 30 days?\"",
+        "`{ project: \"MCP\", mode: \"net_change\", period: \"Last 90 Days\", grouping_period: \"Week\" }`"
+      ]
+    },
+    "adv_get_failure_analytics": {
+      "name": "adv_get_failure_analytics",
+      "description": "",
+      "category": "Platform & Results Analysis",
+      "examples": [
+        "\"Failure tag distribution pie for Android in the last 24 hours\"",
+        "\"Cross-tab of failure tags and maintainers for iOS today\"",
+        "\"Map Jira issues to maintainers by failure count on Web for the last 14 days\""
+      ]
+    },
+    "adv_get_execution_analytics": {
+      "name": "adv_get_execution_analytics",
+      "description": "",
+      "category": "Platform & Results Analysis",
+      "examples": [
+        "\"Execution ROI for Android over the last 7 days\"",
+        "\"Daily execution duration trend for MCP last week\"",
+        "\"Launch duration for suite Regression on iOS this quarter\"",
+        "\"Tests below 99% stability on Web in the last 24 hours\""
+      ]
+    },
+    "adv_get_test_authoring_trend": {
+      "name": "adv_get_test_authoring_trend",
+      "description": "Daily/weekly/monthly count of test cases created over time (`CREATED_AT` × `AMOUNT`). Matches dashboard widget **TEST CASES DEVELOPMENT TREND**.",
+      "category": "Platform & Results Analysis",
+      "examples": [
+        "\"How many test cases were created per day on MCP over the last 14 days?\"",
+        "\"Test case authoring velocity for Android this quarter by week\"",
+        "`{ project: \"MCP\", period: \"Last 14 Days\", grouping_period: \"DAY\" }`"
+      ]
+    },
+    "adv_get_project_milestones": {
+      "name": "adv_get_project_milestones",
+      "description": "Get all milestones configured for a project.",
+      "category": "Platform & Results Analysis",
+      "examples": [
+        "\"Get all milestones for project MCP\"",
+        "\"Show me available milestones\"",
+        "\"List milestones for MCP\""
+      ]
+    },
+    "adv_generate_report": {
+      "name": "adv_generate_report",
+      "description": "Universal report generator that supports 6 report types. Can generate a single report or combine multiple in one call. Replaces the former `generate_quality_dashboard` tool (use `report_types: [\"quality_dashboard\"]` for equivalent behavior).",
+      "category": "Universal Report Generator",
+      "examples": [
+        "\"Generate a quality dashboard for Android and iOS for the last 30 days\"",
+        "\"Build a test coverage report for all three platforms\"",
+        "\"Show pass rate for Android, iOS, and Web for milestone 25.40.0\"",
+        "\"Compare runtime efficiency for Android between milestone 25.40.0 and 25.39.0\"",
+        "\"Generate an executive dashboard for all platforms this quarter\"",
+        "\"Assess release readiness for Android on milestone 25.40.0 vs previous 25.39.0\"",
+        "\"Generate coverage and pass rate reports together for all platforms\""
+      ]
+    },
+    "adv_get_available_projects": {
+      "name": "adv_get_available_projects",
+      "description": "Discover all projects you have access to in Zebrunner.",
+      "category": "Project Discovery",
+      "examples": [
+        "\"What projects can I access?\"",
+        "\"Show me all available projects\"",
+        "\"List all projects I have access to\""
+      ]
+    },
+    "adv_test_reporting_connection": {
+      "name": "adv_test_reporting_connection",
+      "description": "Test API connectivity and authentication with Zebrunner Reporting API.",
+      "category": "Project Discovery",
+      "examples": [
+        "\"Test my connection to Zebrunner\"",
+        "\"Check if I can connect to Zebrunner reporting\"",
+        "\"Verify my Zebrunner API access\""
+      ]
+    },
+    "adv_about_mcp_tools": {
+      "name": "adv_about_mcp_tools",
+      "description": "Discover and understand Zebrunner MCP capabilities — tools, prompts, resources, and session metrics.",
+      "category": "Project Discovery",
+      "examples": [
+        "\"Using Zebrunner MCP make a summary of all tools with examples\"",
+        "\"Using Zebrunner MCP give info for tool adv_analyze_test_execution_video with examples\"",
+        "\"Show detailed info for adv_get_bug_review including token usage estimation\"",
+        "\"What prompts are available in Zebrunner MCP?\"",
+        "\"What MCP resources are available?\"",
+        "\"Show me tool usage metrics for this session\"",
+        "Extract parameters from your question",
+        "Choose the right tool",
+        "Format the output appropriately",
+        "Project key: MCP",
+        "Launch ID: 120906",
+        "Test ID: 5455325",
+        "`string` (markdown) - Human-readable, default",
+        "`json` - Structured data",
+        "`dto` - Detailed structured object",
+        "`jira` - Ready-to-paste Jira tickets",
+        "**Installation Guide:** [INSTALL-GUIDE.md](INSTALL-GUIDE.md)",
+        "**Security Features:** [change-logs.md](change-logs.md#v5100---security-comprehensive-security-hardening-high--medium-severity-fixes)",
+        "**Changelog:** [change-logs.md](change-logs.md)",
+        "**Screenshot Analysis:** [docs/archive/SCREENSHOT_ANALYSIS.md](docs/archive/SCREENSHOT_ANALYSIS.md)"
+      ]
+    }
+  },
+  "roleBenefits": [
+    {
+      "role": "Manual QA",
+      "value": "Faster reviews, quality validation, improvement suggestions"
+    },
+    {
+      "role": "SDETs",
+      "value": "Code generation, automation assessment, coverage analysis"
+    },
+    {
+      "role": "Developers",
+      "value": "Faster failure investigation, clearer test requirements"
+    },
+    {
+      "role": "QA Managers",
+      "value": "Instant dashboards, duplicate detection, consistent metrics"
+    },
+    {
+      "role": "Leadership",
+      "value": "Release risk visibility, standardized reporting, trends"
+    }
+  ]
+}

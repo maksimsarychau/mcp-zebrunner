@@ -1,13 +1,19 @@
 import { describe, it } from "node:test";
 import { strict as assert } from "node:assert";
 import {
+  batchSourceLabel,
+  hasMeaningfulBatchContexts,
   hasMeaningfulChangeContext,
   matchesInfraKeyword,
+  mergeBatchChangeContexts,
   normalizeChangeContext,
   rankSearchPhrases,
+  MAX_BATCH_SEARCH_PHRASES,
 } from "../../src/utils/test-impact-normalizer.js";
 import { matchRootSuites } from "../../src/utils/test-impact-suite-matcher.js";
 import {
+  applyMultiSourceBoost,
+  collectBatchSources,
   scoreTestCase,
   scoreToConfidence,
   detectCoverageGaps,
@@ -45,6 +51,32 @@ describe("test-impact normalizer", () => {
   it("matches infra keywords on word boundaries", () => {
     assert.ok(matchesInfraKeyword("bottom nav changed", "bottom nav"));
     assert.equal(matchesInfraKeyword("tablet layout", "tab"), false);
+  });
+
+  it("merges change_batches with raised phrase cap", () => {
+    const batches = Array.from({ length: 5 }, (_, i) => ({
+      id: String(1000 + i),
+      behaviors: [`behavior ${i}`, "shared diary edit"],
+      keywords: [`keyword-${i}`],
+    }));
+    const merged = mergeBatchChangeContexts(batches);
+    assert.equal(merged.batchCount, 5);
+    assert.ok(merged.merged.searchPhrases.length <= MAX_BATCH_SEARCH_PHRASES);
+    assert.ok(merged.batchLabels.some((l) => l.startsWith("PR#")));
+  });
+
+  it("batchSourceLabel prefers label and parses PR URLs", () => {
+    assert.equal(batchSourceLabel({ label: "Diary fix" }, 0), "Diary fix");
+    assert.equal(
+      batchSourceLabel({ source_url: "https://github.com/o/r/pull/42" }, 1),
+      "PR#42",
+    );
+  });
+
+  it("hasMeaningfulBatchContexts requires at least one batch signal", () => {
+    assert.equal(hasMeaningfulBatchContexts(undefined), false);
+    assert.equal(hasMeaningfulBatchContexts([{}]), false);
+    assert.equal(hasMeaningfulBatchContexts([{ behaviors: ["edit food"] }]), true);
   });
 });
 
@@ -114,6 +146,29 @@ describe("test-impact scorer", () => {
     assert.equal(scoreToConfidence(0.5), "MEDIUM");
     assert.equal(scoreToConfidence(0.1), null);
   });
+
+  it("collectBatchSources tags matching PR batches", () => {
+    const ctx1 = normalizeChangeContext({
+      behaviors: ["edit logged food", "serving size"],
+    });
+    const ctx2 = normalizeChangeContext({ behaviors: ["meal planner tab"] });
+    const sources = collectBatchSources(
+      tc,
+      [
+        { id: "1", behaviors: ["edit logged food", "serving size"] },
+        { id: "2", behaviors: ["meal planner tab"] },
+      ],
+      [ctx1, ctx2],
+      [],
+      {},
+    );
+    assert.deepEqual(sources, ["PR#1"]);
+  });
+
+  it("applyMultiSourceBoost adds small boost for multi-PR hits", () => {
+    assert.equal(applyMultiSourceBoost(0.5, 1), 0.5);
+    assert.equal(applyMultiSourceBoost(0.5, 2), 0.55);
+  });
 });
 
 describe("test-impact project resolution", () => {
@@ -169,9 +224,14 @@ describe("test-impact hybrid output", () => {
       truncated: true,
       partialFailures: [],
       enrichNotFound: [],
+      sourceByKey: new Map([["K-0", ["PR#1", "PR#2"]]]),
+      batchSummary: { count: 2, labels: ["PR#1", "PR#2"] },
     });
     const total =
       out.regression.summary.automated + out.regression.summary.manual;
     assert.ok(total <= 5);
+    assert.equal(out.changeBatches?.count, 2);
+    const firstAuto = out.regression.byTheme.flatMap((g) => g.automated)[0];
+    assert.deepEqual(firstAuto?.sources, ["PR#1", "PR#2"]);
   });
 });

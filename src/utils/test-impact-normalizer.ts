@@ -1,8 +1,14 @@
 /** Minimum token length after normalization. */
 export const MIN_PHRASE_LENGTH = 3;
 
-/** Max title-search phrases per impact analysis call. */
+/** Max title-search phrases per single impact analysis call. */
 export const MAX_SEARCH_PHRASES = 8;
+
+/** Max title-search phrases when merging change_batches. */
+export const MAX_BATCH_SEARCH_PHRASES = 24;
+
+/** Max PR/change batches per call. */
+export const MAX_CHANGE_BATCHES = 20;
 
 const GENERIC_DEV_TERMS = new Set([
   "manager",
@@ -30,6 +36,20 @@ export interface ChangeContextInput {
   changed_symbols?: string[];
   changed_files?: string[];
   keywords?: string[];
+}
+
+/** One PR or change slice for batch impact analysis (client-derived metadata only). */
+export interface ChangeContextBatch extends ChangeContextInput {
+  id?: string;
+  label?: string;
+  source_url?: string;
+  merged_at?: string;
+}
+
+export interface MergedBatchContext {
+  merged: NormalizedChangeContext;
+  batchLabels: string[];
+  batchCount: number;
 }
 
 export interface NormalizedChangeContext {
@@ -88,7 +108,10 @@ function fileBaseName(path: string): string {
 }
 
 /** Rank and cap search phrases: behaviors > features > symbol-derived > keywords > summary tokens. */
-export function rankSearchPhrases(ctx: NormalizedChangeContext): string[] {
+export function rankSearchPhrases(
+  ctx: NormalizedChangeContext,
+  maxPhrases: number = MAX_SEARCH_PHRASES,
+): string[] {
   const scored: Array<{ phrase: string; score: number }> = [];
   const add = (phrase: string, score: number) => {
     const n = normalizePhrase(phrase);
@@ -120,12 +143,57 @@ export function rankSearchPhrases(ctx: NormalizedChangeContext): string[] {
     if (seen.has(phrase)) continue;
     seen.add(phrase);
     out.push(phrase);
-    if (out.length >= MAX_SEARCH_PHRASES) break;
+    if (out.length >= maxPhrases) break;
   }
   return out;
 }
 
-export function normalizeChangeContext(input: ChangeContextInput): NormalizedChangeContext {
+export function batchSourceLabel(batch: ChangeContextBatch, index: number): string {
+  if (batch.label?.trim()) return batch.label.trim();
+  if (batch.id?.trim()) {
+    const id = batch.id.trim();
+    return /^PR#/i.test(id) ? id : `PR#${id}`;
+  }
+  if (batch.source_url?.trim()) {
+    const m = batch.source_url.match(/\/pull\/(\d+)/i);
+    if (m) return `PR#${m[1]}`;
+    return batch.source_url.trim();
+  }
+  return `batch-${index + 1}`;
+}
+
+/** Merge multiple change batches into one normalized context for a single retrieval pass. */
+export function mergeBatchChangeContexts(
+  batches: ChangeContextBatch[],
+  maxPhrases: number = MAX_BATCH_SEARCH_PHRASES,
+): MergedBatchContext {
+  const capped = batches.slice(0, MAX_CHANGE_BATCHES);
+  const mergedInput: ChangeContextInput = {
+    change_summary: capped
+      .map((b) => b.change_summary?.trim())
+      .filter(Boolean)
+      .join("; "),
+    features: capped.flatMap((b) => b.features ?? []),
+    behaviors: capped.flatMap((b) => b.behaviors ?? []),
+    changed_symbols: capped.flatMap((b) => b.changed_symbols ?? []),
+    changed_files: capped.flatMap((b) => b.changed_files ?? []),
+    keywords: capped.flatMap((b) => b.keywords ?? []),
+  };
+
+  const merged = normalizeChangeContext(mergedInput);
+  merged.searchPhrases = rankSearchPhrases(merged, maxPhrases);
+
+  return {
+    merged,
+    batchLabels: capped.map((b, i) => batchSourceLabel(b, i)),
+    batchCount: capped.length,
+  };
+}
+
+export function normalizeChangeContext(
+  input: ChangeContextInput,
+  maxPhrases: number = MAX_SEARCH_PHRASES,
+): NormalizedChangeContext {
   const features = dedupeStrings(input.features ?? []);
   const behaviors = dedupeStrings(input.behaviors ?? []);
   const symbols = dedupeStrings(input.changed_symbols ?? []);
@@ -155,7 +223,7 @@ export function normalizeChangeContext(input: ChangeContextInput): NormalizedCha
     searchPhrases: [],
     allText: "",
   };
-  ctx.searchPhrases = rankSearchPhrases(ctx);
+  ctx.searchPhrases = rankSearchPhrases(ctx, maxPhrases);
   ctx.allText = [
     changeSummary,
     ...features,
@@ -181,6 +249,11 @@ export function hasMeaningfulChangeContext(input: ChangeContextInput): boolean {
     ...(input.keywords ?? []),
   ];
   return parts.some((p) => typeof p === "string" && p.trim().length >= MIN_PHRASE_LENGTH);
+}
+
+export function hasMeaningfulBatchContexts(batches: ChangeContextBatch[] | undefined): boolean {
+  if (!batches?.length) return false;
+  return batches.some((b) => hasMeaningfulChangeContext(b));
 }
 
 /** Word-boundary match for infra keyword detection. */

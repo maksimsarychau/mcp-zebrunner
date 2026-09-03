@@ -468,7 +468,7 @@ EVAL_SUITE=all npm run test:eval
 
 ### v9.2.8 eval changes — test impact routing
 
-Routing for **`adv_analyze_test_impact`** lives in `tests/eval/eval-test-impact-tools.ts` (**8 prompts**). Layers 1–2 only; scoring/output covered by `tests/unit/analyze-test-impact.test.ts`.
+Routing for **`adv_analyze_test_impact`** lives in `tests/eval/eval-test-impact-tools.ts` (**10 prompts**). Layers 1–2 only; scoring/output covered by `tests/unit/analyze-test-impact.test.ts`.
 
 | Prompt ID | Layer | What it checks |
 |-----------|-------|----------------|

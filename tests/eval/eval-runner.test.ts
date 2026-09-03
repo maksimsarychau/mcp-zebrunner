@@ -7,6 +7,7 @@ import {
   hasEvalLlmConfig,
   isLocalEvalEndpoint,
   getEvalConfigWarnings,
+  assertLocalEvalLlmReachable,
   type EvalConfig,
 } from "./eval-config.js";
 import { discoverEvalContext, type EvalDiscoveryContext } from "./eval-discovery.js";
@@ -164,9 +165,9 @@ describe("LLM Evaluation Tests", () => {
     for (const warning of getEvalConfigWarnings(config)) {
       evalSafeStderr(`⚠️  ${warning}`);
     }
-    console.error("");
 
-    // Discover real data from Zebrunner
+    await assertLocalEvalLlmReachable(config);
+    console.error("");
     ctx = await discoverEvalContext(config.layer);
 
     // Start the real MCP server and get tool schemas via tools/list

@@ -18,6 +18,7 @@ import {
   buildDailyQaStandupPrompt,
   buildAutomationGapsPrompt,
   buildTestImpactPrompt,
+  buildTestImpactPeriodPrompt,
   buildProjectOverviewPrompt,
   getPromptsCatalog,
   type PromptMeta,
@@ -45,7 +46,7 @@ describe("Prompt Registry Coverage", () => {
   const registeredPrompts = extractPromptRegistrations(promptSource);
 
   it("registers the expected number of prompts", () => {
-    assert.equal(registeredPrompts.length, 20, `Expected 20 prompts, got ${registeredPrompts.length}: ${registeredPrompts.join(", ")}`);
+    assert.equal(registeredPrompts.length, 21, `Expected 21 prompts, got ${registeredPrompts.length}: ${registeredPrompts.join(", ")}`);
   });
 
   it("has unique prompt names", () => {
@@ -67,6 +68,7 @@ describe("Prompt Registry Coverage", () => {
       "flaky-review",
       "find-duplicates",
       "test-impact",
+      "test-impact-period",
       "daily-qa-standup",
       "automation-gaps",
       "project-overview",
@@ -473,9 +475,44 @@ describe("Test Impact Prompt", () => {
     assert.ok(text.includes("gh pr view"));
   });
 
+  it("includes GitHub MCP resolver option", () => {
+    assert.ok(text.includes("GitHub MCP"));
+  });
+
   it("forbids suite_smart chain by default", () => {
     assert.ok(text.includes("adv_get_test_cases_by_suite_smart"));
     assert.ok(text.includes("Do NOT chain"));
+  });
+
+  it("documents change_batches for multiple PR URLs", () => {
+    const multi = buildTestImpactPrompt(
+      "PROJ2",
+      undefined,
+      undefined,
+      "https://github.com/org/repo/pull/1 https://github.com/org/repo/pull/2",
+    );
+    assert.ok(multi.includes("change_batches"));
+    assert.ok(multi.includes("PR URLs (2)"));
+  });
+});
+
+describe("Test Impact Period Prompt", () => {
+  const text = buildTestImpactPeriodPrompt(
+    "org/repo-android",
+    "2026-08-01",
+    "2026-08-21",
+    "merged",
+    "20",
+    "PROJ2",
+  );
+
+  it("references gh pr list and change_batches", () => {
+    assert.ok(text.includes("gh pr list"));
+    assert.ok(text.includes("change_batches"));
+  });
+
+  it("references adv_analyze_test_impact once", () => {
+    assert.ok(text.includes("adv_analyze_test_impact ONCE"));
   });
 });
 
@@ -484,8 +521,8 @@ describe("Test Impact Prompt", () => {
 describe("getPromptsCatalog()", () => {
   const catalog = getPromptsCatalog();
 
-  it("returns exactly 20 prompts matching registered count", () => {
-    assert.equal(catalog.length, 20);
+  it("returns exactly 21 prompts matching registered count", () => {
+    assert.equal(catalog.length, 21);
   });
 
   it("every entry has required fields", () => {
