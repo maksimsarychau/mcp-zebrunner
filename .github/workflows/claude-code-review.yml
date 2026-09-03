@@ -50,10 +50,17 @@ jobs:
             5. **Business Logic**: Identify edge cases not covered by tests, potential race conditions
             6. **MCP Compliance**: Ensure tool schemas match implementation, proper resource handling
 
-            **Exclude from review:**
+            **Exclude from review (skip reading):**
             - Files in `dist/` (compiled output)
             - Files in `node_modules/` (dependencies)
-            - Files in `tests/` (test files)
+            - Generated bundles: `src/generated/tool-intel-bundle.json`, `.integrity-signature`
+            - Pure doc-only changes unless they contradict code
+
+            **Efficiency (stay within turn budget):**
+            - Start with `gh pr view` and `gh pr diff` for overview — do NOT open every file individually
+            - Prioritize `src/`, `scripts/`, `.github/` over docs-only paths
+            - Limit inline comments to top HIGH/MEDIUM issues (max 8); put the rest in the summary
+            - Post the PR summary comment early, then add inline comments only if turns remain
 
             **Output:**
             - Always post a review summary comment on this PR (even if you also leave inline comments)
@@ -66,7 +73,7 @@ jobs:
             Provide a detailed but concise review with clear recommendations.
           claude_args: |
             --model claude-sonnet-5
-            --max-turns 20
+            --max-turns 50
             --disallowedTools WebSearch,WebFetch
 
       - name: Review Summary
