@@ -7,7 +7,7 @@
 # Usage (local single-arch): docker build -t msarychau/mcp-zebrunner:latest .
 # ══════════════════════════════════════════════════════════════════════════════
 
-ARG NODE_VERSION=20
+ARG NODE_VERSION=22
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Stage 1: Builder - Compile TypeScript and install dependencies
@@ -35,6 +35,11 @@ RUN npm ci
 COPY tsconfig.json ./
 COPY src/ ./src/
 COPY .integrity-signatur[e] ./
+
+# Inputs for npm run generate:tool-intel-bundle (part of npm run build)
+COPY scripts/generate-tool-intel-bundle.ts ./scripts/
+COPY tools.json TOOLS_CATALOG.md ./
+COPY docs/AI_MCP_BENEFITS.md ./docs/
 
 # Build TypeScript to JavaScript
 RUN npm run build
