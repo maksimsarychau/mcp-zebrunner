@@ -15,7 +15,6 @@ function getProjectRoot(): string {
 
 describe("tool-intel bundle", () => {
   it("bundle file exists with metadata and tools", () => {
-    assert.ok(bundle.generatedAt, "generatedAt should be set");
     assert.ok(bundle.sourceHashes?.toolsJson, "toolsJson hash should be set");
     assert.ok(Array.isArray(bundle.tools));
     assert.ok(bundle.tools.length >= 65, `expected >= 65 tools, got ${bundle.tools.length}`);

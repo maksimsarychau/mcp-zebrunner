@@ -53,10 +53,12 @@ coverage
 # ──────────────────────────────────────────────────────────────────────────────
 # Documentation
 # ──────────────────────────────────────────────────────────────────────────────
-docs
+docs/*
 *.md
 !README.md
 !mcp-zebrunner-rules.md.example
+!TOOLS_CATALOG.md
+!docs/AI_MCP_BENEFITS.md
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Docker files (no need to copy into build context)
@@ -70,7 +72,8 @@ custom-catalog.yaml
 # ──────────────────────────────────────────────────────────────────────────────
 # Scripts and utilities
 # ──────────────────────────────────────────────────────────────────────────────
-scripts
+scripts/*
+!scripts/generate-tool-intel-bundle.ts
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Logs and temp files

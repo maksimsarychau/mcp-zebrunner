@@ -7,7 +7,7 @@
 # Usage (local single-arch): docker build -t msarychau/mcp-zebrunner:latest .
 # ══════════════════════════════════════════════════════════════════════════════
 
-ARG NODE_VERSION=20
+ARG NODE_VERSION=22
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Stage 1: Builder - Compile TypeScript and install dependencies
@@ -36,6 +36,11 @@ COPY tsconfig.json ./
 COPY src/ ./src/
 COPY .integrity-signatur[e] ./
 
+# Inputs for npm run generate:tool-intel-bundle (part of npm run build)
+COPY scripts/generate-tool-intel-bundle.ts ./scripts/
+COPY tools.json TOOLS_CATALOG.md ./
+COPY docs/AI_MCP_BENEFITS.md ./docs/
+
 # Build TypeScript to JavaScript
 RUN npm run build
 
@@ -48,7 +53,7 @@ RUN npm prune --production
 FROM node:${NODE_VERSION}-alpine AS production
 
 # Labels for Docker Hub and container identification
-ARG APP_VERSION=9.1.0
+ARG APP_VERSION=9.3.0
 LABEL org.opencontainers.image.title="Zebrunner MCP Server"
 LABEL org.opencontainers.image.description="MCP server for Zebrunner TCM - test cases, suites, coverage analysis, launchers, and reporting"
 LABEL org.opencontainers.image.version="${APP_VERSION}"
