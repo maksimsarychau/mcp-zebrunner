@@ -45,7 +45,6 @@ function main(): void {
   }
 
   const bundle = {
-    generatedAt: new Date().toISOString(),
     sourceHashes: {
       toolsJson: sha256(toolsRaw),
       catalog: sha256(catalogRaw),
