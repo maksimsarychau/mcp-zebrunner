@@ -83,8 +83,13 @@ export const FIELD_HISTORY_EVAL_PROMPTS: EvalPrompt[] = [
     toolSection: "1. TCM — Field history (v9.4.0+)",
     promptTemplate:
       "How many test cases in {{project_key}} **currently** have Manual Only = Yes? Just the count of today's snapshot — " +
-      "do NOT use adv_find_field_history_changes (that tool is for audit transitions over time).",
-    expectedTools: ["adv_get_test_cases_advanced", "adv_get_test_case_by_filter"],
+      "use adv_get_test_case_distribution_by_field, adv_get_test_cases_advanced, or adv_get_test_case_by_filter — " +
+      "NOT adv_find_field_history_changes (that tool is for audit transitions over time).",
+    expectedTools: [
+      "adv_get_test_cases_advanced",
+      "adv_get_test_case_by_filter",
+      "adv_get_test_case_distribution_by_field",
+    ],
     forbiddenTools: ["adv_find_field_history_changes"],
     category: "negative",
     layer: 2,

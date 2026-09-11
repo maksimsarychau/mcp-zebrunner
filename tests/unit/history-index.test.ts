@@ -25,7 +25,7 @@ describe('history-index', () => {
     const rows = historyEntriesToIndexedChanges(
       {
         id: 112,
-        key: 'MFPAND-206',
+        key: 'MCP-206',
         title: 'Sample',
         testSuite: { id: 999, title: 'Suite' },
         automationState: { id: 1, name: 'Semi-Automated' },
@@ -38,7 +38,7 @@ describe('history-index', () => {
     const index: HistoryIndexData = {
       meta: {
         version: 1,
-        projectKey: 'MFPAND',
+        projectKey: 'MCP',
         projectId: 7,
         builtAt: '2026-09-11T00:00:00Z',
         lastIncrementalAt: '2026-09-11T00:00:00Z',
@@ -60,7 +60,7 @@ describe('history-index', () => {
     });
 
     assert.equal(result.matchCount, 1);
-    assert.equal(result.matches[0].key, 'MFPAND-206');
+    assert.equal(result.matches[0].key, 'MCP-206');
     assert.equal(result.matches[0].concurrentChanges.length, 1);
   });
 
@@ -68,7 +68,7 @@ describe('history-index', () => {
     const index: HistoryIndexData = {
       meta: {
         version: 1,
-        projectKey: 'MFPAND',
+        projectKey: 'MCP',
         projectId: 7,
         builtAt: '2026-09-11T00:00:00Z',
         lastIncrementalAt: '2026-09-11T00:00:00Z',

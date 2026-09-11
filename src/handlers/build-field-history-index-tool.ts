@@ -31,7 +31,7 @@ export function registerBuildFieldHistoryIndexTool(
         'Run repeatedly with continue_build=true until complete=true (chunked to avoid MCP timeouts). ' +
         `Storage: ${getHistoryIndexRoot()}/<projectKey>/index.json`,
       inputSchema: {
-        project_key: z.string().min(1).describe("Project key (e.g. 'MFPAND')"),
+        project_key: z.string().min(1).describe("Project key (e.g. 'MCP', 'android')"),
         max_cases_per_batch: z.number().int().positive().max(500).default(150).describe(
           'Cases to index per call (default 150 — tune for MCP timeout budget)',
         ),
