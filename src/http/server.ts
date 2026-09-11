@@ -19,14 +19,22 @@ function parsePositiveIntEnv(name: string, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
+/** Like parsePositiveIntEnv but allows 0 (e.g. MCP_HTTP_REQUEST_TIMEOUT_MS=0 → Node default, no socket cap). */
+function parseNonNegativeIntEnv(name: string, fallback: number): number {
+  const raw = process.env[name]?.trim();
+  if (!raw) return fallback;
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
+}
+
 /** MCP Streamable HTTP session sweep — extend via MCP_SESSION_IDLE_MS (default 30 min). */
 function sessionIdleMs(): number {
   return parsePositiveIntEnv('MCP_SESSION_IDLE_MS', DEFAULT_SESSION_IDLE_MS);
 }
 
-/** Node HTTP socket timeout for long tool calls (default 10 min). 0 = no limit. */
+/** Node HTTP socket inactivity timeout for long tool calls (default 30 min). 0 = no limit. */
 function httpRequestTimeoutMs(): number {
-  return parsePositiveIntEnv('MCP_HTTP_REQUEST_TIMEOUT_MS', 600_000);
+  return parseNonNegativeIntEnv('MCP_HTTP_REQUEST_TIMEOUT_MS', 1_800_000);
 }
 
 export interface HttpServerOptions {
