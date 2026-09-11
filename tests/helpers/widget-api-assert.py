@@ -116,6 +116,39 @@ def main() -> int:
         print("")
         return 0
 
+    if mode == "fields_manual_only_type":
+        fields = data.get("data", data)
+        if isinstance(fields, dict):
+            fields = fields.get("fields", [])
+        for f in fields or []:
+            if f.get("enabled") and str(f.get("name", "")).strip().lower() == "manual only":
+                print(str(f.get("type", "")).upper())
+                return 0
+        print("")
+        return 0
+
+    if mode == "fields_case_status_id":
+        fields = data.get("data", data)
+        if isinstance(fields, dict):
+            fields = fields.get("fields", [])
+        for f in fields or []:
+            if f.get("enabled") and str(f.get("name", "")).strip().lower() == "case status":
+                print(f.get("id", ""))
+                return 0
+        print("")
+        return 0
+
+    if mode == "fields_case_status_type":
+        fields = data.get("data", data)
+        if isinstance(fields, dict):
+            fields = fields.get("fields", [])
+        for f in fields or []:
+            if f.get("enabled") and str(f.get("name", "")).strip().lower() == "case status":
+                print(str(f.get("type", "")).upper())
+                return 0
+        print("")
+        return 0
+
     if mode == "suite_ids":
         items = data.get("items", data) if isinstance(data, dict) else data
         if not isinstance(items, list):

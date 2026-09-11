@@ -1,16 +1,21 @@
 # Change Logs
 
+## v9.4.1 — TCM history pagination + distribution field resolution
+
+### Fixed
+
+- **`history_limit: 100` → empty `history: []`** — TCM `/changes` rejects `maxPageSize=100`; `getTestCaseChanges()` now paginates at **20/page** with `pageToken`. Tool schema still accepts 1–100.
+- **`system_field: CASE_STATUS` distribution widget HTTP 500** — on custom-layout tenants where “Case Status” is a CUSTOM field (MFP projects), MCP resolves to `customFieldId` (same pattern as `MANUAL_ONLY`).
+- **`npm run test:api`** — R19 restores `$_BODY` after R19b/R19c probes; `TCM-DIST-CASE-STATUS` uses layout-resolved field id; `TCM-DIST-SYSTEM-MANUAL` documents expected raw-widget 500 on CUSTOM Manual Only.
+
+---
+
 ## v9.4.0 — Field history search tool
 
 ### Added
 
 - **`adv_find_field_history_changes`** — scan TCM audit history for field transitions (e.g. Manual Only Yes→No in date range). Internal pagination; returns `{ matches[], casesScanned, matchCount }` without full case payloads. Field aliases match distribution-by-field naming.
 - **Pagination audit extensions** — `P4-AUTOMATION` (NA+TBA token walks) in `tests/api-verify.sh`; automation/history/fields scenarios in `tests/mcp-pagination-audit.ts` (optional `ZEBRUNNER_AUDIT_TC_KEY` for H8 probe).
-
-### Notes
-
-- Option 2 (internal scan) shipped first; server-side history index deferred.
-- H8 (single-case `history: []`) — set `ZEBRUNNER_AUDIT_TC_KEY` on MCP audit to flag empty history vs R19.
 
 ---
 

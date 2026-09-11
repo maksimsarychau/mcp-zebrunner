@@ -804,13 +804,39 @@ export class ZebrunnerReportingClient {
 
   /**
    * Get TCM test case change history (audit log).
-   * Endpoint: GET /api/tcm/v1/test-cases/{testCaseId}/changes?projectId={projectId}&maxPageSize={maxPageSize}
+   * Endpoint: GET /api/tcm/v1/test-cases/{testCaseId}/changes?projectId={projectId}&maxPageSize={n}
+   *
+   * TCM rejects maxPageSize=100 (HTTP 400 → MCP showed history: []).
+   * Some tenants also reject values above ~20; cap each page and paginate with pageToken.
    */
-  async getTestCaseChanges(testCaseId: number, projectId: number, maxPageSize: number = 20): Promise<any> {
-    const url = `/api/tcm/v1/test-cases/${testCaseId}/changes?projectId=${projectId}&maxPageSize=${maxPageSize}`;
-    const response = await this.makeAuthenticatedRequest<any>('GET', url);
-    const data = response.data?.data || response.data || response;
-    return data;
+  static readonly TCM_CHANGES_MAX_PAGE_SIZE = 20;
+
+  async getTestCaseChanges(testCaseId: number, projectId: number, maxResults: number = 20): Promise<any> {
+    const target = Math.max(1, maxResults);
+    const collected: unknown[] = [];
+    let pageToken = '';
+
+    while (collected.length < target) {
+      const pageSize = Math.min(
+        ZebrunnerReportingClient.TCM_CHANGES_MAX_PAGE_SIZE,
+        target - collected.length,
+      );
+      let url = `/api/tcm/v1/test-cases/${testCaseId}/changes?projectId=${projectId}&maxPageSize=${pageSize}`;
+      if (pageToken) {
+        url += `&pageToken=${encodeURIComponent(pageToken)}`;
+      }
+      const response = await this.makeAuthenticatedRequest<any>('GET', url);
+      const data = response.data?.data || response.data || response;
+      const items: unknown[] = Array.isArray(data?.items) ? data.items : [];
+      collected.push(...items);
+      const next = data?._meta?.nextPageToken || data?.meta?.nextPageToken || '';
+      if (!next || items.length === 0) {
+        break;
+      }
+      pageToken = String(next);
+    }
+
+    return { items: collected.slice(0, target) };
   }
 
   /**

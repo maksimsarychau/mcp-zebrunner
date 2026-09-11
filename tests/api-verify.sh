@@ -554,6 +554,40 @@ tcm_widget_post() {
   fi
 }
 
+# Raw widget API with systemFieldDataType MANUAL_ONLY returns HTTP 500 on custom-layout tenants
+# where "Manual Only" is a CUSTOM field (MFPAND). MCP tool resolves to customFieldId instead.
+tcm_widget_post_system_manual_only() {
+  local label="$1"
+  local manual_field_type="${2:-}"
+  if [[ "$manual_field_type" == "CUSTOM" ]]; then
+    do_reporting_post "/api/tcm/v1/widgets/test-cases-distribution-by-field/content:get?projectId=$PROJECT_ID" \
+      '{"filters":{"field":{"systemFieldDataType":"MANUAL_ONLY"}}}'
+    if [[ "$_STATUS" == "500" ]]; then
+      log_pass "$label: HTTP 500 expected (Manual Only is CUSTOM — use customFieldId or adv_get_test_case_distribution_by_field)"
+    else
+      log_fail "$label" "CUSTOM Manual Only layout: expected HTTP 500 for raw systemFieldDataType MANUAL_ONLY, got HTTP $_STATUS"
+    fi
+  else
+    tcm_widget_post "$label" "test-cases-distribution-by-field" '{"field":{"systemFieldDataType":"MANUAL_ONLY"}}'
+  fi
+}
+
+# Case Status is CUSTOM on MFP projects — use customFieldId from fields-layout (MCP resolves the same way).
+tcm_widget_post_case_status() {
+  local label="$1"
+  local case_status_id="${2:-}"
+  local case_status_type="${3:-}"
+  if [[ -z "$case_status_id" ]]; then
+    log_skip "$label (no Case Status field in layout)"
+    return 0
+  fi
+  if [[ "$case_status_type" == "CUSTOM" ]]; then
+    tcm_widget_post "$label" "test-cases-distribution-by-field" "{\"field\":{\"customFieldId\":$case_status_id}}"
+  else
+    tcm_widget_post "$label" "test-cases-distribution-by-field" '{"field":{"systemFieldDataType":"CASE_STATUS"}}'
+  fi
+}
+
 # =====================================================================
 # STEP 1: AUTHENTICATION & PROJECT DISCOVERY
 # =====================================================================
@@ -750,12 +784,16 @@ run_project_tests() {
       log_section "$TEST_PROJECT — TCM distribution probes (pagination audit)"
       tcm_widget_post "TCM-DIST-AUTO" "test-cases-distribution-by-field" '{"field":{"systemFieldDataType":"AUTOMATION_STATE"}}'
       MANUAL_FIELD_ID=$(python3 "$WIDGET_ASSERT" fields_manual_only_id "$FIELDS_LAYOUT_BODY" 2>/dev/null || echo "")
+      local MANUAL_FIELD_TYPE=""
+      MANUAL_FIELD_TYPE=$(python3 "$WIDGET_ASSERT" fields_manual_only_type "$FIELDS_LAYOUT_BODY" 2>/dev/null || echo "")
       if [[ -n "$MANUAL_FIELD_ID" ]]; then
         tcm_widget_post "TCM-DIST-MANUAL" "test-cases-distribution-by-field" "{\"field\":{\"customFieldId\":$MANUAL_FIELD_ID}}"
-        tcm_widget_post "TCM-DIST-SYSTEM-MANUAL" "test-cases-distribution-by-field" '{"field":{"systemFieldDataType":"MANUAL_ONLY"}}'
+        tcm_widget_post_system_manual_only "TCM-DIST-SYSTEM-MANUAL" "$MANUAL_FIELD_TYPE"
       fi
-      tcm_widget_post "TCM-DIST-CASE-STATUS" "test-cases-distribution-by-field" '{"field":{"systemFieldDataType":"CASE_STATUS"}}' || \
-        log_fail "TCM-DIST-CASE-STATUS" "systemFieldDataType CASE_STATUS HTTP $_STATUS"
+      local CASE_STATUS_FIELD_ID="" CASE_STATUS_FIELD_TYPE=""
+      CASE_STATUS_FIELD_ID=$(python3 "$WIDGET_ASSERT" fields_case_status_id "$FIELDS_LAYOUT_BODY" 2>/dev/null || echo "")
+      CASE_STATUS_FIELD_TYPE=$(python3 "$WIDGET_ASSERT" fields_case_status_type "$FIELDS_LAYOUT_BODY" 2>/dev/null || echo "")
+      tcm_widget_post_case_status "TCM-DIST-CASE-STATUS" "$CASE_STATUS_FIELD_ID" "$CASE_STATUS_FIELD_TYPE"
     else
       log_skip "TCM distribution probes (no project ID)"
     fi
@@ -990,6 +1028,34 @@ try:
 except: print(0)
 " 2>/dev/null || echo "0")
     log_pass "Test case $TC_ID has $CHANGE_COUNT change history entry(ies)"
+
+    local R19_BODY="$_BODY"
+
+    # R19b: TCM rejects maxPageSize=100 (HTTP 400 listChanges.maxPageSize)
+    do_reporting_get "/api/tcm/v1/test-cases/$TC_ID/changes?projectId=$PROJECT_ID&maxPageSize=100"
+    if [[ "$_STATUS" == "200" ]]; then
+      local CHANGE_COUNT_100
+      CHANGE_COUNT_100=$(echo "$_BODY" | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    items = d.get('data',d).get('items', d.get('items',[]))
+    print(len(items))
+except: print(0)
+" 2>/dev/null || echo "0")
+      log_pass "R19b: maxPageSize=100 HTTP 200 ($CHANGE_COUNT_100 entries)"
+    else
+      log_pass "R19b: maxPageSize=100 HTTP $_STATUS (TCM rejects 100 — MCP paginates at 20/page)"
+    fi
+
+    do_reporting_get "/api/tcm/v1/test-cases/$TC_ID/changes?projectId=$PROJECT_ID&maxPageSize=20"
+    if [[ "$_STATUS" == "200" ]]; then
+      log_pass "R19c: maxPageSize=20 HTTP 200 (MCP pagination page size)"
+    else
+      log_fail "R19c" "maxPageSize=20 should succeed, got HTTP $_STATUS"
+    fi
+
+    _BODY="$R19_BODY"
 
     if [[ "$CHANGE_COUNT" -gt 0 ]]; then
       local CHANGE_DETAIL
@@ -1562,9 +1628,10 @@ print('yes' if 'items' in d or 'results' in d or isinstance(d, list) else 'no')
     tcm_widget_post "TCM-UPDATED" "test-cases-updated-by-user" '{"period":"Last 30 Days"}'
 
     if [[ -n "$FIELDS_LAYOUT_BODY" ]]; then
-      local BOOL_FIELD_ID MANUAL_FIELD_ID SUITE_IDS_JSON
+      local BOOL_FIELD_ID MANUAL_FIELD_ID MANUAL_FIELD_TYPE SUITE_IDS_JSON
       BOOL_FIELD_ID=$(python3 "$WIDGET_ASSERT" fields_boolean_id "$FIELDS_LAYOUT_BODY")
       MANUAL_FIELD_ID=$(python3 "$WIDGET_ASSERT" fields_manual_only_id "$FIELDS_LAYOUT_BODY")
+      MANUAL_FIELD_TYPE=$(python3 "$WIDGET_ASSERT" fields_manual_only_type "$FIELDS_LAYOUT_BODY")
       SUITE_IDS_JSON=$(python3 "$WIDGET_ASSERT" suite_ids "$P1_BODY" 2>/dev/null || echo "")
 
       if [[ -n "$BOOL_FIELD_ID" && -n "$SUITE_IDS_JSON" ]]; then
@@ -1575,13 +1642,15 @@ print('yes' if 'items' in d or 'results' in d or isinstance(d, list) else 'no')
 
       if [[ -n "$MANUAL_FIELD_ID" ]]; then
         tcm_widget_post "TCM-DIST-MANUAL" "test-cases-distribution-by-field" "{\"field\":{\"customFieldId\":$MANUAL_FIELD_ID}}"
-        tcm_widget_post "TCM-DIST-SYSTEM-MANUAL" "test-cases-distribution-by-field" '{"field":{"systemFieldDataType":"MANUAL_ONLY"}}'
+        tcm_widget_post_system_manual_only "TCM-DIST-SYSTEM-MANUAL" "$MANUAL_FIELD_TYPE"
       else
         log_skip "TCM-DIST-MANUAL (no Manual Only field)"
       fi
 
-      tcm_widget_post "TCM-DIST-CASE-STATUS" "test-cases-distribution-by-field" '{"field":{"systemFieldDataType":"CASE_STATUS"}}' || \
-        log_fail "TCM-DIST-CASE-STATUS" "systemFieldDataType CASE_STATUS HTTP $_STATUS"
+      local CASE_STATUS_FIELD_ID="" CASE_STATUS_FIELD_TYPE=""
+      CASE_STATUS_FIELD_ID=$(python3 "$WIDGET_ASSERT" fields_case_status_id "$FIELDS_LAYOUT_BODY" 2>/dev/null || echo "")
+      CASE_STATUS_FIELD_TYPE=$(python3 "$WIDGET_ASSERT" fields_case_status_type "$FIELDS_LAYOUT_BODY" 2>/dev/null || echo "")
+      tcm_widget_post_case_status "TCM-DIST-CASE-STATUS" "$CASE_STATUS_FIELD_ID" "$CASE_STATUS_FIELD_TYPE"
     else
       log_skip "TCM-DIST-CUSTOM/MANUAL (no fields-layout body)"
     fi

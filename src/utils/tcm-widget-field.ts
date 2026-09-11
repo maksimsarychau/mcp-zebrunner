@@ -100,6 +100,17 @@ export function resolveDistributionField(
         };
       }
     }
+    if (input.system_field === 'CASE_STATUS') {
+      const caseStatus = findCaseStatusField(fieldsLayout);
+      if (caseStatus?.type === 'CUSTOM') {
+        return {
+          filter: { field: { customFieldId: caseStatus.id } },
+          fieldLabel: caseStatus.name,
+          fieldType: 'custom',
+          customFieldId: caseStatus.id,
+        };
+      }
+    }
 
     const match = fieldsLayout.fields.find(f => systemDataTypeFromField(f) === input.system_field);
     return {
@@ -128,6 +139,17 @@ export function resolveDistributionField(
           fieldLabel: manualOnly.name,
           fieldType: 'custom',
           customFieldId: manualOnly.id,
+        };
+      }
+    }
+    if (systemType === 'CASE_STATUS') {
+      const caseStatus = findCaseStatusField(fieldsLayout);
+      if (caseStatus?.type === 'CUSTOM') {
+        return {
+          filter: { field: { customFieldId: caseStatus.id } },
+          fieldLabel: caseStatus.name,
+          fieldType: 'custom',
+          customFieldId: caseStatus.id,
         };
       }
     }
@@ -199,5 +221,12 @@ export function findFirstBooleanCustomField(fieldsLayout: FieldsLayout): FieldLa
 export function findManualOnlyField(fieldsLayout: FieldsLayout): FieldLayoutItem | undefined {
   return fieldsLayout.fields.find(
     f => f.enabled && f.name.trim().toLowerCase() === 'manual only',
+  );
+}
+
+/** Field named "Case Status" (case-insensitive). */
+export function findCaseStatusField(fieldsLayout: FieldsLayout): FieldLayoutItem | undefined {
+  return fieldsLayout.fields.find(
+    f => f.enabled && f.name.trim().toLowerCase() === 'case status',
   );
 }
