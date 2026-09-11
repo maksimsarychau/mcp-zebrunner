@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { describe, it, before, after } from 'node:test';
+import { describe, it, before, after, type TestContext } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { existsSync } from 'fs';
 import { spawn, type ChildProcess } from 'child_process';
@@ -68,7 +68,7 @@ describe('Zebrunner MCP Server E2E Tests', () => {
   let serverProcess: ChildProcess;
   let serverReady = false;
 
-  before(async function() {
+  before(async function (this: TestContext) {
     if (!hasRealCredentials) {
       console.log('⚠️  Skipping E2E tests - no real credentials available');
       this.skip();
@@ -96,7 +96,7 @@ describe('Zebrunner MCP Server E2E Tests', () => {
   });
 
   describe('Server Initialization (requires credentials)', () => {
-    it('should start server successfully', function() {
+    it('should start server successfully', function (this: TestContext) {
       if (!hasRealCredentials) {
         this.skip();
         return;
@@ -106,7 +106,7 @@ describe('Zebrunner MCP Server E2E Tests', () => {
   });
 
   describe('Core Working Tools (requires credentials)', () => {
-    it('should list test suites for MCP project', function() {
+    it('should list test suites for MCP project', function (this: TestContext) {
       if (!hasRealCredentials) {
         this.skip();
         return;
@@ -116,7 +116,7 @@ describe('Zebrunner MCP Server E2E Tests', () => {
       assert.ok(serverReady, 'Server should be ready for tool calls');
     });
 
-    it('should get test case by key MCP-2', function() {
+    it('should get test case by key MCP-2', function (this: TestContext) {
       if (!hasRealCredentials) {
         this.skip();
         return;
@@ -125,7 +125,7 @@ describe('Zebrunner MCP Server E2E Tests', () => {
       assert.ok(serverReady, 'Server should be ready for tool calls');
     });
 
-    it('should get test case in markdown format', function() {
+    it('should get test case in markdown format', function (this: TestContext) {
       if (!hasRealCredentials) {
         this.skip();
         return;
@@ -136,7 +136,7 @@ describe('Zebrunner MCP Server E2E Tests', () => {
   });
 
   describe('Enhanced Features (requires credentials)', () => {
-    it('should get advanced test cases with pagination', function() {
+    it('should get advanced test cases with pagination', function (this: TestContext) {
       if (!hasRealCredentials) {
         this.skip();
         return;
@@ -144,7 +144,7 @@ describe('Zebrunner MCP Server E2E Tests', () => {
       assert.ok(serverReady, 'Server should be ready for enhanced features');
     });
 
-    it('should build suite hierarchy', function() {
+    it('should build suite hierarchy', function (this: TestContext) {
       if (!hasRealCredentials) {
         this.skip();
         return;
@@ -152,7 +152,7 @@ describe('Zebrunner MCP Server E2E Tests', () => {
       assert.ok(serverReady, 'Server should be ready for hierarchy building');
     });
 
-    it('should handle string format output', function() {
+    it('should handle string format output', function (this: TestContext) {
       if (!hasRealCredentials) {
         this.skip();
         return;
@@ -162,7 +162,7 @@ describe('Zebrunner MCP Server E2E Tests', () => {
   });
 
   describe('Error Handling (requires credentials)', () => {
-    it('should handle invalid project key gracefully', function() {
+    it('should handle invalid project key gracefully', function (this: TestContext) {
       if (!hasRealCredentials) {
         this.skip();
         return;
@@ -170,7 +170,7 @@ describe('Zebrunner MCP Server E2E Tests', () => {
       assert.ok(serverReady, 'Server should be ready for error handling');
     });
 
-    it('should handle missing required parameters', function() {
+    it('should handle missing required parameters', function (this: TestContext) {
       if (!hasRealCredentials) {
         this.skip();
         return;
@@ -178,7 +178,7 @@ describe('Zebrunner MCP Server E2E Tests', () => {
       assert.ok(serverReady, 'Server should be ready for parameter validation');
     });
 
-    it('should handle non-existent test case', function() {
+    it('should handle non-existent test case', function (this: TestContext) {
       if (!hasRealCredentials) {
         this.skip();
         return;
@@ -188,7 +188,7 @@ describe('Zebrunner MCP Server E2E Tests', () => {
   });
 
   describe('Tool Discovery (requires credentials)', () => {
-    it('should list available tools', function() {
+    it('should list available tools', function (this: TestContext) {
       if (!hasRealCredentials) {
         this.skip();
         return;
@@ -196,7 +196,7 @@ describe('Zebrunner MCP Server E2E Tests', () => {
       assert.ok(serverReady, 'Server should be ready for tool discovery');
     });
 
-    it('should provide tool descriptions and schemas', function() {
+    it('should provide tool descriptions and schemas', function (this: TestContext) {
       if (!hasRealCredentials) {
         this.skip();
         return;
@@ -206,7 +206,7 @@ describe('Zebrunner MCP Server E2E Tests', () => {
   });
 
   describe('Performance (requires credentials)', () => {
-    it('should handle multiple concurrent requests', function() {
+    it('should handle multiple concurrent requests', function (this: TestContext) {
       if (!hasRealCredentials) {
         this.skip();
         return;
@@ -214,7 +214,7 @@ describe('Zebrunner MCP Server E2E Tests', () => {
       assert.ok(serverReady, 'Server should be ready for concurrent requests');
     });
 
-    it('should respond within reasonable time', function() {
+    it('should respond within reasonable time', function (this: TestContext) {
       if (!hasRealCredentials) {
         this.skip();
         return;

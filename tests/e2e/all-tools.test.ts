@@ -1,4 +1,4 @@
-import { describe, it, before } from 'node:test';
+import { describe, it, before, type TestContext } from 'node:test';
 import { strict as assert } from 'node:assert';
 import 'dotenv/config';
 
@@ -31,7 +31,7 @@ const EXPECTED_ROOT_SUITES_COUNT = 1; // MCP project has 1 root suite
 
 describe('All MCP Tools E2E Tests', () => {
   
-  before(function() {
+  before(function (this: TestContext) {
     const requiredEnvVars = ['ZEBRUNNER_URL', 'ZEBRUNNER_LOGIN', 'ZEBRUNNER_TOKEN'];
     const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
     
