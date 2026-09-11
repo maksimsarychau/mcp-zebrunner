@@ -3,6 +3,7 @@ import { strict as assert } from 'node:assert';
 import type { FieldsLayout } from '../../src/api/reporting-client.js';
 import {
   expandSuiteIds,
+  findCaseStatusField,
   findFirstBooleanCustomField,
   findManualOnlyField,
   resolveDistributionField,
@@ -14,10 +15,23 @@ const layout: FieldsLayout = {
     { id: 1, type: 'SYSTEM', tabId: null, relativePosition: 0, name: 'Automation State', enabled: true, dataType: 'AUTOMATION_STATE', description: null },
     { id: 38, type: 'CUSTOM', tabId: 1, relativePosition: 1, name: 'Is Automated', enabled: true, dataType: 'boolean', description: null },
     { id: 99, type: 'CUSTOM', tabId: 1, relativePosition: 2, name: 'Manual Only', enabled: true, dataType: 'boolean', description: null },
+    { id: 77, type: 'CUSTOM', tabId: 1, relativePosition: 3, name: 'Case Status', enabled: true, dataType: 'string', description: null },
   ],
 };
 
 describe('tcm-widget-field', () => {
+  it('resolves system_field MANUAL_ONLY to custom id on custom layouts', () => {
+    const r = resolveDistributionField({ system_field: 'MANUAL_ONLY' }, layout);
+    assert.deepEqual(r.filter, { field: { customFieldId: 99 } });
+    assert.equal(r.fieldType, 'custom');
+  });
+
+  it('resolves system_field CASE_STATUS to custom id on custom layouts', () => {
+    const r = resolveDistributionField({ system_field: 'CASE_STATUS' }, layout);
+    assert.deepEqual(r.filter, { field: { customFieldId: 77 } });
+    assert.equal(r.fieldType, 'custom');
+  });
+
   it('resolves system_field enum', () => {
     const r = resolveDistributionField({ system_field: 'AUTOMATION_STATE' }, layout);
     assert.deepEqual(r.filter, { field: { systemFieldDataType: 'AUTOMATION_STATE' } });
@@ -59,8 +73,9 @@ describe('tcm-widget-field', () => {
     assert.ok(ids.includes(3));
   });
 
-  it('finds boolean custom field and Manual Only', () => {
+  it('finds boolean custom field, Manual Only, and Case Status', () => {
     assert.equal(findFirstBooleanCustomField(layout)?.id, 38);
     assert.equal(findManualOnlyField(layout)?.id, 99);
+    assert.equal(findCaseStatusField(layout)?.id, 77);
   });
 });

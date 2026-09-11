@@ -39,7 +39,7 @@ export interface ZebrunnerDefaults {
  */
 export const DEFAULT_CONFIG: ZebrunnerDefaults = {
   // Core API settings
-  timeout: 60_000, // 60 seconds (configurable via TIMEOUT env var)
+  timeout: 180_000, // 3 minutes (configurable via TIMEOUT env var)
   retryAttempts: 3,
   retryDelay: 1000, // 1 second
   

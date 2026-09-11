@@ -36,6 +36,14 @@
     "description": "Analyze which Zebrunner test cases may be affected by production code changes. Pass compact semantic change context (features, behaviors, symbols, keywords) — not raw git diffs. Returns regression candidates by theme (automated vs manual), potential coverage gaps, and optional smoke-suite recommendations."
   },
   {
+    "name": "adv_find_field_history_changes",
+    "description": "Find test cases whose TCM change history matches a field transition in a date range. Returns only matching change events (key, timestamp, old/new values, concurrentChanges) — not full case payloads. Field aliases match distribution-by-field (Manual Only, automationState, customField.manualOnly). Uses local history index when built (adv_build_field_history_index)."
+  },
+  {
+    "name": "adv_build_field_history_index",
+    "description": "Build or refresh the local TCM field-history index for a project. Run in batches until complete=true; then adv_find_field_history_changes queries in milliseconds. Stored under ~/.mcp-zebrunner/history-index/."
+  },
+  {
     "name": "adv_batch_get_test_cases",
     "description": "Fetch multiple test cases by key in one call (partial success). Use detail=summary and format=compact for token-efficient shortlists."
   },

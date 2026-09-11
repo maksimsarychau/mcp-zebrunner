@@ -132,16 +132,17 @@ describe('Mode 3: Self-Service OAuth — JWT lifecycle', () => {
   it('recovered mcp_* client after cold start has redirect URIs for major MCP hosts', async () => {
     const recovered = await provider.clientsStore.getClient('mcp_notindcrmap00001');
     assert.ok(recovered);
+    const redirectUris: string[] = recovered!.redirect_uris;
     assert.ok(
-      recovered!.redirect_uris.some((u) => u.endsWith('/oauth/callback')),
+      redirectUris.some((u) => u.endsWith('/oauth/callback')),
       'Claude mcp-remote uses /oauth/callback on loopback',
     );
     assert.ok(
-      recovered!.redirect_uris.some((u) => u.endsWith('/callback') && !u.includes('oauth')),
+      redirectUris.some((u) => u.endsWith('/callback') && !u.includes('oauth')),
       'Claude Code uses /callback on loopback',
     );
     assert.ok(
-      recovered!.redirect_uris.includes('cursor://anysphere.cursor-mcp/oauth/callback'),
+      redirectUris.includes('cursor://anysphere.cursor-mcp/oauth/callback'),
       'Cursor native MCP OAuth',
     );
   });

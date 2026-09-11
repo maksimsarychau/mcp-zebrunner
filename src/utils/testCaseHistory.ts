@@ -318,10 +318,12 @@ function parseChangeItem(
     }
 
     const fieldName = `customField.${systemName ?? 'unknown'}`;
+    const oldRaw = item.oldValue?.value ?? item.oldValue;
+    const newRaw = item.newValue?.value ?? item.newValue;
     changes.push({
       field: fieldName,
-      oldValue: stringifyValue(item.oldValue?.value),
-      newValue: stringifyValue(item.newValue?.value),
+      oldValue: stringifyCustomFieldValue(oldRaw),
+      newValue: stringifyCustomFieldValue(newRaw),
     });
     return { changes, events };
   }
@@ -329,11 +331,25 @@ function parseChangeItem(
   // All other scalar fields
   changes.push({
     field: item.field,
-    oldValue: stringifyValue(item.oldValue),
-    newValue: stringifyValue(item.newValue),
+    oldValue: stringifyCustomFieldValue(item.oldValue),
+    newValue: stringifyCustomFieldValue(item.newValue),
   });
 
   return { changes, events };
+}
+
+/** Resolve custom-field audit values (Yes/No, booleans, id:name objects). */
+function stringifyCustomFieldValue(v: any): string {
+  if (v === null || v === undefined) return '';
+  if (typeof v === 'boolean') return String(v);
+  if (typeof v === 'number') return String(v);
+  if (typeof v === 'string') return v;
+  if (typeof v === 'object') {
+    if (v.name != null && typeof v.name === 'string') return v.name;
+    if (v.value !== undefined) return stringifyCustomFieldValue(v.value);
+    if (v.id != null && v.label != null) return String(v.label);
+  }
+  return stringifyValue(v);
 }
 
 function stringifyValue(v: any): string {
@@ -379,7 +395,10 @@ function parseChangeEntry(
 const STEP_FIELDS = new Set(['steps', 'preConditions', 'postConditions', 'deprecated', 'automationState']);
 
 function filterEntry(entry: HistoryEntry, filter: HistoryFilter): HistoryEntry | null {
-  if (filter === 'all') return entry;
+  if (filter === 'all') {
+    if (entry.changes.length === 0 && entry.events.length === 0) return null;
+    return entry;
+  }
 
   if (filter === 'steps_only') {
     const filteredChanges = entry.changes.filter(c => STEP_FIELDS.has(c.field));
@@ -416,6 +435,22 @@ function buildUserMap(cases: any[]): Map<number, string> {
 // Fetch + parse for a single test case
 // ---------------------------------------------------------------------------
 
+/** Normalize TCM `/changes` payloads (items may be nested or keyed differently per tenant). */
+export function extractChangeHistoryItems(raw: unknown): RawChangeEntry[] {
+  if (raw == null) return [];
+  if (Array.isArray(raw)) return raw as RawChangeEntry[];
+
+  if (typeof raw === 'object') {
+    const obj = raw as Record<string, unknown>;
+    if (Array.isArray(obj.items)) return obj.items as RawChangeEntry[];
+    if (Array.isArray(obj.content)) return obj.content as RawChangeEntry[];
+    if (Array.isArray(obj.changes)) return obj.changes as RawChangeEntry[];
+    if (obj.data != null) return extractChangeHistoryItems(obj.data);
+  }
+
+  return [];
+}
+
 async function fetchAndParseHistory(
   reportingClient: any,
   caseId: number,
@@ -426,12 +461,44 @@ async function fetchAndParseHistory(
   userMap: Map<number, string>
 ): Promise<HistoryEntry[]> {
   const raw = await reportingClient.getTestCaseChanges(caseId, projectId, maxResults);
-  const items: RawChangeEntry[] = raw?.items ?? raw ?? [];
+  const items = extractChangeHistoryItems(raw);
+  return parseRawChangeEntries(items, statesMap, userMap, filter);
+}
 
+/** Fetch and parse full audit history for one case (used by history index builder). */
+export async function fetchParsedCaseHistory(
+  reportingClient: { getTestCaseChanges: (id: number, pid: number, max: number) => Promise<unknown> },
+  testCase: {
+    id: number;
+    createdBy?: { id?: number; username?: string | null };
+    lastModifiedBy?: { id?: number; username?: string | null };
+  },
+  projectId: number,
+  statesMap: AutomationStatesMap,
+  maxResults: number,
+): Promise<HistoryEntry[]> {
+  const userMap = buildUserMap([testCase]);
+  return fetchAndParseHistory(
+    reportingClient,
+    testCase.id,
+    projectId,
+    'all',
+    maxResults,
+    statesMap,
+    userMap,
+  );
+}
+
+/** Parse TCM audit-log items (exported for unit tests). */
+export function parseRawChangeEntries(
+  items: RawChangeEntry[],
+  statesMap: AutomationStatesMap,
+  userMap: Map<number, string>,
+  filter: HistoryFilter,
+): HistoryEntry[] {
   const entries: HistoryEntry[] = [];
   for (const rawEntry of items) {
-    if (rawEntry.type === 'LAYOUT_UPDATE') continue;
-
+    // LAYOUT_UPDATE rows carry custom-field and automation-state deltas on many tenants (custom Manual Only layouts).
     const parsed = parseChangeEntry(rawEntry, statesMap, userMap);
     const filtered = filterEntry(parsed, filter);
     if (filtered) entries.push(filtered);

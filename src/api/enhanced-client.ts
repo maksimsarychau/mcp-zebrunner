@@ -10,6 +10,7 @@ import {
   ZebrunnerNotFoundError,
   ZebrunnerRateLimitError
 } from "../types/api.js";
+import { fetchAllTestCasePages } from "../utils/test-case-pagination.js";
 import {
   ZebrunnerTestCase,
   ZebrunnerShortTestCase,
@@ -1495,50 +1496,23 @@ export class EnhancedZebrunnerClient {
    * Get all test cases with filter support using working pagination
    */
   async getAllTestCases(projectKey: string, options: any = {}): Promise<ZebrunnerShortTestCase[]> {
-    const allItems: ZebrunnerShortTestCase[] = [];
-    const seenIds = new Set<number>(); // Track seen IDs to avoid duplicates
-    let page = 0;
-    let hasMore = true;
+    const pageSize = Math.min(this.config.maxPageSize || 100, 100);
+    const result = await fetchAllTestCasePages({
+      pageSize,
+      maxPages: 100,
+      dedupeById: true,
+      debugLog: this.config.debug
+        ? (message, data) => console.error(`📄 [getAllTestCases] ${message}`, data ?? '')
+        : undefined,
+      fetchPage: (pageToken, size) =>
+        this.getTestCases(projectKey, { ...options, pageToken, size }),
+    });
 
-    while (hasMore) {
-      const response = await this.getTestCases(projectKey, { 
-        ...options, 
-        page, 
-        size: this.config.maxPageSize || 100
-      });
-      
-      // Filter out duplicates and add only new items
-      const newItems = response.items.filter((item: any) => {
-        if (seenIds.has(item.id)) {
-          return false; // Skip duplicates
-        }
-        seenIds.add(item.id);
-        return true;
-      });
-      
-      allItems.push(...newItems);
-      
-      // Stop if response is empty OR there's no _meta section OR no nextPageToken in _meta
-      // OR if we got no new items (all were duplicates)
-      hasMore = response.items.length > 0 && 
-                !!response._meta && 
-                !!response._meta.nextPageToken &&
-                newItems.length > 0;
-      page++;
-
-      if (this.config.debug) {
-        console.error(`📄 [getAllTestCases] Page ${page}: ${response.items.length} items, ${newItems.length} new (total: ${allItems.length})`);
-        console.error(`📄 [getAllTestCases] _meta exists: ${!!response._meta}, nextPageToken: ${response._meta?.nextPageToken ? 'Available' : 'None'} - hasMore: ${hasMore}`);
-      }
-
-      // Safety check to prevent infinite loops
-      if (page > 100) {
-        console.error('⚠️ [getAllTestCases] Stopped after 100 pages to prevent infinite loop');
-        break;
-      }
+    if (result.hasMorePages && this.config.debug) {
+      console.error(`⚠️ [getAllTestCases] Stopped after ${result.pagesTraversed} pages (${result.stoppedReason})`);
     }
 
-    return allItems;
+    return result.items;
   }
 
 

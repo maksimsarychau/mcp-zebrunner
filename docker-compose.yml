@@ -39,6 +39,7 @@ services:
       MAX_PAGE_SIZE: ${MAX_PAGE_SIZE:-100}
       DEFAULT_PAGE_SIZE: ${DEFAULT_PAGE_SIZE:-10}
       ENABLE_RULES_ENGINE: ${ENABLE_RULES_ENGINE:-false}
+      TIMEOUT: ${TIMEOUT:-180000}
 
       # Node.js settings
       NODE_ENV: production

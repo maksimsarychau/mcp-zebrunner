@@ -5,7 +5,9 @@ A **Model Context Protocol (MCP)** server that brings advanced analytics, report
 
 > Tool naming: every tool on this server is registered under the canonical `adv_<name>` form (e.g. `adv_create_test_case`, `adv_list_test_runs`) so it never collides with the official Zebrunner MCP. The legacy names are kept as **deprecated aliases** so prompts/scripts that called the old names continue to work for now; aliases will be removed in the next major release. 
 
-> 🆕 **v9.3.0** — Multi-PR / period test impact: `change_batches[]`, `/test-impact-period`, extended `/test-impact`. See [TEST_IMPACT_WORKFLOW.md](docs/TEST_IMPACT_WORKFLOW.md) and [TEST_IMPACT_PR_PERIOD_DESIGN.md](docs/TEST_IMPACT_PR_PERIOD_DESIGN.md).
+> 🆕 **v9.3.1** — TCM pagination fixes: correct `get_all` token walks, `root_suite_id` subtree scoping, honest bulk metadata. See [PUBLIC_API_PAGINATION.md](docs/PUBLIC_API_PAGINATION.md) and [change-logs.md](change-logs.md#v931--tcm-pagination-correctness-and-honest-bulk-metadata).
+>
+> **v9.3.0** — Multi-PR / period test impact: `change_batches[]`, `/test-impact-period`, extended `/test-impact`. See [TEST_IMPACT_WORKFLOW.md](docs/TEST_IMPACT_WORKFLOW.md) and [TEST_IMPACT_PR_PERIOD_DESIGN.md](docs/TEST_IMPACT_PR_PERIOD_DESIGN.md).
 >
 > 🆕 **v9.2.7** — New `adv_scaffold_test_case` wizard (hybrid form/conversational) to author test cases from best practices with an automatic warn-only similar-case check, plus configurable `projectAliases` in `zebrunner-config.json`. See [release notes](docs/releases/v9.2.7.md).
 >

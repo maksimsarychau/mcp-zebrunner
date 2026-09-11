@@ -1,6 +1,6 @@
 {
   "sourceHashes": {
-    "toolsJson": "cb800b58e7571a74",
+    "toolsJson": "d43c4242b70cb265",
     "catalog": "ce053e397703d598",
     "benefits": "1c7370f3df9e2d38"
   },
@@ -111,6 +111,18 @@
       "name": "adv_analyze_test_impact",
       "description": "[Advanced Zebrunner MCP] Discover and rank Zebrunner test cases likely affected by production-code changes. Accepts compact semantic change context (features, behaviors, symbols, keywords) — **not** raw git diffs. Returns regression candidates by theme (automated vs manual, confidence), potential coverage gaps, optional smoke-suite recommendations, and scoping notes.",
       "category": "Test Impact Analysis *(v9.2.8)*",
+      "examples": []
+    },
+    {
+      "name": "adv_find_field_history_changes",
+      "description": "[Advanced Zebrunner MCP] Find test cases whose TCM change history matches a field transition in a date range. Returns only matching change events (key, timestamp, old/new values, concurrentChanges) — not full case payloads. Field aliases match distribution-by-field (Manual Only, automationState, customField.manualOnly). Uses local history index when built (adv_build_field_history_index).",
+      "category": null,
+      "examples": []
+    },
+    {
+      "name": "adv_build_field_history_index",
+      "description": "[Advanced Zebrunner MCP] Build or refresh the local TCM field-history index for a project. Run in batches until complete=true; then adv_find_field_history_changes queries in milliseconds. Stored under ~/.mcp-zebrunner/history-index/.",
+      "category": null,
       "examples": []
     },
     {

@@ -1,8 +1,5 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
-import { ZebrunnerReportingClient } from '../../dist/api/reporting-client.js';
-import { ZebrunnerReportingError } from '../../dist/types/reporting.js';
-import { EnhancedZebrunnerClient } from '../../dist/api/enhanced-client.js';
 
 describe('Automation State Tools', () => {
   let mockReportingClient: any;
@@ -281,7 +278,9 @@ describe('Automation State Tools', () => {
       });
       
       assert.strictEqual(result.items.length, 2);
-      const stateNames = result.items.map(item => item.automationState.name);
+      const stateNames = result.items.map(
+        (item: { automationState: { name: string } }) => item.automationState.name,
+      );
       assert(stateNames.includes('Not Automated'));
       assert(stateNames.includes('Automated'));
     });

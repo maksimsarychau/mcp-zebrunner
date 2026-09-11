@@ -13,7 +13,13 @@
 #
 # Coverage: 29 unique endpoint patterns across Public API, Reporting API, and Widget SQL.
 #
-# Usage: ./tests/api-verify.sh [--verbose] [--widget-catalog-audit]
+# Usage: ./tests/api-verify.sh [--verbose] [--widget-catalog-audit] [--pagination-audit]
+#
+# Optional env:
+#   ZEBRUNNER_VERIFY_PROJECTS=MCP,STARRED  — override starred project list
+#   ZEBRUNNER_PAGINATION_SUITE_ID=<id>     — suite for filter/root probes
+#   ZEBRUNNER_PAGINATION_ROOT_SUITE_ID=<id>
+#   ZEBRUNNER_AUDIT_TC_KEY=<caseKey>       — MCP audit H8 history probe (optional)
 #
 set -euo pipefail
 
@@ -21,13 +27,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 ENV_FILE="$ROOT_DIR/.env"
 WIDGET_ASSERT="$SCRIPT_DIR/helpers/widget-api-assert.py"
+PAGINATION_WALK="$SCRIPT_DIR/helpers/pagination-walk.py"
 
 VERBOSE=false
 WIDGET_CATALOG_AUDIT=false
+PAGINATION_AUDIT=false
 for arg in "$@"; do
   case "$arg" in
     --verbose) VERBOSE=true ;;
     --widget-catalog-audit) WIDGET_CATALOG_AUDIT=true ;;
+    --pagination-audit) PAGINATION_AUDIT=true ;;
   esac
 done
 
@@ -214,6 +223,230 @@ check_status() {
   debug "$(echo "$_BODY" | head -c 300)"
 }
 
+# ---------- pagination audit helpers (P-series) ----------
+
+pagination_page_meta() {
+  echo "$1" | python3 "$PAGINATION_WALK" page_meta
+}
+
+pagination_collect_ids_to_file() {
+  echo "$1" | python3 "$PAGINATION_WALK" ids >> "$2"
+}
+
+pagination_token_walk() {
+  local label="$1"
+  local query_suffix="${2:-}"
+  local max_pages="${3:-150}"
+  local token=""
+  local page_num=0
+  local total_items=0
+  local total_bytes=0
+  local max_page_bytes=0
+  local fat_pages=0
+  local ids_file
+  ids_file=$(mktemp)
+
+  while [[ $page_num -lt $max_pages ]]; do
+    local url="/test-cases?projectKey=$TEST_PROJECT&maxPageSize=100${query_suffix}"
+    [[ -n "$token" ]] && url="${url}&pageToken=${token}"
+    do_public_get "$url"
+    if [[ "$_STATUS" != "200" ]]; then
+      log_fail "$label page $((page_num + 1))" "HTTP $_STATUS"
+      return 1
+    fi
+
+    local meta
+    meta=$(pagination_page_meta "$_BODY")
+    local count bytes next first_id last_id fat
+    count=$(echo "$meta" | python3 -c "import sys,json; print(json.load(sys.stdin).get('count',0))")
+    bytes=$(echo "$meta" | python3 -c "import sys,json; print(json.load(sys.stdin).get('bytes',0))")
+    next=$(echo "$meta" | python3 -c "import sys,json; print(json.load(sys.stdin).get('nextPageToken',''))")
+    first_id=$(echo "$meta" | python3 -c "import sys,json; print(json.load(sys.stdin).get('firstId',''))")
+    last_id=$(echo "$meta" | python3 -c "import sys,json; print(json.load(sys.stdin).get('lastId',''))")
+    fat=$(echo "$meta" | python3 -c "import sys,json; print(json.load(sys.stdin).get('fatPage',False))")
+
+    total_items=$((total_items + count))
+    total_bytes=$((total_bytes + bytes))
+    [[ $bytes -gt $max_page_bytes ]] && max_page_bytes=$bytes
+    [[ "$fat" == "True" ]] && fat_pages=$((fat_pages + 1))
+    pagination_collect_ids_to_file "$_BODY" "$ids_file"
+
+    debug "$label p$((page_num + 1)): count=$count bytes=$bytes first=$first_id last=$last_id next=${next:+yes}"
+
+    page_num=$((page_num + 1))
+    [[ -z "$next" ]] && break
+    token="$next"
+  done
+
+  local unique_ids
+  unique_ids=$(sort -nu "$ids_file" | wc -l | tr -d ' ')
+  rm -f "$ids_file"
+  log_pass "$label: pages=$page_num unique_ids=$unique_ids total_items=$total_items max_page_bytes=$max_page_bytes fat_pages=$fat_pages"
+  echo "$unique_ids"
+}
+
+run_pagination_audit() {
+  local TEST_PROJECT="$1"
+  local DEFAULT_SUITE_ID="${2:-}"
+  log_section "$TEST_PROJECT — Pagination audit (P-series)"
+
+  # P4-TOKEN-WALK: full project walk
+  local walk_count
+  walk_count=$(pagination_token_walk "P4-TOKEN-WALK" "" 150)
+
+  # P4-PAGE-IGNORED: numeric page param should not affect first page
+  do_public_get "/test-cases?projectKey=$TEST_PROJECT&maxPageSize=5"
+  local first_no_page
+  first_no_page=$(json_first "$_BODY" "id")
+  do_public_get "/test-cases?projectKey=$TEST_PROJECT&maxPageSize=5&page=0"
+  local first_page0
+  first_page0=$(json_first "$_BODY" "id")
+  do_public_get "/test-cases?projectKey=$TEST_PROJECT&maxPageSize=5&page=1"
+  local first_page1
+  first_page1=$(json_first "$_BODY" "id")
+  if [[ "$first_no_page" == "$first_page0" && "$first_page0" == "$first_page1" && -n "$first_no_page" ]]; then
+    log_pass "P4-PAGE-IGNORED: page=0/1 same as no page (first id=$first_no_page) — numeric page ignored by API"
+  else
+    log_fail "P4-PAGE-IGNORED" "first ids differ: none=$first_no_page page0=$first_page0 page1=$first_page1"
+  fi
+
+  # P4-FILTER-PERSIST: RQL filter on page 1 only vs every page
+  local filter='filter=deprecated%20%3D%20false'
+  local token="" page_num=0 dep_page1_only=0 dep_every_page=0
+
+  while [[ $page_num -lt 20 ]]; do
+    local url="/test-cases?projectKey=$TEST_PROJECT&maxPageSize=100&pageToken=${token}"
+    [[ $page_num -eq 0 ]] && url="${url}&${filter}"
+    do_public_get "$url"
+    dep_page1_only=$((dep_page1_only + $(echo "$_BODY" | python3 "$PAGINATION_WALK" count_deprecated)))
+    token=$(json_field "$_BODY" ".get('_meta',{}).get('nextPageToken','')")
+    page_num=$((page_num + 1))
+    [[ -z "$token" ]] && break
+  done
+
+  token="" page_num=0
+  while [[ $page_num -lt 20 ]]; do
+    local url="/test-cases?projectKey=$TEST_PROJECT&maxPageSize=100&${filter}"
+    [[ -n "$token" ]] && url="${url}&pageToken=${token}"
+    do_public_get "$url"
+    dep_every_page=$((dep_every_page + $(echo "$_BODY" | python3 "$PAGINATION_WALK" count_deprecated)))
+    token=$(json_field "$_BODY" ".get('_meta',{}).get('nextPageToken','')")
+    page_num=$((page_num + 1))
+    [[ -z "$token" ]] && break
+  done
+
+  if [[ "$dep_page1_only" -eq 0 && "$dep_every_page" -eq 0 ]]; then
+    log_pass "P4-FILTER-PERSIST: no deprecated in sample (filter=deprecated=false)"
+  elif [[ "$dep_page1_only" -gt 0 && "$dep_every_page" -eq 0 ]]; then
+    log_fail "P4-FILTER-PERSIST" "filter only on page 1: deprecated leaked on later pages ($dep_page1_only deprecated vs $dep_every_page with filter every page)"
+  else
+    log_pass "P4-FILTER-PERSIST: deprecated counts page1-only=$dep_page1_only every-page=$dep_every_page"
+  fi
+
+  # P4-ROOT-SUITE vs IN filter (when configured)
+  local ROOT_SUITE_ID="${ZEBRUNNER_PAGINATION_ROOT_SUITE_ID:-${ZEBRUNNER_PAGINATION_SUITE_ID:-}}"
+  if [[ -n "$ROOT_SUITE_ID" ]]; then
+    local suites_pages=""
+    local stoken="" spage=0
+    while [[ $spage -lt 50 ]]; do
+      local surl="/test-suites?projectKey=$TEST_PROJECT&maxPageSize=100"
+      [[ -n "$stoken" ]] && surl="${surl}&pageToken=${stoken}"
+      do_public_get "$surl"
+      [[ -n "$suites_pages" ]] && suites_pages="${suites_pages}"$'\n---PAGE---\n'
+      suites_pages="${suites_pages}${_BODY}"
+      stoken=$(json_field "$_BODY" ".get('_meta',{}).get('nextPageToken','')")
+      spage=$((spage + 1))
+      [[ -z "$stoken" ]] && break
+    done
+    local desc_file
+    desc_file=$(mktemp)
+    printf '%s' "$suites_pages" | python3 "$PAGINATION_WALK" suite_descendants_pages "$ROOT_SUITE_ID" > "$desc_file"
+    local in_list
+    in_list=$(paste -sd, "$desc_file")
+    rm -f "$desc_file"
+    local in_filter="testSuite.id%20IN%20%5B${in_list}%5D"
+
+    local root_count in_count
+    root_count=$(pagination_token_walk "P4-ROOT-SUITE(rootSuiteId=$ROOT_SUITE_ID)" "&rootSuiteId=${ROOT_SUITE_ID}" 50)
+    in_count=$(pagination_token_walk "P4-SUITE-FILTER(IN)" "&filter=${in_filter}" 50)
+
+    if [[ "$root_count" == "$in_count" ]]; then
+      log_pass "P4-ROOT-SUITE: rootSuiteId count ($root_count) matches IN filter ($in_count)"
+    else
+      log_fail "P4-ROOT-SUITE" "rootSuiteId=$root_count vs IN filter=$in_count for suite $ROOT_SUITE_ID"
+    fi
+  else
+    log_skip "P4-ROOT-SUITE (set ZEBRUNNER_PAGINATION_ROOT_SUITE_ID)"
+  fi
+
+  # P4-SUITE-FILTER single suite
+  local SUITE_PROBE_ID="${ZEBRUNNER_PAGINATION_SUITE_ID:-$DEFAULT_SUITE_ID}"
+  if [[ -n "${SUITE_PROBE_ID:-}" ]]; then
+    pagination_token_walk "P4-SUITE-FILTER(direct)" "&filter=testSuite.id%3D${SUITE_PROBE_ID}" 50 >/dev/null
+  else
+    log_skip "P4-SUITE-FILTER (no suite id; set ZEBRUNNER_PAGINATION_SUITE_ID)"
+  fi
+
+  debug "P4 baseline walk_count=$walk_count"
+
+  # P4-AUTOMATION: token-walk NA + TBA (Not Automated / To Be Automated) vs IN filter
+  do_reporting_get "/api/projects/v1/projects/$TEST_PROJECT"
+  local AUTO_PROJECT_ID
+  AUTO_PROJECT_ID=$(json_data_field "$_BODY" "id")
+  if [[ -n "$AUTO_PROJECT_ID" ]]; then
+    do_reporting_get "/api/tcm/v1/test-case-settings/system-fields/automation-states?projectId=$AUTO_PROJECT_ID"
+    local AUTO_STATE_IDS
+    AUTO_STATE_IDS=$(echo "$_BODY" | python3 -c "
+import sys, json, re
+try:
+    d = json.load(sys.stdin)
+    items = d.get('data', d).get('items', d.get('items', []))
+    if not isinstance(items, list):
+        items = []
+    targets = []
+    patterns = [
+        re.compile(r'^not\\s+automated$', re.I),
+        re.compile(r'^to\\s+be\\s+automated$', re.I),
+        re.compile(r'^na$', re.I),
+        re.compile(r'^tba$', re.I),
+    ]
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get('name') or item.get('title') or '').strip()
+        sid = item.get('id')
+        if sid is None:
+            continue
+        if any(p.search(name) for p in patterns):
+            targets.append(int(sid))
+    # Prefer canonical NA/TBA names when both shorthand and long names exist
+    uniq = sorted(set(targets))
+    print(','.join(str(i) for i in uniq[:2]))
+except Exception:
+    print('')
+" 2>/dev/null || echo "")
+    if [[ -n "$AUTO_STATE_IDS" && "$AUTO_STATE_IDS" == *,* ]]; then
+      local NA_ID TBA_ID na_count tba_count in_count
+      NA_ID="${AUTO_STATE_IDS%%,*}"
+      TBA_ID="${AUTO_STATE_IDS#*,}"
+      na_count=$(pagination_token_walk "P4-AUTOMATION(NA id=$NA_ID)" "&filter=automationState.id%20%3D%20${NA_ID}" 50)
+      tba_count=$(pagination_token_walk "P4-AUTOMATION(TBA id=$TBA_ID)" "&filter=automationState.id%20%3D%20${TBA_ID}" 50)
+      in_count=$(pagination_token_walk "P4-AUTOMATION(NA+TBA IN)" "&filter=automationState.id%20IN%20%5B${NA_ID}%2C${TBA_ID}%5D" 50)
+      if [[ "$in_count" -ge "$na_count" && "$in_count" -ge "$tba_count" ]]; then
+        log_pass "P4-AUTOMATION: NA=$na_count TBA=$tba_count IN=$in_count (NA+TBA walk OK)"
+      else
+        log_fail "P4-AUTOMATION" "IN filter count ($in_count) smaller than NA ($na_count) or TBA ($tba_count)"
+      fi
+    elif [[ -n "$AUTO_STATE_IDS" ]]; then
+      log_skip "P4-AUTOMATION (need both NA and TBA states; found ids=$AUTO_STATE_IDS)"
+    else
+      log_skip "P4-AUTOMATION (no Not Automated / To Be Automated states in project)"
+    fi
+  else
+    log_skip "P4-AUTOMATION (could not resolve project id for $TEST_PROJECT)"
+  fi
+}
+
 widget_sql_post() {
   local label="$1"
   local payload="$2"
@@ -321,6 +554,40 @@ tcm_widget_post() {
   fi
 }
 
+# Raw widget API with systemFieldDataType MANUAL_ONLY returns HTTP 500 on custom-layout tenants
+# where "Manual Only" is a CUSTOM field (MFPAND). MCP tool resolves to customFieldId instead.
+tcm_widget_post_system_manual_only() {
+  local label="$1"
+  local manual_field_type="${2:-}"
+  if [[ "$manual_field_type" == "CUSTOM" ]]; then
+    do_reporting_post "/api/tcm/v1/widgets/test-cases-distribution-by-field/content:get?projectId=$PROJECT_ID" \
+      '{"filters":{"field":{"systemFieldDataType":"MANUAL_ONLY"}}}'
+    if [[ "$_STATUS" == "500" ]]; then
+      log_pass "$label: HTTP 500 expected (Manual Only is CUSTOM — use customFieldId or adv_get_test_case_distribution_by_field)"
+    else
+      log_fail "$label" "CUSTOM Manual Only layout: expected HTTP 500 for raw systemFieldDataType MANUAL_ONLY, got HTTP $_STATUS"
+    fi
+  else
+    tcm_widget_post "$label" "test-cases-distribution-by-field" '{"field":{"systemFieldDataType":"MANUAL_ONLY"}}'
+  fi
+}
+
+# Case Status is CUSTOM on MFP projects — use customFieldId from fields-layout (MCP resolves the same way).
+tcm_widget_post_case_status() {
+  local label="$1"
+  local case_status_id="${2:-}"
+  local case_status_type="${3:-}"
+  if [[ -z "$case_status_id" ]]; then
+    log_skip "$label (no Case Status field in layout)"
+    return 0
+  fi
+  if [[ "$case_status_type" == "CUSTOM" ]]; then
+    tcm_widget_post "$label" "test-cases-distribution-by-field" "{\"field\":{\"customFieldId\":$case_status_id}}"
+  else
+    tcm_widget_post "$label" "test-cases-distribution-by-field" '{"field":{"systemFieldDataType":"CASE_STATUS"}}'
+  fi
+}
+
 # =====================================================================
 # STEP 1: AUTHENTICATION & PROJECT DISCOVERY
 # =====================================================================
@@ -381,9 +648,19 @@ fi
 STARRED_COUNT=$(echo "$STARRED_PROJECTS" | wc -w | tr -d ' ')
 echo "  $(cyan '★') Testing $STARRED_COUNT starred project(s): $STARRED_PROJECTS" >&2
 
+if [[ -n "${ZEBRUNNER_VERIFY_PROJECTS:-}" ]]; then
+  STARRED_PROJECTS="${ZEBRUNNER_VERIFY_PROJECTS//,/ }"
+  STARRED_COUNT=$(echo "$STARRED_PROJECTS" | wc -w | tr -d ' ')
+  echo "  $(cyan '↪') Overridden by ZEBRUNNER_VERIFY_PROJECTS: $STARRED_PROJECTS" >&2
+fi
+
 # =====================================================================
 # STEP 2: GLOBAL TESTS (run once)
 # =====================================================================
+
+if $PAGINATION_AUDIT; then
+  log_section "Pagination audit mode — skipping global/widget smokes"
+else
 
 log_section "Global — Projects Limit"
 
@@ -479,6 +756,8 @@ else
   log_fail "WT-LIST" "HTTP $_STATUS"
 fi
 
+fi
+
 # =====================================================================
 # STEP 3: PER-PROJECT TESTS
 # =====================================================================
@@ -490,6 +769,36 @@ run_project_tests() {
   bold "╔══════════════════════════════════════════════╗" >&2
   bold "║  Project: $TEST_PROJECT" >&2
   bold "╚══════════════════════════════════════════════╝" >&2
+
+  if $PAGINATION_AUDIT; then
+    do_public_get "/test-suites?projectKey=$TEST_PROJECT&maxPageSize=5"
+    local SUITE_ID=""
+    SUITE_ID=$(json_first "$_BODY" "id")
+    run_pagination_audit "$TEST_PROJECT" "${SUITE_ID:-}"
+
+    do_reporting_get "/api/projects/v1/projects/$TEST_PROJECT"
+    PROJECT_ID=$(json_data_field "$_BODY" "id")
+    if [[ -n "$PROJECT_ID" ]]; then
+      do_reporting_get "/api/tcm/v1/test-case-settings/fields-layout?projectId=$PROJECT_ID"
+      FIELDS_LAYOUT_BODY="$_BODY"
+      log_section "$TEST_PROJECT — TCM distribution probes (pagination audit)"
+      tcm_widget_post "TCM-DIST-AUTO" "test-cases-distribution-by-field" '{"field":{"systemFieldDataType":"AUTOMATION_STATE"}}'
+      MANUAL_FIELD_ID=$(python3 "$WIDGET_ASSERT" fields_manual_only_id "$FIELDS_LAYOUT_BODY" 2>/dev/null || echo "")
+      local MANUAL_FIELD_TYPE=""
+      MANUAL_FIELD_TYPE=$(python3 "$WIDGET_ASSERT" fields_manual_only_type "$FIELDS_LAYOUT_BODY" 2>/dev/null || echo "")
+      if [[ -n "$MANUAL_FIELD_ID" ]]; then
+        tcm_widget_post "TCM-DIST-MANUAL" "test-cases-distribution-by-field" "{\"field\":{\"customFieldId\":$MANUAL_FIELD_ID}}"
+        tcm_widget_post_system_manual_only "TCM-DIST-SYSTEM-MANUAL" "$MANUAL_FIELD_TYPE"
+      fi
+      local CASE_STATUS_FIELD_ID="" CASE_STATUS_FIELD_TYPE=""
+      CASE_STATUS_FIELD_ID=$(python3 "$WIDGET_ASSERT" fields_case_status_id "$FIELDS_LAYOUT_BODY" 2>/dev/null || echo "")
+      CASE_STATUS_FIELD_TYPE=$(python3 "$WIDGET_ASSERT" fields_case_status_type "$FIELDS_LAYOUT_BODY" 2>/dev/null || echo "")
+      tcm_widget_post_case_status "TCM-DIST-CASE-STATUS" "$CASE_STATUS_FIELD_ID" "$CASE_STATUS_FIELD_TYPE"
+    else
+      log_skip "TCM distribution probes (no project ID)"
+    fi
+    return 0
+  fi
 
   # --- Reporting: resolve project ID ---
 
@@ -633,6 +942,10 @@ except: print(0)
     log_skip "P3b: pageToken pagination (only 1 page)"
   fi
 
+  if $PAGINATION_AUDIT; then
+    run_pagination_audit "$TEST_PROJECT" "${SUITE_ID:-}"
+  fi
+
   # Test case by key
   if [[ -n "$TC_KEY" ]]; then
     do_public_get "/test-cases/key:$TC_KEY?projectKey=$TEST_PROJECT"
@@ -715,6 +1028,34 @@ try:
 except: print(0)
 " 2>/dev/null || echo "0")
     log_pass "Test case $TC_ID has $CHANGE_COUNT change history entry(ies)"
+
+    local R19_BODY="$_BODY"
+
+    # R19b: TCM rejects maxPageSize=100 (HTTP 400 listChanges.maxPageSize)
+    do_reporting_get "/api/tcm/v1/test-cases/$TC_ID/changes?projectId=$PROJECT_ID&maxPageSize=100"
+    if [[ "$_STATUS" == "200" ]]; then
+      local CHANGE_COUNT_100
+      CHANGE_COUNT_100=$(echo "$_BODY" | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    items = d.get('data',d).get('items', d.get('items',[]))
+    print(len(items))
+except: print(0)
+" 2>/dev/null || echo "0")
+      log_pass "R19b: maxPageSize=100 HTTP 200 ($CHANGE_COUNT_100 entries)"
+    else
+      log_pass "R19b: maxPageSize=100 HTTP $_STATUS (TCM rejects 100 — MCP paginates at 20/page)"
+    fi
+
+    do_reporting_get "/api/tcm/v1/test-cases/$TC_ID/changes?projectId=$PROJECT_ID&maxPageSize=20"
+    if [[ "$_STATUS" == "200" ]]; then
+      log_pass "R19c: maxPageSize=20 HTTP 200 (MCP pagination page size)"
+    else
+      log_fail "R19c" "maxPageSize=20 should succeed, got HTTP $_STATUS"
+    fi
+
+    _BODY="$R19_BODY"
 
     if [[ "$CHANGE_COUNT" -gt 0 ]]; then
       local CHANGE_DETAIL
@@ -1287,9 +1628,10 @@ print('yes' if 'items' in d or 'results' in d or isinstance(d, list) else 'no')
     tcm_widget_post "TCM-UPDATED" "test-cases-updated-by-user" '{"period":"Last 30 Days"}'
 
     if [[ -n "$FIELDS_LAYOUT_BODY" ]]; then
-      local BOOL_FIELD_ID MANUAL_FIELD_ID SUITE_IDS_JSON
+      local BOOL_FIELD_ID MANUAL_FIELD_ID MANUAL_FIELD_TYPE SUITE_IDS_JSON
       BOOL_FIELD_ID=$(python3 "$WIDGET_ASSERT" fields_boolean_id "$FIELDS_LAYOUT_BODY")
       MANUAL_FIELD_ID=$(python3 "$WIDGET_ASSERT" fields_manual_only_id "$FIELDS_LAYOUT_BODY")
+      MANUAL_FIELD_TYPE=$(python3 "$WIDGET_ASSERT" fields_manual_only_type "$FIELDS_LAYOUT_BODY")
       SUITE_IDS_JSON=$(python3 "$WIDGET_ASSERT" suite_ids "$P1_BODY" 2>/dev/null || echo "")
 
       if [[ -n "$BOOL_FIELD_ID" && -n "$SUITE_IDS_JSON" ]]; then
@@ -1300,9 +1642,15 @@ print('yes' if 'items' in d or 'results' in d or isinstance(d, list) else 'no')
 
       if [[ -n "$MANUAL_FIELD_ID" ]]; then
         tcm_widget_post "TCM-DIST-MANUAL" "test-cases-distribution-by-field" "{\"field\":{\"customFieldId\":$MANUAL_FIELD_ID}}"
+        tcm_widget_post_system_manual_only "TCM-DIST-SYSTEM-MANUAL" "$MANUAL_FIELD_TYPE"
       else
         log_skip "TCM-DIST-MANUAL (no Manual Only field)"
       fi
+
+      local CASE_STATUS_FIELD_ID="" CASE_STATUS_FIELD_TYPE=""
+      CASE_STATUS_FIELD_ID=$(python3 "$WIDGET_ASSERT" fields_case_status_id "$FIELDS_LAYOUT_BODY" 2>/dev/null || echo "")
+      CASE_STATUS_FIELD_TYPE=$(python3 "$WIDGET_ASSERT" fields_case_status_type "$FIELDS_LAYOUT_BODY" 2>/dev/null || echo "")
+      tcm_widget_post_case_status "TCM-DIST-CASE-STATUS" "$CASE_STATUS_FIELD_ID" "$CASE_STATUS_FIELD_TYPE"
     else
       log_skip "TCM-DIST-CUSTOM/MANUAL (no fields-layout body)"
     fi

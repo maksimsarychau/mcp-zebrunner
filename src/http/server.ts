@@ -9,8 +9,33 @@ import { resolveAuthMode, hasStrategy, hasTokenExchange } from '../config/transp
 import type { TokenStore } from './token-store.js';
 import type { OAuthServerProvider } from '@modelcontextprotocol/sdk/server/auth/provider.js';
 
-const SESSION_IDLE_MS = 30 * 60 * 1000;
+const DEFAULT_SESSION_IDLE_MS = 30 * 60 * 1000;
 const SWEEP_INTERVAL_MS = 5 * 60 * 1000;
+
+function parsePositiveIntEnv(name: string, fallback: number): number {
+  const raw = process.env[name]?.trim();
+  if (!raw) return fallback;
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+/** Like parsePositiveIntEnv but allows 0 (e.g. MCP_HTTP_REQUEST_TIMEOUT_MS=0 → Node default, no socket cap). */
+function parseNonNegativeIntEnv(name: string, fallback: number): number {
+  const raw = process.env[name]?.trim();
+  if (!raw) return fallback;
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
+}
+
+/** MCP Streamable HTTP session sweep — extend via MCP_SESSION_IDLE_MS (default 30 min). */
+function sessionIdleMs(): number {
+  return parsePositiveIntEnv('MCP_SESSION_IDLE_MS', DEFAULT_SESSION_IDLE_MS);
+}
+
+/** Node HTTP socket inactivity timeout for long tool calls (default 30 min). 0 = no limit. */
+function httpRequestTimeoutMs(): number {
+  return parseNonNegativeIntEnv('MCP_HTTP_REQUEST_TIMEOUT_MS', 1_800_000);
+}
 
 export interface HttpServerOptions {
   port: number;
@@ -162,7 +187,7 @@ export async function startHttpServer(
   const sweepTimer = setInterval(() => {
     const now = Date.now();
     for (const [sid, entry] of sessions) {
-      if (now - entry.lastUsed > SESSION_IDLE_MS) {
+      if (now - entry.lastUsed > sessionIdleMs()) {
         entry.transport.close().catch(() => {});
         sessions.delete(sid);
       }
@@ -171,7 +196,18 @@ export async function startHttpServer(
   sweepTimer.unref();
 
   // --- Start listening ---
-  app.listen(port, '0.0.0.0', () => {
+  const httpServer = app.listen(port, '0.0.0.0', () => {
     console.error(`✅ MCP HTTP server listening on port ${port} (auth: ${authMode})`);
+    console.error(
+      `   Session idle: ${Math.round(sessionIdleMs() / 60_000)} min | ` +
+      `HTTP request timeout: ${httpRequestTimeoutMs() === 0 ? 'none' : `${Math.round(httpRequestTimeoutMs() / 1000)}s`}`,
+    );
   });
+
+  const reqTimeout = httpRequestTimeoutMs();
+  if (reqTimeout > 0) {
+    httpServer.timeout = reqTimeout;
+    httpServer.keepAliveTimeout = Math.min(reqTimeout, 120_000);
+    httpServer.headersTimeout = httpServer.keepAliveTimeout + 10_000;
+  }
 }
