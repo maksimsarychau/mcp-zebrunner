@@ -206,8 +206,8 @@ if (configWarnings.length > 0) {
   configWarnings.forEach(warning => console.error(warning));
 }
 
-/** Enhanced API client configuration — timeout sourced from TIMEOUT env var (default: 60s) */
-const API_TIMEOUT = appConfig.timeout ?? 60_000;
+/** Enhanced API client configuration — timeout sourced from TIMEOUT env var (default: 3 min) */
+const API_TIMEOUT = appConfig.timeout ?? 180_000;
 const TRANSPORT_MODE = resolveTransportMode();
 
 const config: ZebrunnerConfig = {

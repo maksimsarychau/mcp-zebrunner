@@ -41,6 +41,13 @@ services:
       # Localhost is already exempted, but Docker hostname may differ
       MCP_DANGEROUSLY_ALLOW_INSECURE_ISSUER_URL: ${MCP_DANGEROUSLY_ALLOW_INSECURE_ISSUER_URL:-true}
 
+      # Zebrunner API client timeout (ms) — raise for heavy history/index scans
+      TIMEOUT: ${TIMEOUT:-180000}
+
+      # MCP HTTP session + socket timeouts (ms)
+      MCP_SESSION_IDLE_MS: ${MCP_SESSION_IDLE_MS:-7200000}
+      MCP_HTTP_REQUEST_TIMEOUT_MS: ${MCP_HTTP_REQUEST_TIMEOUT_MS:-600000}
+
     ports:
       - "${PORT:-3000}:3000"
 
