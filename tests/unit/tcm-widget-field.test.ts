@@ -18,6 +18,12 @@ const layout: FieldsLayout = {
 };
 
 describe('tcm-widget-field', () => {
+  it('resolves system_field MANUAL_ONLY to custom id on custom layouts', () => {
+    const r = resolveDistributionField({ system_field: 'MANUAL_ONLY' }, layout);
+    assert.deepEqual(r.filter, { field: { customFieldId: 99 } });
+    assert.equal(r.fieldType, 'custom');
+  });
+
   it('resolves system_field enum', () => {
     const r = resolveDistributionField({ system_field: 'AUTOMATION_STATE' }, layout);
     assert.deepEqual(r.filter, { field: { systemFieldDataType: 'AUTOMATION_STATE' } });

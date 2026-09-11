@@ -1,5 +1,57 @@
 # Change Logs
 
+## v9.4.0 — Field history search tool (in progress)
+
+### Added
+
+- **`adv_find_field_history_changes`** — scan TCM audit history for field transitions (e.g. Manual Only Yes→No in date range). Internal pagination; returns `{ matches[], casesScanned, matchCount }` without full case payloads. Field aliases match distribution-by-field naming.
+
+### Notes
+
+- Option 2 (internal scan) shipped first; server-side history index deferred.
+- H8 (single-case `history: []`) still under investigation — this tool uses the same `/changes` fetch path per case.
+
+---
+
+## v9.3.2 — Change history fixes (H8)
+
+### Fixed
+
+- **`LAYOUT_UPDATE` audit rows dropped** — TCM change history on tenants like MFPAND stores Manual Only / automation state updates as `LAYOUT_UPDATE`. Parser now includes them (fixes empty `history: []` when API has data).
+- **`adv_get_test_case_by_key` + `include_history`** — uses `mergeTestCaseProjectionFields` so `history` is not stripped when `detail: summary` or explicit `fields` are set; re-attaches `history` on projected output.
+- **Custom field audit values** — better Yes/No / nested value resolution in history `changes[]` (`customField.manualOnly`, etc.).
+- **TCM `/changes` payload shapes** — `extractChangeHistoryItems` handles nested `data.items`, `content`, etc.
+
+### Notes
+
+- Default `history_filter: steps_only` still hides custom-field-only rows; use `history_filter: all` for Manual Only transition queries.
+
+---
+
+## v9.3.1 — TCM pagination correctness and honest bulk metadata
+
+### Fixed
+
+- **`getAllTestCases()` token loop** — Public API ignores numeric `page`; the old loop re-fetched page 1 and returned partial sets (e.g. suite 17441: 416 vs 494). New shared `fetchAllTestCasePages` advances `pageToken` on every request.
+- **`adv_get_test_cases_by_suite_smart` (`get_all: true`)** — Routes through fixed pagination; paginated mode uses `page_token` instead of deprecated `page`.
+- **`adv_get_test_cases_advanced` (`root_suite_id`)** — Scopes via RQL `testSuite.id IN [descendants]` instead of non-functional Public API `rootSuiteId` param (was returning full project ~4275 instead of subtree ~494). Response includes `behavior_change_note` explaining the intentional count change.
+- **`adv_get_all_tcm_test_cases_by_project`** — RQL status filters (`exclude_deprecated`, etc.) now sent on **every** page, not only page 1.
+- **`adv_get_test_case_distribution_by_field`** — `system_field: MANUAL_ONLY` resolves to `customFieldId` on projects where “Manual Only” is a custom layout field (MFPAND HTTP 500 fix).
+
+### Added
+
+- **`page_token`** on `adv_get_test_cases_advanced` and `adv_get_test_cases_by_suite_smart` (paginated mode); numeric **`page` deprecated** with warning.
+- Response metadata: **`fetched_count`**, **`returned_count`**, **`truncation_reason`**, **`next_page_token`** where applicable — distinguishes incomplete fetch vs MCP ~900 KB response cap.
+- **`mergeTestCaseProjectionFields`** — auto-includes `history` / `rootSuiteId` when `include_history` / `include_root_suite` flags are set; warns on unknown `fields` keys.
+- Investigation + regression: `docs/PUBLIC_API_PAGINATION.md`, `npm run test:api:pagination`, `npm run test:mcp-pagination-audit`.
+
+### Notes
+
+- **Intentional behavior change:** `adv_get_test_cases_advanced` with `root_suite_id` returns the correct subtree count, not the full project. Matches `adv_get_test_cases_by_suite_smart` and tool documentation.
+- **`count_only` / token-walking handlers** unchanged where they were already correct (e.g. automation_state).
+
+---
+
 ## v9.3.0 — Multi-PR and period test impact
 
 ### Added

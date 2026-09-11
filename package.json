@@ -1,6 +1,6 @@
 {
   "name": "mcp-zebrunner",
-  "version": "9.3.0",
+  "version": "9.3.2",
   "type": "module",
   "description": "Advanced Zebrunner MCP Server — analytics, reporting, and safe mutations for Zebrunner. Complements the official Zebrunner MCP (beta). Tools registered as adv_<name> with legacy aliases kept for backward compatibility.",
   "mcpName": "io.github.maksimsarychau/mcp-zebrunner",
@@ -52,6 +52,8 @@
     "test:watch": "tsx tests/test-runner.ts all --watch",
     "test:health": "tsx tests/test-runner.ts --health",
     "test:api": "bash tests/api-verify.sh",
+    "test:api:pagination": "bash tests/api-verify.sh --pagination-audit",
+    "test:mcp-pagination-audit": "tsx tests/mcp-pagination-audit.ts",
     "test:eval": "tsx tests/test-runner.ts eval",
     "test:eval:l1": "EVAL_LAYER=1 tsx tests/test-runner.ts eval",
     "test:eval:l2": "EVAL_LAYER=2 tsx tests/test-runner.ts eval",

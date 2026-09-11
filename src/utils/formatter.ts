@@ -16,6 +16,67 @@ const SUMMARY_TESTCASE_FIELDS = [
   'webUrl',
 ] as const;
 
+/** Fields commonly requested on bulk read tools (for unknown-key warnings). */
+const KNOWN_TESTCASE_FIELD_KEYS = new Set<string>([
+  ...SUMMARY_TESTCASE_FIELDS,
+  'history',
+  'rootSuiteId',
+  'testSuite',
+  'draft',
+  'deleted',
+  'description',
+  'createdAt',
+  'lastModifiedAt',
+  'createdBy',
+  'lastModifiedBy',
+  'steps',
+  'customField',
+]);
+
+export interface TestCaseProjectionHints {
+  includeHistory?: boolean;
+  includeRootSuite?: boolean;
+}
+
+/**
+ * Merge explicit `fields` with flags that imply extra keys (history, rootSuiteId).
+ * Returns warnings for unknown allow-list keys and auto-inclusions.
+ */
+export function mergeTestCaseProjectionFields(
+  fields: string[] | undefined,
+  detail: DetailLevel,
+  hints: TestCaseProjectionHints = {},
+): { effectiveFields: string[] | undefined; warnings: string[] } {
+  const warnings: string[] = [];
+
+  if (fields && fields.length > 0) {
+    const effectiveFields: string[] = [...fields];
+    for (const key of fields) {
+      if (!KNOWN_TESTCASE_FIELD_KEYS.has(key)) {
+        warnings.push(`Unknown field "${key}" in fields allow-list — omitted unless present on each test case`);
+      }
+    }
+    if (hints.includeHistory && !effectiveFields.includes('history')) {
+      effectiveFields.push('history');
+      warnings.push('Auto-included "history" because include_history=true (fields allow-list would have dropped it)');
+    }
+    if (hints.includeRootSuite && !effectiveFields.includes('rootSuiteId')) {
+      effectiveFields.push('rootSuiteId');
+      warnings.push('Auto-included "rootSuiteId" because include_root_suite=true');
+    }
+    return { effectiveFields, warnings };
+  }
+
+  if (detail !== 'summary') {
+    return { effectiveFields: undefined, warnings };
+  }
+
+  const effectiveFields: string[] = [...SUMMARY_TESTCASE_FIELDS];
+  if (hints.includeRootSuite) effectiveFields.push('rootSuiteId');
+  if (hints.includeHistory) effectiveFields.push('history');
+  return { effectiveFields, warnings };
+}
+
 /** Top-level fields kept by the suite summary projection. */
 const SUMMARY_SUITE_FIELDS = [
   'id',

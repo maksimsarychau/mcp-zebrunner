@@ -11,7 +11,7 @@ import { EnhancedZebrunnerClient } from "./api/enhanced-client.js";
 import { ZebrunnerReportingClient, type FieldsLayout } from "./api/reporting-client.js";
 import { ZebrunnerReportingToolHandlers } from "./handlers/reporting-tools.js";
 import { ReportHandler } from "./handlers/report-handler.js";
-import { FormatProcessor, projectTestCases, projectSuites, serializeFormattedOutput } from "./utils/formatter.js";
+import { FormatProcessor, projectTestCases, projectSuites, serializeFormattedOutput, mergeTestCaseProjectionFields } from "./utils/formatter.js";
 import { defaultDataFormat, defaultDetailLevel, defaultMaxResults } from "./utils/mcp-output-flags.js";
 import {
   MAX_RESPONSE_BYTES,
@@ -74,11 +74,16 @@ import {
   type SystemFieldDataType,
 } from "./utils/tcm-widget-field.js";
 import { distributionWithPercents } from "./utils/widget-response-parsers.js";
+import {
+  buildRootSuiteInFilter,
+  DEPRECATED_PAGE_PARAM_WARNING,
+} from "./utils/test-case-pagination.js";
 import { TCM_WIDGET_SYSTEM_NAMES } from "./utils/tcm-widget-client.js";
 import { registerWidgetHubTools } from "./handlers/widget-hub-tools.js";
 import { registerTestAuthoringTrendTool } from "./handlers/widget-authoring-trend-tool.js";
 import { registerScaffoldTestCaseTool } from "./handlers/scaffold-test-case-tool.js";
 import { registerAnalyzeTestImpactTool } from "./handlers/analyze-test-impact-tool.js";
+import { registerFindFieldHistoryChangesTool } from "./handlers/find-field-history-changes-tool.js";
 import {
   buildPassRateViewExtra,
   PASS_RATE_GROUP_BY,
@@ -1393,6 +1398,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
         }
 
         // Fetch change history if requested
+        let changeHistory: import("./utils/testCaseHistory.js").HistoryEntry[] | undefined;
         if (include_history && testCase.id) {
           try {
             const { projectId } = await resolveProjectId(project_key);
@@ -1401,9 +1407,12 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
               [testCase], reportingClient, projectId, statesMap,
               { filter: history_filter as HistoryFilter, maxResults: history_limit }
             );
-            (testCase as any).history = historyResults[0] ?? [];
+            changeHistory = historyResults[0] ?? [];
+            (testCase as any).history = changeHistory;
           } catch (err: any) {
             debugLog("Failed to fetch change history", { error: err.message });
+            changeHistory = [];
+            (testCase as any).history = changeHistory;
           }
         }
 
@@ -1448,7 +1457,18 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
           (enhancedTestCase as any).executionHistory = executionHistory;
         }
         const fieldsLayout = await getFieldsLayoutForProject(project_key);
-        const projected = projectTestCases(enhancedTestCase, detail, fields);
+        const { effectiveFields, warnings: fieldWarnings } = mergeTestCaseProjectionFields(
+          fields,
+          detail,
+          { includeHistory: include_history },
+        );
+        const projected = projectTestCases(enhancedTestCase, detail, effectiveFields);
+        if (include_history) {
+          (projected as any).history = changeHistory ?? (enhancedTestCase as any).history ?? [];
+        }
+        if (fieldWarnings.length > 0) {
+          (projected as any).field_projection_warnings = fieldWarnings;
+        }
         const formattedData = FormatProcessor.format(projected, format, fieldsLayout);
         const body = typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2);
 
@@ -1683,7 +1703,8 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
       field_value: z.string().optional().describe("Value to match against the field. Required for 'exact', 'contains', and 'regex' modes. Not needed for 'exists' mode."),
       field_match: z.enum(["exact", "contains", "regex", "exists"]).default("exact").describe("Match mode: 'exact' (case-insensitive equality), 'contains' (substring), 'regex' (pattern), 'exists' (field is present and non-null)"),
       format: z.enum(['dto', 'json', 'compact', 'string', 'markdown']).default('json').describe("Output format"),
-      page: z.number().int().nonnegative().default(0).describe("Page number (0-based)"),
+      page: z.number().int().nonnegative().default(0).describe("Deprecated — ignored by Zebrunner Public API. Use page_token instead."),
+      page_token: z.string().optional().describe("Token for pagination (from previous response next_page_token). On first call, omit this."),
       size: z.number().int().positive().max(100).default(100).describe("Page size (configurable via MAX_PAGE_SIZE env var)"),
       count_only: z.boolean().default(false).describe(
         "When true, paginates through all pages and returns only the total count without test case data. " +
@@ -1720,6 +1741,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
         field_match,
         format,
         page,
+        page_token,
         size,
         count_only,
         include_clickable_links,
@@ -1752,9 +1774,26 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
           }] };
         }
 
+        let rootSuiteScopeFilter: string | undefined;
+        let rootSuiteBehaviorNote: string | undefined;
+        if (root_suite_id) {
+          const allSuites = await client.getAllTestSuites(project_key);
+          const processedSuites = HierarchyProcessor.setRootParentsToSuites(allSuites);
+          rootSuiteScopeFilter = buildRootSuiteInFilter(processedSuites, root_suite_id);
+          rootSuiteBehaviorNote =
+            'v9.3.1 behavior: root_suite_id scopes via RQL testSuite.id IN [descendants]. ' +
+            'Pre-9.3.1 this tool could return the full project (~all cases) because the Public API rootSuiteId param is non-functional. ' +
+            'Counts for root_suite_id may be significantly lower than before — this matches adv_get_test_cases_by_suite_smart.';
+        }
+
+        const paginationWarnings: string[] = [];
+        if (page > 0 && !page_token) {
+          paginationWarnings.push(DEPRECATED_PAGE_PARAM_WARNING);
+        }
+
         const baseSearchParams = {
-          suiteId: suite_id,
-          rootSuiteId: root_suite_id,
+          suiteId: rootSuiteScopeFilter ? undefined : suite_id,
+          filter: rootSuiteScopeFilter,
           automationState: automation_states,
           createdAfter: created_after,
           createdBefore: created_before,
@@ -1844,11 +1883,16 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
           return { content: [{ type: "text" as const, text: JSON.stringify({
             total_count: totalCount,
             pages_traversed: pageCount,
-            project_key
+            project_key,
+            ...(rootSuiteBehaviorNote ? { behavior_change_note: rootSuiteBehaviorNote } : {}),
           }, null, 2) }] };
         }
 
-        const response = await client.getTestCases(project_key, { ...baseSearchParams, page, size });
+        const response = await client.getTestCases(project_key, {
+          ...baseSearchParams,
+          pageToken: page_token,
+          size,
+        });
 
         if (!validateApiResponse(response, 'array')) {
           throw new Error('Invalid API response format');
@@ -1913,18 +1957,29 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
         }
 
         const hasMorePages = !!response._meta?.nextPageToken;
+        const nextPageToken = response._meta?.nextPageToken;
         const responseData: any = {
           items: processedCases,
+          fetched_count: processedCases.length,
+          returned_count: processedCases.length,
           page_count: processedCases.length,
           has_more_pages: hasMorePages,
+          ...(nextPageToken ? { next_page_token: nextPageToken } : {}),
           _meta: {
             ...(response._meta || {}),
-            nextPageToken: response._meta?.nextPageToken || undefined
+            nextPageToken: nextPageToken || undefined
           },
           _notice: hasMorePages
             ? "More pages available. Pass the nextPageToken value to the page_token parameter to fetch the next page. Note: the Zebrunner Public API does not provide a total count."
             : undefined
         };
+
+        if (rootSuiteBehaviorNote) {
+          responseData.behavior_change_note = rootSuiteBehaviorNote;
+        }
+        if (paginationWarnings.length > 0) {
+          responseData.pagination_warnings = paginationWarnings;
+        }
 
         if (include_history) {
           const warning = getHistoryBulkWarning(processedCases.length);
@@ -6222,7 +6277,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
             const result = await client.getTestCases(project_key, {
               size: MAX_PAGE_SIZE,
               pageToken,
-              ...(rqlFilter && !pageToken ? { filter: rqlFilter } : {})
+              ...(rqlFilter ? { filter: rqlFilter } : {})
             });
             totalCount += applyDeletedFilter(result.items || []).length;
             pageCount++;
@@ -6244,6 +6299,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         let allTestCases: ZebrunnerTestCase[] = [];
         let pageToken: string | undefined = undefined;
         let pageCount = 0;
+        let fetchStoppedReason: string | undefined;
         let wasTruncated = false;
         let hasMorePages = false;
         const maxPages = 100; // Safety limit
@@ -6252,7 +6308,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           const result = await client.getTestCases(project_key, {
             size: MAX_PAGE_SIZE,
             pageToken: pageToken,
-            ...(rqlFilter && !pageToken ? { filter: rqlFilter } : {})
+            ...(rqlFilter ? { filter: rqlFilter } : {})
           });
 
           allTestCases.push(...result.items);
@@ -6264,6 +6320,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
             allTestCases = allTestCases.slice(0, max_results);
             wasTruncated = true;
             hasMorePages = !!pageToken;
+            fetchStoppedReason = 'max_results_cap';
             debugLog(`Limiting results to ${max_results} test cases for performance`);
             break;
           }
@@ -6280,7 +6337,10 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         if (!wasTruncated && pageCount >= maxPages && pageToken) {
           wasTruncated = true;
           hasMorePages = true;
+          fetchStoppedReason = 'max_pages';
         }
+
+        const fetchedCount = allTestCases.length;
 
         allTestCases = applyDeletedFilter(allTestCases) as ZebrunnerTestCase[];
 
@@ -6322,17 +6382,21 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         }
 
         const rootSummaryFields = ['id', 'key', 'title', 'priority', 'automationState', 'deprecated', 'webUrl', 'rootSuiteId'];
-        const projectedCases = projectTestCases(
-          enhancedTestCases,
-          detail,
+        const { effectiveFields, warnings: fieldWarnings } = mergeTestCaseProjectionFields(
           fields ?? (include_root_suite && detail === 'summary' ? [...rootSummaryFields] : undefined),
+          detail,
+          { includeHistory: include_history, includeRootSuite: include_root_suite },
         );
+        const projectedCases = projectTestCases(enhancedTestCases, detail, effectiveFields);
 
         const resultPayload: any = {
           project_key,
+          fetched_count: fetchedCount,
+          returned_count: projectedCases.length,
           total_fetched: allTestCases.length,
           was_truncated: wasTruncated,
           has_more_pages: hasMorePages,
+          ...(fetchStoppedReason ? { truncation_reason: fetchStoppedReason } : {}),
           filters_applied: {
             exclude_deprecated,
             exclude_draft,
@@ -6340,6 +6404,10 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           },
           test_cases: projectedCases
         };
+
+        if (fieldWarnings.length > 0) {
+          resultPayload.field_projection_warnings = fieldWarnings;
+        }
 
         if (include_history) {
           const warning = getHistoryBulkWarning(enhancedTestCases.length);
@@ -6619,7 +6687,8 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         "When true, returns only the total count of test cases in the suite without fetching data. " +
         "Efficient for metrics collection -- avoids 1MB response limit on large projects."
       ),
-      page: z.number().int().nonnegative().default(0).describe("Page number (0-based, only used if get_all=false)"),
+      page: z.number().int().nonnegative().default(0).describe("Deprecated — ignored by Zebrunner Public API. Use page_token instead (only when get_all=false)."),
+      page_token: z.string().optional().describe("Token for pagination (from previous response next_page_token). On first call, omit this."),
       size: z.number().int().positive().max(100).default(50).describe("Page size (only used if get_all=false)"),
       include_history: z.boolean().default(false).describe("When true, each test case includes a 'history' array of change log entries. Filtered to steps, preconditions, expected results, and lifecycle events (automation state changes, deprecation) by default."),
       history_filter: z.enum(['steps_only', 'events_only', 'all']).default('steps_only').describe("What to include in history. 'steps_only': step/precondition/expectedResult diffs only. 'events_only': lifecycle events only (automated, deprecated, etc.). 'all': everything. Only used when include_history=true."),
@@ -6634,9 +6703,14 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
     },
     async (args) => {
       try {
-        const { project_key, suite_id, include_steps, format, detail, fields, get_all, include_sub_suites, count_only, page, size, include_history, history_filter, history_limit } = args;
+        const { project_key, suite_id, include_steps, format, detail, fields, get_all, include_sub_suites, count_only, page, page_token, size, include_history, history_filter, history_limit } = args;
 
-        debugLog("Smart test case retrieval by suite", { project_key, suite_id, include_steps, format, get_all, include_sub_suites, page, size });
+        const paginationWarnings: string[] = [];
+        if (!get_all && page > 0 && !page_token) {
+          paginationWarnings.push(DEPRECATED_PAGE_PARAM_WARNING);
+        }
+
+        debugLog("Smart test case retrieval by suite", { project_key, suite_id, include_steps, format, get_all, include_sub_suites, page, page_token, size });
 
         // Step 1: Get all suites to determine hierarchy
         debugLog("Fetching all suites for hierarchy analysis", { project_key, suite_id });
@@ -6725,6 +6799,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         // Step 5: Get test cases using appropriate method
         let testCases: any[];
         let filterDescription: string;
+        let paginatedNextPageToken: string | undefined;
 
         if ((isRootSuite || hasChildren) && include_sub_suites) {
           // For root suites OR suites with children, use the enhanced filtering approach
@@ -6806,12 +6881,13 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
             const filter = `testSuite.id IN [${childSuiteIds.join(',')}]`;
             const response = await client.getTestCases(project_key, {
               filter,
-              page,
+              pageToken: page_token,
               size
             });
 
             testCases = response.items;
-            filterDescription = `${isRootSuite ? 'root' : 'parent'} suite ${suite_id} with filter (${childSuiteIds.length - 1} child suites) - page ${page + 1}`;
+            paginatedNextPageToken = response._meta?.nextPageToken;
+            filterDescription = `${isRootSuite ? 'root' : 'parent'} suite ${suite_id} with filter (${childSuiteIds.length - 1} child suites) — token page`;
           }
         } else {
           // For leaf suites (no children), use direct filtering
@@ -6823,13 +6899,16 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           } else {
             const response = await client.getTestCases(project_key, {
               filter: `testSuite.id=${suite_id}`,
-              page,
+              pageToken: page_token,
               size
             });
             testCases = response.items;
-            filterDescription = `direct suite ${suite_id} - page ${page + 1}`;
+            paginatedNextPageToken = response._meta?.nextPageToken;
+            filterDescription = `direct suite ${suite_id} — token page`;
           }
         }
+
+        const fetchedCount = testCases.length;
 
         debugLog("Retrieved test cases", { count: testCases.length, filterDescription });
 
@@ -6931,20 +7010,38 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
             usesFilter: true
           },
           results: {
-            count: testCases.length,
+            fetched_count: fetchedCount,
+            count: fetchedCount,
+            returned_count: fetchedCount,
             getAllResults: get_all,
+            ...(paginatedNextPageToken ? { next_page_token: paginatedNextPageToken } : {}),
+            has_more_pages: !!paginatedNextPageToken,
             page: get_all ? undefined : page,
             size: get_all ? undefined : size,
             includesSteps: include_steps
           }
         };
 
+        if (paginationWarnings.length > 0) {
+          metadata.pagination_warnings = paginationWarnings;
+        }
+
         if (include_history) {
           const warning = getHistoryBulkWarning(testCases.length);
           if (warning) metadata.history_warning = warning;
         }
 
-        const projectedCases = projectTestCases(testCases, detail, fields);
+        const { effectiveFields, warnings: fieldWarnings } = mergeTestCaseProjectionFields(
+          fields,
+          detail,
+          { includeHistory: include_history },
+        );
+        const projectedCases = projectTestCases(testCases, detail, effectiveFields);
+
+        if (fieldWarnings.length > 0) {
+          metadata.field_projection_warnings = fieldWarnings;
+        }
+        metadata.results.returned_count = Array.isArray(projectedCases) ? projectedCases.length : fetchedCount;
 
         const result = {
           metadata,
@@ -6954,10 +7051,10 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         const formattedData = FormatProcessor.format(result, format);
 
         // Add helpful summary message
-        let summaryMessage = `✅ Found ${testCases.length} test cases from ${filterDescription}${summaryInfo}\n` +
+        let summaryMessage = `✅ Found ${fetchedCount} test cases from ${filterDescription}${summaryInfo}\n` +
           `📊 Suite: "${targetSuite.name || targetSuite.title}" (ID: ${suite_id})\n` +
           `🎯 Filter method: ${isRootSuite ? 'Root suite filtering with child suites' : hasChildren && include_sub_suites ? 'Parent suite filtering with child suites' : 'Direct suite filtering'} (filter-based)\n` +
-          `🔄 Results: ${get_all ? 'All results' : `Page ${page + 1} (size: ${size})`}\n`;
+          `🔄 Results: ${get_all ? 'All results' : paginatedNextPageToken ? `Token page (size: ${size}, more pages available)` : `Token page (size: ${size})`}\n`;
 
         if (include_steps) {
           summaryMessage += `📝 Detailed steps included for first ${Math.min(5, testCases.length)} cases\n`;
@@ -6976,7 +7073,16 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
             resultText.length,
             format,
             (s) => ({
-              metadata: { ...metadata, was_truncated: true },
+              metadata: {
+                ...metadata,
+                was_truncated: true,
+                truncation_reason: 'response_size_cap',
+                results: {
+                  ...metadata.results,
+                  fetched_count: fetchedCount,
+                  returned_count: s.length,
+                },
+              },
               testCases: s,
             }),
           );
@@ -6985,7 +7091,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
               content: [{
                 type: "text" as const,
                 text:
-                  `Found ${testCases.length} total test cases in suite ${suite_id}, returning first ${slice.length} ` +
+                  `Fetched ${fetchedCount} test cases in suite ${suite_id}, returning first ${slice.length} ` +
                   `(response truncated to stay under MCP 1MB limit).\n` +
                   `Use count_only=true to get just the count without data.\n\n${bodyText}`,
               }],
@@ -8305,7 +8411,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           content: [
             {
               type: "text" as const,
-              text: JSON.stringify(result, null, 2)
+              text: JSON.stringify({ mcp_version: PKG_VERSION, ...result }, null, 2)
             }
           ]
         };
@@ -8315,7 +8421,11 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           content: [
             {
               type: "text" as const,
-              text: `❌ Reporting API Connection failed: ${error.message}`
+              text: JSON.stringify({
+                mcp_version: PKG_VERSION,
+                success: false,
+                message: `Reporting API Connection failed: ${error.message}`,
+              }, null, 2)
             }
           ]
         };
@@ -9654,6 +9764,14 @@ ${detailsInfo.map((detail, i) => {
   registerAnalyzeTestImpactTool(server, {
     client,
     webBaseUrl: WIDGET_BASE_URL,
+    debugLog,
+  });
+
+  registerFindFieldHistoryChangesTool(server, {
+    client,
+    reportingClient,
+    resolveProjectId,
+    getProjectAliases,
     debugLog,
   });
 

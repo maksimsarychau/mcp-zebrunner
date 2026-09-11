@@ -89,6 +89,18 @@ export function resolveDistributionField(
   }
 
   if (input.system_field != null) {
+    if (input.system_field === 'MANUAL_ONLY') {
+      const manualOnly = findManualOnlyField(fieldsLayout);
+      if (manualOnly?.type === 'CUSTOM') {
+        return {
+          filter: { field: { customFieldId: manualOnly.id } },
+          fieldLabel: manualOnly.name,
+          fieldType: 'custom',
+          customFieldId: manualOnly.id,
+        };
+      }
+    }
+
     const match = fieldsLayout.fields.find(f => systemDataTypeFromField(f) === input.system_field);
     return {
       filter: { field: { systemFieldDataType: input.system_field } },
@@ -107,6 +119,17 @@ export function resolveDistributionField(
     const systemType = systemDataTypeFromField(item);
     if (!systemType) {
       throw new Error(`Cannot map system field "${item.name}" to systemFieldDataType`);
+    }
+    if (systemType === 'MANUAL_ONLY') {
+      const manualOnly = findManualOnlyField(fieldsLayout);
+      if (manualOnly?.type === 'CUSTOM') {
+        return {
+          filter: { field: { customFieldId: manualOnly.id } },
+          fieldLabel: manualOnly.name,
+          fieldType: 'custom',
+          customFieldId: manualOnly.id,
+        };
+      }
     }
     return {
       filter: { field: { systemFieldDataType: systemType } },
