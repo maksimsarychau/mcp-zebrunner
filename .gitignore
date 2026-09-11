@@ -33,6 +33,8 @@ docs/OFFICIAL_MCP_DIFF.json
 docs/OFFICIAL_MCP_PARITY.md
 docs/releases
 docs/investigation/**
+docs/PUBLIC_API_PAGINATION.md
+docs/STATELESS_MCP_AUDIT.md
 
 # LLM eval results (contain real Zebrunner project data)
 tests/eval/results/

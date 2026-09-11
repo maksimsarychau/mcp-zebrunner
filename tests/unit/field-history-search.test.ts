@@ -69,7 +69,7 @@ describe('field-history-search', () => {
     const entries: HistoryEntry[] = [{
       entryId: 1,
       timestamp: '2026-08-02T16:33:23Z',
-      author: 'imikulich',
+      author: 'test.author',
       events: [],
       changes: [
         {
@@ -94,7 +94,7 @@ describe('field-history-search', () => {
     });
 
     assert.equal(matches.length, 1);
-    assert.equal(matches[0].author, 'imikulich');
+    assert.equal(matches[0].author, 'test.author');
     assert.equal(matches[0].concurrentChanges.length, 1);
     assert.equal(matches[0].concurrentChanges[0].field, 'automationState');
   });

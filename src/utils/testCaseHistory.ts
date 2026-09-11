@@ -471,7 +471,7 @@ export function parseRawChangeEntries(
 ): HistoryEntry[] {
   const entries: HistoryEntry[] = [];
   for (const rawEntry of items) {
-    // LAYOUT_UPDATE rows carry custom-field and automation-state deltas on many tenants (e.g. MFPAND).
+    // LAYOUT_UPDATE rows carry custom-field and automation-state deltas on many tenants (custom Manual Only layouts).
     const parsed = parseChangeEntry(rawEntry, statesMap, userMap);
     const filtered = filterEntry(parsed, filter);
     if (filtered) entries.push(filtered);

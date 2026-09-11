@@ -4,7 +4,7 @@ import { extractChangeHistoryItems, parseRawChangeEntries } from '../../src/util
 
 describe('testCaseHistory', () => {
   const statesMap = { 12: 'Semi-Automated', 10: 'Not Automated' };
-  const userMap = new Map<number, string>([[42, 'imikulich']]);
+  const userMap = new Map<number, string>([[42, 'test.author']]);
 
   const sampleEntry = {
     id: 9001,
@@ -50,7 +50,7 @@ describe('testCaseHistory', () => {
     );
 
     assert.equal(entries.length, 1);
-    assert.equal(entries[0].author, 'imikulich');
+    assert.equal(entries[0].author, 'test.author');
     const manualChange = entries[0].changes.find(c => c.field === 'customField.manualOnly');
     assert.ok(manualChange);
     assert.equal(manualChange!.oldValue, 'Yes');

@@ -41,6 +41,7 @@ function extractHandlerModuleTools(root: string): string[] {
   const handlerFiles = [
     path.join(root, "src", "handlers", "scaffold-test-case-tool.ts"),
     path.join(root, "src", "handlers", "analyze-test-impact-tool.ts"),
+    path.join(root, "src", "handlers", "find-field-history-changes-tool.ts"),
   ];
   return handlerFiles.flatMap((f) => extractServerTools(fs.readFileSync(f, "utf-8")));
 }

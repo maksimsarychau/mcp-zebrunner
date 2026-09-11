@@ -30,7 +30,7 @@ export function registerFindFieldHistoryChangesTool(
         'Use for questions like "Manual Only changed Yes→No in the last 60 days". ' +
         'Field aliases match adv_get_test_case_distribution_by_field (e.g. "Manual Only", automationState, customField.manualOnly).',
       inputSchema: {
-        project_key: z.string().min(1).describe("Project key (e.g. 'MFPAND')"),
+        project_key: z.string().min(1).describe("Project key (e.g. 'MCP', 'android')"),
         field: z.string().min(1).describe(
           'History field path or display name: customField.manualOnly, automationState, "Manual Only", deprecated, steps, etc.',
         ),
