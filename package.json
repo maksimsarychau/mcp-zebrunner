@@ -70,6 +70,7 @@
     "inspector": "npx @modelcontextprotocol/inspector -- npx tsx src/server.ts",
     "dev:debug": "DEBUG=true tsx watch src/server.ts",
     "sign-release": "tsx scripts/sign-release.ts",
+    "history-index:build": "tsx scripts/build-history-index.ts",
     "update-control": "tsx scripts/update-control.ts",
     "docker:build:multiarch": "bash scripts/docker-build-push.sh"
   },

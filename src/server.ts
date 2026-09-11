@@ -84,6 +84,7 @@ import { registerTestAuthoringTrendTool } from "./handlers/widget-authoring-tren
 import { registerScaffoldTestCaseTool } from "./handlers/scaffold-test-case-tool.js";
 import { registerAnalyzeTestImpactTool } from "./handlers/analyze-test-impact-tool.js";
 import { registerFindFieldHistoryChangesTool } from "./handlers/find-field-history-changes-tool.js";
+import { registerBuildFieldHistoryIndexTool } from "./handlers/build-field-history-index-tool.js";
 import {
   buildPassRateViewExtra,
   PASS_RATE_GROUP_BY,
@@ -9768,6 +9769,14 @@ ${detailsInfo.map((detail, i) => {
   });
 
   registerFindFieldHistoryChangesTool(server, {
+    client,
+    reportingClient,
+    resolveProjectId,
+    getProjectAliases,
+    debugLog,
+  });
+
+  registerBuildFieldHistoryIndexTool(server, {
     client,
     reportingClient,
     resolveProjectId,

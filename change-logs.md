@@ -2,6 +2,11 @@
 
 ## v9.4.1 — TCM history pagination + distribution field resolution
 
+### Added
+
+- **`adv_build_field_history_index`** — Option 1 local history index at `~/.mcp-zebrunner/history-index/`; chunked build + CLI `npm run history-index:build -- MFPAND`.
+- **`index_mode`** on `adv_find_field_history_changes` — `auto` (default) queries index when complete; `scan` = live API; `index` = require index.
+
 ### Fixed
 
 - **`history_limit: 100` → empty `history: []`** — TCM `/changes` rejects `maxPageSize=100`; `getTestCaseChanges()` now paginates at **20/page** with `pageToken`. Tool schema still accepts 1–100.

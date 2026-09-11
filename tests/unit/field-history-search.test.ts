@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 import type { FieldsLayout } from '../../src/api/reporting-client.js';
 import {
+  caseLikelyChangedSince,
   historyValuesMatch,
   normalizeHistoryCompareValue,
   resolveHistoryFieldPath,
@@ -97,6 +98,18 @@ describe('field-history-search', () => {
     assert.equal(matches[0].author, 'test.author');
     assert.equal(matches[0].concurrentChanges.length, 1);
     assert.equal(matches[0].concurrentChanges[0].field, 'automationState');
+  });
+
+  it('caseLikelyChangedSince skips cases not modified since changed_after', () => {
+    assert.ok(caseLikelyChangedSince(
+      { lastModifiedAt: '2026-08-01T00:00:00Z' },
+      new Date('2026-07-13T00:00:00Z'),
+    ));
+    assert.ok(!caseLikelyChangedSince(
+      { lastModifiedAt: '2026-06-01T00:00:00Z' },
+      new Date('2026-07-13T00:00:00Z'),
+    ));
+    assert.ok(caseLikelyChangedSince({}, new Date('2026-07-13T00:00:00Z')));
   });
 
   it('scanHistoryForFieldChanges excludes out-of-range timestamps', () => {

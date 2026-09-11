@@ -28,6 +28,7 @@ export function registerFindFieldHistoryChangesTool(
         'Scans project cases internally (no full case payloads to the client) and returns only matching ' +
         '{key, timestamp, oldValue, newValue} events plus concurrentChanges from the same audit entry. ' +
         'Use for questions like "Manual Only changed Yes→No in the last 60 days". ' +
+        'Large projects: build index first via adv_build_field_history_index, or pass suite_id/root_suite_id. ' +
         'Field aliases match adv_get_test_case_distribution_by_field (e.g. "Manual Only", automationState, customField.manualOnly).',
       inputSchema: {
         project_key: z.string().min(1).describe("Project key (e.g. 'MCP', 'android')"),
@@ -54,6 +55,15 @@ export function registerFindFieldHistoryChangesTool(
         ),
         history_limit: z.number().int().min(1).max(100).default(100).describe(
           'Max audit entries fetched per test case from TCM /changes (default 100)',
+        ),
+        max_cases_to_scan: z.number().int().positive().max(10000).default(2500).describe(
+          'Stop after this many cases receive a history fetch (default 2500). Lower for faster partial scans.',
+        ),
+        history_concurrency: z.number().int().min(1).max(20).default(10).describe(
+          'Parallel /changes requests per page batch (default 10)',
+        ),
+        index_mode: z.enum(['auto', 'scan', 'index']).default('auto').describe(
+          'auto = query local index when built (fast); scan = live API only; index = require index',
         ),
         format: z.enum(['json', 'compact']).default('json').describe('Output format'),
       },
@@ -92,6 +102,9 @@ export function registerFindFieldHistoryChangesTool(
             includeCaseSummary: args.include_case_summary,
             maxResults: args.max_results,
             historyLimit: args.history_limit,
+            maxCasesToScan: args.max_cases_to_scan,
+            historyConcurrency: args.history_concurrency,
+            indexMode: args.index_mode,
           },
         );
 

@@ -8,7 +8,6 @@ import type { FieldsLayout } from '../api/reporting-client.js';
 import type { ZebrunnerReportingClient } from '../api/reporting-client.js';
 import type { EnhancedZebrunnerClient } from '../api/enhanced-client.js';
 import type { ZebrunnerShortTestCase, ZebrunnerTestSuite } from '../types/core.js';
-import { fetchAllTestCasePages } from './test-case-pagination.js';
 import {
   expandSuiteIds,
   findManualOnlyField,
@@ -20,6 +19,11 @@ import {
   type AutomationStatesMap,
   type HistoryEntry,
 } from './testCaseHistory.js';
+import {
+  isIndexUsable,
+  loadHistoryIndex,
+  queryHistoryIndex,
+} from './history-index/index.js';
 
 export interface ResolvedHistoryField {
   historyField: string;
@@ -46,7 +50,12 @@ export interface FindFieldHistoryChangesResult {
   matchCount: number;
   stoppedEarly: boolean;
   scanNotes?: string[];
+  /** True when matches came from the local history index (Option 1). */
+  indexUsed?: boolean;
+  indexComplete?: boolean;
 }
+
+export type FieldHistoryIndexMode = 'auto' | 'scan' | 'index';
 
 export interface FindFieldHistoryChangesOptions {
   projectKey: string;
@@ -61,6 +70,12 @@ export interface FindFieldHistoryChangesOptions {
   includeCaseSummary?: boolean;
   maxResults?: number;
   historyLimit?: number;
+  /** Stop after this many cases receive a history fetch (partial results + scanNotes). Default 2500. */
+  maxCasesToScan?: number;
+  /** Parallel /changes fetches per page batch. Default 10. */
+  historyConcurrency?: number;
+  /** auto = use index when complete; scan = live API only; index = require index. Default auto. */
+  indexMode?: FieldHistoryIndexMode;
 }
 
 function displayNameToSystemName(name: string): string {
@@ -246,6 +261,22 @@ export function scanHistoryForFieldChanges(
   return out;
 }
 
+/**
+ * Skip history fetch when the case could not have changed since `changedAfter`.
+ * `lastModifiedAt` is not RQL-filterable; this is a safe client-side prefilter only.
+ * Cases without lastModifiedAt are still scanned (conservative).
+ */
+export function caseLikelyChangedSince(
+  testCase: { lastModifiedAt?: string },
+  changedAfter?: Date,
+): boolean {
+  if (!changedAfter) return true;
+  if (!testCase.lastModifiedAt) return true;
+  const modified = new Date(testCase.lastModifiedAt);
+  if (Number.isNaN(modified.getTime())) return true;
+  return modified >= changedAfter;
+}
+
 function buildRqlSuiteFilter(
   suiteId: number | undefined,
   rootSuiteId: number | undefined,
@@ -286,6 +317,8 @@ export async function findFieldHistoryChanges(
     includeCaseSummary = true,
     maxResults = 100,
     historyLimit = 100,
+    maxCasesToScan = 2500,
+    historyConcurrency = 10,
   } = options;
 
   const changedAfterDate = parseOptionalDate(changedAfter, 'changed_after');
@@ -294,24 +327,58 @@ export async function findFieldHistoryChanges(
   const fieldsLayout = await deps.getFieldsLayout(projectId);
   const resolved = resolveHistoryFieldPath(field, fieldsLayout);
 
+  const indexMode = options.indexMode ?? 'auto';
+  let suiteIdsForIndex: number[] | undefined;
+  if (rootSuiteId != null) {
+    const allSuites = await deps.client.getAllTestSuites(projectKey);
+    suiteIdsForIndex = expandSuiteIds(allSuites, [rootSuiteId], [], true);
+  }
+
+  if (indexMode !== 'scan') {
+    const index = loadHistoryIndex(projectKey);
+    if (index && isIndexUsable(index.meta, projectId)) {
+      const indexed = queryHistoryIndex(index, {
+        historyField: resolved.historyField,
+        fromValue,
+        toValue,
+        changedAfter: changedAfterDate,
+        changedBefore: changedBeforeDate,
+        suiteId,
+        rootSuiteId,
+        suiteIds: suiteIdsForIndex,
+        maxResults,
+        includeCaseSummary,
+      });
+      return {
+        project: projectKey,
+        field: resolved.historyField,
+        fieldLabel: resolved.displayLabel,
+        matches: indexed.matches,
+        casesScanned: index.meta.totalCasesIndexed,
+        matchCount: indexed.matchCount,
+        stoppedEarly: indexed.matchCount >= maxResults,
+        indexUsed: true,
+        indexComplete: indexed.indexComplete,
+        scanNotes: [
+          `Queried local history index at ${indexed.indexBuiltAt} ` +
+          `(${index.meta.totalCasesIndexed} cases indexed).`,
+        ],
+      };
+    }
+    if (indexMode === 'index') {
+      throw new Error(
+        'History index is missing or incomplete for this project. ' +
+        'Run adv_build_field_history_index (repeat until complete=true) or use index_mode=scan.',
+      );
+    }
+  }
+
   let rqlFilter: string | undefined;
   if (suiteId != null || rootSuiteId != null) {
     const allSuites = await deps.client.getAllTestSuites(projectKey);
     rqlFilter = buildRqlSuiteFilter(suiteId, rootSuiteId, allSuites);
   }
 
-  const pageResult = await fetchAllTestCasePages({
-    fetchPage: (pageToken, pageSize) =>
-      deps.client.getTestCases(projectKey, {
-        size: pageSize,
-        filter: rqlFilter,
-        pageToken,
-      }),
-    pageSize: 100,
-    debugLog: deps.debugLog,
-  });
-
-  const candidates = pageResult.items.filter(tc => tc.id != null && !tc.deleted);
   const statesMap: AutomationStatesMap = await (async () => {
     try {
       const states = await deps.reportingClient.getAutomationStates(projectId);
@@ -324,75 +391,148 @@ export async function findFieldHistoryChanges(
   const matches: FieldHistoryChangeMatch[] = [];
   let stoppedEarly = false;
   const scanNotes: string[] = [];
-  let nextIndex = 0;
+  let casesScanned = 0;
+  let casesSkippedByModified = 0;
+  let pagesTraversed = 0;
+  let hasMorePages = false;
 
-  if (pageResult.hasMorePages) {
-    scanNotes.push(
-      `Pagination stopped after ${pageResult.pagesTraversed} pages (${pageResult.stoppedReason}); ` +
-      'casesScanned may be incomplete.',
+  const pageSize = 100;
+  const maxPages = 100;
+  let pageToken: string | undefined;
+
+  async function scanCase(tc: ZebrunnerShortTestCase): Promise<void> {
+    if (matches.length >= maxResults) {
+      stoppedEarly = true;
+      return;
+    }
+    if (casesScanned >= maxCasesToScan) {
+      stoppedEarly = true;
+      return;
+    }
+
+    casesScanned++;
+
+    const historyResults = await enrichTestCasesWithHistory(
+      [tc],
+      deps.reportingClient,
+      projectId,
+      statesMap,
+      { filter: 'all', maxResults: historyLimit },
     );
-  }
 
-  const HISTORY_CONCURRENCY = 5;
+    const entryMatches = scanHistoryForFieldChanges(historyResults[0] ?? [], {
+      historyField: resolved.historyField,
+      fromValue,
+      toValue,
+      changedAfter: changedAfterDate,
+      changedBefore: changedBeforeDate,
+    });
 
-  async function scanWorker(): Promise<void> {
-    while (true) {
+    for (const m of entryMatches) {
       if (matches.length >= maxResults) {
         stoppedEarly = true;
         return;
       }
-
-      const index = nextIndex++;
-      if (index >= candidates.length) return;
-
-      const tc = candidates[index];
-
-      const historyResults = await enrichTestCasesWithHistory(
-        [tc],
-        deps.reportingClient,
-        projectId,
-        statesMap,
-        { filter: 'all', maxResults: historyLimit },
-      );
-
-      const entryMatches = scanHistoryForFieldChanges(historyResults[0] ?? [], {
-        historyField: resolved.historyField,
-        fromValue,
-        toValue,
-        changedAfter: changedAfterDate,
-        changedBefore: changedBeforeDate,
+      matches.push({
+        key: tc.key ?? String(tc.id),
+        ...(includeCaseSummary
+          ? {
+            title: tc.title,
+            currentAutomationState: tc.automationState?.name,
+          }
+          : {}),
+        timestamp: m.timestamp,
+        author: m.author,
+        oldValue: m.oldValue,
+        newValue: m.newValue,
+        concurrentChanges: m.concurrentChanges,
       });
-
-      for (const m of entryMatches) {
-        if (matches.length >= maxResults) {
-          stoppedEarly = true;
-          return;
-        }
-        matches.push({
-          key: tc.key ?? String(tc.id),
-          ...(includeCaseSummary
-            ? {
-              title: tc.title,
-              currentAutomationState: tc.automationState?.name,
-            }
-            : {}),
-          timestamp: m.timestamp,
-          author: m.author,
-          oldValue: m.oldValue,
-          newValue: m.newValue,
-          concurrentChanges: m.concurrentChanges,
-        });
-      }
     }
   }
 
-  const workers = Array.from(
-    { length: Math.min(HISTORY_CONCURRENCY, Math.max(candidates.length, 1)) },
-    () => scanWorker(),
-  );
-  await Promise.all(workers);
+  async function scanBatch(batch: ZebrunnerShortTestCase[]): Promise<void> {
+    let nextIndex = 0;
+    const workers = Array.from(
+      { length: Math.min(historyConcurrency, Math.max(batch.length, 1)) },
+      async () => {
+        while (!stoppedEarly && matches.length < maxResults && casesScanned < maxCasesToScan) {
+          const index = nextIndex++;
+          if (index >= batch.length) return;
+          await scanCase(batch[index]!);
+        }
+      },
+    );
+    await Promise.all(workers);
+  }
 
-  const casesScanned = Math.min(nextIndex, candidates.length);
+  while (pagesTraversed < maxPages && !stoppedEarly && matches.length < maxResults) {
+    const response = await deps.client.getTestCases(projectKey, {
+      size: pageSize,
+      filter: rqlFilter,
+      pageToken,
+    });
+    pagesTraversed++;
+
+    const pageItems = (response.items ?? []).filter(
+      (tc): tc is ZebrunnerShortTestCase => tc.id != null && !tc.deleted,
+    );
+
+    const candidates: ZebrunnerShortTestCase[] = [];
+    for (const tc of pageItems) {
+      if (caseLikelyChangedSince(tc, changedAfterDate)) {
+        candidates.push(tc);
+      } else {
+        casesSkippedByModified++;
+      }
+    }
+
+    if (candidates.length > 0) {
+      await scanBatch(candidates);
+    }
+
+    deps.debugLog?.('Field history scan page', {
+      pagesTraversed,
+      pageItems: pageItems.length,
+      candidates: candidates.length,
+      casesScanned,
+      matchCount: matches.length,
+      skippedByModified: casesSkippedByModified,
+    });
+
+    const nextToken = response._meta?.nextPageToken;
+    if (!nextToken || pageItems.length === 0) {
+      break;
+    }
+    if (casesScanned >= maxCasesToScan || matches.length >= maxResults) {
+      if (nextToken) {
+        hasMorePages = true;
+      }
+      break;
+    }
+    pageToken = nextToken;
+  }
+
+  if (pagesTraversed >= maxPages && pageToken) {
+    hasMorePages = true;
+  }
+
+  if (hasMorePages) {
+    scanNotes.push(
+      `Scan stopped before all project pages were read (casesScanned=${casesScanned}). ` +
+      'Narrow with suite_id/root_suite_id or raise max_cases_to_scan.',
+    );
+  }
+  if (casesScanned >= maxCasesToScan && matches.length < maxResults) {
+    scanNotes.push(
+      `Reached max_cases_to_scan=${maxCasesToScan} before finding ${maxResults} matches. ` +
+      'Results may be incomplete — add suite_id/root_suite_id or raise max_cases_to_scan.',
+    );
+  }
+  if (casesSkippedByModified > 0 && changedAfterDate) {
+    scanNotes.push(
+      `Skipped ${casesSkippedByModified} case(s) with lastModifiedAt before changed_after (client prefilter).`,
+    );
+  }
 
   return {
     project: projectKey,
@@ -402,6 +542,7 @@ export async function findFieldHistoryChanges(
     casesScanned,
     matchCount: matches.length,
     stoppedEarly,
+    indexUsed: false,
     ...(scanNotes.length > 0 ? { scanNotes } : {}),
   };
 }

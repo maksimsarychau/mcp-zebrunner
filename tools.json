@@ -37,7 +37,11 @@
   },
   {
     "name": "adv_find_field_history_changes",
-    "description": "Find test cases whose TCM change history matches a field transition in a date range. Returns only matching change events (key, timestamp, old/new values, concurrentChanges) — not full case payloads. Field aliases match distribution-by-field (Manual Only, automationState, customField.manualOnly)."
+    "description": "Find test cases whose TCM change history matches a field transition in a date range. Returns only matching change events (key, timestamp, old/new values, concurrentChanges) — not full case payloads. Field aliases match distribution-by-field (Manual Only, automationState, customField.manualOnly). Uses local history index when built (adv_build_field_history_index)."
+  },
+  {
+    "name": "adv_build_field_history_index",
+    "description": "Build or refresh the local TCM field-history index for a project. Run in batches until complete=true; then adv_find_field_history_changes queries in milliseconds. Stored under ~/.mcp-zebrunner/history-index/."
   },
   {
     "name": "adv_batch_get_test_cases",

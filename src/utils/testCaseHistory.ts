@@ -462,6 +462,30 @@ async function fetchAndParseHistory(
   return parseRawChangeEntries(items, statesMap, userMap, filter);
 }
 
+/** Fetch and parse full audit history for one case (used by history index builder). */
+export async function fetchParsedCaseHistory(
+  reportingClient: { getTestCaseChanges: (id: number, pid: number, max: number) => Promise<unknown> },
+  testCase: {
+    id: number;
+    createdBy?: { id?: number; username?: string | null };
+    lastModifiedBy?: { id?: number; username?: string | null };
+  },
+  projectId: number,
+  statesMap: AutomationStatesMap,
+  maxResults: number,
+): Promise<HistoryEntry[]> {
+  const userMap = buildUserMap([testCase]);
+  return fetchAndParseHistory(
+    reportingClient,
+    testCase.id,
+    projectId,
+    'all',
+    maxResults,
+    statesMap,
+    userMap,
+  );
+}
+
 /** Parse TCM audit-log items (exported for unit tests). */
 export function parseRawChangeEntries(
   items: RawChangeEntry[],
