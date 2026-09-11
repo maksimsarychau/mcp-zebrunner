@@ -808,24 +808,86 @@ export class ZebrunnerReportingClient {
    *
    * TCM rejects maxPageSize=100 (HTTP 400 → MCP showed history: []).
    * Some tenants also reject values above ~20; cap each page and paginate with pageToken.
+   * Override cap via TCM_CHANGES_MAX_PAGE_SIZE env (1–100). On HTTP 400, falls back to smaller sizes.
    */
   static readonly TCM_CHANGES_MAX_PAGE_SIZE = 20;
+
+  private static readonly TCM_CHANGES_PAGE_SIZE_FALLBACKS = [20, 10, 5, 1] as const;
+
+  private resolveTcmChangesPageSizeCap(): number {
+    const raw = process.env.TCM_CHANGES_MAX_PAGE_SIZE?.trim();
+    if (raw) {
+      const n = parseInt(raw, 10);
+      if (Number.isFinite(n) && n >= 1 && n <= 100) return n;
+    }
+    return ZebrunnerReportingClient.TCM_CHANGES_MAX_PAGE_SIZE;
+  }
+
+  private nextSmallerTcmPageSizeCap(current: number): number | null {
+    const fallbacks = ZebrunnerReportingClient.TCM_CHANGES_PAGE_SIZE_FALLBACKS;
+    const idx = fallbacks.indexOf(current as (typeof fallbacks)[number]);
+    if (idx >= 0) {
+      return idx < fallbacks.length - 1 ? fallbacks[idx + 1]! : null;
+    }
+    const next = Math.floor(current / 2);
+    return next >= 1 && next < current ? next : null;
+  }
+
+  private async fetchTcmChangesPage(url: string, maxRetries = 3): Promise<any> {
+    let lastError: unknown;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        return await this.makeAuthenticatedRequest<any>('GET', url);
+      } catch (error) {
+        lastError = error;
+        if (
+          error instanceof ZebrunnerReportingError &&
+          error.statusCode === 429 &&
+          attempt < maxRetries
+        ) {
+          const delayMs = 1000 * Math.pow(2, attempt);
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+          continue;
+        }
+        throw error;
+      }
+    }
+    throw lastError;
+  }
 
   async getTestCaseChanges(testCaseId: number, projectId: number, maxResults: number = 20): Promise<any> {
     const target = Math.max(1, maxResults);
     const collected: unknown[] = [];
     let pageToken = '';
+    let pageSizeCap = this.resolveTcmChangesPageSizeCap();
 
     while (collected.length < target) {
-      const pageSize = Math.min(
-        ZebrunnerReportingClient.TCM_CHANGES_MAX_PAGE_SIZE,
-        target - collected.length,
-      );
+      const pageSize = Math.min(pageSizeCap, target - collected.length);
       let url = `/api/tcm/v1/test-cases/${testCaseId}/changes?projectId=${projectId}&maxPageSize=${pageSize}`;
       if (pageToken) {
         url += `&pageToken=${encodeURIComponent(pageToken)}`;
       }
-      const response = await this.makeAuthenticatedRequest<any>('GET', url);
+
+      let response: any;
+      try {
+        response = await this.fetchTcmChangesPage(url);
+      } catch (error) {
+        if (error instanceof ZebrunnerReportingError && error.statusCode === 400) {
+          const smaller = this.nextSmallerTcmPageSizeCap(pageSizeCap);
+          if (smaller != null) {
+            if (this.config.debug) {
+              console.error(
+                `[ZebrunnerReportingClient] TCM /changes maxPageSize=${pageSize} rejected (400); ` +
+                `retrying with cap ${smaller}`,
+              );
+            }
+            pageSizeCap = smaller;
+            continue;
+          }
+        }
+        throw error;
+      }
+
       const data = response.data?.data || response.data || response;
       const items: unknown[] = Array.isArray(data?.items) ? data.items : [];
       collected.push(...items);

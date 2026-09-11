@@ -1,5 +1,6 @@
 import {
   historyValuesMatch,
+  sortFieldHistoryMatchesByRecency,
   type FieldHistoryChangeMatch,
 } from '../field-history-search.js';
 import type { HistoryIndexData, HistoryIndexQueryOptions, HistoryIndexQueryResult } from './types.js';
@@ -60,15 +61,16 @@ export function queryHistoryIndex(
       newValue: row.newValue,
       concurrentChanges: row.concurrentChanges,
     });
-
-    if (matches.length >= options.maxResults) break;
   }
 
-  matches.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+  const sorted = sortFieldHistoryMatchesByRecency(matches);
+  const totalMatches = sorted.length;
+  const limited = sorted.slice(0, options.maxResults);
 
   return {
-    matches,
-    matchCount: matches.length,
+    matches: limited,
+    matchCount: limited.length,
+    totalMatches,
     indexComplete: index.meta.complete,
     indexBuiltAt: index.meta.lastIncrementalAt,
   };

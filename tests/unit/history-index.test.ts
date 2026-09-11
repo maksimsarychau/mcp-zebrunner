@@ -64,6 +64,65 @@ describe('history-index', () => {
     assert.equal(result.matches[0].concurrentChanges.length, 1);
   });
 
+  it('returns the N most recent matches when maxResults is smaller than total', () => {
+    const index: HistoryIndexData = {
+      meta: {
+        version: 1,
+        projectKey: 'MFPAND',
+        projectId: 7,
+        builtAt: '2026-09-11T00:00:00Z',
+        lastIncrementalAt: '2026-09-11T00:00:00Z',
+        complete: true,
+        totalCasesIndexed: 3,
+        caseSnapshots: {},
+      },
+      byField: {
+        automationState: [
+          {
+            caseId: 1,
+            caseKey: 'A-1',
+            timestamp: '2026-01-01T00:00:00Z',
+            author: 'old',
+            field: 'automationState',
+            oldValue: 'Not Automated',
+            newValue: 'Automated',
+            concurrentChanges: [],
+          },
+          {
+            caseId: 2,
+            caseKey: 'A-2',
+            timestamp: '2026-06-01T00:00:00Z',
+            author: 'mid',
+            field: 'automationState',
+            oldValue: 'Not Automated',
+            newValue: 'Automated',
+            concurrentChanges: [],
+          },
+          {
+            caseId: 3,
+            caseKey: 'A-3',
+            timestamp: '2026-08-01T00:00:00Z',
+            author: 'new',
+            field: 'automationState',
+            oldValue: 'Not Automated',
+            newValue: 'Automated',
+            concurrentChanges: [],
+          },
+        ],
+      },
+    };
+
+    const result = queryHistoryIndex(index, {
+      historyField: 'automationState',
+      maxResults: 2,
+      includeCaseSummary: false,
+    });
+
+    assert.equal(result.totalMatches, 3);
+    assert.equal(result.matchCount, 2);
+    assert.deepEqual(result.matches.map(m => m.key), ['A-3', 'A-2']);
+  });
+
   it('removeCaseFromIndex drops all rows for a case', () => {
     const byField = {
       'customField.manualOnly': [

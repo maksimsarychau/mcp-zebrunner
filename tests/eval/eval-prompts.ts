@@ -4,6 +4,7 @@ import { HUB_EVAL_PROMPTS } from "./eval-hub-prompts.js";
 import { AUTHORING_EVAL_PROMPTS } from "./eval-authoring-prompts.js";
 import { AUTHORING_TOOLS_EVAL_PROMPTS } from "./eval-authoring-tools.js";
 import { TEST_IMPACT_EVAL_PROMPTS } from "./eval-test-impact-tools.js";
+import { FIELD_HISTORY_EVAL_PROMPTS } from "./eval-field-history-tools.js";
 import { WIDGET_EVAL_PROMPTS } from "./eval-widget-prompts.js";
 
 export type PromptCategory =
@@ -834,6 +835,8 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
   // Test impact analysis (v9.2.8) — see eval-test-impact-tools.ts
   ...TEST_IMPACT_EVAL_PROMPTS,
 
+  ...FIELD_HISTORY_EVAL_PROMPTS,
+
   // ── Section 4: Utility / Connection Tools ──
 
   {
@@ -1172,7 +1175,7 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
     id: "field_filter.count_manual_only",
     toolSection: "10. Field Filter",
     promptTemplate:
-      "How many test cases in the {{project_key}} project have customField.manualOnly set to 'Yes'? Just the count.",
+      "How many test cases in the {{project_key}} project **currently** have customField.manualOnly set to 'Yes'? Just the count — not audit history of changes.",
     expectedTools: [ "adv_get_test_cases_advanced", "adv_get_test_case_by_filter"],
     expectedArgKeys: ["project_key"],
     category: "field_filter",

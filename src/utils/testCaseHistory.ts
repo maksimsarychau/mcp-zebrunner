@@ -395,7 +395,10 @@ function parseChangeEntry(
 const STEP_FIELDS = new Set(['steps', 'preConditions', 'postConditions', 'deprecated', 'automationState']);
 
 function filterEntry(entry: HistoryEntry, filter: HistoryFilter): HistoryEntry | null {
-  if (filter === 'all') return entry;
+  if (filter === 'all') {
+    if (entry.changes.length === 0 && entry.events.length === 0) return null;
+    return entry;
+  }
 
   if (filter === 'steps_only') {
     const filteredChanges = entry.changes.filter(c => STEP_FIELDS.has(c.field));

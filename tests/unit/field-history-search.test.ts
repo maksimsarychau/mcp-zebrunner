@@ -7,6 +7,7 @@ import {
   normalizeHistoryCompareValue,
   resolveHistoryFieldPath,
   scanHistoryForFieldChanges,
+  sortFieldHistoryMatchesByRecency,
 } from '../../src/utils/field-history-search.js';
 import type { HistoryEntry } from '../../src/utils/testCaseHistory.js';
 
@@ -127,5 +128,15 @@ describe('field-history-search', () => {
     });
 
     assert.equal(matches.length, 0);
+  });
+
+  it('sortFieldHistoryMatchesByRecency orders newest first', () => {
+    const sorted = sortFieldHistoryMatchesByRecency([
+      { timestamp: '2026-01-01T00:00:00Z', key: 'old' },
+      { timestamp: '2026-08-01T00:00:00Z', key: 'new' },
+      { timestamp: '2026-03-01T00:00:00Z', key: 'mid' },
+    ] as any);
+
+    assert.deepEqual(sorted.map(m => m.key), ['new', 'mid', 'old']);
   });
 });

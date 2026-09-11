@@ -60,7 +60,10 @@ export interface HistoryIndexQueryOptions {
 
 export interface HistoryIndexQueryResult {
   matches: FieldHistoryChangeMatch[];
+  /** Number of matches returned (≤ maxResults). */
   matchCount: number;
+  /** Total matches for the query before maxResults truncation. */
+  totalMatches: number;
   indexComplete: boolean;
   indexBuiltAt: string;
 }

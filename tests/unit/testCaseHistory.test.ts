@@ -81,6 +81,23 @@ describe('testCaseHistory', () => {
     assert.ok(entries[0].events.length > 0);
   });
 
+  it('drops empty LAYOUT_UPDATE rows for filter=all', () => {
+    const entries = parseRawChangeEntries(
+      [{
+        id: 3,
+        instant: '2026-08-02T16:33:23Z',
+        userId: 42,
+        type: 'LAYOUT_UPDATE',
+        items: [],
+      }],
+      statesMap,
+      userMap,
+      'all',
+    );
+
+    assert.equal(entries.length, 0);
+  });
+
   it('steps_only drops customFields-only LAYOUT_UPDATE rows', () => {
     const entries = parseRawChangeEntries(
       [{

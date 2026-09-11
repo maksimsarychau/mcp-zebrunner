@@ -41,6 +41,13 @@ export interface FieldHistoryChangeMatch {
   currentAutomationState?: string;
 }
 
+/** Newest-first ordering for field-history matches (ISO timestamps). */
+export function sortFieldHistoryMatchesByRecency<T extends { timestamp: string }>(
+  matches: T[],
+): T[] {
+  return [...matches].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+}
+
 export interface FindFieldHistoryChangesResult {
   project: string;
   field: string;
@@ -356,7 +363,7 @@ export async function findFieldHistoryChanges(
         matches: indexed.matches,
         casesScanned: index.meta.totalCasesIndexed,
         matchCount: indexed.matchCount,
-        stoppedEarly: indexed.matchCount >= maxResults,
+        stoppedEarly: indexed.totalMatches > maxResults,
         indexUsed: true,
         indexComplete: indexed.indexComplete,
         scanNotes: [
@@ -401,10 +408,6 @@ export async function findFieldHistoryChanges(
   let pageToken: string | undefined;
 
   async function scanCase(tc: ZebrunnerShortTestCase): Promise<void> {
-    if (matches.length >= maxResults) {
-      stoppedEarly = true;
-      return;
-    }
     if (casesScanned >= maxCasesToScan) {
       stoppedEarly = true;
       return;
@@ -429,10 +432,6 @@ export async function findFieldHistoryChanges(
     });
 
     for (const m of entryMatches) {
-      if (matches.length >= maxResults) {
-        stoppedEarly = true;
-        return;
-      }
       matches.push({
         key: tc.key ?? String(tc.id),
         ...(includeCaseSummary
@@ -455,7 +454,7 @@ export async function findFieldHistoryChanges(
     const workers = Array.from(
       { length: Math.min(historyConcurrency, Math.max(batch.length, 1)) },
       async () => {
-        while (!stoppedEarly && matches.length < maxResults && casesScanned < maxCasesToScan) {
+        while (!stoppedEarly && casesScanned < maxCasesToScan) {
           const index = nextIndex++;
           if (index >= batch.length) return;
           await scanCase(batch[index]!);
@@ -465,7 +464,7 @@ export async function findFieldHistoryChanges(
     await Promise.all(workers);
   }
 
-  while (pagesTraversed < maxPages && !stoppedEarly && matches.length < maxResults) {
+  while (pagesTraversed < maxPages && !stoppedEarly && casesScanned < maxCasesToScan) {
     const response = await deps.client.getTestCases(projectKey, {
       size: pageSize,
       filter: rqlFilter,
@@ -503,7 +502,7 @@ export async function findFieldHistoryChanges(
     if (!nextToken || pageItems.length === 0) {
       break;
     }
-    if (casesScanned >= maxCasesToScan || matches.length >= maxResults) {
+    if (casesScanned >= maxCasesToScan) {
       if (nextToken) {
         hasMorePages = true;
       }
@@ -534,14 +533,18 @@ export async function findFieldHistoryChanges(
     );
   }
 
+  const sortedMatches = sortFieldHistoryMatchesByRecency(matches);
+  const finalMatches = sortedMatches.slice(0, maxResults);
+  const truncatedByMaxResults = sortedMatches.length > maxResults;
+
   return {
     project: projectKey,
     field: resolved.historyField,
     fieldLabel: resolved.displayLabel,
-    matches,
+    matches: finalMatches,
     casesScanned,
-    matchCount: matches.length,
-    stoppedEarly,
+    matchCount: finalMatches.length,
+    stoppedEarly: truncatedByMaxResults || stoppedEarly || hasMorePages,
     indexUsed: false,
     ...(scanNotes.length > 0 ? { scanNotes } : {}),
   };

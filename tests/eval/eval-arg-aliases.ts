@@ -30,6 +30,15 @@ export const EVAL_ARG_KEY_ALIASES: Record<string, readonly string[]> = {
   ],
   count_only: ["count_only", "countonly"],
   field: ["field", "system_field", "systemfield", "custom_field_id", "customfieldid"],
+  from_value: ["from_value", "fromvalue", "old_value", "oldvalue"],
+  to_value: ["to_value", "tovalue", "new_value", "newvalue"],
+  changed_after: ["changed_after", "changedafter", "since", "start_date", "startdate"],
+  changed_before: ["changed_before", "changedbefore", "until", "end_date", "enddate"],
+  index_mode: ["index_mode", "indexmode"],
+  continue_build: ["continue_build", "continuebuild"],
+  include_history: ["include_history", "includehistory"],
+  history_filter: ["history_filter", "historyfilter"],
+  system_field: ["system_field", "systemfield", "field"],
 };
 
 export function normalizeArgKey(key: string): string {
