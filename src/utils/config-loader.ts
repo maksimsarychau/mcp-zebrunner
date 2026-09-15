@@ -56,6 +56,13 @@ const ZebrunnerConfigSchema = z.object({
     })),
   ).optional(),
   testImpactInfraKeywords: z.array(z.string()).optional(),
+  jiraAutomationPlan: z.object({
+    targetProject: z.string().optional(),
+    platformByProjectKey: z.record(z.string(), z.string()).optional(),
+    componentByPlatform: z.record(z.string(), z.string()).optional(),
+    analyticsComponentByPlatform: z.record(z.string(), z.string()).optional(),
+    analyticsTagMatch: z.string().optional(),
+  }).partial().optional(),
 }).strict().partial();
 
 export type TestImpactSmokeSuite = {
@@ -65,6 +72,28 @@ export type TestImpactSmokeSuite = {
 };
 
 export type ZebrunnerConfig = z.infer<typeof ZebrunnerConfigSchema>;
+
+export type JiraAutomationPlanConfig = {
+  targetProject: string;
+  platformByProjectKey: Record<string, string>;
+  componentByPlatform: Record<string, string>;
+  analyticsComponentByPlatform: Record<string, string>;
+  analyticsTagMatch: string;
+};
+
+const DEFAULT_JIRA_AUTOMATION_PLAN: JiraAutomationPlanConfig = {
+  targetProject: "QAS",
+  platformByProjectKey: {},
+  componentByPlatform: {
+    iOS: "Auto-iOS",
+    Android: "Auto-Android",
+  },
+  analyticsComponentByPlatform: {
+    iOS: "Analytics iOS",
+    Android: "Analytics Android",
+  },
+  analyticsTagMatch: "analytics",
+};
 
 const DEFAULT_TEST_IMPACT_INFRA_KEYWORDS = [
   "navigation",
@@ -101,6 +130,7 @@ const DEFAULTS: Required<{
   repositoryProjectMap: Record<string, string>;
   testImpactSmokeSuites: Record<string, TestImpactSmokeSuite[]>;
   testImpactInfraKeywords: string[];
+  jiraAutomationPlan: JiraAutomationPlanConfig;
 }> = {
   projectAliases: {
     web: "MFPWEB",
@@ -153,6 +183,7 @@ const DEFAULTS: Required<{
   repositoryProjectMap: {},
   testImpactSmokeSuites: {},
   testImpactInfraKeywords: [...DEFAULT_TEST_IMPACT_INFRA_KEYWORDS],
+  jiraAutomationPlan: { ...DEFAULT_JIRA_AUTOMATION_PLAN },
 };
 
 // ---------------------------------------------------------------------------
@@ -188,6 +219,7 @@ export interface ResolvedConfig {
   repositoryProjectMap: Record<string, string>;
   testImpactSmokeSuites: Record<string, TestImpactSmokeSuite[]>;
   testImpactInfraKeywords: string[];
+  jiraAutomationPlan: JiraAutomationPlanConfig;
 }
 
 // ---------------------------------------------------------------------------
@@ -305,6 +337,24 @@ function mergeConfig(overrides: ZebrunnerConfig | null): ResolvedConfig {
       : { ...DEFAULTS.testImpactSmokeSuites },
     testImpactInfraKeywords: overrides.testImpactInfraKeywords
       ?? [...DEFAULTS.testImpactInfraKeywords],
+    jiraAutomationPlan: {
+      targetProject:
+        overrides.jiraAutomationPlan?.targetProject ?? DEFAULTS.jiraAutomationPlan.targetProject,
+      platformByProjectKey: overrides.jiraAutomationPlan?.platformByProjectKey
+        ? { ...DEFAULTS.jiraAutomationPlan.platformByProjectKey, ...overrides.jiraAutomationPlan.platformByProjectKey }
+        : { ...DEFAULTS.jiraAutomationPlan.platformByProjectKey },
+      componentByPlatform: overrides.jiraAutomationPlan?.componentByPlatform
+        ? { ...DEFAULTS.jiraAutomationPlan.componentByPlatform, ...overrides.jiraAutomationPlan.componentByPlatform }
+        : { ...DEFAULTS.jiraAutomationPlan.componentByPlatform },
+      analyticsComponentByPlatform: overrides.jiraAutomationPlan?.analyticsComponentByPlatform
+        ? {
+            ...DEFAULTS.jiraAutomationPlan.analyticsComponentByPlatform,
+            ...overrides.jiraAutomationPlan.analyticsComponentByPlatform,
+          }
+        : { ...DEFAULTS.jiraAutomationPlan.analyticsComponentByPlatform },
+      analyticsTagMatch:
+        overrides.jiraAutomationPlan?.analyticsTagMatch ?? DEFAULTS.jiraAutomationPlan.analyticsTagMatch,
+    },
   };
 }
 

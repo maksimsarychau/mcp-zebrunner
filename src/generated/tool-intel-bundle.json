@@ -1,6 +1,6 @@
 {
   "sourceHashes": {
-    "toolsJson": "d43c4242b70cb265",
+    "toolsJson": "f6adb1c6d2bcb888",
     "catalog": "ce053e397703d598",
     "benefits": "1c7370f3df9e2d38"
   },
@@ -718,6 +718,12 @@
         "\"Show me all test suites\"",
         "\"Get first 50 test suites for project MCP\""
       ]
+    },
+    {
+      "name": "adv_prepare_jira_automation_plan",
+      "description": "[Advanced Zebrunner MCP] Prepare a structured Jira automation task plan from a Zebrunner suite URL or suite id (grouping, automation-state filtering, Analytics split, caseId links). Plan only — does not read or write Jira.",
+      "category": null,
+      "examples": []
     },
     {
       "name": "adv_manage_test_run",

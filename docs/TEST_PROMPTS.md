@@ -25,6 +25,7 @@
 17. [Tool Metrics & Token Tracking](#17-tool-metrics--token-tracking-v721)
 18. [Dashboard Widgets (22 templates)](#18-dashboard-widgets-22-templates--v925)
 19. [Pagination & suite-scope regression (v9.4.2)](#19-pagination--suite-scope-regression-v942)
+20. [Jira automation plan (v9.4.3)](#20-jira-automation-plan-v943)
 
 ---
 
@@ -2545,4 +2546,34 @@ ZEBRUNNER_AUDIT_PROJECTS=<your_project_key> ZEBRUNNER_PAGINATION_SUITE_ID=<paren
 
 ---
 
-*Last Updated: v9.4.2 — September 2026 (§19 pagination regression prompts)*
+## 20. Jira automation plan (v9.4.3)
+
+Manual prompts for **`adv_prepare_jira_automation_plan`** (plan only — no Jira I/O). Use a real suite URL locally; examples use generic hosts and project keys.
+
+### Prompt 1 — Suite URL (default JSON plan)
+
+> Prepare a Jira automation plan from this Zebrunner suite link: `https://example.zebrunner.com/projects/PROJ/test-cases?suiteId=42`
+
+**Expected:** `adv_prepare_jira_automation_plan` with `suite_url`, default `format: json`. Response includes `parentTasks`, `skippedGroups`, and subtask `description` URLs with `caseId=` (not `caseKey`).
+
+### Prompt 2 — Markdown preview
+
+> Same suite as Prompt 1, but show me a human-readable markdown preview of the Jira automation plan before any Jira calls.
+
+**Expected:** `format: markdown` — same plan logic as JSON, rendered as sections/tables.
+
+### Prompt 3 — Automation intake only
+
+> Build the Jira automation plan for suite 42 in project PROJ. Include only default intake automation states; do not include Automated or Manual Only cases.
+
+**Expected:** Default states resolved via project automation-state catalog; no `include_automated_or_manual_only: true`. Excluded cases may appear in `warnings` with `excluded_automation_state`.
+
+### Prompt 4 — Negative (no bulk suite_smart)
+
+> From suite URL `https://example.zebrunner.com/projects/PROJ/test-cases?suiteId=42`, prepare Jira automation tasks using the dedicated plan tool — not `adv_get_test_cases_by_suite_smart`.
+
+**Expected:** `adv_prepare_jira_automation_plan` only.
+
+---
+
+*Last Updated: v9.4.3 — September 2026 (§20 Jira automation plan)*

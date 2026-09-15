@@ -34,6 +34,8 @@ export interface EvalDiscoveryContext {
   /** From live bug-review widget (template 9) for failure-info prompts. */
   bugHashcode?: string;
   dashboardId?: number;
+  /** Zebrunner web URL for suite-scoped Jira plan eval prompts. */
+  suiteUrl?: string;
 }
 
 interface DiscoveryDeps {
@@ -121,6 +123,7 @@ export async function discoverEvalContext(layer: EvalLayer): Promise<EvalDiscove
     throw new Error(`Project ${projectKey} has no test cases. Cannot run eval.`);
   }
 
+  const webBase = reportingBase.replace(/\/+$/, "");
   const ctx: EvalDiscoveryContext = {
     projectKey,
     projectId,
@@ -129,6 +132,7 @@ export async function discoverEvalContext(layer: EvalLayer): Promise<EvalDiscove
     testCaseKey: firstCase.key || `${projectKey}-${firstCase.id}`,
     testCaseId: firstCase.id,
     period: "Last 14 Days",
+    suiteUrl: `${webBase}/projects/${projectKey}/test-cases?suiteId=${firstSuite.id}`,
   };
 
   await discoverBugWidgetContext(ctx, reportingBase, token, projectId);

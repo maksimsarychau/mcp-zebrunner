@@ -6,7 +6,9 @@ A **Model Context Protocol (MCP)** server that brings advanced analytics, report
 
 > Tool naming: every tool on this server is registered under the canonical `adv_<name>` form (e.g. `adv_create_test_case`, `adv_list_test_runs`) so it never collides with the official Zebrunner MCP. The legacy names are kept as **deprecated aliases** so prompts/scripts that called the old names continue to work for now; aliases will be removed in the next major release. 
 
-> 🆕 **v9.3.1** — TCM pagination fixes: correct `get_all` token walks, `root_suite_id` subtree scoping, honest bulk metadata. See [PUBLIC_API_PAGINATION.md](docs/PUBLIC_API_PAGINATION.md) and [change-logs.md](change-logs.md#v931--tcm-pagination-correctness-and-honest-bulk-metadata).
+> 🆕 **v9.4.3** — **`adv_prepare_jira_automation_plan`**: structured Jira automation task plan from a Zebrunner suite link (grouping, automation-state gate, Analytics split, `caseId` links). Configure `jiraAutomationPlan` in `zebrunner-config.json`. See [change-logs.md](change-logs.md#v943--jira-automation-plan-tool-qat-32410) and [TEST_PROMPTS.md §20](docs/TEST_PROMPTS.md#20-jira-automation-plan-v943).
+>
+> **v9.3.1** — TCM pagination fixes: correct `get_all` token walks, `root_suite_id` subtree scoping, honest bulk metadata. See [PUBLIC_API_PAGINATION.md](docs/PUBLIC_API_PAGINATION.md) and [change-logs.md](change-logs.md#v931--tcm-pagination-correctness-and-honest-bulk-metadata).
 >
 > **v9.3.0** — Multi-PR / period test impact: `change_batches[]`, `/test-impact-period`, extended `/test-impact`. See [TEST_IMPACT_WORKFLOW.md](docs/TEST_IMPACT_WORKFLOW.md) and [TEST_IMPACT_PR_PERIOD_DESIGN.md](docs/TEST_IMPACT_PR_PERIOD_DESIGN.md).
 >
@@ -30,7 +32,7 @@ A **Model Context Protocol (MCP)** server that brings advanced analytics, report
 
 ## 🔥 Why This Server
 
-This is the **Advanced Zebrunner MCP Server** — built to go well beyond basic test case management and help QA teams work smarter and faster with AI. Compared to the official Zebrunner MCP (beta, ~70 tools spanning Public REST + Reporting/TAM/Launcher), this server provides **69 analytics-focused tools** (`adv_`* prefix) and is safe to run side-by-side with the official server:
+This is the **Advanced Zebrunner MCP Server** — built to go well beyond basic test case management and help QA teams work smarter and faster with AI. Compared to the official Zebrunner MCP (beta, ~70 tools spanning Public REST + Reporting/TAM/Launcher), this server provides **70 analytics-focused tools** (`adv_`* prefix) and is safe to run side-by-side with the official server:
 
 - **[Reporting & Analytics](#-reporting--analytics)** — dashboards, pass-rate trends, regression stability reports, runtime efficiency analysis, bug reviews, and weekly delta tracking
 - **[Test Coverage & Analysis](#-test-coverage--analysis)** — coverage gaps, automation readiness scoring, and cross-suite analysis

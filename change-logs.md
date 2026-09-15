@@ -1,5 +1,20 @@
 # Change Logs
 
+## v9.4.3 — Jira automation plan tool (QAT-32410)
+
+### Added
+
+- **`adv_prepare_jira_automation_plan`** — read-only Zebrunner-side plan for Jira parent tasks + per-case subtasks from a suite URL or `project_key` + `suite_id`. Handles top-level sub-suite grouping, dynamic automation-state intake (`Not Automated` / `To be automated`), denylist for **Automated** and **Manual Only** unless `include_automated_or_manual_only: true`, Analytics title/suite split, and `caseId` links (never key-based URLs). Output formats: `json` (default), `compact`, `dto`, `string`, `markdown`.
+- **`jiraAutomationPlan`** block in `zebrunner-config.json` — `targetProject` (default **QAS**), optional `platformByProjectKey`, `componentByPlatform`, `analyticsComponentByPlatform`, `analyticsTagMatch`.
+- **Eval** — `jira_plan.*` prompts (v9.4.3) in `tests/eval/eval-jira-automation-plan-tools.ts`.
+
+### Notes
+
+- Does **not** call Jira; dedup/create stays in the agent + Atlassian MCP.
+- Configure `platformByProjectKey` or rely on `projectAliases` reverse-map (`ios` / `android`) for platform labels.
+
+---
+
 ## v9.4.2 — Pagination & suite-scope parity
 
 ### Added

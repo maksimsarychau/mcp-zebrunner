@@ -4,6 +4,7 @@ import { HUB_EVAL_PROMPTS } from "./eval-hub-prompts.js";
 import { AUTHORING_EVAL_PROMPTS } from "./eval-authoring-prompts.js";
 import { AUTHORING_TOOLS_EVAL_PROMPTS } from "./eval-authoring-tools.js";
 import { TEST_IMPACT_EVAL_PROMPTS } from "./eval-test-impact-tools.js";
+import { JIRA_AUTOMATION_PLAN_EVAL_PROMPTS } from "./eval-jira-automation-plan-tools.js";
 import { FIELD_HISTORY_EVAL_PROMPTS } from "./eval-field-history-tools.js";
 import { WIDGET_EVAL_PROMPTS } from "./eval-widget-prompts.js";
 
@@ -80,6 +81,7 @@ export function populatePrompt(template: string, ctx: EvalDiscoveryContext): str
     period: ctx.period,
     bug_hashcode: ctx.bugHashcode,
     dashboard_id: ctx.dashboardId != null ? String(ctx.dashboardId) : undefined,
+    suite_url: ctx.suiteUrl,
   };
 
   return template.replace(/\{\{(\w+)\}\}/g, (match, key) => {
@@ -904,6 +906,9 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
 
   // Test impact analysis (v9.2.8) — see eval-test-impact-tools.ts
   ...TEST_IMPACT_EVAL_PROMPTS,
+
+  // Jira automation plan (v9.4.3) — see eval-jira-automation-plan-tools.ts
+  ...JIRA_AUTOMATION_PLAN_EVAL_PROMPTS,
 
   ...FIELD_HISTORY_EVAL_PROMPTS,
 
