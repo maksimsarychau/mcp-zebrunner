@@ -263,6 +263,39 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
     requiredContext: ["projectKey"],
   },
   {
+    id: "pagination.count_only_automation",
+    toolSection: "1. TCM",
+    promptTemplate:
+      "How many Not Automated test cases are in project {{project_key}}? Return only the count, no case list.",
+    expectedTools: ["adv_get_test_cases_by_automation_state", "adv_get_automation_states"],
+    expectedArgKeys: ["project_key", "count_only"],
+    category: "tcm",
+    layer: 1,
+    requiredContext: ["projectKey"],
+  },
+  {
+    id: "pagination.suite_scope_smart",
+    toolSection: "1. TCM",
+    promptTemplate:
+      "Give a short summary list (not full bodies) of test cases in suite {{suite_id}} for {{project_key}}. Do not pull the entire project.",
+    expectedTools: ["adv_get_test_cases_by_suite_smart"],
+    expectedArgKeys: ["project_key", "suite_id"],
+    category: "tcm",
+    layer: 1,
+    requiredContext: ["projectKey", "suiteId"],
+  },
+  {
+    id: "pagination.advanced_subtree",
+    toolSection: "1. TCM",
+    promptTemplate:
+      "Count test cases in suite {{suite_id}} including all sub-suites in {{project_key}} using advanced retrieval with subtree scope.",
+    expectedTools: ["adv_get_test_cases_advanced", "adv_get_test_cases_by_suite_smart"],
+    expectedArgKeys: ["project_key", "suite_id", "include_sub_suites"],
+    category: "tcm",
+    layer: 2,
+    requiredContext: ["projectKey", "suiteId"],
+  },
+  {
     id: "get_suite_hierarchy.full_tree",
     toolSection: "1. TCM",
     promptTemplate:

@@ -175,6 +175,7 @@ const CLOUD_EVAL_PROMPT_IDS = [
   "get_test_case_by_key.markdown",
   "get_all_subsuites.flat",
   "get_test_cases_advanced.by_suite",
+  "pagination.advanced_subtree",
   "get_test_cases_by_automation_state.automated",
   "get_automation_states.list",
   "get_test_case_by_title.search",

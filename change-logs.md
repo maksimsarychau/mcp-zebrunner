@@ -1,5 +1,27 @@
 # Change Logs
 
+## v9.4.2 — Pagination & suite-scope parity
+
+### Added
+
+- **`include_sub_suites`** on `adv_get_test_cases_advanced` (default `false`) — subtree scope aligned with `adv_get_test_cases_by_suite_smart` when `true`.
+- **`src/utils/suite-scope-filter.ts`** — shared subtree ids, batched `testSuite.id IN` fetch/count, numeric `page` warnings helper.
+- **Eval** — `pagination.count_only_automation`, `pagination.suite_scope_smart`, `pagination.advanced_subtree` (L1/L2).
+- **Audit** — `advanced_subtree_vs_suite_smart` scenario in `tests/mcp-pagination-audit.ts`.
+
+### Fixed
+
+- **`adv_get_test_case_by_filter` + `field_path` + `get_all`** — returns all matches (1MB cap only), not silent `max_page_size` slice.
+- **`adv_get_test_cases_advanced`** — batched suite IN for large scopes; `root_suite_id` vs `suite_id`+`include_sub_suites` documented in tool schema.
+- **`buildRQLFilter`** — `options.filter` AND-composed with automation/date/exclude clauses (no silent drop).
+- **Numeric `page`** — warning in response text (`page_token` required); applies to `_advanced` and `_by_suite_smart`.
+
+### Notes
+
+- Agents: prefer **`count_only` + `page_token`** over bulk `get_all` (API-first; see `docs/PUBLIC_API_PAGINATION.md`).
+
+---
+
 ## v9.4.1 — TCM history pagination + distribution field resolution
 
 ### Added

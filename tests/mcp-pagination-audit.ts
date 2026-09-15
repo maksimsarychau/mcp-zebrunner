@@ -186,17 +186,37 @@ async function auditProject(project: string, suiteId?: number): Promise<AuditRow
   }
 
   if (suite) {
+    const smartCount = await auditTool(rows, project, "suite_smart_count_for_parity", "adv_get_test_cases_by_suite_smart", {
+      suite_id: suite,
+      count_only: true,
+      get_all: true,
+    });
+    const advSubtree = await auditTool(rows, project, "advanced_subtree_count", "adv_get_test_cases_advanced", {
+      suite_id: suite,
+      include_sub_suites: true,
+      count_only: true,
+    });
+    if (smartCount !== undefined && advSubtree !== undefined && smartCount !== advSubtree) {
+      rows.push({
+        project,
+        scenario: "advanced_subtree_vs_suite_smart",
+        tool: "adv_get_test_cases_advanced",
+        args: { suite_id: suite, include_sub_suites: true },
+        notes: `suite_smart count=${smartCount} advanced subtree count=${advSubtree}`,
+      });
+    }
+
     const advRoot = await auditTool(rows, project, "advanced_root_suite", "adv_get_test_cases_advanced", {
       root_suite_id: suite,
       count_only: true,
     });
-    if (advRoot !== undefined && tcmCount !== undefined) {
+    if (advRoot !== undefined && tcmCount !== undefined && advRoot === tcmCount) {
       rows.push({
         project,
         scenario: "advanced_root_vs_project",
         tool: "adv_get_test_cases_advanced",
         args: { root_suite_id: suite },
-        notes: `advanced root count=${advRoot} project deprecated-excluded=${tcmCount}`,
+        notes: `advanced root count=${advRoot} equals full project=${tcmCount} (root_suite_id may be wrong param for this suite)`,
       });
     }
   }
