@@ -12,6 +12,10 @@ import {
 } from "../types/api.js";
 import { fetchAllTestCasePages } from "../utils/test-case-pagination.js";
 import {
+  collectZebrunnerRootSuiteIds,
+  fetchTestCasesForSuiteIdsBatched,
+} from "../utils/suite-scope-filter.js";
+import {
   ZebrunnerTestCase,
   ZebrunnerShortTestCase,
   ZebrunnerTestSuite,
@@ -1047,12 +1051,16 @@ export class EnhancedZebrunnerClient {
       filters.push(`draft = false`);
     }
 
-    // Custom filter (if provided, it takes precedence)
+    const base = filters.join(' AND ');
+
     if (options.filter) {
-      return options.filter;
+      if (!base) {
+        return options.filter;
+      }
+      return `(${options.filter}) AND (${base})`;
     }
 
-    return filters.join(' AND ');
+    return base;
   }
 
   /**
@@ -1145,14 +1153,6 @@ export class EnhancedZebrunnerClient {
         params.filter = rqlFilter;
         if (this.config.debug) {
           console.error(`🔍 Using RQL filter: ${rqlFilter}`);
-        }
-      }
-      
-      // Also support direct filter parameter (overrides RQL filter)
-      if (options.filter) {
-        params.filter = options.filter;
-        if (this.config.debug) {
-          console.error(`🔍 Using direct filter: ${options.filter}`);
         }
       }
 
@@ -1433,63 +1433,21 @@ export class EnhancedZebrunnerClient {
     rootSuiteId: number,
     allSuites: any[]
   ): Promise<ZebrunnerShortTestCase[]> {
-    // Find all child suites (including the root suite itself if it has direct test cases)
-    const childSuiteIds: number[] = [];
-    
-    // Find all suites that have this root suite as their root (after hierarchy processing)
-    for (const suite of allSuites) {
-      if (suite.rootSuiteId === rootSuiteId) {
-        childSuiteIds.push(suite.id);
-      }
-    }
-    
+    const childSuiteIds = collectZebrunnerRootSuiteIds(allSuites, rootSuiteId);
+
     if (this.config.debug) {
-      console.error(`🔍 [getTestCasesByRootSuiteWithFilter] Root suite ${rootSuiteId} has ${childSuiteIds.length} child suites: [${childSuiteIds.join(', ')}]`);
+      console.error(
+        `🔍 [getTestCasesByRootSuiteWithFilter] Root suite ${rootSuiteId} has ${childSuiteIds.length} suite id(s)`,
+      );
     }
-    
-    // Split child suite IDs into smaller batches to avoid API limitations
-    const batchSize = 10; // Smaller batches to ensure API compatibility
-    const allTestCases: ZebrunnerShortTestCase[] = [];
-    const seenIds = new Set<number>(); // Global deduplication across batches
-    
-    for (let i = 0; i < childSuiteIds.length; i += batchSize) {
-      const batch = childSuiteIds.slice(i, i + batchSize);
-      const filter = `testSuite.id IN [${batch.join(',')}]`;
-      
-      if (this.config.debug) {
-        console.error(`🔍 [getTestCasesByRootSuiteWithFilter] Batch ${Math.floor(i/batchSize) + 1}: ${filter}`);
-      }
-      
-      try {
-        const batchResults = await this.getAllTestCases(projectKey, { filter });
-        
-        // Deduplicate across batches
-        const newItems = batchResults.filter(item => {
-          if (seenIds.has(item.id)) {
-            return false;
-          }
-          seenIds.add(item.id);
-          return true;
-        });
-        
-        allTestCases.push(...newItems);
-        
-        if (this.config.debug) {
-          console.error(`🔍 [getTestCasesByRootSuiteWithFilter] Batch ${Math.floor(i/batchSize) + 1}: ${batchResults.length} items, ${newItems.length} new (total: ${allTestCases.length})`);
-        }
-        
-        // Small delay between batches to avoid rate limiting
-        if (i + batchSize < childSuiteIds.length) {
-          await new Promise(resolve => setTimeout(resolve, 100));
-        }
-      } catch (error) {
-        throw new Error(
-          `[getTestCasesByRootSuiteWithFilter] Batch ${Math.floor(i/batchSize) + 1} failed: ${(error as Error).message}`
-        );
-      }
+
+    try {
+      return await fetchTestCasesForSuiteIdsBatched(childSuiteIds, {
+        fetchWithFilter: (filter) => this.getAllTestCases(projectKey, { filter }),
+      });
+    } catch (error) {
+      throw new Error(`[getTestCasesByRootSuiteWithFilter] ${(error as Error).message}`);
     }
-    
-    return allTestCases;
   }
 
   /**

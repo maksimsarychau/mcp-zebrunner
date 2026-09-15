@@ -75,9 +75,20 @@ import {
 } from "./utils/tcm-widget-field.js";
 import { distributionWithPercents } from "./utils/widget-response-parsers.js";
 import {
-  buildRootSuiteInFilter,
   DEPRECATED_PAGE_PARAM_WARNING,
 } from "./utils/test-case-pagination.js";
+import {
+  analyzeSuiteHierarchy,
+  appendWarningsToText,
+  collectNumericPageWarnings,
+  collectSubtreeSuiteIds,
+  collectZebrunnerRootSuiteIds,
+  countTestCasesForSuiteIdsBatched,
+  fetchTestCasesForSuiteIdsBatched,
+  findAllDescendantSuiteIds,
+  MAX_SUITE_IDS_SINGLE_IN,
+  resolveSuiteScopeRql,
+} from "./utils/suite-scope-filter.js";
 import { TCM_WIDGET_SYSTEM_NAMES } from "./utils/tcm-widget-client.js";
 import { registerWidgetHubTools } from "./handlers/widget-hub-tools.js";
 import { registerTestAuthoringTrendTool } from "./handlers/widget-authoring-trend-tool.js";
@@ -1679,12 +1690,18 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
     "get_test_cases_advanced",
     {
       description: "📊 Advanced test case retrieval with filtering and pagination (✨ Enhanced with automation state and date filtering)\n" +
-    "⚠️  IMPORTANT: Use 'suite_id' for direct parent suites, 'root_suite_id' for root suites that contain sub-suites.\n" +
-    "💡 TIP: Use 'adv_get_test_cases_by_suite_smart' for automatic suite type detection!",
+    "⚠️  suite_id = direct suite only (default). For a feature subtree like adv_get_test_cases_by_suite_smart, set include_sub_suites: true.\n" +
+    "⚠️  root_suite_id = Zebrunner root suite id only (rootSuiteId hierarchy), not arbitrary parent suites.\n" +
+    "💡 Agents: prefer count_only + page_token over bulk get_all. Use adv_get_test_cases_by_suite_smart for auto suite-type detection.",
     inputSchema: {
       project_key: z.string().min(1).describe("Project key"),
-      suite_id: z.number().int().positive().optional().describe("Filter by direct parent suite ID (for child suites)"),
-      root_suite_id: z.number().int().positive().optional().describe("Filter by root suite ID (includes all sub-suites)"),
+      suite_id: z.number().int().positive().optional().describe("Filter by suite ID. Direct cases only unless include_sub_suites is true."),
+      include_sub_suites: z.boolean().default(false).describe(
+        "When true with suite_id, includes all descendant suites (same subtree as adv_get_test_cases_by_suite_smart). Default false preserves direct-suite-only behavior."
+      ),
+      root_suite_id: z.number().int().positive().optional().describe(
+        "Zebrunner root suite ID (all suites with matching rootSuiteId). For non-root feature subtrees use suite_id + include_sub_suites instead."
+      ),
       include_steps: z.boolean().default(false).describe("Include detailed test steps"),
       // 🆕 Automation state filtering
       automation_states: z.union([
@@ -1704,7 +1721,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
       field_value: z.string().optional().describe("Value to match against the field. Required for 'exact', 'contains', and 'regex' modes. Not needed for 'exists' mode."),
       field_match: z.enum(["exact", "contains", "regex", "exists"]).default("exact").describe("Match mode: 'exact' (case-insensitive equality), 'contains' (substring), 'regex' (pattern), 'exists' (field is present and non-null)"),
       format: z.enum(['dto', 'json', 'compact', 'string', 'markdown']).default('json').describe("Output format"),
-      page: z.number().int().nonnegative().default(0).describe("Deprecated — ignored by Zebrunner Public API. Use page_token instead."),
+      page: z.number().int().nonnegative().default(0).describe("Ignored by Zebrunner Public API — use page_token instead."),
       page_token: z.string().optional().describe("Token for pagination (from previous response next_page_token). On first call, omit this."),
       size: z.number().int().positive().max(100).default(100).describe("Page size (configurable via MAX_PAGE_SIZE env var)"),
       count_only: z.boolean().default(false).describe(
@@ -1727,6 +1744,7 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
       const {
         project_key,
         suite_id,
+        include_sub_suites,
         root_suite_id,
         include_steps,
         automation_states,
@@ -1776,24 +1794,41 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
         }
 
         let rootSuiteScopeFilter: string | undefined;
+        let useBatchedSuiteFetch = false;
         let rootSuiteBehaviorNote: string | undefined;
+        let suiteScopeIds: number[] | undefined;
+
         if (root_suite_id) {
           const allSuites = await client.getAllTestSuites(project_key);
           const processedSuites = HierarchyProcessor.setRootParentsToSuites(allSuites);
-          rootSuiteScopeFilter = buildRootSuiteInFilter(processedSuites, root_suite_id);
+          suiteScopeIds = collectZebrunnerRootSuiteIds(processedSuites, root_suite_id);
           rootSuiteBehaviorNote =
-            'v9.3.1 behavior: root_suite_id scopes via RQL testSuite.id IN [descendants]. ' +
-            'Pre-9.3.1 this tool could return the full project (~all cases) because the Public API rootSuiteId param is non-functional. ' +
-            'Counts for root_suite_id may be significantly lower than before — this matches adv_get_test_cases_by_suite_smart.';
+            'root_suite_id scopes via RQL testSuite.id IN [Zebrunner rootSuiteId descendants]. ' +
+            'For a non-root feature suite, use suite_id + include_sub_suites: true instead.';
+        } else if (suite_id && include_sub_suites) {
+          const allSuites = await client.getAllTestSuites(project_key);
+          const processedSuites = HierarchyProcessor.setRootParentsToSuites(allSuites);
+          const rootId = HierarchyProcessor.getRootId(processedSuites, suite_id);
+          const { isRootSuite, hasChildren } = analyzeSuiteHierarchy(suite_id, processedSuites, rootId);
+          suiteScopeIds = collectSubtreeSuiteIds(processedSuites, suite_id, {
+            includeSubSuites: true,
+            isRootSuite,
+            hasChildren,
+          });
+          rootSuiteBehaviorNote =
+            'suite_id with include_sub_suites scopes the same subtree as adv_get_test_cases_by_suite_smart.';
         }
 
-        const paginationWarnings: string[] = [];
-        if (page > 0 && !page_token) {
-          paginationWarnings.push(DEPRECATED_PAGE_PARAM_WARNING);
+        if (suiteScopeIds) {
+          const resolvedScope = resolveSuiteScopeRql(suiteScopeIds);
+          rootSuiteScopeFilter = resolvedScope.suiteRqlFilter;
+          useBatchedSuiteFetch = resolvedScope.useBatchedSuiteFetch;
         }
+
+        const paginationWarnings = collectNumericPageWarnings(page, page_token, DEPRECATED_PAGE_PARAM_WARNING);
 
         const baseSearchParams = {
-          suiteId: rootSuiteScopeFilter ? undefined : suite_id,
+          suiteId: rootSuiteScopeFilter || suiteScopeIds ? undefined : suite_id,
           filter: rootSuiteScopeFilter,
           automationState: automation_states,
           createdAfter: created_after,
@@ -1805,10 +1840,18 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
           excludeDeleted: exclude_deleted
         };
 
-        // Field-path filtering requires full pagination + client-side filter
-        if (hasFieldFilter) {
+        const fetchAllCasesForScope = async (): Promise<any[]> => {
+          if (useBatchedSuiteFetch && suiteScopeIds) {
+            return fetchTestCasesForSuiteIdsBatched(suiteScopeIds, {
+              fetchWithFilter: (suiteFilter) =>
+                client.getAllTestCases(project_key, {
+                  ...baseSearchParams,
+                  filter: suiteFilter,
+                }),
+            });
+          }
+
           const allCases: any[] = [];
-          let pageCount = 0;
           let currentPageToken: string | undefined = undefined;
           do {
             const response = await client.getTestCases(project_key, {
@@ -1817,9 +1860,15 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
               pageToken: currentPageToken,
             });
             allCases.push(...(response.items || []));
-            pageCount++;
             currentPageToken = response._meta?.nextPageToken;
           } while (currentPageToken);
+
+          return allCases;
+        };
+
+        // Field-path filtering requires full pagination + client-side filter
+        if (hasFieldFilter) {
+          const allCases = await fetchAllCasesForScope();
 
           const matched = filterByField(allCases, fFilter!);
 
@@ -1827,7 +1876,9 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
             return { content: [{ type: "text" as const, text: JSON.stringify({
               total_count: matched.length,
               total_before_filter: allCases.length,
-              pages_traversed: pageCount,
+              ...(useBatchedSuiteFetch
+                ? { suite_scope_batched: true, suite_ids_in_scope: suiteScopeIds?.length }
+                : {}),
               field_filter: { path: fFilter!.fieldPath, value: fFilter!.fieldValue, mode: fFilter!.matchMode },
               project_key
             }, null, 2) }] };
@@ -1866,13 +1917,14 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
           }] };
         }
 
-        if (count_only) {
+        const countPagesForFilter = async (suiteFilter: string | undefined) => {
           let totalCount = 0;
           let pageCount = 0;
           let currentPageToken: string | undefined = undefined;
           do {
             const response = await client.getTestCases(project_key, {
               ...baseSearchParams,
+              filter: suiteFilter ?? baseSearchParams.filter,
               size: MAX_PAGE_SIZE,
               pageToken: currentPageToken,
             });
@@ -1880,6 +1932,27 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
             pageCount++;
             currentPageToken = response._meta?.nextPageToken;
           } while (currentPageToken);
+          return { totalCount, pageCount };
+        };
+
+        if (count_only) {
+          if (useBatchedSuiteFetch && suiteScopeIds) {
+            const totalCount = await countTestCasesForSuiteIdsBatched(suiteScopeIds, {
+              countWithFilter: async (suiteFilter) => {
+                const { totalCount: n } = await countPagesForFilter(suiteFilter);
+                return n;
+              },
+            });
+            return { content: [{ type: "text" as const, text: JSON.stringify({
+              total_count: totalCount,
+              suite_scope_batched: true,
+              suite_ids_in_scope: suiteScopeIds.length,
+              project_key,
+              ...(rootSuiteBehaviorNote ? { behavior_change_note: rootSuiteBehaviorNote } : {}),
+            }, null, 2) }] };
+          }
+
+          const { totalCount, pageCount } = await countPagesForFilter(baseSearchParams.filter);
 
           return { content: [{ type: "text" as const, text: JSON.stringify({
             total_count: totalCount,
@@ -1889,17 +1962,43 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
           }, null, 2) }] };
         }
 
-        const response = await client.getTestCases(project_key, {
-          ...baseSearchParams,
-          pageToken: page_token,
-          size,
-        });
-
-        if (!validateApiResponse(response, 'array')) {
-          throw new Error('Invalid API response format');
+        if (useBatchedSuiteFetch && page_token) {
+          return {
+            content: [{
+              type: "text" as const,
+              text: `❌ Error: page_token is not supported when the suite scope exceeds ${MAX_SUITE_IDS_SINGLE_IN} suite ids (batched fetch). ` +
+                'Use count_only: true for totals, or narrow suite_id / root_suite_id scope.',
+            }],
+          };
         }
 
-        let processedCases = response.items || response;
+        let response: { items?: any[]; _meta?: { nextPageToken?: string } };
+        let processedCases: any[];
+        let suiteScopeBatchedListing = false;
+        let batchedScopeTotalInProject: number | undefined;
+
+        if (useBatchedSuiteFetch && suiteScopeIds) {
+          const allInScope = await fetchAllCasesForScope();
+          batchedScopeTotalInProject = allInScope.length;
+          processedCases = allInScope.slice(0, size);
+          suiteScopeBatchedListing = true;
+          response = {
+            items: processedCases,
+            _meta: {},
+          };
+        } else {
+          response = await client.getTestCases(project_key, {
+            ...baseSearchParams,
+            pageToken: page_token,
+            size,
+          });
+
+          if (!validateApiResponse(response, 'array')) {
+            throw new Error('Invalid API response format');
+          }
+
+          processedCases = Array.isArray(response) ? response : (response.items ?? []);
+        }
 
         if (include_steps && processedCases.length > 0) {
           debugLog("Fetching detailed steps for test cases", { count: Math.min(5, processedCases.length) });
@@ -1957,11 +2056,14 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
           }
         }
 
-        const hasMorePages = !!response._meta?.nextPageToken;
-        const nextPageToken = response._meta?.nextPageToken;
+        const hasMorePages = suiteScopeBatchedListing
+          ? (batchedScopeTotalInProject ?? 0) > size
+          : !!response._meta?.nextPageToken;
+        const nextPageToken = suiteScopeBatchedListing ? undefined : response._meta?.nextPageToken;
+
         const responseData: any = {
           items: processedCases,
-          fetched_count: processedCases.length,
+          fetched_count: suiteScopeBatchedListing ? batchedScopeTotalInProject : processedCases.length,
           returned_count: processedCases.length,
           page_count: processedCases.length,
           has_more_pages: hasMorePages,
@@ -1970,16 +2072,20 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
             ...(response._meta || {}),
             nextPageToken: nextPageToken || undefined
           },
-          _notice: hasMorePages
-            ? "More pages available. Pass the nextPageToken value to the page_token parameter to fetch the next page. Note: the Zebrunner Public API does not provide a total count."
-            : undefined
+          _notice: suiteScopeBatchedListing
+            ? hasMorePages
+              ? `Large suite scope (${suiteScopeIds!.length} ids): results merged via batched IN. Showing first ${size} cases in scope — increase size or use count_only. API page_token is not available for this mode.`
+              : `Large suite scope (${suiteScopeIds!.length} ids): results merged via batched IN.`
+            : hasMorePages
+              ? "More pages available. Pass the nextPageToken value to the page_token parameter to fetch the next page. Note: the Zebrunner Public API does not provide a total count."
+              : undefined,
+          ...(suiteScopeBatchedListing
+            ? { suite_scope_batched: true, suite_ids_in_scope: suiteScopeIds!.length }
+            : {}),
         };
 
         if (rootSuiteBehaviorNote) {
           responseData.behavior_change_note = rootSuiteBehaviorNote;
-        }
-        if (paginationWarnings.length > 0) {
-          responseData.pagination_warnings = paginationWarnings;
         }
 
         if (include_history) {
@@ -1988,11 +2094,14 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
         }
 
         const formattedData = FormatProcessor.format(responseData, format);
+        const bodyText = typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2);
 
         return {
           content: [{
             type: "text" as const,
-            text: typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2)
+            text: paginationWarnings.length > 0
+              ? appendWarningsToText(bodyText, paginationWarnings)
+              : bodyText,
           }]
         };
       } catch (error: any) {
@@ -2784,7 +2893,9 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
       field_match: z.enum(["exact", "contains", "regex", "exists"]).default("exact").describe("Match mode: 'exact' (case-insensitive equality), 'contains' (substring), 'regex' (pattern), 'exists' (field is present and non-null)"),
       max_page_size: z.number().int().positive().max(100).default(20).describe("Maximum number of results per page"),
       page_token: z.string().optional().describe("Token for pagination (from previous response next_page_token). On first call, omit this."),
-      get_all: z.boolean().default(false).describe("Get all matching test cases across all pages (uses page_token loop internally)"),
+      get_all: z.boolean().default(false).describe(
+        "Server-side full fetch. Agents: prefer count_only + page_token. With field_path, returns all matches (may truncate at 1MB)."
+      ),
       count_only: z.boolean().default(false).describe(
         "When true with get_all, returns only the total count without test case data. " +
         "Efficient for metrics collection -- avoids 1MB response limit on large projects."
@@ -2928,7 +3039,9 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
             );
           }
 
-          const limited = processedCases.slice(0, max_page_size);
+          const limited = get_all
+            ? processedCases
+            : processedCases.slice(0, max_page_size);
 
           // Enrich with change history if requested
           if (include_history && limited.length > 0) {
@@ -2986,7 +3099,11 @@ Default format is 'json' which exposes all raw field values. Use 'json' when usi
 
           const filterDesc = `Field filter: ${fFilter!.fieldPath} ${fFilter!.matchMode} ${fFilter!.fieldValue ?? '(any)'}`;
           const summary = `Found ${matched.length} test case(s) matching field filter (${allCases.length} total, ${pageCount} pages scanned)`;
-          const showingInfo = matched.length > limited.length ? `\nShowing first ${limited.length} of ${matched.length}. Set max_page_size higher to see more.` : '';
+          const showingInfo = !get_all && matched.length > limited.length
+            ? `\nShowing first ${limited.length} of ${matched.length}. Use get_all: true or raise max_page_size.`
+            : (get_all && matched.length > limited.length
+              ? `\nReturning ${limited.length} of ${matched.length} matches (response may be capped at 1MB). Use count_only for totals.`
+              : '');
 
           return attachBulkMetrics(
             {
@@ -6706,10 +6823,9 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       try {
         const { project_key, suite_id, include_steps, format, detail, fields, get_all, include_sub_suites, count_only, page, page_token, size, include_history, history_filter, history_limit } = args;
 
-        const paginationWarnings: string[] = [];
-        if (!get_all && page > 0 && !page_token) {
-          paginationWarnings.push(DEPRECATED_PAGE_PARAM_WARNING);
-        }
+        const paginationWarnings = !get_all
+          ? collectNumericPageWarnings(page, page_token, DEPRECATED_PAGE_PARAM_WARNING)
+          : [];
 
         debugLog("Smart test case retrieval by suite", { project_key, suite_id, include_steps, format, get_all, include_sub_suites, page, page_token, size });
 
@@ -6821,22 +6937,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
               // New logic for parent suites that aren't root suites
               const childSuiteIds: number[] = [suite_id]; // Include parent suite itself
 
-              // Find ALL descendants recursively (not just direct children)
-              function findAllDescendants(parentId: number, processedSuites: any[]): number[] {
-                const descendants: number[] = [];
-                const directChildren = processedSuites.filter(s => s.parentSuiteId === parentId);
-
-                for (const child of directChildren) {
-                  descendants.push(child.id);
-                  // Recursively find descendants of this child
-                  const childDescendants = findAllDescendants(child.id, processedSuites);
-                  descendants.push(...childDescendants);
-                }
-
-                return descendants;
-              }
-
-              const allDescendants = findAllDescendants(suite_id, processedSuites);
+              const allDescendants = findAllDescendantSuiteIds(suite_id, processedSuites);
               childSuiteIds.push(...allDescendants);
 
               debugLog(`Found ${allDescendants.length} total descendants for parent suite ${suite_id}`, {
@@ -6860,22 +6961,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
                 }
               }
             } else {
-              // For parent suites, find ALL descendants recursively
-              function findAllDescendants(parentId: number, processedSuites: any[]): number[] {
-                const descendants: number[] = [];
-                const directChildren = processedSuites.filter(s => s.parentSuiteId === parentId);
-
-                for (const child of directChildren) {
-                  descendants.push(child.id);
-                  // Recursively find descendants of this child
-                  const childDescendants = findAllDescendants(child.id, processedSuites);
-                  descendants.push(...childDescendants);
-                }
-
-                return descendants;
-              }
-
-              const allDescendants = findAllDescendants(suite_id, processedSuites);
+              const allDescendants = findAllDescendantSuiteIds(suite_id, processedSuites);
               childSuiteIds.push(...allDescendants);
             }
 
@@ -7062,6 +7148,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         }
 
         let resultText = typeof formattedData === 'string' ? formattedData : JSON.stringify(formattedData, null, 2);
+        resultText = appendWarningsToText(resultText, paginationWarnings);
         resultText = appendResponseSizeNotice(resultText, [
           '- detail: "summary"',
           '- count_only: true',
@@ -10399,8 +10486,9 @@ ${detailsInfo.map((detail, i) => {
               dueDate: run.milestone.dueDate
             } : null,
             environment: run.environment ? {
-              key: run.environment.key,
-              name: run.environment.name
+              id: run.environment.id,
+              key: run.environment.key ?? run.environment.name,
+              name: run.environment.name,
             } : null,
             configurations: run.configurations.map((config: any) => `${config.group.name}: ${config.option.name}`),
             requirements: run.requirements.map((req: any) => `${req.source}: ${req.reference}`),
@@ -10541,7 +10629,7 @@ ${detailsInfo.map((detail, i) => {
               } : null,
               environment: run.environment ? {
                 id: run.environment.id,
-                key: run.environment.key,
+                key: run.environment.key ?? run.environment.name,
                 name: run.environment.name
               } : null,
               configurations: run.configurations.map((config: any) => ({

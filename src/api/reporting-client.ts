@@ -78,7 +78,7 @@ export interface TestCaseExecution {
   automationLaunchId: number | null;
   automationExecutionId: number | null;
   attachments: any[];
-  environment: { id: number; key: string; name: string } | null;
+  environment: { id: number; key?: string; name: string } | null;
   configurations: { groupId: number; groupName: string; optionId: number; optionName: string }[];
   userId: number;
 }

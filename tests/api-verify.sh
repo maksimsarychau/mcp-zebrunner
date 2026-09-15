@@ -20,6 +20,8 @@
 #   ZEBRUNNER_PAGINATION_SUITE_ID=<id>     — suite for filter/root probes
 #   ZEBRUNNER_PAGINATION_ROOT_SUITE_ID=<id>
 #   ZEBRUNNER_AUDIT_TC_KEY=<caseKey>       — MCP audit H8 history probe (optional)
+#   ZEBRUNNER_VERIFY_TEST_RUN_PROJECT=<key> — with VERIFY_TEST_RUN_ID: P7c environment/schema probe
+#   ZEBRUNNER_VERIFY_TEST_RUN_ID=<id>       — GET specific test run (UI has Environment set)
 #
 set -euo pipefail
 
@@ -28,6 +30,7 @@ ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 ENV_FILE="$ROOT_DIR/.env"
 WIDGET_ASSERT="$SCRIPT_DIR/helpers/widget-api-assert.py"
 PAGINATION_WALK="$SCRIPT_DIR/helpers/pagination-walk.py"
+TEST_RUN_ENV_ASSERT="$SCRIPT_DIR/helpers/test-run-environment-assert.ts"
 
 VERBOSE=false
 WIDGET_CATALOG_AUDIT=false
@@ -1253,6 +1256,23 @@ else:
     RUN_ID=""
   fi
 
+  if [[ "$RUN_COUNT" -gt 0 && -f "$TEST_RUN_ENV_ASSERT" ]]; then
+    local P6B_MSG P6B_ERR
+    P6B_ERR=$(mktemp)
+    if P6B_MSG=$(echo "$P6_BODY" | (cd "$ROOT_DIR" && npx tsx "$TEST_RUN_ENV_ASSERT" list) 2>"$P6B_ERR"); then
+      if [[ "$P6B_MSG" == OK:* ]]; then
+        log_pass "P6b: MCP schema (test-runs list) — ${P6B_MSG#OK: }"
+      else
+        log_pass "P6b: MCP schema parse OK"
+      fi
+    else
+      log_fail "P6b: test-runs list failed MCP Zod parse" "$(cat "$P6B_ERR" | head -c 300)"
+    fi
+    rm -f "$P6B_ERR"
+  else
+    [[ "$RUN_COUNT" -eq 0 ]] && log_skip "P6b: test-runs environment/schema (no runs)"
+  fi
+
   local RUN_PAGE_TOKEN
   RUN_PAGE_TOKEN=$(json_field "$P6_BODY" ".get('_meta',{}).get('nextPageToken','')")
   if [[ -n "$RUN_PAGE_TOKEN" ]]; then
@@ -1267,10 +1287,26 @@ else:
 
     local P7_ID
     P7_ID=$(json_data_field "$_BODY" "id")
+    local P7_BODY="$_BODY"
     if [[ -n "$P7_ID" ]]; then
       log_pass "Single test run has data wrapper with id=$P7_ID"
     else
       log_fail "Single test run missing data.id" "$(echo "$_BODY" | head -c 200)"
+    fi
+
+    if [[ -n "$P7_ID" && -f "$TEST_RUN_ENV_ASSERT" ]]; then
+      local P7B_MSG P7B_ERR
+      P7B_ERR=$(mktemp)
+      if P7B_MSG=$(echo "$P7_BODY" | (cd "$ROOT_DIR" && npx tsx "$TEST_RUN_ENV_ASSERT" single) 2>"$P7B_ERR"); then
+        if [[ "$P7B_MSG" == OK:* ]]; then
+          log_pass "P7b: MCP schema (test-run by id) — ${P7B_MSG#OK: }"
+        else
+          log_pass "P7b: MCP schema parse OK"
+        fi
+      else
+        log_fail "P7b: test-run by id failed MCP Zod parse" "$(cat "$P7B_ERR" | head -c 300)"
+      fi
+      rm -f "$P7B_ERR"
     fi
   else
     log_skip "P7: GET single test run (no RUN_ID)"
@@ -1285,6 +1321,40 @@ else:
     log_pass "Test run $RUN_ID has $P8_COUNT test case(s)"
   else
     log_skip "P8: GET /test-runs/{runId}/test-cases (no RUN_ID)"
+  fi
+
+  if [[ -n "${ZEBRUNNER_VERIFY_TEST_RUN_ID:-}" ]]; then
+    local VTR_PROJECT="${ZEBRUNNER_VERIFY_TEST_RUN_PROJECT:-}"
+    local VTR_ID="${ZEBRUNNER_VERIFY_TEST_RUN_ID}"
+    if [[ -z "$VTR_PROJECT" ]]; then
+      log_skip "P7c: explicit test run probe (set ZEBRUNNER_VERIFY_TEST_RUN_PROJECT with VERIFY_TEST_RUN_ID)"
+    elif [[ "$TEST_PROJECT" != "$VTR_PROJECT" ]]; then
+      debug "P7c: skip (project $TEST_PROJECT != ZEBRUNNER_VERIFY_TEST_RUN_PROJECT=$VTR_PROJECT)"
+    else
+      do_public_get "/test-runs/$VTR_ID?projectKey=$TEST_PROJECT"
+      check_status "P7c: GET /test-runs/$VTR_ID (VERIFY_TEST_RUN_ID)"
+      local P7C_BODY="$_BODY"
+      local P7C_ID
+      P7C_ID=$(json_data_field "$P7C_BODY" "id")
+      if [[ -z "$P7C_ID" ]]; then
+        log_fail "P7c: test run $VTR_ID missing data.id" "$(echo "$P7C_BODY" | head -c 200)"
+      elif [[ -f "$TEST_RUN_ENV_ASSERT" ]]; then
+        local P7C_MSG P7C_ERR
+        P7C_ERR=$(mktemp)
+        if P7C_MSG=$(echo "$P7C_BODY" | (cd "$ROOT_DIR" && npx tsx "$TEST_RUN_ENV_ASSERT" single --require-environment) 2>"$P7C_ERR"); then
+          if [[ "$P7C_MSG" == OK:* ]]; then
+            log_pass "P7c: MCP schema + environment — ${P7C_MSG#OK: }"
+          else
+            log_pass "P7c: MCP schema parse OK (environment present)"
+          fi
+        else
+          log_fail "P7c: explicit test run failed MCP Zod or missing environment" "$(cat "$P7C_ERR" | head -c 300)"
+        fi
+        rm -f "$P7C_ERR"
+      else
+        log_skip "P7c: assert helper missing"
+      fi
+    fi
   fi
 
   # --- Public API: settings ---

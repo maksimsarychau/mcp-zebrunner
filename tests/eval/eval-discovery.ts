@@ -26,6 +26,8 @@ export interface EvalDiscoveryContext {
   failedLaunchTestId?: number;
   milestoneName?: string;
   testRunId?: number;
+  /** Second open test run (multi-run progress eval prompts). */
+  secondTestRunId?: number;
   automationStateId?: number;
   automationStateName?: string;
   secondTestCaseKey?: string;
@@ -235,9 +237,14 @@ export async function discoverEvalContext(layer: EvalLayer): Promise<EvalDiscove
     console.error("[eval-discovery] Fetching test runs...");
     const runsResp = await publicClient.getTestRuns(projectKey, { size: 2 });
     const firstRun = runsResp.items?.[0];
+    const secondRun = runsResp.items?.[1];
     if (firstRun) {
       ctx.testRunId = firstRun.id;
       console.error(`[eval-discovery]   test run: id=${firstRun.id}`);
+    }
+    if (secondRun && secondRun.id !== firstRun?.id) {
+      ctx.secondTestRunId = secondRun.id;
+      console.error(`[eval-discovery]   second test run: id=${secondRun.id}`);
     }
   } catch {
     console.error("[eval-discovery]   Could not fetch test runs (skipped)");
