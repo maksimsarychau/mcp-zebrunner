@@ -1,4 +1,5 @@
 # Advanced Zebrunner MCP Server
+
 ![version](https://img.shields.io/github/package-json/v/maksimsarychau/mcp-zebrunner)
 
 A **Model Context Protocol (MCP)** server that brings advanced analytics, reporting, failure forensics, and safe TCM mutations to **Zebrunner**. Designed to coexist with the official Zebrunner MCP (beta) — see the "Dual-MCP setup" section below.
@@ -11,7 +12,7 @@ A **Model Context Protocol (MCP)** server that brings advanced analytics, report
 >
 > 🆕 **v9.2.7** — New `adv_scaffold_test_case` wizard (hybrid form/conversational) to author test cases from best practices with an automatic warn-only similar-case check, plus configurable `projectAliases` in `zebrunner-config.json`. See [release notes](docs/releases/v9.2.7.md).
 >
-> 🆕 **v9.2.5** — **`adv_get_test_authoring_trend`** (TAM template 7) completes **22/22** dashboard widget MCP coverage. Hub tools, pass-rate views, period modes. See **[TEST_PROMPTS.md §18](docs/TEST_PROMPTS.md#18-dashboard-widgets-22-templates--v925)** and [change-logs.md](change-logs.md#v925--test-authoring-trend-template-7).
+> 🆕 **v9.2.5** — `adv_get_test_authoring_trend` (TAM template 7) completes **22/22** dashboard widget MCP coverage. Hub tools, pass-rate views, period modes. See **[TEST_PROMPTS.md §18](docs/TEST_PROMPTS.md#18-dashboard-widgets-22-templates--v925)** and [change-logs.md](change-logs.md#v925--test-authoring-trend-template-7).
 
 > **v9.2.1** — LLM-visible metrics (`include_call_metrics`, session breakdown), compact expansion (+19 tools), format/truncation bugfixes. See **[Token efficiency guide](docs/TOKEN_EFFICIENCY.md)** and [change-logs.md](change-logs.md#v921--llm-visible-metrics--compact-expansion).
 
@@ -19,15 +20,17 @@ A **Model Context Protocol (MCP)** server that brings advanced analytics, report
 
 > **v9.1.0** — Launch mutations: `adv_rerun_launch_failures`, `adv_start_launch` (Jenkins Build Now), plus `/relaunch-regression-failures` and `/feature-scoped-launch` prompts. See [GitHub Release v9.1.0](https://github.com/maksimsarychau/mcp-zebrunner/releases/tag/v9.1.0).
 >
-> 📖 **Need help with installation?** Check out our [**Step-by-Step Install Guide**](INSTALL-GUIDE.md) for detailed setup instructions.
-> 
-> 🚀 **Installing via npm?** See our [**MCP NPM Installation Guide**](MCP_NPM_INSTALLATION_GUIDE.md) for Claude Desktop, Cursor, IntelliJ IDEA, and ChatGPT Desktop configuration.
+> 📖 **Need help with installation?** Check out our **[Step-by-Step Install Guide](INSTALL-GUIDE.md)** for detailed setup instructions.
 >
-> 📚 **Test vs Test Case vs Launch?** See [**Terminology & Glossary**](docs/TERMINOLOGY.md) — definitions, counting rules, and how metrics are calculated.
+> 🚀 **Installing via npm?** See our **[MCP NPM Installation Guide](MCP_NPM_INSTALLATION_GUIDE.md)** for Claude Desktop, Cursor, IntelliJ IDEA, and ChatGPT Desktop configuration.
+>
+> 📚 **Test vs Test Case vs Launch?** See **[Terminology & Glossary](docs/TERMINOLOGY.md)** — definitions, counting rules, and how metrics are calculated.
+
+
 
 ## 🔥 Why This Server
 
-This is the **Advanced Zebrunner MCP Server** — built to go well beyond basic test case management and help QA teams work smarter and faster with AI. Compared to the official Zebrunner MCP (beta, ~70 tools spanning Public REST + Reporting/TAM/Launcher), this server provides **69 analytics-focused tools** (`adv_*` prefix) and is safe to run side-by-side with the official server:
+This is the **Advanced Zebrunner MCP Server** — built to go well beyond basic test case management and help QA teams work smarter and faster with AI. Compared to the official Zebrunner MCP (beta, ~70 tools spanning Public REST + Reporting/TAM/Launcher), this server provides **69 analytics-focused tools** (`adv_`* prefix) and is safe to run side-by-side with the official server:
 
 - **[Reporting & Analytics](#-reporting--analytics)** — dashboards, pass-rate trends, regression stability reports, runtime efficiency analysis, bug reviews, and weekly delta tracking
 - **[Test Coverage & Analysis](#-test-coverage--analysis)** — coverage gaps, automation readiness scoring, and cross-suite analysis
@@ -36,73 +39,65 @@ This is the **Advanced Zebrunner MCP Server** — built to go well beyond basic 
 - **[MCP Resources & Prompts](#-mcp-resources--prompts-new)** — `@` context injection and `/` workflow commands for streamlined daily operations
 - **[Multi-Transport & Multi-Auth](#-usage-methods)** — STDIO, Streamable HTTP, self-service OAuth, Okta SSO, and token exchange (Modes 1–5)
 
+
+
 ## 📑 Table of Contents
 
 1. [🔥 Why This Server](#-why-this-server)
 2. [🎯 What is this tool?](#-what-is-this-tool)
 3. [🧠 Intelligent Rules System](#-intelligent-rules-system)
-   - 3.1. [What Makes This Tool Special](#what-makes-this-tool-special)
-   - 3.2. [How the Rules Work Together](#how-the-rules-work-together)
-   - 3.3. [Why This Matters](#why-this-matters)
-   - 3.4. [Customizing Rules for Your Project](#customizing-rules-for-your-project)
+  - 3.1. [What Makes This Tool Special](#what-makes-this-tool-special)
+  - 3.2. [How the Rules Work Together](#how-the-rules-work-together)
+  - 3.3. [Why This Matters](#why-this-matters)
+  - 3.4. [Customizing Rules for Your Project](#customizing-rules-for-your-project)
 4. [📋 Prerequisites](#-prerequisites)
 5. [🚀 Quick Start Guide](#-quick-start-guide)
 6. [🔧 Usage Methods](#-usage-methods)
-   - 6.1. [Method 1: Use with Claude Desktop/Code](#method-1-use-with-claude-desktopcode-recommended)
-   - 6.2. [Method 2: Run as standalone server](#method-2-run-as-standalone-server)
-   - 6.3. [Method 3: Smart URL-Based Analysis 🚀](#method-3-smart-url-based-analysis-)
+  - 6.1. [Method 1: Use with Claude Desktop/Code](#method-1-use-with-claude-desktopcode-recommended)
+  - 6.2. [Method 2: Run as standalone server](#method-2-run-as-standalone-server)
+  - 6.3. [Method 3: Smart URL-Based Analysis 🚀](#method-3-smart-url-based-analysis-)
 7. [🛠️ Available Tools](#️-available-tools)
-   - 7.1. [📋 Test Case Management](#-test-case-management)
-   - 7.2. [🌳 Test Suite Hierarchy & Organization](#-test-suite-hierarchy--organization)
-   - 7.3. [🔧 Mutation Tools (Beta)](#-mutation-tools-beta)
-   - 7.4. [🔍 Test Coverage & Analysis](#-test-coverage--analysis)
-   - 7.5. [🧪 Test Code Generation & Validation](#-test-code-generation--validation)
-   - 7.6. [🚀 Launch & Execution Management](#-launch--execution-management)
-   - 7.7. [📊 Reporting & Analytics](#-reporting--analytics)
-   - 7.8. [🏃 Test Run Management](#-test-run-management)
-   - 7.9. [🎯 Management-Focused Quick Commands](#-management-focused-quick-commands)
+  - 7.1. [📋 Test Case Management](#-test-case-management)
+  - 7.2. [🌳 Test Suite Hierarchy & Organization](#-test-suite-hierarchy--organization)
+  - 7.3. [🔧 Mutation Tools (Beta)](#-mutation-tools-beta)
+  - 7.4. [🔍 Test Coverage & Analysis](#-test-coverage--analysis)
+  - 7.5. [🧪 Test Code Generation & Validation](#-test-code-generation--validation)
+  - 7.6. [🚀 Launch & Execution Management](#-launch--execution-management)
+  - 7.7. [📊 Reporting & Analytics](#-reporting--analytics)
+  - 7.8. [🏃 Test Run Management](#-test-run-management)
+  - 7.9. [🎯 Management-Focused Quick Commands](#-management-focused-quick-commands)
 8. [📎 MCP Resources & Prompts (NEW)](#-mcp-resources--prompts-new)
-   - 8.1. [Resources — `@` Context Injection](#resources--context-injection)
-   - 8.2. [Prompts — `/` Workflow Commands](#prompts---workflow-commands)
+  - 8.1. [Resources —](#resources--context-injection) `@` [Context Injection](#resources--context-injection)
+  - 8.2. [Prompts —](#prompts---workflow-commands) `/` [Workflow Commands](#prompts---workflow-commands)
 9. [🎭 Role-Specific Prompts & Workflows](#-role-specific-prompts--workflows)
-   - <details><summary>9.1. 👩‍💻 Manual QA Engineers</summary>
-     
-     - [Daily Test Case Review](#daily-test-case-review)
-     - [Test Case Creation & Improvement](#test-case-creation--improvement)
-     - [Test Suite Organization](#test-suite-organization)
-     - [Coverage Analysis](#coverage-analysis)
-     </details>
-   - <details><summary>9.2. 🤖 Test Automation Engineers & SDETs</summary>
-     
-     - [Automation Readiness Assessment](#automation-readiness-assessment)
-     - [Test Code Generation](#test-code-generation-1)
-     - [Coverage Analysis & Validation](#coverage-analysis--validation)
-     - [Framework Integration](#framework-integration)
-     - [Batch Automation Analysis](#batch-automation-analysis)
-     </details>
-   - <details><summary>9.3. 👨‍💻 Developers</summary>
-     
-     - [Test Case Understanding](#test-case-understanding)
-     - [Implementation Validation](#implementation-validation)
-     - [Code Generation for Testing](#code-generation-for-testing)
-     - [Bug Analysis](#bug-analysis)
-     </details>
-   - <details><summary>9.4. 👔 Test Managers & Team Leads</summary>
-     
-     - [Team Quality Metrics](#team-quality-metrics)
-     - [Test Suite Analysis](#test-suite-analysis)
-     - [Team Performance & Planning](#team-performance--planning)
-     - [Process Improvement](#process-improvement)
-     - [Reporting & Stakeholder Communication](#reporting--stakeholder-communication)
-     </details>
-   - <details><summary>9.5. 🏢 Project Owners & Product Managers</summary>
-     
-     - [Project Health Overview](#project-health-overview)
-     - [Feature Testing Status](#feature-testing-status)
-     - [Quality Assurance Metrics](#quality-assurance-metrics)
-     - [Risk Assessment](#risk-assessment)
-     - [Planning & Resource Allocation](#planning--resource-allocation)
-     </details>
+  - 9.1. 👩‍💻 Manual QA Engineers
+    - [Daily Test Case Review](#daily-test-case-review)
+    - [Test Case Creation & Improvement](#test-case-creation--improvement)
+    - [Test Suite Organization](#test-suite-organization)
+    - [Coverage Analysis](#coverage-analysis)
+  - 9.2. 🤖 Test Automation Engineers & SDETs
+    - [Automation Readiness Assessment](#automation-readiness-assessment)
+    - [Test Code Generation](#test-code-generation-1)
+    - [Coverage Analysis & Validation](#coverage-analysis--validation)
+    - [Framework Integration](#framework-integration)
+    - [Batch Automation Analysis](#batch-automation-analysis)
+  - 9.3. 👨‍💻 Developers
+    - [Test Case Understanding](#test-case-understanding)
+    - [Implementation Validation](#implementation-validation)
+    - [Code Generation for Testing](#code-generation-for-testing)
+    - [Bug Analysis](#bug-analysis)
+  - 9.4. 👔 Test Managers & Team Leads
+    - [Team Quality Metrics](#team-quality-metrics)
+    - [Test Suite Analysis](#test-suite-analysis)
+    - [Team Performance & Planning](#team-performance--planning)
+    - [Process Improvement](#process-improvement)
+    - [Reporting & Stakeholder Communication](#reporting--stakeholder-communication)
+  - 9.5. 🏢 Project Owners & Product Managers
+    - [Project Health Overview](#project-health-overview)
+    - [Feature Testing Status](#feature-testing-status)
+    - [Quality Assurance Metrics](#quality-assurance-metrics)
+    - [Risk Assessment](#risk-assessment)
+    - [Planning & Resource Allocation](#planning--resource-allocation)
 10. [📖 Output Formats](#-output-formats)
 11. [⚙️ Configuration Options](#️-configuration-options)
 12. [🧪 Testing Your Setup](#-testing-your-setup)
@@ -116,9 +111,12 @@ This is the **Advanced Zebrunner MCP Server** — built to go well beyond basic 
 
 ---
 
+
+
 ## 🎯 What is this tool?
 
 This tool allows you to:
+
 - **Retrieve test cases** and test suites from Zebrunner
 - **Analyze test coverage** and generate test code
 - **Get test execution results** and launch details
@@ -132,27 +130,38 @@ All through natural language commands in AI assistants!
 
 ## 🧠 Intelligent Rules System
 
+
+
 ### What Makes This Tool Special
 
 Our MCP server includes a sophisticated **3-tier rules system** that transforms how you work with test cases:
 
 #### 🎯 **Test Case Review Rules** (`test_case_review_rules.md`)
+
 - **Purpose**: Core quality standards and writing guidelines
 - **What it does**: Defines fundamental principles for writing high-quality test cases
 - **Key areas**: Independence, single responsibility, comprehensive preconditions, complete step coverage
 - **Used by**: `adv_validate_test_case` and `adv_improve_test_case` tools
 
+
+
 #### ✅ **Test Case Analysis Checkpoints** (`test_case_analysis_checkpoints.md`)
+
 - **Purpose**: Detailed validation checklist with 100+ checkpoints
 - **What it does**: Provides granular validation criteria for thorough test case analysis
 - **Key areas**: Structure validation, automation readiness, platform considerations, quality assurance
 - **Used by**: `adv_validate_test_case` for comprehensive scoring and issue detection
 
+
+
 #### ⚙️ **MCP Zebrunner Rules** (`mcp-zebrunner-rules.md`)
+
 - **Purpose**: Technical configuration for test generation and coverage analysis
 - **What it does**: Defines framework detection patterns, code templates, and coverage thresholds
 - **Key areas**: Framework detection, test generation templates, coverage thresholds, quality standards
 - **Used by**: `adv_generate_draft_test_by_key` and `adv_get_enhanced_test_coverage_with_rules` tools
+
+
 
 ### How the Rules Work Together
 
@@ -175,6 +184,10 @@ graph TD
     K --> L[Coverage Analysis + Rules Validation]
 ```
 
+
+
+
+
 ### Why This Matters
 
 1. **Consistency**: All team members follow the same quality standards
@@ -182,6 +195,8 @@ graph TD
 3. **Learning**: New team members learn best practices through AI feedback
 4. **Customization**: Adapt rules to your project's specific needs
 5. **Continuous Improvement**: AI suggests improvements based on proven patterns
+
+
 
 ### Customizing Rules for Your Project
 
@@ -198,6 +213,7 @@ cp mcp-zebrunner-rules.md my-project-technical-rules.md
 ```
 
 **Example customizations:**
+
 - **Mobile projects**: Add mobile-specific validation rules
 - **API projects**: Focus on API testing patterns and data validation
 - **Different frameworks**: Customize code generation templates
@@ -207,48 +223,70 @@ cp mcp-zebrunner-rules.md my-project-technical-rules.md
 
 ## 📋 Prerequisites
 
+
+
 ### What you need to know
+
 - **Basic command line usage** (opening terminal, running commands)
 - **Your Zebrunner credentials** (login and API token)
 - **Basic understanding of test management** (test cases, test suites)
 
+
+
 ### Software requirements
+
 - **Node.js 18 or newer** - [Download here](https://nodejs.org/)
 - **npm** (comes with Node.js)
 - **Access to a Zebrunner instance** with API credentials
 
+
+
 ### How to check if you have Node.js
+
 Open your terminal/command prompt and run:
+
 ```bash
 node --version
 npm --version
 ```
+
 If you see version numbers, you're ready to go!
 
 [⬆️ Back to top](#-table-of-contents)
 
 ## 🚀 Quick Start Guide
 
-> 💡 **Want more detailed instructions?** Check out our [**More Detailed Step-by-step Install Guide**](INSTALL-GUIDE.md) with troubleshooting tips and platform-specific instructions.
+> 💡 **Want more detailed instructions?** Check out our **[More Detailed Step-by-step Install Guide](INSTALL-GUIDE.md)** with troubleshooting tips and platform-specific instructions.
+
+
 
 ### Step 1: Get the code
+
 Choose one of these methods:
 
 #### Option A: Clone from repository (recommended)
+
 ```bash
 git clone https://github.com/maksimsarychau/mcp-zebrunner.git
 cd mcp-zebrunner
 ```
 
+
+
 #### Option B: Download and extract
+
 Download the project files and extract them to a folder.
 
 ### Step 2: Install dependencies
+
 ```bash
 npm install
 ```
 
+
+
 ### Step 3: Configure your Zebrunner connection
+
 Create a `.env` file in the project folder with your Zebrunner details:
 
 ```env
@@ -268,27 +306,40 @@ DEBUG=false
 ENABLE_RULES_ENGINE=true
 ```
 
+
+
 #### How to get your Zebrunner API token:
+
 1. Log into your Zebrunner instance
 2. Go to your profile settings
 3. Find the "API Access" section
 4. Generate a new API token
 5. Copy the token to your `.env` file
 
+
+
 ### Step 4: Build the project
+
 ```bash
 npm run build
 ```
 
+
+
 ### Step 5: Test your connection
+
 ```bash
 npm run test:health
 ```
+
 If you see "✅ Health check completed", you're ready to go!
 
 ## 🔄 Updating to New Version
 
+
+
 ### Check current version
+
 ```bash
 # Check your current version
 npm run version
@@ -296,7 +347,10 @@ npm run version
 cat package.json | grep '"version"'
 ```
 
+
+
 ### Update steps
+
 ```bash
 # 1. Pull latest changes from master branch
 git pull origin master
@@ -312,7 +366,8 @@ npm run test:health
 ```
 
 **Important Notes:**
-- ✅ **Your `.env` file must be properly configured** for the health check to work
+
+- ✅ **Your** `.env` **file must be properly configured** for the health check to work
 - ✅ **Restart Claude Desktop/Code** after updating to reload the MCP server
 - ✅ **Check release notes** for any breaking changes before updating
 
@@ -321,6 +376,8 @@ If the health check fails, verify your `.env` configuration and Zebrunner creden
 [⬆️ Back to top](#-table-of-contents)
 
 ## 🔧 Usage Methods
+
+
 
 ### Method 1: Use with Claude Desktop/Code (Recommended)
 
@@ -347,8 +404,11 @@ Add this configuration to your Claude Desktop or Claude Code settings. **Importa
 ```
 
 **Example paths:**
+
 - **Windows:** `C:\\Users\\YourName\\Projects\\mcp-zebrunner\\dist\\server.js`
 - **macOS/Linux:** `/Users/YourName/Projects/mcp-zebrunner/dist/server.js`
+
+
 
 ### Alternative: Command Line Integration (Claude Code)
 
@@ -368,38 +428,52 @@ claude mcp add mcp-zebrunner \
 
 ### Method 2: Run as standalone server
 
+
+
 #### Development mode (with auto-reload)
+
 ```bash
 npm run dev
 ```
 
+
+
 #### Production mode
+
 ```bash
 npm start
 ```
+
+
 
 ### Method 3: Smart URL-Based Analysis 🚀
 
 **NEW in v5.4.1+**: Claude can automatically detect Zebrunner URLs and analyze them with optimal settings!
 
 Just paste a Zebrunner URL in your conversation, and Claude will automatically:
+
 - Parse the URL to extract project, launch, and test IDs
 - Call the appropriate analysis tool
 - Use recommended settings (videos, screenshots, AI analysis enabled)
 
+
+
 #### 📋 Supported URL Patterns
 
 **1. Test Analysis URLs**
+
 ```
 https://your-workspace.zebrunner.com/projects/PROJECT/automation-launches/LAUNCH_ID/tests/TEST_ID
 ```
 
 **What happens:**
+
 - Claude automatically calls `adv_analyze_test_failure`
 - Extracts: `projectKey`, `testRunId` (launch ID), `testId`
 - Enables: `includeVideo: true`, `analyzeScreenshotsWithAI: true`, all diagnostics
 
 **Example:**
+
 ```
 User: "Analyze https://your-workspace.zebrunner.com/projects/MCP/automation-launches/120911/tests/5455386"
 
@@ -419,16 +493,19 @@ Claude automatically calls:
 ```
 
 **2. Launch Analysis URLs**
+
 ```
 https://your-workspace.zebrunner.com/projects/PROJECT/automation-launches/LAUNCH_ID
 ```
 
 **What happens:**
+
 - Claude automatically calls `adv_detailed_analyze_launch_failures`
 - Extracts: `projectKey`, `testRunId` (launch ID)
 - Enables: `includeScreenshotAnalysis: true`, comprehensive analysis
 
 **Example:**
+
 ```
 User: "Analyze https://your-workspace.zebrunner.com/projects/MCP/automation-launches/120911"
 
@@ -443,6 +520,8 @@ Claude automatically calls:
   executionMode: "sequential"
 }
 ```
+
+
 
 #### ✨ Advanced Usage
 
@@ -483,14 +562,20 @@ User: "Analyze https://other-workspace.zebrunner.com/..."
 → Proceeds with analysis using available credentials
 ```
 
+
+
 #### 📖 URL Pattern Reference
 
-| Component | Example | Extracted As | Used In Tool |
-|-----------|---------|--------------|--------------|
-| Workspace | `your-workspace.zebrunner.com` | Validation only | N/A |
-| Project Key | `MCP` | `projectKey` | All tools |
-| Launch ID | `120911` | `testRunId` | All tools |
-| Test ID | `5455386` | `testId` | `adv_analyze_test_failure` only |
+
+| Component   | Example                        | Extracted As    | Used In Tool                    |
+| ----------- | ------------------------------ | --------------- | ------------------------------- |
+| Workspace   | `your-workspace.zebrunner.com` | Validation only | N/A                             |
+| Project Key | `MCP`                          | `projectKey`    | All tools                       |
+| Launch ID   | `120911`                       | `testRunId`     | All tools                       |
+| Test ID     | `5455386`                      | `testId`        | `adv_analyze_test_failure` only |
+
+
+
 
 #### 🎯 Why Use URL-Based Analysis?
 
@@ -544,11 +629,13 @@ Example `.cursor/mcp.json`:
 
 Rule of thumb when both are connected:
 
-| Use **`zebrunner`** (official) for | Use **`mcp-zebrunner`** (Advanced) for |
-|------------------------------------|----------------------------------------|
-| `list_projects`, shared steps, test run replace/close, custom field create | Failure forensics, runtime + flakiness analytics |
-| Server-side `filter` DSL; file upload + screenshot content in triage | Reporting, dashboards, regression analyzers |
+
+| Use `zebrunner` (official) for                                                 | Use `mcp-zebrunner` (Advanced) for                                |
+| ------------------------------------------------------------------------------ | ----------------------------------------------------------------- |
+| `list_projects`, shared steps, test run replace/close, custom field create     | Failure forensics, runtime + flakiness analytics                  |
+| Server-side `filter` DSL; file upload + screenshot content in triage           | Reporting, dashboards, regression analyzers                       |
 | Bulk launch/test comments, issue linking, launcher/preset CRUD, `launch_tests` | Preview/confirm TCM mutations; Jenkins Build Now / rerun failures |
+
 
 Inside chat, ask `adv_about_mcp_tools` with `mode: "routing"` or open the
 `zebrunner://mcp-routing` resource for the full live-generated diff and routing table.
@@ -563,14 +650,16 @@ Once connected, you can use these tools through natural language in your AI assi
 
 Large TCM exports can consume significant context. Use these **opt-in** parameters (defaults stay backward-compatible). **Full guide:** [docs/TOKEN_EFFICIENCY.md](docs/TOKEN_EFFICIENCY.md).
 
-| Technique | Example | When to use |
-|-----------|---------|-------------|
-| `format: 'compact'` | `adv_get_all_tcm_test_cases_by_project` with `format:'compact'` | Minified JSON (~22% smaller than pretty `json`) |
-| `detail: 'summary'` | `adv_get_test_cases_by_suite_smart` with `detail:'summary'` | After filtering — returns id, key, title, priority, automationState, webUrl only |
-| `adv_batch_get_test_cases` | `{ case_keys: ["MCP-1","MCP-2"], detail:"summary", format:"compact" }` | Fetch a shortlist without N round-trips |
-| `adv_generate_report` `inline: false` | Writes HTML/PNG to disk, returns paths | Huge dashboards in chat clients |
-| `count_only: true` | Any bulk TCM/suite read | Metrics without payload |
-| Env flags (off) | `MCP_COMPACT_DEFAULTS=true`, `MCP_SUMMARY_DEFAULTS=true` | Server-wide default flips after eval passes |
+
+| Technique                             | Example                                                                | When to use                                                                      |
+| ------------------------------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `format: 'compact'`                   | `adv_get_all_tcm_test_cases_by_project` with `format:'compact'`        | Minified JSON (~22% smaller than pretty `json`)                                  |
+| `detail: 'summary'`                   | `adv_get_test_cases_by_suite_smart` with `detail:'summary'`            | After filtering — returns id, key, title, priority, automationState, webUrl only |
+| `adv_batch_get_test_cases`            | `{ case_keys: ["MCP-1","MCP-2"], detail:"summary", format:"compact" }` | Fetch a shortlist without N round-trips                                          |
+| `adv_generate_report` `inline: false` | Writes HTML/PNG to disk, returns paths                                 | Huge dashboards in chat clients                                                  |
+| `count_only: true`                    | Any bulk TCM/suite read                                                | Metrics without payload                                                          |
+| Env flags (off)                       | `MCP_COMPACT_DEFAULTS=true`, `MCP_SUMMARY_DEFAULTS=true`               | Server-wide default flips after eval passes                                      |
+
 
 **Workflow:** list/filter with `detail:'summary'` + `format:'compact'` → `adv_get_test_case_by_key` for full body (steps, preconditions) before create/update.
 
@@ -580,42 +669,59 @@ Large TCM exports can consume significant context. Use these **opt-in** paramete
 - *"Fetch MCP-1 and MCP-2 in one batch call with summary and compact format."*
 - *"Generate a quality dashboard for MCP with inline false — save to disk."*
 
-> **Tool naming:** All tools are exposed as **`adv_<name>`** (e.g. `adv_get_test_case_by_key`). Use these names in prompts, scripts, and when both the official and Advanced MCP are connected. Legacy short names (`get_test_case_by_key`, etc.) are **deprecated** and only registered when `ZEBRUNNER_REGISTER_LEGACY_ALIASES=true`.
+> **Tool naming:** All tools are exposed as `adv_<name>` (e.g. `adv_get_test_case_by_key`). Use these names in prompts, scripts, and when both the official and Advanced MCP are connected. Legacy short names (`get_test_case_by_key`, etc.) are **deprecated** and only registered when `ZEBRUNNER_REGISTER_LEGACY_ALIASES=true`.
+
+
 
 ### 📋 Test Case Management
 
+
+
 #### **Core Test Case Tools**
-| Tool | Description | Example Usage | Best For |
-|------|-------------|---------------|----------|
-| `adv_get_test_case_by_key` | Get detailed test case information | `"Get test case MCP-123 details"` | All roles |
-| `adv_batch_get_test_cases` | Fetch multiple cases by key (partial success) | `"Get MCP-1 and MCP-2 with summary detail"` | All roles |
-| `adv_get_test_cases_advanced` | Advanced filtering with automation states, dates | `"Get test cases created after 2025-01-01 with automation state 'Manual'"` | QA, SDETs |
-| `adv_get_test_cases_by_automation_state` | Filter by specific automation states | `"Show me all 'Not Automated' test cases in project MCP"` | SDETs, Managers |
-| `adv_get_test_case_by_title` | Search test cases by title (partial match) | `"Find test cases with title containing 'login functionality'"` | All roles |
-| `adv_get_test_case_by_filter` | Advanced filtering by suite, dates, priority, automation state | `"Get test cases from suite 491 created after 2025-01-01 with high priority"` | QA, Managers |
-| `adv_get_automation_states` | List available automation states | `"What automation states are available for project MCP?"` | All roles |
-| `adv_get_automation_priorities` | List available priorities with IDs | `"Show me all priority levels for project MCP"` | All roles |
+
+
+| Tool                                     | Description                                                    | Example Usage                                                                 | Best For        |
+| ---------------------------------------- | -------------------------------------------------------------- | ----------------------------------------------------------------------------- | --------------- |
+| `adv_get_test_case_by_key`               | Get detailed test case information                             | `"Get test case MCP-123 details"`                                             | All roles       |
+| `adv_batch_get_test_cases`               | Fetch multiple cases by key (partial success)                  | `"Get MCP-1 and MCP-2 with summary detail"`                                   | All roles       |
+| `adv_get_test_cases_advanced`            | Advanced filtering with automation states, dates               | `"Get test cases created after 2025-01-01 with automation state 'Manual'"`    | QA, SDETs       |
+| `adv_get_test_cases_by_automation_state` | Filter by specific automation states                           | `"Show me all 'Not Automated' test cases in project MCP"`                     | SDETs, Managers |
+| `adv_get_test_case_by_title`             | Search test cases by title (partial match)                     | `"Find test cases with title containing 'login functionality'"`               | All roles       |
+| `adv_get_test_case_by_filter`            | Advanced filtering by suite, dates, priority, automation state | `"Get test cases from suite 491 created after 2025-01-01 with high priority"` | QA, Managers    |
+| `adv_get_automation_states`              | List available automation states                               | `"What automation states are available for project MCP?"`                     | All roles       |
+| `adv_get_automation_priorities`          | List available priorities with IDs                             | `"Show me all priority levels for project MCP"`                               | All roles       |
+
+
+
 
 #### **Batch Test Case Operations**
-| Tool | Description | Example Usage | Best For |
-|------|-------------|---------------|----------|
-| `adv_get_all_tcm_test_cases_by_project` | Get ALL test cases (handles pagination) | `"Get all test cases for project MCP"` | Managers, Leads |
-| `adv_get_all_tcm_test_cases_with_root_suite_id` | All test cases with hierarchy info | `"Get all test cases with their root suite information"` | Analysts |
-| `adv_get_test_cases_by_suite_smart` | Smart suite test case retrieval with root/child auto-detection | `"Get test cases from suite 18824 in project MCP using smart mode"` | QA, Analysts |
+
+
+| Tool                                            | Description                                                    | Example Usage                                                       | Best For        |
+| ----------------------------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------- | --------------- |
+| `adv_get_all_tcm_test_cases_by_project`         | Get ALL test cases (handles pagination)                        | `"Get all test cases for project MCP"`                              | Managers, Leads |
+| `adv_get_all_tcm_test_cases_with_root_suite_id` | All test cases with hierarchy info                             | `"Get all test cases with their root suite information"`            | Analysts        |
+| `adv_get_test_cases_by_suite_smart`             | Smart suite test case retrieval with root/child auto-detection | `"Get test cases from suite 18824 in project MCP using smart mode"` | QA, Analysts    |
+
+
+
 
 #### **Test Case Change History**
 
 Most test case tools support optional **change history enrichment** — fetching the audit log of modifications for each test case. This is useful for understanding when steps were changed, when automation state transitioned, or when a test case was deprecated.
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `include_history` | boolean | `false` | Attach a `history` array of parsed change entries to each test case |
-| `history_filter` | `steps_only` \| `events_only` \| `all` | `steps_only` | Filter: step/precondition diffs only, lifecycle events only, or all changes |
-| `history_limit` | number (1–100) | `20` | Max history entries per test case |
+
+| Parameter         | Type                                 | Default      | Description                                                                 |
+| ----------------- | ------------------------------------ | ------------ | --------------------------------------------------------------------------- |
+| `include_history` | boolean                              | `false`      | Attach a `history` array of parsed change entries to each test case         |
+| `history_filter`  | `steps_only` | `events_only` | `all` | `steps_only` | Filter: step/precondition diffs only, lifecycle events only, or all changes |
+| `history_limit`   | number (1–100)                       | `20`         | Max history entries per test case                                           |
+
 
 **Supported on:** `adv_get_test_case_by_key`, `adv_get_test_cases_advanced`, `adv_get_test_cases_by_automation_state`, `adv_get_test_case_by_title`, `adv_get_test_case_by_filter`, `adv_get_all_tcm_test_cases_by_project`, `adv_get_test_cases_by_suite_smart`
 
 **Example prompts:**
+
 - `"Get test case MCP-29 with change history"` → sets `include_history=true`
 - `"Show me MCP-29 history, events only"` → sets `include_history=true`, `history_filter='events_only'`
 - `"Get all automated test cases with their last 5 changes"` → sets `include_history=true`, `history_limit=5`
@@ -624,21 +730,33 @@ Most test case tools support optional **change history enrichment** — fetching
 
 ### 🌳 Test Suite Hierarchy & Organization
 
+
+
 #### **Suite Management**
-| Tool | Description | Example Usage | Best For |
-|------|-------------|---------------|----------|
-| `adv_list_test_suites` | List suites with pagination | `"List test suites for project MCP"` | All roles |
-| `adv_get_suite_hierarchy` | Hierarchical tree view | `"Show me the hierarchy of test suites with depth 3"` | Managers, QA |
-| `adv_get_root_suites` | Get top-level suites | `"Show me all root suites for project MCP"` | Managers |
-| `adv_get_all_subsuites` | Get all child suites | `"Get all subsuites from root suite 18697"` | QA, Analysts |
+
+
+| Tool                      | Description                 | Example Usage                                         | Best For     |
+| ------------------------- | --------------------------- | ----------------------------------------------------- | ------------ |
+| `adv_list_test_suites`    | List suites with pagination | `"List test suites for project MCP"`                  | All roles    |
+| `adv_get_suite_hierarchy` | Hierarchical tree view      | `"Show me the hierarchy of test suites with depth 3"` | Managers, QA |
+| `adv_get_root_suites`     | Get top-level suites        | `"Show me all root suites for project MCP"`           | Managers     |
+| `adv_get_all_subsuites`   | Get all child suites        | `"Get all subsuites from root suite 18697"`           | QA, Analysts |
+
+
+
 
 #### **Suite Analysis Tools**
-| Tool | Description | Example Usage | Best For |
-|------|-------------|---------------|----------|
-| `adv_get_tcm_suite_by_id` | Get suite by ID (simple: fast direct API, full: hierarchy-enriched) | `"Show me suite 20421 in project MCP"` | All roles |
-| `adv_get_tcm_test_suites_by_project` | Comprehensive suite listing | `"Get all suites for project MCP with hierarchy"` | Managers |
-| `adv_get_all_tcm_test_case_suites_by_project` | Get all TCM test case suites with pagination | `"Get all TCM test case suites for project MCP"` | Managers, Analysts |
-| `adv_get_root_id_by_suite_id` | Find root suite for any suite | `"What's the root suite for suite 12345?"` | Analysts |
+
+
+| Tool                                          | Description                                                         | Example Usage                                     | Best For           |
+| --------------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------- | ------------------ |
+| `adv_get_tcm_suite_by_id`                     | Get suite by ID (simple: fast direct API, full: hierarchy-enriched) | `"Show me suite 20421 in project MCP"`            | All roles          |
+| `adv_get_tcm_test_suites_by_project`          | Comprehensive suite listing                                         | `"Get all suites for project MCP with hierarchy"` | Managers           |
+| `adv_get_all_tcm_test_case_suites_by_project` | Get all TCM test case suites with pagination                        | `"Get all TCM test case suites for project MCP"`  | Managers, Analysts |
+| `adv_get_root_id_by_suite_id`                 | Find root suite for any suite                                       | `"What's the root suite for suite 12345?"`        | Analysts           |
+
+
+
 
 ### 🔧 Mutation Tools (Beta)
 
@@ -646,85 +764,134 @@ Most test case tools support optional **change history enrichment** — fetching
 >
 > **Next-step steering (v7.2.2):** After every successful mutation, the server appends a `Tip:` block guiding the LLM to the most useful next action (e.g., "validate quality", "publish the draft", "populate the test run"). Hints are conditional -- they are suppressed when redundant. For example, the quality-check hint is omitted if `review: true` was already used. Created test cases are always forced to `draft=true`, and the hint always reminds the LLM to publish via `adv_update_test_case`. This approach is inspired by the [Strands Agents steering pattern](https://strandsagents.com/blog/steering-accuracy-beats-prompts-workflows/) and delivers just-in-time guidance without bloating system prompts.
 
+
+
 #### **Suite Mutations**
-| Tool | Description | Example Usage | Best For |
-|------|-------------|---------------|----------|
-| `adv_create_test_suite` | (Beta) Create a new Test Suite | `"Create root suite 'Payments' in project MCP"` | QA, Managers |
+
+
+| Tool                    | Description                                     | Example Usage                                    | Best For     |
+| ----------------------- | ----------------------------------------------- | ------------------------------------------------ | ------------ |
+| `adv_create_test_suite` | (Beta) Create a new Test Suite                  | `"Create root suite 'Payments' in project MCP"`  | QA, Managers |
 | `adv_update_test_suite` | (Beta) Update an existing Test Suite (full PUT) | `"Rename suite 18697 to 'Login & Registration'"` | QA, Managers |
 
+
+
+
 #### **Test Case Mutations**
-| Tool | Description | Example Usage | Best For |
-|------|-------------|---------------|----------|
+
+
+| Tool                   | Description                                                                                                                                                                                                             | Example Usage                                                      | Best For  |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | --------- |
 | `adv_create_test_case` | (Beta) Create a new Test Case with runtime validation of priorities, automation states, and custom fields. Accepts `{file_path}` in attachments. Optional `source_case_key` to pre-populate from an existing test case. | `"Create test case 'Verify login' in suite 17470 for project MCP"` | QA, SDETs |
-| `adv_update_test_case` | (Beta) Partially update a Test Case by ID or key (PATCH). Accepts `{file_path}` in attachments for local file upload. | `"Attach /Users/me/screenshot.png to test case MCP-42"` | QA, SDETs |
+| `adv_update_test_case` | (Beta) Partially update a Test Case by ID or key (PATCH). Accepts `{file_path}` in attachments for local file upload.                                                                                                   | `"Attach /Users/me/screenshot.png to test case MCP-42"`            | QA, SDETs |
+
+
+
 
 ### 🔍 Test Coverage & Analysis
 
+
+
 #### **Test Impact (PR / code changes)** *(v9.2.8)*
-| Tool | Description | Example Usage | Best For |
-|------|-------------|---------------|----------|
+
+
+| Tool                      | Description                                                                 | Example Usage                                                          | Best For              |
+| ------------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------- | --------------------- |
 | `adv_analyze_test_impact` | Rank Zebrunner cases affected by code changes from compact semantic context | `"Analyze test impact for diary edit + serving size changes on PROJ2"` | **Developers, SDETs** |
 
-Use the **`/test-impact`** MCP prompt (optional `pr_url`) for guided workflow. See [TEST_IMPACT_WORKFLOW.md](docs/TEST_IMPACT_WORKFLOW.md). Configure `repositoryProjectMap` via `.env.example`.
+
+Use the `/test-impact` MCP prompt (optional `pr_url`) for guided workflow. See [TEST_IMPACT_WORKFLOW.md](docs/TEST_IMPACT_WORKFLOW.md). Configure `repositoryProjectMap` via `.env.example`.
 
 #### **Coverage Analysis**
-| Tool | Description | Example Usage | Best For |
-|------|-------------|---------------|----------|
-| `adv_get_test_coverage_by_test_case_steps_by_key` | Analyze implementation coverage | `"Analyze coverage for MCP-123 against this code: [paste code]"` | Developers, SDETs |
-| `adv_get_enhanced_test_coverage_with_rules` | Rules-based coverage analysis | `"Enhanced coverage analysis for MCP-123 with framework detection"` | SDETs, Leads |
+
+
+| Tool                                              | Description                     | Example Usage                                                       | Best For          |
+| ------------------------------------------------- | ------------------------------- | ------------------------------------------------------------------- | ----------------- |
+| `adv_get_test_coverage_by_test_case_steps_by_key` | Analyze implementation coverage | `"Analyze coverage for MCP-123 against this code: [paste code]"`    | Developers, SDETs |
+| `adv_get_enhanced_test_coverage_with_rules`       | Rules-based coverage analysis   | `"Enhanced coverage analysis for MCP-123 with framework detection"` | SDETs, Leads      |
+
+
+
 
 #### **Duplicate Analysis**
-| Tool | Description | Example Usage | Best For |
-|------|-------------|---------------|----------|
-| `adv_analyze_test_cases_duplicates` | Find and group similar test cases by step similarity | `"Analyze suite 12345 for duplicates with 80% similarity threshold"` | QA Managers, SDETs |
+
+
+| Tool                                         | Description                                                 | Example Usage                                                                  | Best For                   |
+| -------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------ | -------------------------- |
+| `adv_analyze_test_cases_duplicates`          | Find and group similar test cases by step similarity        | `"Analyze suite 12345 for duplicates with 80% similarity threshold"`           | QA Managers, SDETs         |
 | `adv_analyze_test_cases_duplicates_semantic` | Advanced semantic analysis with LLM-powered step clustering | `"Semantic analysis of suite 12345 with step clustering and medoid selection"` | Senior QA, Test Architects |
 
+
 **🔗 Clickable Links Feature**: Both duplicate analysis tools support clickable links to Zebrunner web UI:
+
 - Add `include_clickable_links: true` to make test case keys clickable in markdown output
 - JSON/DTO formats automatically include `webUrl` fields when enabled
 - Links are generated from your `ZEBRUNNER_URL` environment variable
 - Example: `"Analyze suite 17585 for duplicates with clickable links enabled"`
 
+
+
 ### 🧪 Test Code Generation & Validation
 
+
+
 #### **AI-Powered Tools**
-| Tool | Description | Example Usage | Best For |
-|------|-------------|---------------|----------|
+
+
+| Tool                             | Description                                 | Example Usage                                                          | Best For          |
+| -------------------------------- | ------------------------------------------- | ---------------------------------------------------------------------- | ----------------- |
 | `adv_generate_draft_test_by_key` | Generate test code with framework detection | `"Generate Java/Carina test for MCP-123 based on this implementation"` | SDETs, Developers |
-| `adv_validate_test_case` | Quality validation with improvement | `"Validate test case MCP-123 and suggest improvements"` | QA, Managers |
-| `adv_improve_test_case` | Dedicated improvement tool | `"Improve test case MCP-123 with specific suggestions"` | QA, SDETs |
+| `adv_validate_test_case`         | Quality validation with improvement         | `"Validate test case MCP-123 and suggest improvements"`                | QA, Managers      |
+| `adv_improve_test_case`          | Dedicated improvement tool                  | `"Improve test case MCP-123 with specific suggestions"`                | QA, SDETs         |
+
+
+
 
 ### 🚀 Launch & Execution Management
 
-#### **Launch Operations** ⭐ *Essential for Managers*
-| Tool | Description | Example Usage | Best For |
-|------|-------------|---------------|----------|
-| `adv_get_launch_details` | Comprehensive launch information; optional `includeJobParameters` for Jenkins Build Now discovery | `"Get launch details for launch 118685 with job parameters"` | **Managers, Leads, SDETs** |
-| `adv_rerun_launch_failures` | 🆕 **v9.1.0** Rerun failed/aborted tests for one or many launches (preview/confirm) | `"Rerun failures for launch 132522 in project android"` | **Managers, SDETs** |
-| `adv_start_launch` | 🆕 **v9.1.0** Trigger Jenkins **Build Now** (not Launch Launchers); preview/confirm | `"Build now regression for android milestone 26.19.0 build 50977"` | **Managers, SDETs** |
-| `adv_get_launch_summary` | Quick launch overview | `"Show me summary for launch 118685"` | **Managers** |
-| `adv_get_all_launches_for_project` | List individual launch executions with pagination | `"List launches for project MCP from last month"` | **Managers, Leads** |
-| `adv_get_all_launches_with_filter` | Search launches by milestone/build/name | `"Find launches for milestone 2.1.0 and build 'mcp-app-2.1.0'"` | **Managers, Leads** |
-| `adv_generate_weekly_regression_stability_report` | Weekly regression stability report with WoW delta, linked issues, and strict Jira-ready output. Supports launch list or build-based auto-discovery (version-segment build lookup with `launch.build` validation when needed). | `"Weekly stability report for MCP: (120906 vs 120814), (120901 vs 120809)"` or `"Weekly stability report for builds 9117 vs 48886"` | **Managers, Leads** |
-| `adv_analyze_regression_runtime` | Regression Runtime Efficiency — per-launch elapsed time, attempt/re-run breakdown, configurable duration classification (Short/Medium/Long), dual metrics for both Tests and Test Cases (Average Runtime, WRI), duration distribution with test case counts, and baseline comparison with delta tracking. | `"Analyze regression runtime for the iOS project on the latest milestone. Show WRI and WRI per test case."` or `"Compare runtime for latest vs previous milestone"` | **Managers, Leads, SDETs** |
 
-> **`adv_analyze_regression_runtime` — Usage Examples:**
+
+#### **Launch Operations** ⭐ *Essential for Managers*
+
+
+| Tool                                              | Description                                                                                                                                                                                                                                                                                               | Example Usage                                                                                                                                                       | Best For                   |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| `adv_get_launch_details`                          | Comprehensive launch information; optional `includeJobParameters` for Jenkins Build Now discovery                                                                                                                                                                                                         | `"Get launch details for launch 118685 with job parameters"`                                                                                                        | **Managers, Leads, SDETs** |
+| `adv_rerun_launch_failures`                       | 🆕 **v9.1.0** Rerun failed/aborted tests for one or many launches (preview/confirm)                                                                                                                                                                                                                       | `"Rerun failures for launch 132522 in project android"`                                                                                                             | **Managers, SDETs**        |
+| `adv_start_launch`                                | 🆕 **v9.1.0** Trigger Jenkins **Build Now** (not Launch Launchers); preview/confirm                                                                                                                                                                                                                       | `"Build now regression for android milestone 26.19.0 build 50977"`                                                                                                  | **Managers, SDETs**        |
+| `adv_get_launch_summary`                          | Quick launch overview                                                                                                                                                                                                                                                                                     | `"Show me summary for launch 118685"`                                                                                                                               | **Managers**               |
+| `adv_get_all_launches_for_project`                | List individual launch executions with pagination                                                                                                                                                                                                                                                         | `"List launches for project MCP from last month"`                                                                                                                   | **Managers, Leads**        |
+| `adv_get_all_launches_with_filter`                | Search launches by milestone/build/name                                                                                                                                                                                                                                                                   | `"Find launches for milestone 2.1.0 and build 'mcp-app-2.1.0'"`                                                                                                     | **Managers, Leads**        |
+| `adv_generate_weekly_regression_stability_report` | Weekly regression stability report with WoW delta, linked issues, and strict Jira-ready output. Supports launch list or build-based auto-discovery (version-segment build lookup with `launch.build` validation when needed).                                                                             | `"Weekly stability report for MCP: (120906 vs 120814), (120901 vs 120809)"` or `"Weekly stability report for builds 9117 vs 48886"`                                 | **Managers, Leads**        |
+| `adv_analyze_regression_runtime`                  | Regression Runtime Efficiency — per-launch elapsed time, attempt/re-run breakdown, configurable duration classification (Short/Medium/Long), dual metrics for both Tests and Test Cases (Average Runtime, WRI), duration distribution with test case counts, and baseline comparison with delta tracking. | `"Analyze regression runtime for the iOS project on the latest milestone. Show WRI and WRI per test case."` or `"Compare runtime for latest vs previous milestone"` | **Managers, Leads, SDETs** |
+
+
+> `adv_analyze_regression_runtime` **— Usage Examples:**
+>
 > - *"Analyze regression runtime for the iOS project on the latest milestone. Show both average runtime per test and per test case, plus WRI and WRI per test case."*
 > - *"Run regression runtime analysis for all three projects on their latest milestones. Compare how many test cases fall into Short vs Medium vs Long buckets per team."*
 > - *"Analyze regression runtime for the Android project, latest vs previous milestone. Show WRI and WRI per test case for both. Has efficiency improved or degraded?"*
 > - *"Analyze regression runtime with medium_threshold_seconds: 120 and long_threshold_seconds: 300. Show which tests fall into each bucket."*
 > - *"What is the average time cost per test case in each duration bucket? Are long-running tests covering proportionally more test cases?"*
 
+
+
 ### 📊 Reporting & Analytics
 
+
+
 #### **Test Failure Analysis** 🆕 *Game Changer*
-| Tool | Description | Example Usage | Best For |
-|------|-------------|---------------|----------|
-| `adv_analyze_test_failure` | Deep forensic analysis of failed tests with logs, screenshots, error classification, and recommendations. **NEW in v5.11.0:** Compare with last passed execution! Shows what changed (logs, duration, environment). **Also:** `format: 'jira'` generates ready-to-paste Jira tickets with auto-priority, labels, and clickable 🎥 video links! | `"Analyze test failure 5451420 in launch 120806 and compare with last passed execution"` | **QA Engineers, SDETs, Managers** |
-| `adv_get_test_execution_history` | 🆕 **NEW in v5.11.0!** Track test execution trends across launches. View pass/fail history, find last passed execution, calculate pass rate. **Critical Detection:** Highlights when test failed in all recent runs! | `"Show execution history for test 5478492"` or `"Has test 5478492 been failing consistently?"` | **QA Engineers, SDETs, Managers** |
-| `adv_detailed_analyze_launch_failures` | 🚀 **Enhanced v4.12.1** Analyze failures WITHOUT linked issues with **Claude-level intelligence** + **Jira format support**. Auto-deep-dive with executive summary, timeline, patterns, priorities. **NEW:** Generate Jira-ready tickets for entire launches! | `"Analyze failures in launch 120806"` or with `format: 'jira'` | **QA Managers, SDETs, Team Leads** |
+
+
+| Tool                                   | Description                                                                                                                                                                                                                                                                                                                                    | Example Usage                                                                                  | Best For                           |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------- |
+| `adv_analyze_test_failure`             | Deep forensic analysis of failed tests with logs, screenshots, error classification, and recommendations. **NEW in v5.11.0:** Compare with last passed execution! Shows what changed (logs, duration, environment). **Also:** `format: 'jira'` generates ready-to-paste Jira tickets with auto-priority, labels, and clickable 🎥 video links! | `"Analyze test failure 5451420 in launch 120806 and compare with last passed execution"`       | **QA Engineers, SDETs, Managers**  |
+| `adv_get_test_execution_history`       | 🆕 **NEW in v5.11.0!** Track test execution trends across launches. View pass/fail history, find last passed execution, calculate pass rate. **Critical Detection:** Highlights when test failed in all recent runs!                                                                                                                           | `"Show execution history for test 5478492"` or `"Has test 5478492 been failing consistently?"` | **QA Engineers, SDETs, Managers**  |
+| `adv_detailed_analyze_launch_failures` | 🚀 **Enhanced v4.12.1** Analyze failures WITHOUT linked issues with **Claude-level intelligence** + **Jira format support**. Auto-deep-dive with executive summary, timeline, patterns, priorities. **NEW:** Generate Jira-ready tickets for entire launches!                                                                                  | `"Analyze failures in launch 120806"` or with `format: 'jira'`                                 | **QA Managers, SDETs, Team Leads** |
+
 
 > ✅ **FIXED in v5.2.4!** **Improved Reliability & Video Links**
+>
 > - **🎥 Video URLs fixed**: Now uses test-sessions API (`/api/reporting/v1/launches/{id}/test-sessions`) for reliable video artifact extraction
 > - **🛡️ Comprehensive error handling**: Gracefully handles missing screenshots/logs (returns empty arrays instead of throwing)
 > - **🚫 No more "no result received" errors**: All API calls have proper try-catch blocks with fallbacks
@@ -732,6 +899,7 @@ Use the **`/test-impact`** MCP prompt (optional `pr_url`) for guided workflow. S
 > - **📊 Schema updates**: Supports both old and new API structures for backward compatibility
 >
 > 🎫 **NEW in v4.12.1!** **Jira-Ready Ticket Format**
+>
 > - Use `format: 'jira'` to generate ready-to-paste Jira tickets
 > - **Auto-calculated priority** based on stability and impact
 > - **Smart labels**: `test-automation`, `locator-issue`, `flaky-test`, etc.
@@ -741,6 +909,7 @@ Use the **`/test-impact`** MCP prompt (optional `pr_url`) for guided workflow. S
 > - **Saves 5-10 minutes per ticket** with consistent quality
 
 > 🧠 **Enhanced in v4.11.1!** `adv_detailed_analyze_launch_failures` provides **automatic deep synthesis** like Claude would manually provide:
+>
 > - **🎯 Executive Summary**: Key findings, patterns, and stability indicators
 > - **📅 Timeline Analysis**: When failures first appeared, progression tracking
 > - **🔬 Pattern Analysis**: Groups by root cause with affected tests and stability %
@@ -752,6 +921,7 @@ Use the **`/test-impact`** MCP prompt (optional `pr_url`) for guided workflow. S
 > - **No manual follow-up needed** - get complete picture in one call!
 
 > 🆕 **NEW in v5.11.0!** **Test Execution History & Comparison**
+>
 > - **📊 Track execution trends**: View pass/fail history across launches with `adv_get_test_execution_history`
 > - **🔄 Compare with last passed**: New `compareWithLastPassed` parameter in `adv_analyze_test_failure`
 >   - Compare logs (new errors detection)
@@ -763,46 +933,73 @@ Use the **`/test-impact`** MCP prompt (optional `pr_url`) for guided workflow. S
 > - **📈 Pass rate metrics**: Calculate test stability over time
 > - See [TOOLS_CATALOG.md](TOOLS_CATALOG.md) for example prompts!
 
+
+
 #### **Screenshot Analysis & Visual Forensics** 🎯 *Enhanced in v4.11.0*
-| Tool | Description | Example Usage | Best For |
-|------|-------------|---------------|----------|
-| `adv_download_test_screenshot` | Download protected screenshots from Zebrunner with authentication | `"Download screenshot from https://your-workspace.zebrunner.com/files/abc123 for test 5451420"` | **QA Engineers, Automation Engineers** |
-| `adv_analyze_screenshot` | Visual analysis with OCR, UI detection, and Claude Vision | `"Analyze screenshot https://your-workspace.zebrunner.com/files/abc123 with OCR and detailed analysis"` | **QA Engineers, SDETs, Developers** |
+
+
+| Tool                           | Description                                                       | Example Usage                                                                                           | Best For                               |
+| ------------------------------ | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| `adv_download_test_screenshot` | Download protected screenshots from Zebrunner with authentication | `"Download screenshot from https://your-workspace.zebrunner.com/files/abc123 for test 5451420"`         | **QA Engineers, Automation Engineers** |
+| `adv_analyze_screenshot`       | Visual analysis with OCR, UI detection, and Claude Vision         | `"Analyze screenshot https://your-workspace.zebrunner.com/files/abc123 with OCR and detailed analysis"` | **QA Engineers, SDETs, Developers**    |
+
 
 > 📸 **Enhanced!** Screenshot analysis now integrated directly into `adv_analyze_test_failure` and `analyze_launch_failures` - no need to call separately! See [Screenshot Analysis Guide](docs/archive/SCREENSHOT_ANALYSIS.md) for details.
 
+
+
 #### **Platform & Results Analysis** ⭐ *Critical for Management*
-| Tool | Description | Example Usage | Best For |
-|------|-------------|---------------|----------|
-| `adv_get_platform_results_by_period` | Aggregated test results, pass rate, and statistics for a project over a time period | `"Get results for MCP during last 7 days"` or `"Show pass rate for MCP"` | **Managers, Leads** |
-| `adv_get_top_bugs` | Most frequent defects | `"Show me top 10 bugs from last week"` | **Managers, Developers** |
-| `adv_get_bug_review` | Detailed bug review with failure analysis, priority breakdown, and automatic detail fetching | `"Get bug review with full failure details for top 10 bugs"` | **Managers, QA, Developers** |
-| `adv_get_bug_failure_info` | Comprehensive failure info by hashcode (alternative to auto-fetch) | `"Get failure info for hashcode 1051677506"` | **Developers, SDETs** |
-| `adv_get_project_milestones` | Available milestones | `"Get all milestones for project MCP"` | **Managers, PMs** |
+
+
+| Tool                                 | Description                                                                                  | Example Usage                                                            | Best For                     |
+| ------------------------------------ | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ | ---------------------------- |
+| `adv_get_platform_results_by_period` | Aggregated test results, pass rate, and statistics for a project over a time period          | `"Get results for MCP during last 7 days"` or `"Show pass rate for MCP"` | **Managers, Leads**          |
+| `adv_get_top_bugs`                   | Most frequent defects                                                                        | `"Show me top 10 bugs from last week"`                                   | **Managers, Developers**     |
+| `adv_get_bug_review`                 | Detailed bug review with failure analysis, priority breakdown, and automatic detail fetching | `"Get bug review with full failure details for top 10 bugs"`             | **Managers, QA, Developers** |
+| `adv_get_bug_failure_info`           | Comprehensive failure info by hashcode (alternative to auto-fetch)                           | `"Get failure info for hashcode 1051677506"`                             | **Developers, SDETs**        |
+| `adv_get_project_milestones`         | Available milestones                                                                         | `"Get all milestones for project MCP"`                                   | **Managers, PMs**            |
+
 
 **Period behavior for reporting widgets:** `period` is passed to Zebrunner widgets **as-is** (for example `Today`, `Month`, `Last 30 Days`). If a selected widget does not support a specific period label, the API will return an error.
 
 #### **Project Discovery**
-| Tool | Description | Example Usage | Best For |
-|------|-------------|---------------|----------|
-| `adv_get_available_projects` | Discover all accessible projects | `"What projects can I access?"` | All roles |
-| `adv_test_reporting_connection` | Test API connectivity | `"Test my connection to Zebrunner"` | All roles |
-| `adv_about_mcp_tools` | Summarize tools, prompts, resources, or show session metrics. Modes: summary, tool, prompts, resources, metrics | `"Using Zebrunner MCP make a summary of all tools with examples"` or `"Show me tool usage metrics for this session"` | All roles |
+
+
+| Tool                            | Description                                                                                                     | Example Usage                                                                                                        | Best For  |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | --------- |
+| `adv_get_available_projects`    | Discover all accessible projects                                                                                | `"What projects can I access?"`                                                                                      | All roles |
+| `adv_test_reporting_connection` | Test API connectivity                                                                                           | `"Test my connection to Zebrunner"`                                                                                  | All roles |
+| `adv_about_mcp_tools`           | Summarize tools, prompts, resources, or show session metrics. Modes: summary, tool, prompts, resources, metrics | `"Using Zebrunner MCP make a summary of all tools with examples"` or `"Show me tool usage metrics for this session"` | All roles |
+
+
+
 
 ### 🏃 Test Run Management
 
+
+
 #### **Public API Test Runs** ⭐ *Powerful for Analysis*
-| Tool | Description | Example Usage | Best For |
-|------|-------------|---------------|----------|
-| `adv_list_test_runs` | Advanced test run filtering | `"Get test runs from last 30 days with status 'FAILED'"` | **Managers, SDETs** |
-| `adv_get_test_run_by_id` | Detailed test run information | `"Get details for test run 12345"` | **Managers, QA** |
-| `adv_list_test_run_test_cases` | Test cases in a specific run | `"Show me all test cases in test run 12345"` | **QA, Analysts** |
+
+
+| Tool                           | Description                   | Example Usage                                            | Best For            |
+| ------------------------------ | ----------------------------- | -------------------------------------------------------- | ------------------- |
+| `adv_list_test_runs`           | Advanced test run filtering   | `"Get test runs from last 30 days with status 'FAILED'"` | **Managers, SDETs** |
+| `adv_get_test_run_by_id`       | Detailed test run information | `"Get details for test run 12345"`                       | **Managers, QA**    |
+| `adv_list_test_run_test_cases` | Test cases in a specific run  | `"Show me all test cases in test run 12345"`             | **QA, Analysts**    |
+
+
+
 
 #### **Configuration Management**
-| Tool | Description | Example Usage | Best For |
-|------|-------------|---------------|----------|
-| `adv_get_test_run_result_statuses` | Available result statuses | `"What result statuses are configured for project MCP?"` | QA, SDETs |
-| `adv_get_test_run_configuration_groups` | Configuration options | `"Show me configuration groups for project MCP"` | SDETs, Leads |
+
+
+| Tool                                    | Description               | Example Usage                                            | Best For     |
+| --------------------------------------- | ------------------------- | -------------------------------------------------------- | ------------ |
+| `adv_get_test_run_result_statuses`      | Available result statuses | `"What result statuses are configured for project MCP?"` | QA, SDETs    |
+| `adv_get_test_run_configuration_groups` | Configuration options     | `"Show me configuration groups for project MCP"`         | SDETs, Leads |
+
+
+
 
 ## 📎 MCP Resources & Prompts (NEW)
 
@@ -814,54 +1011,62 @@ In addition to 69 tools, the server now provides **14 resources** and **17 promp
 
 Resources are read-only reference data you attach to your conversation via the `@` menu. They help the AI use exact parameter values instead of guessing.
 
-| Resource | What it provides |
-|----------|-----------------|
-| `@zebrunner://reports/types` | 6 report types with params, defaults, and examples |
-| `@zebrunner://periods` | 12 valid time period values (case-sensitive) |
-| `@zebrunner://charts` | Chart formats, types, and 17 supported tools |
-| `@zebrunner://formats` | 5 output format families with valid values |
-| `@zebrunner://projects` | All accessible projects with keys and IDs |
-| `@zebrunner://projects/{key}/suites` | Root test suites for a project |
-| `@zebrunner://projects/{key}/suite-hierarchy` | Full suite tree with parent-child relationships |
-| `@zebrunner://projects/{key}/automation-states` | Automation state names and IDs |
-| `@zebrunner://projects/{key}/priorities` | Priority levels and IDs |
-| `@zebrunner://projects/{key}/milestones` | Active and completed milestones |
-| `@zebrunner://projects/{key}/result-statuses` | Test run result statuses |
-| `@zebrunner://projects/{key}/configuration-groups` | Test run config groups and options |
-| `@zebrunner://projects/{key}/fields` | System and custom field definitions |
+
+| Resource                                           | What it provides                                   |
+| -------------------------------------------------- | -------------------------------------------------- |
+| `@zebrunner://reports/types`                       | 6 report types with params, defaults, and examples |
+| `@zebrunner://periods`                             | 12 valid time period values (case-sensitive)       |
+| `@zebrunner://charts`                              | Chart formats, types, and 17 supported tools       |
+| `@zebrunner://formats`                             | 5 output format families with valid values         |
+| `@zebrunner://projects`                            | All accessible projects with keys and IDs          |
+| `@zebrunner://projects/{key}/suites`               | Root test suites for a project                     |
+| `@zebrunner://projects/{key}/suite-hierarchy`      | Full suite tree with parent-child relationships    |
+| `@zebrunner://projects/{key}/automation-states`    | Automation state names and IDs                     |
+| `@zebrunner://projects/{key}/priorities`           | Priority levels and IDs                            |
+| `@zebrunner://projects/{key}/milestones`           | Active and completed milestones                    |
+| `@zebrunner://projects/{key}/result-statuses`      | Test run result statuses                           |
+| `@zebrunner://projects/{key}/configuration-groups` | Test run config groups and options                 |
+| `@zebrunner://projects/{key}/fields`               | System and custom field definitions                |
+
 
 **Quick example:**
+
 ```
 @ zebrunner://reports/types
 @ zebrunner://projects
 Generate an executive dashboard for all starred projects.
 ```
 
+
+
 ### Prompts — `/` Workflow Commands
 
 Prompts are pre-built workflow instructions triggered via the `/` command menu. Each prompt guides the AI through a tested multi-tool orchestration.
 
-| Prompt | Parameters | What it does |
-|--------|-----------|--------------|
-| `/pass-rate` | `projects` | Cross-platform pass rate with target comparison |
-| `/runtime-efficiency` | `projects` | Runtime metrics with milestone delta |
-| `/automation-coverage` | `projects` | 7-metric coverage + automation intake rate |
-| `/executive-dashboard` | `projects` | 5-section standup-ready dashboard |
-| `/release-readiness` | `project`, `milestone?` | Go/No-Go assessment with evidence |
-| `/suite-coverage` | `projects` | Per-suite coverage tables (TOTAL + TOTAL REGRESSION) |
-| `/regression-summary` | `project`, `milestone?`, `build?` | Regression results overview, new bugs, top bugs, slowest tests |
-| `/review-test-case` | `case_key` | Validate + improve a test case |
-| `/launch-triage` | `project` | Post-regression failure analysis |
-| `/relaunch-regression-failures` | `projects`, `milestone?`, `build?`, `period?` | 🆕 **v9.1.0** Discover failed launches and batch-rerun failures |
-| `/feature-scoped-launch` | `project`, `feature`, `suite_name?`, `build?` | 🆕 **v9.1.0** Feature keyword → test_run_rules → Build Now per root suite |
-| `/flaky-review` | `project` | Flaky test detection + stabilization plan |
-| `/find-duplicates` | `project`, `suite_id?` | Structural + semantic duplicate analysis |
-| `/daily-qa-standup` | `projects` | Daily standup summary with action items |
-| `/automation-gaps` | `projects` | Automation backlog prioritization |
-| `/project-overview` | `project` | Comprehensive project health card |
-| `/session-metrics` | *(none)* | Show tool usage stats for the current session |
+
+| Prompt                          | Parameters                                    | What it does                                                              |
+| ------------------------------- | --------------------------------------------- | ------------------------------------------------------------------------- |
+| `/pass-rate`                    | `projects`                                    | Cross-platform pass rate with target comparison                           |
+| `/runtime-efficiency`           | `projects`                                    | Runtime metrics with milestone delta                                      |
+| `/automation-coverage`          | `projects`                                    | 7-metric coverage + automation intake rate                                |
+| `/executive-dashboard`          | `projects`                                    | 5-section standup-ready dashboard                                         |
+| `/release-readiness`            | `project`, `milestone?`                       | Go/No-Go assessment with evidence                                         |
+| `/suite-coverage`               | `projects`                                    | Per-suite coverage tables (TOTAL + TOTAL REGRESSION)                      |
+| `/regression-summary`           | `project`, `milestone?`, `build?`             | Regression results overview, new bugs, top bugs, slowest tests            |
+| `/review-test-case`             | `case_key`                                    | Validate + improve a test case                                            |
+| `/launch-triage`                | `project`                                     | Post-regression failure analysis                                          |
+| `/relaunch-regression-failures` | `projects`, `milestone?`, `build?`, `period?` | 🆕 **v9.1.0** Discover failed launches and batch-rerun failures           |
+| `/feature-scoped-launch`        | `project`, `feature`, `suite_name?`, `build?` | 🆕 **v9.1.0** Feature keyword → test_run_rules → Build Now per root suite |
+| `/flaky-review`                 | `project`                                     | Flaky test detection + stabilization plan                                 |
+| `/find-duplicates`              | `project`, `suite_id?`                        | Structural + semantic duplicate analysis                                  |
+| `/daily-qa-standup`             | `projects`                                    | Daily standup summary with action items                                   |
+| `/automation-gaps`              | `projects`                                    | Automation backlog prioritization                                         |
+| `/project-overview`             | `project`                                     | Comprehensive project health card                                         |
+| `/session-metrics`              | *(none)*                                      | Show tool usage stats for the current session                             |
+
 
 **Quick example:**
+
 ```
 /executive-dashboard
   projects: android,ios,web
@@ -871,7 +1076,10 @@ Prompts are pre-built workflow instructions triggered via the `/` command menu. 
 
 ## 🎯 Management-Focused Quick Commands
 
+
+
 ### **📈 Daily Standup Reports**
+
 ```bash
 # Get yesterday's results
 "Get platform results for last 7 days for project MCP"
@@ -883,7 +1091,10 @@ Prompts are pre-built workflow instructions triggered via the `/` command menu. 
 "Get all launches for project MCP from last 3 days"
 ```
 
+
+
 ### **🔍 Test Suite Optimization**
+
 ```bash
 # Basic duplicate analysis
 "Analyze suite 12345 for duplicates with 80% similarity threshold"
@@ -907,7 +1118,10 @@ Prompts are pre-built workflow instructions triggered via the `/` command menu. 
 "Analyze suite 17585 for duplicates with clickable links enabled"
 ```
 
+
+
 ### **📊 Weekly Management Reports**
+
 ```bash
 # Comprehensive project health
 "Get all launches for project MCP with milestone filter"
@@ -919,7 +1133,10 @@ Prompts are pre-built workflow instructions triggered via the `/` command menu. 
 "Get all test cases by automation state for project MCP"
 ```
 
+
+
 ### **🎯 Milestone & Release Planning**
+
 ```bash
 # Milestone tracking
 "Get project milestones for MCP with completion status"
@@ -931,7 +1148,10 @@ Prompts are pre-built workflow instructions triggered via the `/` command menu. 
 "Get automation readiness for all test cases in project MCP"
 ```
 
+
+
 ### **🐞 Issue Analysis & Troubleshooting**
+
 ```bash
 # Bug analysis
 "Show me top 10 most frequent bugs with issue links"
@@ -947,9 +1167,14 @@ Prompts are pre-built workflow instructions triggered via the `/` command menu. 
 
 ## 🎭 Role-Specific Prompts & Workflows
 
+
+
 ### 👩‍💻 Manual QA Engineers
 
+
+
 #### Daily Test Case Review
+
 ```
 "Get test case MCP-45 details and validate its quality"
 "Show me all test cases in suite 18708 that need improvement"
@@ -958,14 +1183,20 @@ Prompts are pre-built workflow instructions triggered via the `/` command menu. 
 "Get test cases from suite 491 with high priority for today's testing"
 ```
 
+
+
 #### Test Case Creation & Improvement
+
 ```
 "I'm writing a test case for login functionality. What should I include based on our quality standards?"
 "Improve test case MCP-89 - it's missing some preconditions"
 "Check if test case MCP-12 is ready for manual execution"
 ```
 
+
+
 #### Test Suite Organization
+
 ```
 "Show me the hierarchy of test suites for project MYAPP to understand the structure"
 "Get all subsuites from Authentication suite to review test coverage"
@@ -974,15 +1205,23 @@ Prompts are pre-built workflow instructions triggered via the `/` command menu. 
 "Get all high priority test cases from suite 491 for release testing"
 ```
 
+
+
 #### Coverage Analysis
+
 ```
 "I executed test case MCP-34 manually. Here's what I did: [paste your execution notes]. Analyze coverage against the documented steps."
 "Compare test case MCP-56 with this manual testing session: [paste session details]"
 ```
 
+
+
 ### 🤖 Test Automation Engineers & SDETs
 
+
+
 #### Automation Readiness Assessment
+
 ```
 "Validate test case MCP-78 for automation readiness"
 "Get all test cases in suite 18708 and identify which ones are ready for automation"
@@ -992,28 +1231,40 @@ Prompts are pre-built workflow instructions triggered via the `/` command menu. 
 "Get test cases from suite 491 with 'Not Automated' state for automation planning"
 ```
 
+
+
 #### Test Code Generation
+
 ```
 "Generate Java/Carina test code for MCP-45 based on this existing framework: [paste framework code]"
 "Create JavaScript/Jest test for MCP-67 using this test structure: [paste test example]"
 "Generate Python/Pytest code for MCP-89 with these page objects: [paste page object code]"
 ```
 
+
+
 #### Coverage Analysis & Validation
+
 ```
 "Analyze test coverage for MCP-34 against this automated test: [paste test code]"
 "Enhanced coverage analysis for MCP-56 with rules validation - here's my implementation: [paste code]"
 "Compare test case MCP-78 steps with this Selenium test: [paste selenium code]"
 ```
 
+
+
 #### Framework Integration
+
 ```
 "Generate test code for MCP-45 using our Carina framework with these page objects: [paste existing code]"
 "Create test automation for MCP-67 that integrates with this CI/CD pipeline: [paste pipeline config]"
 "Generate API test for MCP-89 using this RestAssured setup: [paste API test framework]"
 ```
 
+
+
 #### Batch Automation Analysis
+
 ```
 "Validate all test cases in Authentication suite for automation readiness"
 "Generate coverage report for all test cases in project MYAPP"
@@ -1023,9 +1274,14 @@ Prompts are pre-built workflow instructions triggered via the `/` command menu. 
 "Get automation priorities and states to create automation roadmap"
 ```
 
+
+
 ### 👨‍💻 Developers
 
+
+
 #### Test Case Understanding
+
 ```
 "Get test case MCP-45 details to understand what I need to implement"
 "Show me test cases related to login functionality in project MYAPP"
@@ -1034,21 +1290,30 @@ Prompts are pre-built workflow instructions triggered via the `/` command menu. 
 "Get high priority test cases from suite 491 that I need to implement"
 ```
 
+
+
 #### Implementation Validation
+
 ```
 "I implemented this feature: [paste code]. Analyze coverage against test case MCP-34"
 "Here's my API implementation: [paste code]. Check coverage against test case MCP-56"
 "Validate my UI implementation against test case MCP-78: [paste component code]"
 ```
 
+
+
 #### Code Generation for Testing
+
 ```
 "Generate unit tests for test case MCP-45 using Jest framework"
 "Create integration tests for MCP-67 based on this API: [paste API code]"
 "Generate test data setup for MCP-89 using this database schema: [paste schema]"
 ```
 
+
+
 #### Bug Analysis
+
 ```
 "Get test execution results for launch 118685 to understand recent failures"
 "Show me top bugs from last week related to my feature area"
@@ -1059,9 +1324,14 @@ Prompts are pre-built workflow instructions triggered via the `/` command menu. 
 "Analyze test case MCP-34 - why might it be failing in automation?"
 ```
 
+
+
 ### 👔 Test Managers & Team Leads
 
+
+
 #### Team Quality Metrics
+
 ```
 "Get quality metrics for all test cases in project MYAPP"
 "Show me test cases that need improvement in suite 18708"
@@ -1071,14 +1341,20 @@ Prompts are pre-built workflow instructions triggered via the `/` command menu. 
 "Get test cases from suite 491 with high priority that need quality improvements"
 ```
 
+
+
 #### Test Suite Analysis
+
 ```
 "Show me the complete test suite hierarchy for project MYAPP"
 "Analyze test coverage across all suites in project MYAPP"
 "Get automation readiness status for all test cases in Authentication suite"
 ```
 
+
+
 #### Team Performance & Planning
+
 ```
 "Get test execution results by platform for the last 30 days"
 "Show me top 10 most frequent bugs to prioritize fixes"
@@ -1088,7 +1364,10 @@ Prompts are pre-built workflow instructions triggered via the `/` command menu. 
 "Get test runs with status 'FAILED' from last week for team retrospective"
 ```
 
+
+
 #### Process Improvement
+
 ```
 "Validate all test cases in suite 18708 to identify common quality issues"
 "Generate improvement recommendations for test cases created by junior team members"
@@ -1101,7 +1380,10 @@ Prompts are pre-built workflow instructions triggered via the `/` command menu. 
 "Get automation priorities to optimize team resource allocation"
 ```
 
+
+
 #### Reporting & Stakeholder Communication
+
 ```
 "Generate comprehensive test coverage report for project MYAPP in markdown format"
 "Get test execution summary for launch 118685 for stakeholder presentation"
@@ -1111,7 +1393,10 @@ Prompts are pre-built workflow instructions triggered via the `/` command menu. 
 "Generate weekly team performance report with launch and bug metrics"
 ```
 
+
+
 #### Daily Management Tasks
+
 ```
 "Get all launches for project MYAPP from yesterday"
 "Show me top 5 bugs from last 7 days with issue links"
@@ -1121,9 +1406,14 @@ Prompts are pre-built workflow instructions triggered via the `/` command menu. 
 "Show me project milestones and their completion status"
 ```
 
+
+
 ### 🏢 Project Owners & Product Managers
 
+
+
 #### Project Health Overview
+
 ```
 "Get overall test coverage status for project MYAPP"
 "Show me test execution results by platform for the last quarter"
@@ -1133,7 +1423,10 @@ Prompts are pre-built workflow instructions triggered via the `/` command menu. 
 "Get project milestones with completion status and testing metrics"
 ```
 
+
+
 #### Feature Testing Status
+
 ```
 "Get test cases related to [feature name] in project MYAPP"
 "Show me test execution results for [feature name] functionality"
@@ -1142,7 +1435,10 @@ Prompts are pre-built workflow instructions triggered via the `/` command menu. 
 "Show me test runs for specific build versions"
 ```
 
+
+
 #### Quality Assurance Metrics
+
 ```
 "Get quality metrics for all test cases in project MYAPP"
 "Show me test case validation results and improvement areas"
@@ -1154,7 +1450,10 @@ Prompts are pre-built workflow instructions triggered via the `/` command menu. 
 "Get test cases from suite 491 with critical priority for risk assessment"
 ```
 
+
+
 #### Risk Assessment
+
 ```
 "Show me top 10 most frequent bugs in project MYAPP"
 "Get test cases that are not ready for automation and assess risk"
@@ -1164,7 +1463,10 @@ Prompts are pre-built workflow instructions triggered via the `/` command menu. 
 "Get milestone-based testing progress for release risk assessment"
 ```
 
+
+
 #### Planning & Resource Allocation
+
 ```
 "Get automation readiness assessment for all test cases in project MYAPP"
 "Show me test cases that need quality improvement and estimate effort"
@@ -1177,7 +1479,10 @@ Prompts are pre-built workflow instructions triggered via the `/` command menu. 
 "Get test cases from suite 491 created in last month to plan review sessions"
 ```
 
+
+
 #### Executive Reporting
+
 ```
 "Generate executive dashboard with platform results and bug trends"
 "Get quarterly testing metrics with milestone progress"
@@ -1192,12 +1497,13 @@ Prompts are pre-built workflow instructions triggered via the `/` command menu. 
 
 All tools support multiple output formats:
 
-- **`json`** - Structured data (default)
-- **`markdown`** - Rich formatted output with sections and tables
-- **`string`** - Human-readable text summaries
-- **`dto`** - Raw data objects
+- `json` - Structured data (default)
+- `markdown` - Rich formatted output with sections and tables
+- `string` - Human-readable text summaries
+- `dto` - Raw data objects
 
 Example:
+
 ```
 "Get test case PROJ-123 in markdown format"
 "Show me test suites as JSON"
@@ -1206,6 +1512,8 @@ Example:
 [⬆️ Back to top](#-table-of-contents)
 
 ## ⚙️ Configuration Options
+
+
 
 ### Environment Variables
 
@@ -1234,6 +1542,8 @@ MIN_COVERAGE_THRESHOLD=70         # Minimum coverage percentage (optional)
 REQUIRE_UI_VALIDATION=true        # Require UI validation in tests (optional)
 REQUIRE_API_VALIDATION=true       # Require API validation in tests (optional)
 ```
+
+
 
 ### Instance Configuration File (`zebrunner-config.json`)
 
@@ -1283,16 +1593,18 @@ The MCP server ships with a `zebrunner-config.json` in the project root that con
 }
 ```
 
-| Key | Description |
-|-----|-------------|
-| `projectAliases` | Maps short names (`web`, `android`, etc.) to actual Zebrunner project keys. Update these to match your projects. |
-| `testConnectionProjectKey` | Project key used by the `adv_test_reporting_connection` tool when no env var is set. |
-| `widgetTemplates` | Numeric IDs for SQL widget templates used by reporting tools. These IDs are tenant-specific — check your Zebrunner instance if reports return empty data. |
-| `dashboardNames` | Dashboard display names used by widget SQL queries. Must match dashboard names in your Zebrunner workspace. |
-| `platformMap` | Maps platform aliases to widget SQL `PLATFORM` filter values. |
-| `featureAreaKeywords` | Keyword-to-label mapping used by regression stability reports to bucket test names into feature areas. Customize for your application's feature structure. |
-| `localeTestRunRules` | **Project-scoped Build Now rules** — see [below](#project-specific-automation-rules-localetestrunrules--relaunchfailures). Used by `adv_start_launch` when locale ≠ `en_US`. |
-| `relaunchFailures` | **Project-scoped rerun rules** — see [below](#project-specific-automation-rules-localetestrunrules--relaunchfailures). Used by `/relaunch-regression-failures` and referenced by `adv_rerun_launch_failures`. |
+
+| Key                        | Description                                                                                                                                                                                                   |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `projectAliases`           | Maps short names (`web`, `android`, etc.) to actual Zebrunner project keys. Update these to match your projects.                                                                                              |
+| `testConnectionProjectKey` | Project key used by the `adv_test_reporting_connection` tool when no env var is set.                                                                                                                          |
+| `widgetTemplates`          | Numeric IDs for SQL widget templates used by reporting tools. These IDs are tenant-specific — check your Zebrunner instance if reports return empty data.                                                     |
+| `dashboardNames`           | Dashboard display names used by widget SQL queries. Must match dashboard names in your Zebrunner workspace.                                                                                                   |
+| `platformMap`              | Maps platform aliases to widget SQL `PLATFORM` filter values.                                                                                                                                                 |
+| `featureAreaKeywords`      | Keyword-to-label mapping used by regression stability reports to bucket test names into feature areas. Customize for your application's feature structure.                                                    |
+| `localeTestRunRules`       | **Project-scoped Build Now rules** — see [below](#project-specific-automation-rules-localetestrunrules--relaunchfailures). Used by `adv_start_launch` when locale ≠ `en_US`.                                  |
+| `relaunchFailures`         | **Project-scoped rerun rules** — see [below](#project-specific-automation-rules-localetestrunrules--relaunchfailures). Used by `/relaunch-regression-failures` and referenced by `adv_rerun_launch_failures`. |
+
 
 Individual keys can be omitted — only the keys you include will override the defaults.
 
@@ -1300,23 +1612,27 @@ Individual keys can be omitted — only the keys you include will override the d
 
 These optional blocks configure **launch mutation workflows** per project. They do **not** affect read-only tools, TCM tools, or projects outside the configured scope.
 
-**`localeTestRunRules`** — `adv_start_launch` (Jenkins Build Now) when the effective locale is not `en_US`:
+`localeTestRunRules` — `adv_start_launch` (Jenkins Build Now) when the effective locale is not `en_US`:
 
-| Sub-key | Description |
-|---------|-------------|
-| `enabled` | Master switch. Set `false` to disable locale-based NOT_TAGS logic entirely. |
-| `projectKeys` | Zebrunner project keys where rules apply (e.g. `["MCP", "DEF"]`). Other projects are unchanged. |
+
+| Sub-key                 | Description                                                                                                 |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `enabled`               | Master switch. Set `false` to disable locale-based NOT_TAGS logic entirely.                                 |
+| `projectKeys`           | Zebrunner project keys where rules apply (e.g. `["MCP", "DEF"]`). Other projects are unchanged.             |
 | `enUsOnlyFeatureSuites` | TCM feature suite names that are English-only; auto-excluded via `NOT_TAGS` in `test_run_rules` on preview. |
-| `suiteNameMatch` | `"exact"` or `"includes"` — how suite names are matched when discovering feature suite IDs. |
+| `suiteNameMatch`        | `"exact"` or `"includes"` — how suite names are matched when discovering feature suite IDs.                 |
 
-**`relaunchFailures`** — `/relaunch-regression-failures` prompt and batch rerun guidance:
 
-| Sub-key | Description |
-|---------|-------------|
+`relaunchFailures` — `/relaunch-regression-failures` prompt and batch rerun guidance:
+
+
+| Sub-key                     | Description                                                                                                        |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | `excludeLaunchNamePatterns` | Launch **names** to skip when discovering failures (case-insensitive substring match). Default: `["Performance"]`. |
-| `maxLaunchesPerPlatform` | Cap per platform in the prompt workflow (default `50`, matches `adv_rerun_launch_failures` max). |
+| `maxLaunchesPerPlatform`    | Cap per platform in the prompt workflow (default `50`, matches `adv_rerun_launch_failures` max).                   |
 
-**`/feature-scoped-launch`** does not use `zebrunner-config.json` for Jenkins `suite_path` — the prompt resolves it from args, recent launches, or by asking the user.
+
+`/feature-scoped-launch` does not use `zebrunner-config.json` for Jenkins `suite_path` — the prompt resolves it from args, recent launches, or by asking the user.
 
 **Examples**
 
@@ -1364,17 +1680,22 @@ When running in HTTP mode with `MCP_AUTH_MODE=selfauth` and **without** setting 
 - Per-user URLs are stored encrypted alongside credentials in the token store
 - When `ZEBRUNNER_URL` IS set as an environment variable, the URL field is hidden and the env value is used globally (existing behavior, no change)
 
+
+
 ### Rules System Configuration
 
 The rules system automatically detects and uses rules files in your project root:
 
 #### Automatic Detection
+
 If you have a `mcp-zebrunner-rules.md` file in your project root, the rules engine will automatically enable itself.
 
 #### Custom Rules Files
+
 You can customize the three types of rules:
 
 1. **Test Case Review Rules** (`test_case_review_rules.md`)
+
 ```markdown
 # Custom Test Case Review Rules
 
@@ -1389,7 +1710,8 @@ You can customize the three types of rules:
 - Avoid combining multiple actions in one step
 ```
 
-2. **Analysis Checkpoints** (`test_case_analysis_checkpoints.md`)
+1. **Analysis Checkpoints** (`test_case_analysis_checkpoints.md`)
+
 ```markdown
 # Custom Analysis Checkpoints
 
@@ -1404,7 +1726,8 @@ You can customize the three types of rules:
 - [ ] Stable selectors available?
 ```
 
-3. **Technical Rules** (`mcp-zebrunner-rules.md`)
+1. **Technical Rules** (`mcp-zebrunner-rules.md`)
+
 ```markdown
 # Technical Configuration
 
@@ -1423,22 +1746,34 @@ You can customize the three types of rules:
 
 ## 🧪 Testing Your Setup
 
+
+
 ### Run health checks
+
 ```bash
 npm run test:health
 ```
 
+
+
 ### Test API connection
+
 ```bash
 npm run smoke
 ```
 
+
+
 ### Run full test suite
+
 ```bash
 npm test
 ```
 
+
+
 ### Run specific test types
+
 ```bash
 npm run test:unit           # Fast unit tests
 npm run test:integration    # API integration tests
@@ -1449,38 +1784,60 @@ npm run test:e2e           # End-to-end tests
 
 ## 🔍 Troubleshooting
 
+
+
 ### Common Issues
 
+
+
 #### "Authentication failed" or 401 errors
+
 - ✅ Check your `ZEBRUNNER_LOGIN` and `ZEBRUNNER_TOKEN`
 - ✅ Verify your API token is still valid
 - ✅ Ensure your user has proper permissions in Zebrunner
 
+
+
 #### "Project not found" or 404 errors
+
 - ✅ Check the project key spelling (e.g., "MYAPP", not "myapp")
 - ✅ Verify you have access to the project in Zebrunner
 - ✅ Some endpoints may not be available on all Zebrunner instances
 
+
+
 #### "Connection timeout" errors
+
 - ✅ Check your `ZEBRUNNER_URL` is correct
 - ✅ Ensure your network can reach the Zebrunner instance
 - ✅ Try increasing timeout in configuration
 
+
+
 #### MCP integration not working
+
 - ✅ Verify the path to `dist/server.js` is correct
 - ✅ Check that the project built successfully (`npm run build`)
 - ✅ Ensure environment variables are set in MCP configuration
 - ✅ Look at Claude Desktop/Code logs for error messages
 
+
+
 #### `adv_about_mcp_tools` shows "Total tools: 0"
+
 - ✅ Upgrade to **v9.2.9+** (embeds tool catalog in `dist/` for npm/Docker installs)
 - ✅ Rebuild after upgrade: `npm run build` (git clone) or reinstall the package / pull the Docker image
 
+
+
 #### Rules engine not working
+
 - ✅ Check that `ENABLE_RULES_ENGINE=true` in your `.env` file
 - ✅ Verify rules files exist and have meaningful content
 - ✅ Restart the MCP server after changing rules files
 - ✅ Check debug logs for rules parsing errors
+
+
 
 ### Debug Mode
 
@@ -1491,11 +1848,14 @@ DEBUG=true
 ```
 
 This will show:
+
 - API requests and responses
 - Error details and stack traces
 - Performance metrics
 - Feature availability
 - Rules parsing and validation details
+
+
 
 ### Getting Help
 
@@ -1504,13 +1864,16 @@ This will show:
 3. **Verify your configuration** - Double-check your `.env` file
 4. **Check Zebrunner permissions** - Ensure your user has proper access
 5. **Validate rules files** - Ensure rules files have meaningful content
-6. **Report issues** - If you find a bug, please open an issue at https://github.com/maksimsarychau/mcp-zebrunner/issues
+6. **Report issues** - If you find a bug, please open an issue at [https://github.com/maksimsarychau/mcp-zebrunner/issues](https://github.com/maksimsarychau/mcp-zebrunner/issues)
 
 [⬆️ Back to top](#-table-of-contents)
 
 ## 🎯 Example Workflows
 
+
+
 ### Workflow 1: Test Case Review (Manual QA)
+
 ```
 1. "Get test case PROJ-123 details"
 2. "Validate test case PROJ-123"
@@ -1518,7 +1881,10 @@ This will show:
 4. "Check if test case PROJ-123 is ready for manual execution"
 ```
 
+
+
 ### Workflow 2: Test Automation (SDET)
+
 ```
 1. "Validate test case PROJ-456 for automation readiness"
 2. "Generate Java/Carina test code for PROJ-456"
@@ -1526,7 +1892,10 @@ This will show:
 4. "Get automation readiness assessment"
 ```
 
+
+
 ### Workflow 3: Implementation Validation (Developer)
+
 ```
 1. "Get test case PROJ-789 details to understand requirements"
 2. "Analyze coverage for PROJ-789 against my implementation"
@@ -1534,7 +1903,10 @@ This will show:
 4. "Validate implementation completeness"
 ```
 
+
+
 ### Workflow 4: Quality Management (Team Lead)
+
 ```
 1. "Get quality metrics for all test cases in project MYAPP"
 2. "Show me test cases that need improvement"
@@ -1542,7 +1914,10 @@ This will show:
 4. "Identify automation readiness across the project"
 ```
 
+
+
 ### Workflow 5: Project Health (Product Manager)
+
 ```
 1. "Get overall test coverage status for project MYAPP"
 2. "Show me test execution results by platform"
@@ -1554,62 +1929,95 @@ This will show:
 
 ## 🔧 Advanced Features
 
+
+
 ### Batch Operations
+
 Process multiple test cases at once:
+
 ```
 "Validate all test cases in suite 18708"
 "Generate coverage report for all test cases in project MYAPP"
 "Improve all test cases that have quality issues"
 ```
 
+
+
 ### Custom Output Formats
+
 Get data in the format you need:
+
 ```
 "Get test cases as JSON for API integration"
 "Show test suite hierarchy in markdown for documentation"
 "Generate quality report in markdown for stakeholder presentation"
 ```
 
+
+
 ### Filtering and Search
+
 Find exactly what you need:
+
 ```
 "Get test cases created after 2025-01-01"
 "Find test cases with automation state 'Manual'"
 "Show me test cases that are not ready for automation"
 ```
 
+
+
 ### Rules-Based Analysis
+
 Leverage intelligent validation:
+
 ```
 "Validate test case PROJ-123 using custom rules from my-project-rules.md"
 "Enhanced coverage analysis with framework-specific rules"
 "Generate improvement suggestions based on team quality standards"
 ```
 
+
+
 ## 📚 Additional Documentation
 
+
+
 ### 📖 Tool References
+
 - **[TOOLS_CATALOG.md](TOOLS_CATALOG.md)** - Complete catalog of all **69** tools with natural language examples
 - **[docs/TEST_PROMPTS.md](docs/TEST_PROMPTS.md)** - Test prompts per tool; **§18** covers all **22 dashboard widgets** (MCP + API verify)
 - **[docs/archive/TCM_TAM_WIDGET_BACKLOG.md](docs/archive/TCM_TAM_WIDGET_BACKLOG.md)** - Archived widget template ↔ MCP matrix (live: TEST_PROMPTS §18)
 - **[docs/RESOURCES_AND_PROMPTS.md](docs/RESOURCES_AND_PROMPTS.md)** - MCP Resources & Prompts — full usage guide, reference tables, and contributor guide
 - **[INSTALL-GUIDE.md](INSTALL-GUIDE.md)** - 📥 **Step-by-step installation and setup guide**
 
+
+
 ### 🧠 Intelligent Rules System
+
 - **[docs/INTELLIGENT_RULES_SYSTEM.md](docs/INTELLIGENT_RULES_SYSTEM.md)** - 🧠 **Complete guide to the 3-tier intelligent rules system**
 - **[docs/archive/RULES_QUICK_REFERENCE.md](docs/archive/RULES_QUICK_REFERENCE.md)** - ⚡ **Quick reference for rules system commands and configuration**
 
+
+
 ### 📋 Rules Files (Customizable)
+
 - **[test_case_review_rules.md](test_case_review_rules.md)** - 🎯 **Core quality standards and writing guidelines**
 - **[test_case_analysis_checkpoints.md](test_case_analysis_checkpoints.md)** - ✅ **100+ detailed validation checkpoints**
 - **[mcp-zebrunner-rules.md](mcp-zebrunner-rules.md)** - ⚙️ **Technical configuration for test generation and coverage analysis**
 
+
+
 ### 🔍 Specialized Guides
+
 - **[docs/archive/SCREENSHOT_ANALYSIS.md](docs/archive/SCREENSHOT_ANALYSIS.md)** - 📸 **Screenshot download and visual analysis guide**
 - **[change-logs.md](change-logs.md)** - 📝 **Version history and feature updates**
 - **[GitHub Release v9.1.0](https://github.com/maksimsarychau/mcp-zebrunner/releases/tag/v9.1.0)** - 🆕 **v9.1.0 release notes — launch mutations, prompts, and config**
 
+
+
 ### 🛠️ Feature Documentation
+
 - **[docs/TERMINOLOGY.md](docs/TERMINOLOGY.md)** - 📖 **Test vs Test Case vs Test Run vs Launch — glossary and counting rules**
 - **[docs/archive/NEW_LAUNCHER_TOOL.md](docs/archive/NEW_LAUNCHER_TOOL.md)** - Detailed information about launch and reporting tools
 - **[docs/archive/SUITE_HIERARCHY.md](docs/archive/SUITE_HIERARCHY.md)** - Complete guide to suite hierarchy features
@@ -1626,7 +2034,11 @@ Leverage intelligent validation:
 4. Ensure all tests pass: `npm test`
 5. Submit a pull request
 
+
+
 ## 📄 License
+
+
 
 ## License
 
@@ -1639,6 +2051,8 @@ See **[LICENSE.md](LICENSE.md)** file for details.
 
 ---
 
+
+
 ## 🎉 You're Ready!
 
 Once you've completed the setup:
@@ -1648,9 +2062,14 @@ Once you've completed the setup:
 3. **Start asking questions** about your test cases!
 
 Example first commands to try:
+
 - "List test suites for project [YOUR_PROJECT_KEY]"
 - "Get test case [YOUR_TEST_CASE_KEY] details"
 - "Validate test case [YOUR_TEST_CASE_KEY]"
 - "Show me the test suite hierarchy"
 
 The intelligent rules system will help ensure your test cases meet quality standards and are ready for both manual execution and automation. Happy testing! 🚀
+
+
+
+First push was: Mon Sep 22 00:54:41 2025  +0200
