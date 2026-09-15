@@ -71,6 +71,33 @@ describe('Public API Test Run Tools Unit Tests', () => {
       assert.doesNotThrow(() => PublicTestRunResourceSchema.parse(validTestRun));
     });
 
+    it('should accept environment without key (Zebrunner API regression)', () => {
+      const runWithoutEnvKey = {
+        id: 200,
+        title: 'Run without env key',
+        description: null,
+        milestone: null,
+        environment: {
+          id: 10,
+          name: 'RELEASE',
+        },
+        configurations: [],
+        requirements: [],
+        closed: false,
+        createdBy: {
+          id: 1,
+          username: 'user',
+          email: 'user@example.com',
+        },
+        createdAt: '2026-09-14T10:00:00Z',
+        executionSummaries: [],
+      };
+
+      const parsed = PublicTestRunResourceSchema.parse(runWithoutEnvKey);
+      assert.equal(parsed.environment?.key, 'RELEASE');
+      assert.equal(parsed.environment?.name, 'RELEASE');
+    });
+
     it('should validate PublicTestRunsResponse schema', () => {
       const validResponse = {
         items: [

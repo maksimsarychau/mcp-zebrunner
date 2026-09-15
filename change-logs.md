@@ -12,8 +12,8 @@
 ### Fixed
 
 - **`adv_get_test_case_by_filter` + `field_path` + `get_all`** — returns all matches (1MB cap only), not silent `max_page_size` slice.
-- **`adv_get_test_cases_advanced`** — batched suite IN for large scopes; `root_suite_id` vs `suite_id`+`include_sub_suites` documented in tool schema.
-- **`buildRQLFilter`** — `options.filter` AND-composed with automation/date/exclude clauses (no silent drop).
+- **`adv_get_test_cases_advanced`** — batched suite IN for large scopes (listing + `count_only` + `field_path`); `root_suite_id` vs `suite_id`+`include_sub_suites` documented in tool schema.
+- **`buildRQLFilter`** — **behavior change:** caller `options.filter` is AND-composed with automation/date/exclude clauses instead of replacing them. Integrations that passed a custom filter intending to override exclusions (e.g. include deprecated cases) must adjust predicates explicitly.
 - **Numeric `page`** — warning in response text (`page_token` required); applies to `_advanced` and `_by_suite_smart`.
 
 ### Notes
@@ -26,13 +26,13 @@
 
 ### Added
 
-- **`adv_build_field_history_index`** — Option 1 local history index at `~/.mcp-zebrunner/history-index/`; chunked build + CLI `npm run history-index:build -- MFPAND`.
+- **`adv_build_field_history_index`** — Option 1 local history index at `~/.mcp-zebrunner/history-index/`; chunked build + CLI `npm run history-index:build -- <project_key>`.
 - **`index_mode`** on `adv_find_field_history_changes` — `auto` (default) queries index when complete; `scan` = live API; `index` = require index.
 
 ### Fixed
 
 - **`history_limit: 100` → empty `history: []`** — TCM `/changes` rejects `maxPageSize=100`; `getTestCaseChanges()` now paginates at **20/page** with `pageToken`. Tool schema still accepts 1–100.
-- **`system_field: CASE_STATUS` distribution widget HTTP 500** — on custom-layout tenants where “Case Status” is a CUSTOM field (MFP projects), MCP resolves to `customFieldId` (same pattern as `MANUAL_ONLY`).
+- **`system_field: CASE_STATUS` distribution widget HTTP 500** — on custom-layout tenants where “Case Status” is a CUSTOM field, MCP resolves to `customFieldId` (same pattern as `MANUAL_ONLY`).
 - **`npm run test:api`** — R19 restores `$_BODY` after R19b/R19c probes; `TCM-DIST-CASE-STATUS` uses layout-resolved field id; `TCM-DIST-SYSTEM-MANUAL` documents expected raw-widget 500 on CUSTOM Manual Only.
 
 ---

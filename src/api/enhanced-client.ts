@@ -1155,14 +1155,6 @@ export class EnhancedZebrunnerClient {
           console.error(`🔍 Using RQL filter: ${rqlFilter}`);
         }
       }
-      
-      // Also support direct filter parameter (overrides RQL filter)
-      if (options.filter) {
-        params.filter = options.filter;
-        if (this.config.debug) {
-          console.error(`🔍 Using direct filter: ${options.filter}`);
-        }
-      }
 
       // Add sorting if specified
       if (options.sortBy) {

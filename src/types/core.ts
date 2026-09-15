@@ -224,12 +224,15 @@ export const PublicTestRunConfigurationSchema = z.object({
   })
 });
 
-// Test Run Environment
+// Test Run Environment — Zebrunner may omit `key` (id + name only); do not fail the whole response.
 export const PublicTestRunEnvironmentSchema = z.object({
   id: z.number(),
-  key: z.string(),
-  name: z.string()
-});
+  key: z.string().optional(),
+  name: z.string(),
+}).transform((env) => ({
+  ...env,
+  key: env.key ?? env.name,
+}));
 
 // Test Run Milestone
 export const PublicTestRunMilestoneSchema = z.object({

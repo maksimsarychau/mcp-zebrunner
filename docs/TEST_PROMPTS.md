@@ -934,6 +934,21 @@
 
 **Expected:** Returns full test run info including name, milestone, build, environment, and execution summary.
 
+**Prompt 2 — Regression progress (untested counts)**  
+> For the iOS project, I'm tracking regression progress. How many test cases in test run #42 still have no marked result (untested)? Use execution summary counts from the test run.
+
+**Expected:** `adv_get_test_run_by_id` with `project` + run `id`. Response uses `executionSummaries` / status counts (Untested, Passed, Failed, etc.). Does **not** require `environment.key` — use `environment.name` or `id` when present.
+
+**Prompt 3 — Multiple runs from links (eval: `test_run.progress_multi_run_links`)**  
+> I'm tracking manual regression for Android. These runs:  
+> `https://example.zebrunner.com/projects/android/test-runs/101`  
+> `https://example.zebrunner.com/projects/android/test-runs/102`  
+> How many cases in each run still have no result? Short table per run.
+
+**Expected:** Parse run ids from URLs; call `adv_get_test_run_by_id` once per run (TCM Public API, not Reporting launches). Prefer summary counts over bulk case export unless the user asks for case keys.
+
+**Eval IDs:** `test_run.progress_untested_single`, `test_run.progress_multi_run_links`, `test_run.progress_untested_drilldown`
+
 ---
 
 ### `adv_list_test_run_test_cases`
@@ -1979,7 +1994,7 @@ Full matrix: [docs/archive/TCM_TAM_WIDGET_BACKLOG.md](archive/TCM_TAM_WIDGET_BAC
 ```bash
 npm run test:api
 ```
-Expect hub parity lines per project (`HUB-TCM`, `HUB-FAILURE`, `HUB-EXEC`, `HUB-PASS-RATE`, `HUB-DIST`) and **380+ passed** on MFP starred projects.
+Expect hub parity lines per project (`HUB-TCM`, `HUB-FAILURE`, `HUB-EXEC`, `HUB-PASS-RATE`, `HUB-DIST`) and **380+ passed** on starred projects.
 
 **Unit + eval (no live tenant):**
 ```bash

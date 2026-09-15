@@ -72,6 +72,8 @@ export function populatePrompt(template: string, ctx: EvalDiscoveryContext): str
     failed_launch_test_id: ctx.failedLaunchTestId != null ? String(ctx.failedLaunchTestId) : undefined,
     milestone_name: ctx.milestoneName,
     test_run_id: ctx.testRunId != null ? String(ctx.testRunId) : undefined,
+    second_test_run_id:
+      ctx.secondTestRunId != null ? String(ctx.secondTestRunId) : undefined,
     automation_state_id: ctx.automationStateId != null ? String(ctx.automationStateId) : undefined,
     automation_state_name: ctx.automationStateName,
     second_test_case_key: ctx.secondTestCaseKey,
@@ -994,6 +996,52 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
     expectedArgKeys: ["project", "id"],
     category: "test_run",
     layer: 3,
+    requiredContext: ["projectKey", "testRunId"],
+  },
+  {
+    id: "test_run.progress_untested_single",
+    toolSection: "5. Test Run",
+    promptTemplate:
+      "For {{project_key}} TCM test run {{test_run_id}}, how many test cases still have no marked result (untested / not executed)? " +
+      "I need to track regression progress — use adv_get_test_run_by_id execution summary counts; mention passed/failed/untested if present.",
+    expectedTools: ["adv_get_test_run_by_id"],
+    expectedArgKeys: ["project", "id"],
+    expectedOutputPatterns: ["untested", "Untested", "execution", "testCasesCount", "Passed", "Failed"],
+    category: "test_run",
+    layer: 2,
+    requiredContext: ["projectKey", "testRunId"],
+  },
+  {
+    id: "test_run.progress_multi_run_links",
+    toolSection: "5. Test Run",
+    promptTemplate:
+      "I'm tracking manual regression progress for {{project_key}}. These TCM test run links:\n" +
+      "- https://example.zebrunner.com/projects/{{project_key}}/test-runs/{{test_run_id}}\n" +
+      "- https://example.zebrunner.com/projects/{{project_key}}/test-runs/{{second_test_run_id}}\n\n" +
+      "How many cases in each run still have no marked result? Give a short per-run progress table (untested vs completed). " +
+      "Use adv_get_test_run_by_id per run id from the URLs — not launch tools.",
+    expectedTools: ["adv_get_test_run_by_id"],
+    expectedArgKeys: ["project", "id"],
+    expectedOutputPatterns: ["untested", "Untested", "execution", "testCasesCount"],
+    category: "test_run",
+    layer: 3,
+    isMultiTool: true,
+    requiredContext: ["projectKey", "testRunId", "secondTestRunId"],
+  },
+  {
+    id: "test_run.progress_untested_drilldown",
+    toolSection: "5. Test Run",
+    promptTemplate:
+      "Test run {{test_run_id}} in {{project_key}}: list cases that still need a result. " +
+      "Start with adv_get_test_run_by_id for summary counts, then adv_list_test_run_test_cases if you need case-level detail.",
+    expectedTools: [
+      "adv_get_test_run_by_id",
+      "adv_list_test_run_test_cases",
+    ],
+    expectedArgKeys: ["project"],
+    category: "test_run",
+    layer: 3,
+    isMultiTool: true,
     requiredContext: ["projectKey", "testRunId"],
   },
   {

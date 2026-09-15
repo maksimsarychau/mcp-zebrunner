@@ -4,6 +4,7 @@ dist
 .DS_Store
 mcp.config.json
 api-docs.json
+api-docs_260915.json
 mcp-mutation-safety.md
 .claude
 .codex

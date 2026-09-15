@@ -7,6 +7,7 @@ import {
   collectZebrunnerRootSuiteIds,
   findAllDescendantSuiteIds,
   shouldBatchSuiteInFilter,
+  resolveSuiteScopeRql,
   MAX_SUITE_IDS_SINGLE_IN,
 } from '../../src/utils/suite-scope-filter.js';
 
@@ -64,5 +65,18 @@ describe('suite-scope-filter', () => {
     const many = Array.from({ length: MAX_SUITE_IDS_SINGLE_IN + 1 }, (_, i) => i + 1);
     assert.equal(shouldBatchSuiteInFilter(many), true);
     assert.equal(shouldBatchSuiteInFilter([1, 2]), false);
+  });
+
+  it('resolveSuiteScopeRql uses single IN up to max, then batched fetch flag', () => {
+    const atMax = Array.from({ length: MAX_SUITE_IDS_SINGLE_IN }, (_, i) => i + 1);
+    const overMax = Array.from({ length: MAX_SUITE_IDS_SINGLE_IN + 1 }, (_, i) => i + 1);
+
+    const within = resolveSuiteScopeRql(atMax);
+    assert.equal(within.useBatchedSuiteFetch, false);
+    assert.ok(within.suiteRqlFilter?.includes('IN'));
+
+    const over = resolveSuiteScopeRql(overMax);
+    assert.equal(over.useBatchedSuiteFetch, true);
+    assert.equal(over.suiteRqlFilter, undefined);
   });
 });

@@ -1,5 +1,3 @@
-import { buildRootSuiteInFilter } from './test-case-pagination.js';
-
 /** Default batch size for `testSuite.id IN [...]` (matches getTestCasesByRootSuiteWithFilter). */
 export const DEFAULT_SUITE_IN_BATCH_SIZE = 10;
 
@@ -15,13 +13,19 @@ export interface ProcessedSuiteRow {
 export function findAllDescendantSuiteIds(
   parentId: number,
   processedSuites: ProcessedSuiteRow[],
+  visited: Set<number> = new Set(),
 ): number[] {
+  if (visited.has(parentId)) {
+    return [];
+  }
+  visited.add(parentId);
+
   const descendants: number[] = [];
   const directChildren = processedSuites.filter((s) => s.parentSuiteId === parentId);
 
   for (const child of directChildren) {
     descendants.push(child.id);
-    descendants.push(...findAllDescendantSuiteIds(child.id, processedSuites));
+    descendants.push(...findAllDescendantSuiteIds(child.id, processedSuites, visited));
   }
 
   return descendants;
@@ -101,15 +105,25 @@ export function buildTestSuiteIdInRql(suiteIds: number[]): string {
   return `testSuite.id IN [${suiteIds.join(',')}]`;
 }
 
-export function buildZebrunnerRootSuiteRql(
-  processedSuites: ProcessedSuiteRow[],
-  rootSuiteId: number,
-): string {
-  return buildRootSuiteInFilter(processedSuites, rootSuiteId);
-}
-
 export function shouldBatchSuiteInFilter(suiteIds: number[]): boolean {
   return suiteIds.length > MAX_SUITE_IDS_SINGLE_IN;
+}
+
+/** Single RQL IN when ≤ {@link MAX_SUITE_IDS_SINGLE_IN}; otherwise batched fetch/count. */
+export function resolveSuiteScopeRql(suiteScopeIds: number[] | undefined): {
+  suiteRqlFilter: string | undefined;
+  useBatchedSuiteFetch: boolean;
+} {
+  if (!suiteScopeIds || suiteScopeIds.length === 0) {
+    return { suiteRqlFilter: undefined, useBatchedSuiteFetch: false };
+  }
+  if (shouldBatchSuiteInFilter(suiteScopeIds)) {
+    return { suiteRqlFilter: undefined, useBatchedSuiteFetch: true };
+  }
+  return {
+    suiteRqlFilter: buildTestSuiteIdInRql(suiteScopeIds),
+    useBatchedSuiteFetch: false,
+  };
 }
 
 /**

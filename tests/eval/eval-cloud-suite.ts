@@ -190,6 +190,8 @@ const CLOUD_EVAL_PROMPT_IDS = [
   "mut.manage_run.create",
   "get_launch_details.full",
   "get_test_run_by_id.details",
+  "test_run.progress_untested_single",
+  "test_run.progress_multi_run_links",
   "list_test_run_test_cases.cases",
 
   // v9.2.6 opt-in detailed statuses — requires setting includeDetailedStatuses=true explicitly
