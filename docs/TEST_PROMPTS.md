@@ -24,6 +24,7 @@
 16. [Tool Annotations](#16-tool-annotations-v721)
 17. [Tool Metrics & Token Tracking](#17-tool-metrics--token-tracking-v721)
 18. [Dashboard Widgets (22 templates)](#18-dashboard-widgets-22-templates--v925)
+19. [Pagination & suite-scope regression (v9.4.2)](#19-pagination--suite-scope-regression-v942)
 
 ---
 
@@ -107,6 +108,11 @@
 > How many test cases are in root suite 42 of the iOS project? Just the count.
 
 **Expected:** Uses `count_only: true` with `root_suite_id: 42`. Paginates through all pages accumulating only the count. Returns `{total_count: N}` without test case data.
+
+**Prompt 5 — Feature subtree (not root_suite_id)** *(v9.4.2)*
+> For the iOS project, how many test cases are under suite 42 (a parent suite with sub-suites) including all sub-suites? Use advanced retrieval with subtree scope, count only.
+
+**Expected:** `adv_get_test_cases_advanced` with `suite_id: 42`, `include_sub_suites: true`, `count_only: true`. Must **not** use `root_suite_id: 42` unless the model has verified 42 is the Zebrunner root for that suite. `total_count` should match `adv_get_test_cases_by_suite_smart` with the same `suite_id` and `count_only: true` (subtree-sized count, not whole-project total). See [§19](#19-pagination--suite-scope-regression-v942).
 
 ---
 
@@ -197,6 +203,11 @@
 > How many test cases were created in the Android project in the last 30 days? Just the count.
 
 **Expected:** Uses `get_all: true, count_only: true, created_after: <30 days ago>`. Returns `{total_count: N}` without full payloads.
+
+**Prompt 5 — field_path + get_all (no silent 100 cap)** *(v9.4.2)*
+> In the MCP project, how many test cases have customField.manualOnly equal to "Yes"? Use field_path filtering with count_only — I only need the number.
+
+**Expected:** Prefer `count_only: true` (efficient). If the model uses data + `field_path`, it must pass `get_all: true` and must **not** stop at `max_page_size: 100` when more matches exist. Response should state the true `total_count` / matched count, not a silent cap at 100 without explanation. See [§19 Prompt 5](#19-pagination--suite-scope-regression-v942).
 
 ---
 
@@ -323,6 +334,11 @@
 > Pick one suite in the MCP project with a decent number of cases. Call `adv_get_test_cases_by_suite_smart` twice for that suite with `project_key: "MCP"`, `detail=summary`, `get_all=true`, `include_call_metrics=true` — first `format=json`, then `format=compact`. Compare only the `_mcp_metrics` footers: `rowsReturned`, `responseChars`, `approxTokens`, `bytesPerRow`. Confirm compact used fewer chars/tokens per row; if `rowsReturned` differs, say why the comparison is unfair.
 
 **Expected:** Equal `rowsReturned`; compact wins on `bytesPerRow`. See [§17 Test 9](#per-call-compact-vs-json-comparison-v921).
+
+**Prompt 5 — page_token, not numeric page** *(v9.4.2)*
+> For the Android project, suite 42, show me the first 5 test cases only (summary detail). Then fetch the **next** 5 using proper API pagination — not page=1.
+
+**Expected:** First call: `adv_get_test_cases_by_suite_smart` with `get_all: false`, `size: 5`, `detail: "summary"`. Second call: same tool with `page_token` from `next_page_token` / metadata — **not** `page: 1`. If numeric `page` is passed, response text should include a deprecation warning. See [§19 Prompt 6](#19-pagination--suite-scope-regression-v942).
 
 ---
 
@@ -2403,4 +2419,115 @@ bash tests/api-verify.sh --widget-catalog-audit
 
 ---
 
-*Last Updated: v9.2.8 — August 2026*
+## 19. Pagination & suite-scope regression (v9.4.2)
+
+Manual and **LLM eval** prompts for pagination fixes (v9.4.2). Use your eval project key and a **parent suite id that has sub-suites** — no real production aliases in prompts. Prefer **API-first**: `count_only`, scoped `suite_id` / automation filters, then `page_token` — avoid bulk `get_all` into the model context.
+
+**Automated eval (Layer 1–2):**
+
+```bash
+EVAL_FILTER=pagination. npm run test:eval:l1
+# Layer 2 + cloud: pagination.advanced_subtree in eval-cloud-suite
+EVAL_SUITE=cloud EVAL_LAYER=2 EVAL_FILTER=pagination. npm run test:eval:cloud:l2
+```
+
+| Eval ID | Layer | What it checks |
+|---------|-------|----------------|
+| `pagination.count_only_automation` | 1 | Count via automation state, not bulk project export |
+| `pagination.suite_scope_smart` | 1 | Smart suite retrieval with summary, no full project |
+| `pagination.advanced_subtree` | 2 | Advanced `include_sub_suites` for subtree count |
+| `pagination.subtree_not_root_suite_id` | 2 | Rejects `root_suite_id` for a non-root parent suite |
+| `pagination.field_path_get_all` | 2 | `field_path` + `get_all` / `count_only`, not 100-row cap |
+| `pagination.page_token_not_page` | 2 | Uses `page_token`, not numeric `page` |
+
+**Live audit (optional, no LLM):**
+
+```bash
+ZEBRUNNER_AUDIT_PROJECTS=<your_project_key> ZEBRUNNER_PAGINATION_SUITE_ID=<parent_suite_id> npm run test:mcp-pagination-audit
+```
+
+---
+
+### Prompt 1 — Automation count only (eval: `pagination.count_only_automation`)
+
+> How many **Not Automated** test cases are in the **Web** project? Return **only the count** — no test case list and do not use `get_all` to dump rows.
+
+**Expected tools:** `adv_get_test_cases_by_automation_state` (with `count_only: true`, `automation_states: "Not Automated"`) and/or `adv_get_automation_states` to resolve state names.
+
+**Pass criteria:** Response is a single number or small JSON with `total_count`; no hundreds of case keys in the chat. Tool args include `count_only: true`.
+
+---
+
+### Prompt 2 — Scoped smart shortlist (eval: `pagination.suite_scope_smart`)
+
+> List test cases in suite **42** for the **iOS** project as a **short summary** (no full step bodies). Do **not** load the entire project.
+
+**Expected tools:** `adv_get_test_cases_by_suite_smart` with `detail: "summary"`, reasonable `size` or `get_all: false` for the first page.
+
+**Pass criteria:** Cases belong to the requested suite subtree; metadata mentions the suite id. Must not call `adv_get_all_tcm_test_cases_by_project` without filters.
+
+---
+
+### Prompt 3 — Advanced subtree count (eval: `pagination.advanced_subtree`)
+
+> Count test cases in suite **42** including **all sub-suites** in the **iOS** project using **advanced** retrieval with subtree scope.
+
+**Expected tools:** `adv_get_test_cases_advanced` with `suite_id: 42`, `include_sub_suites: true`, `count_only: true`. May cross-check with `adv_get_test_cases_by_suite_smart` `count_only`.
+
+**Pass criteria:** Both tools return the **same** `total_count` (within 0). Args must include `include_sub_suites: true`, not `root_suite_id` set to the same id when that suite is not a Zebrunner root.
+
+---
+
+### Prompt 4 — Wrong param: root_suite_id on feature suite (eval: `pagination.subtree_not_root_suite_id`)
+
+> For the **Android** project, how many test cases are under parent suite **42** (including sub-suites)?
+
+**Expected tools:** `adv_get_test_cases_advanced` with `suite_id: 42`, `include_sub_suites: true`, `count_only: true` **or** `adv_get_test_cases_by_suite_smart` with `count_only: true`.
+
+**Fail criteria:** `adv_get_test_cases_advanced` with **`root_suite_id: 42` only** when 42 is not the Zebrunner root (wrong semantics — can return whole-project scale). `adv_get_all_tcm_test_cases_by_project` without exclude filters for a simple suite count.
+
+**Pass criteria:** Count is subtree-sized, not whole-project total; model explains `root_suite_id` vs `suite_id` + `include_sub_suites` if asked.
+
+---
+
+### Prompt 5 — field_path + get_all / count (eval: `pagination.field_path_get_all`)
+
+> In the **MCP** project, how many test cases have **customField.manualOnly** equal to **Yes**? Use a field filter; I only need the count.
+
+**Expected tools:** `adv_get_test_case_by_filter` or `adv_get_test_cases_advanced` with `field_path: "customField.manualOnly"`, `field_value: "Yes"`, `field_match: "exact"`, **`count_only: true`** (preferred). If fetching rows: **`get_all: true`** must be set — not `max_page_size: 100` alone.
+
+**Pass criteria:** Stated total is consistent with `count_only` (not silently capped at 100). Message may mention full scan / pages scanned. Prefer `count_only` over dumping cases.
+
+---
+
+### Prompt 6 — Next page via page_token (eval: `pagination.page_token_not_page`)
+
+> For the **Android** project, suite **42**, show **5** test cases in summary form. Then get the **next** 5 — use API pagination correctly.
+
+**Expected tools:** Two calls to `adv_get_test_cases_by_suite_smart`: (1) `get_all: false`, `size: 5`, `detail: "summary"`; (2) same with **`page_token`** from the first response.
+
+**Fail criteria:** Second call uses `page: 1` or `page: 0` without `page_token`. Identical case keys on both pages without warning.
+
+**Pass criteria:** Second page case keys differ from the first (when more cases exist). Deprecation text present if numeric `page` was used.
+
+---
+
+### Prompt 7 — Parity sanity (manual / audit)
+
+> Compare counts: `adv_get_test_cases_by_suite_smart` vs `adv_get_test_cases_advanced` with `include_sub_suites: true` for the same **iOS** project and parent suite **42**. Report both numbers and whether they match.
+
+**Expected:** Two `count_only` calls; numbers equal. Document in the answer which parameters were used.
+
+---
+
+### Prompt 8 — Combined scope + automation (manual, RQL compose v9.4.2)
+
+> In the **Web** project, how many **Not Automated** test cases are in suite **42** including sub-suites?
+
+**Expected:** `adv_get_test_cases_advanced` with `suite_id: 42`, `include_sub_suites: true`, `automation_states: "Not Automated"`, `count_only: true` — RQL suite scope **and** automation filter both applied (post–v9.4.2 AND-compose).
+
+**Pass criteria:** Count is less than subtree total and less than project-wide Not Automated total.
+
+---
+
+*Last Updated: v9.4.2 — September 2026 (§19 pagination regression prompts)*

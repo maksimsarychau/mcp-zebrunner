@@ -296,6 +296,41 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
     requiredContext: ["projectKey", "suiteId"],
   },
   {
+    id: "pagination.subtree_not_root_suite_id",
+    toolSection: "1. TCM",
+    promptTemplate:
+      "For {{project_key}}, how many test cases are under feature suite {{suite_id}} (include sub-suites)? Use the correct advanced or smart tool parameters — not root_suite_id for this suite id.",
+    expectedTools: ["adv_get_test_cases_advanced", "adv_get_test_cases_by_suite_smart"],
+    expectedArgKeys: ["project_key", "suite_id", "count_only"],
+    forbiddenArgKeys: ["root_suite_id"],
+    category: "tcm",
+    layer: 2,
+    requiredContext: ["projectKey", "suiteId"],
+  },
+  {
+    id: "pagination.field_path_get_all",
+    toolSection: "10. Field-Path",
+    promptTemplate:
+      "In {{project_key}}, how many test cases have customField.manualOnly equal to Yes? Use field_path filtering; count only, no case dump.",
+    expectedTools: ["adv_get_test_case_by_filter", "adv_get_test_cases_advanced"],
+    expectedArgKeys: ["project_key", "field_path", "count_only"],
+    category: "tcm",
+    layer: 2,
+    requiredContext: ["projectKey"],
+  },
+  {
+    id: "pagination.page_token_not_page",
+    toolSection: "1. TCM",
+    promptTemplate:
+      "For {{project_key}} suite {{suite_id}}, show 5 summary test cases, then the next 5 using page_token from the first response — not page=1.",
+    expectedTools: ["adv_get_test_cases_by_suite_smart"],
+    expectedArgKeys: ["project_key", "suite_id", "page_token"],
+    forbiddenArgKeys: ["page"],
+    category: "tcm",
+    layer: 2,
+    requiredContext: ["projectKey", "suiteId"],
+  },
+  {
     id: "get_suite_hierarchy.full_tree",
     toolSection: "1. TCM",
     promptTemplate:
