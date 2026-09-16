@@ -50,7 +50,7 @@ export function resolveEnvironmentForPublicApi(
   input: EnvironmentRefInput,
   catalog?: EnvironmentCatalogItem[],
 ): ResolvedEnvironmentRef {
-  if (input.id !== undefined && input.id > 0) {
+  if (input.id !== undefined) {
     const hit = catalog?.find((e) => e.id === input.id);
     return {
       ref: { id: input.id },

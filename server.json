@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.maksimsarychau/mcp-zebrunner",
   "title": "Advanced Zebrunner MCP Server",
-  "description": "Advanced analytics, reporting, and safe mutations for Zebrunner. 71 tools, 14 resources, 19 prompts.",
+  "description": "Advanced analytics, reporting, and safe mutations for Zebrunner. 76 adv_* tools, 15 resources, 22 prompts.",
   "websiteUrl": "https://github.com/maksimsarychau/mcp-zebrunner",
   "repository": {
     "url": "https://github.com/maksimsarychau/mcp-zebrunner",

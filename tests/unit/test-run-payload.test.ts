@@ -62,4 +62,10 @@ describe("resolveEnvironmentForPublicApi", () => {
     const r = resolveEnvironmentForPublicApi({ key: "RELEASE" }, CATALOG);
     assert.deepEqual(Object.keys(r.ref), ["name"]);
   });
+
+  it("treats id: 0 as id branch (not empty name/key fallback)", () => {
+    const r = resolveEnvironmentForPublicApi({ id: 0 });
+    assert.deepEqual(r.ref, { id: 0 });
+    assert.equal(r.matchedBy, "id");
+  });
 });

@@ -16,7 +16,7 @@ servers:
   zebrunner-mcp:
     # ── Basic Info ──────────────────────────────────────────────────────────────
     name: "Zebrunner MCP"
-    description: "Comprehensive test management integration for AI assistants — 75 adv_* tools, 14 resources, 22 prompts for test cases, suites, launches, reporting, and analysis"
+    description: "Comprehensive test management integration for AI assistants — 76 adv_* tools, 15 resources, 22 prompts for test cases, suites, launches, reporting, and analysis"
     version: "9.4.4"
     author: "Maksim Sarychau"
     license: "AGPL-3.0"
