@@ -11,7 +11,7 @@
 #
 # Auto-discovers projects via Reporting API and runs tests against all starred projects.
 #
-# Coverage: 29 unique endpoint patterns across Public API, Reporting API, and Widget SQL.
+# Coverage: 31 unique endpoint patterns across Public API, Reporting API, and Widget SQL.
 #
 # Usage: ./tests/api-verify.sh [--verbose] [--widget-catalog-audit] [--pagination-audit]
 #
@@ -22,6 +22,7 @@
 #   ZEBRUNNER_AUDIT_TC_KEY=<caseKey>       — MCP audit H8 history probe (optional)
 #   ZEBRUNNER_VERIFY_TEST_RUN_PROJECT=<key> — with VERIFY_TEST_RUN_ID: P7c environment/schema probe
 #   ZEBRUNNER_VERIFY_TEST_RUN_ID=<id>       — GET specific test run (UI has Environment set)
+#   ZEBRUNNER_VERIFY_BUILD_SUBSTRING=<text> — P10b: informational search in Build/Platform options (never fails the run)
 #
 set -euo pipefail
 
@@ -1312,6 +1313,48 @@ else:
     log_skip "P7: GET single test run (no RUN_ID)"
   fi
 
+  if [[ "$RUN_COUNT" -gt 0 ]]; then
+    local P6C_SUMMARY
+    P6C_SUMMARY=$(echo "$P6_BODY" | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    items = d.get('items', []) if isinstance(d, dict) else []
+    if not isinstance(items, list):
+        items = []
+    n = len(items)
+    with_env = sum(1 for r in items if isinstance(r.get('environment'), dict))
+    with_cfg = sum(1 for r in items if isinstance(r.get('configurations'), list) and len(r['configurations']) > 0)
+    build_platform = 0
+    for r in items:
+        cfgs = r.get('configurations') or []
+        if not isinstance(cfgs, list):
+            continue
+        groups = {str((c.get('group') or {}).get('name', '')).lower() for c in cfgs if isinstance(c, dict)}
+        if 'build' in groups and 'platform' in groups:
+            build_platform += 1
+    print(f'runs={n}|with_env={with_env}|with_configurations={with_cfg}|build_and_platform={build_platform}')
+except Exception as e:
+    print('PARSE_ERROR:' + str(e)[:80])
+" 2>/dev/null || echo "PARSE_ERROR")
+    if [[ "$P6C_SUMMARY" == PARSE_ERROR* ]]; then
+      log_fail "P6c: test-runs list configuration summary" "${P6C_SUMMARY#PARSE_ERROR:}"
+    else
+      log_pass "P6c: test-runs list — env/config on page ($P6C_SUMMARY)"
+      local P6C_N P6C_CFG P6C_BP
+      P6C_N=$(echo "$P6C_SUMMARY" | sed -n 's/.*runs=\([0-9]*\).*/\1/p')
+      P6C_CFG=$(echo "$P6C_SUMMARY" | sed -n 's/.*with_configurations=\([0-9]*\).*/\1/p')
+      P6C_BP=$(echo "$P6C_SUMMARY" | sed -n 's/.*build_and_platform=\([0-9]*\).*/\1/p')
+      if [[ -n "$P6C_N" && "$P6C_N" -gt 0 && "$P6C_CFG" -eq 0 ]]; then
+        log_pass "P6c: hint — no configurations on this list page (Build/Platform badges need configurations on the run)"
+      elif [[ -n "$P6C_N" && "$P6C_N" -gt 0 && "$P6C_CFG" -gt 0 && "$P6C_BP" -eq 0 ]]; then
+        log_pass "P6c: hint — runs have configurations but none with both Build and Platform groups on this page"
+      fi
+    fi
+  else
+    log_skip "P6c: test-runs configuration summary (no runs)"
+  fi
+
   if [[ -n "$RUN_ID" ]]; then
     do_public_get "/test-runs/$RUN_ID/test-cases?projectKey=$TEST_PROJECT"
     check_status "P8: GET /test-runs/$RUN_ID/test-cases"
@@ -1374,13 +1417,119 @@ else:
 
   do_public_get "/test-run-settings/configuration-groups?projectKey=$TEST_PROJECT"
   check_status "P10: GET /test-run-settings/configuration-groups"
+  local P10_BODY="$_BODY"
 
   local P10_COUNT
-  P10_COUNT=$(json_items_count "$_BODY")
+  P10_COUNT=$(json_items_count "$P10_BODY")
   if [[ "$P10_COUNT" -ge 0 ]]; then
     log_pass "Got $P10_COUNT configuration group(s)"
   else
     log_fail "Unexpected configuration groups response"
+  fi
+
+  if [[ "$P10_COUNT" -eq 0 ]]; then
+    log_skip "P10b: no configuration groups for project (Build/Platform audit N/A)"
+  else
+  local BUILD_SUBSTR="${ZEBRUNNER_VERIFY_BUILD_SUBSTRING:-}"
+  export ZEBRUNNER_VERIFY_BUILD_SUBSTRING="$BUILD_SUBSTR"
+  local P10B_RAW P10B_SUMMARY P10B_MATCH
+  P10B_RAW=$(echo "$P10_BODY" | python3 -c "
+import sys, json, os
+substr = (os.environ.get('ZEBRUNNER_VERIFY_BUILD_SUBSTRING') or '').strip().lower()
+try:
+    d = json.load(sys.stdin)
+    items = d.get('items', []) if isinstance(d, dict) else []
+    if not isinstance(items, list):
+        items = []
+    targets = {'build', 'platform'}
+    parts = []
+    match_hits = []
+    for g in items:
+        if not isinstance(g, dict):
+            continue
+        gname = str(g.get('name') or '')
+        if gname.lower() not in targets:
+            continue
+        opts = g.get('options') or []
+        if not isinstance(opts, list):
+            opts = []
+        names = [str(o.get('name') or '') for o in opts if isinstance(o, dict)]
+        newest = names[-1] if names else ''
+        parts.append(f\"{gname}:options={len(names)}:latest={newest[:72]}\")
+        if substr:
+            for n in names:
+                if substr in n.lower():
+                    match_hits.append(f\"{gname}:{n[:120]}\")
+                    break
+    if not parts:
+        print('NO_BUILD_PLATFORM_GROUPS')
+    else:
+        print('|'.join(parts))
+    if substr:
+        print('MATCH=' + (';' + ';'.join(match_hits) if match_hits else 'NONE'))
+except Exception as e:
+    print('PARSE_ERROR:' + str(e)[:120])
+" 2>/dev/null || echo "PARSE_ERROR")
+  P10B_MATCH=$(echo "$P10B_RAW" | sed -n 's/^MATCH=//p')
+  P10B_SUMMARY=$(echo "$P10B_RAW" | grep -v '^MATCH=' | head -1)
+
+  if [[ "$P10B_SUMMARY" == PARSE_ERROR* ]]; then
+    log_fail "P10b: configuration-groups Build/Platform audit" "${P10B_SUMMARY#PARSE_ERROR:}"
+  elif [[ "$P10B_SUMMARY" == "NO_BUILD_PLATFORM_GROUPS" ]]; then
+    log_fail "P10b: no Build or Platform configuration groups" "TCM run badges need these groups in project settings"
+  else
+    log_pass "P10b: Build/Platform groups — $P10B_SUMMARY"
+    if [[ -n "$BUILD_SUBSTR" ]]; then
+      if [[ "$P10B_MATCH" == "NONE" || -z "$P10B_MATCH" ]]; then
+        log_pass "P10b: substring '$BUILD_SUBSTR' not in Build/Platform options (informational — CI may not have registered this build yet)"
+      else
+        log_pass "P10b: substring '$BUILD_SUBSTR' matched — $P10B_MATCH"
+      fi
+    else
+      log_skip "P10b: build substring search (set ZEBRUNNER_VERIFY_BUILD_SUBSTRING)"
+    fi
+  fi
+  fi
+
+  do_public_get "/environments?projectKey=$TEST_PROJECT"
+  check_status "P11: GET /environments?projectKey=$TEST_PROJECT"
+  local P11_BODY="$_BODY"
+
+  local P11_SUMMARY
+  P11_SUMMARY=$(echo "$P11_BODY" | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    items = d.get('items', []) if isinstance(d, dict) else []
+    if not isinstance(items, list):
+        items = []
+    n = len(items)
+    with_key = sum(1 for i in items if isinstance(i, dict) and i.get('key'))
+    with_name = sum(1 for i in items if isinstance(i, dict) and i.get('name'))
+    names = [str(i.get('name') or '') for i in items[:8] if isinstance(i, dict)]
+    sorted_by_name = names == sorted(names, key=lambda s: s.casefold())
+    api_shape = 'key+name' if with_key > 0 else ('name-only' if with_name > 0 else 'empty')
+    print(f'count={n}|with_key={with_key}|with_name={with_name}|sorted_by_name={sorted_by_name}|shape={api_shape}|sample={\",\".join(names[:4])}')
+except Exception as e:
+    print('PARSE_ERROR:' + str(e)[:120])
+" 2>/dev/null || echo "PARSE_ERROR")
+
+  if [[ "$P11_SUMMARY" == PARSE_ERROR* ]]; then
+    log_fail "P11: environments response parse" "${P11_SUMMARY#PARSE_ERROR:}"
+  elif [[ "$P11_SUMMARY" == *"count=0"* ]]; then
+    log_fail "P11: no environments configured for project"
+  else
+    log_pass "P11: environments — $P11_SUMMARY"
+    if [[ "$P11_SUMMARY" == *"shape=name-only"* ]]; then
+      log_pass "P11: Public API uses name/id for environment (no key) — use environment.name on create/update, not environment.key"
+    elif [[ "$P11_SUMMARY" == *"with_key="* && "$P11_SUMMARY" != *"with_key=0"* ]]; then
+      log_pass "P11: environments still expose key (legacy shape)"
+    fi
+    local P11_SAMPLE
+    P11_SAMPLE=$(echo "$P11_SUMMARY" | sed -n 's/.*sample=\([^|]*\).*/\1/p' | cut -d, -f1)
+    if [[ -n "$P11_SAMPLE" ]]; then
+      log_pass "P11b: example environment.name for create → \"$P11_SAMPLE\""
+    fi
   fi
 
   # --- Reporting API: launches ---

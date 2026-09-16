@@ -230,7 +230,7 @@ export const PROJECT_OTHER_SENTINEL = "Other (enter project key)";
 
 /**
  * Invert alias map: project key → sorted list of alias names that resolve to it.
- * Example: { PROJ1: ["alias-a", "alias-b"], PROJ2: ["alias-c"], … }
+ * Example: { PROJ1: ["short-a", "short-b"], PROJ2: ["short-c"], … } (instance-local; not in public docs)
  */
 export function groupAliasesByProjectKey(aliases: Record<string, string>): Record<string, string[]> {
   const grouped: Record<string, string[]> = {};
@@ -580,7 +580,7 @@ export function registerScaffoldTestCaseTool(server: McpServer, deps: ScaffoldTe
   }
 
   const scaffoldConfig = {
-    description: `🧩 (Beta) Guided wizard to author a NEW Zebrunner test case from best practices, with an automatic warn-only check for similar existing cases and an advisory quality pre-check before creation.
+    description: `🧩 Guided wizard to author a NEW Zebrunner test case from best practices, with an automatic warn-only check for similar existing cases and an advisory quality pre-check before creation.
 On clients that support form elicitation (e.g. Claude Code, Cursor) this presents an interactive questionnaire and creates a forced-draft case directly.
 On clients without elicitation (e.g. Claude Desktop) it returns a conversational questionnaire that finishes through adv_create_test_case.
 Optionally pass project (key like 'PROJ1' or a configured alias) and test_suite_id to skip the first question. There is no default project — it is always chosen explicitly.

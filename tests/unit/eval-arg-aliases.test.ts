@@ -39,7 +39,7 @@ describe("eval-arg-aliases", () => {
 
   it("checkArgKeys accepts distribution field via system_field", () => {
     assert.deepEqual(
-      checkArgKeys({ project: "MFPAND", system_field: "PRIORITY" }, ["project", "field"]),
+      checkArgKeys({ project: "PROJ1", system_field: "PRIORITY" }, ["project", "field"]),
       { pass: true, missing: [] },
     );
   });

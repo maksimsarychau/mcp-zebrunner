@@ -4,9 +4,12 @@ import type { EnhancedZebrunnerClient } from "../../src/api/enhanced-client.js";
 import { runPrepareJiraAutomationPlan } from "../../src/handlers/prepare-jira-automation-plan-tool.js";
 import { reloadConfig } from "../../src/utils/config-loader.js";
 
-const AUTOMATION_CATALOG = [
-  { id: 1, name: "Not Automated" },
-  { id: 2, name: "To be automated" },
+/** Fictional per-project catalog — IDs/names are not global; production loads via getAutomationStatesForProject. */
+const MOCK_NOT_AUTOMATED_ID = 101;
+const MOCK_TO_BE_AUTOMATED_ID = 202;
+const MOCK_AUTOMATION_CATALOG = [
+  { id: MOCK_NOT_AUTOMATED_ID, name: "Not Automated" },
+  { id: MOCK_TO_BE_AUTOMATED_ID, name: "To Be Automated" },
 ];
 
 function mockClient(overrides: Partial<EnhancedZebrunnerClient> = {}): EnhancedZebrunnerClient {
@@ -14,13 +17,13 @@ function mockClient(overrides: Partial<EnhancedZebrunnerClient> = {}): EnhancedZ
     getAllTestSuites: async () => [
       { id: 10, parentSuiteId: null, title: "Feature Suite" },
     ],
-    getAutomationStatesForProject: async () => AUTOMATION_CATALOG,
+    getAutomationStatesForProject: async () => MOCK_AUTOMATION_CATALOG,
     getAllTestCases: async () => [
       {
         id: 100,
         key: "PROJ-100",
         title: "Case A",
-        automationState: { id: 1, name: "Not Automated" },
+        automationState: { id: MOCK_NOT_AUTOMATED_ID, name: "Not Automated" },
       },
     ],
   };
@@ -82,5 +85,6 @@ describe("runPrepareJiraAutomationPlan", () => {
     assert.equal(result.parentTasks.length, 1);
     assert.equal(result.parentTasks[0].subtasks.length, 1);
     assert.match(result.parentTasks[0].subtasks[0].description, /caseId=100/);
+    assert.ok(result.intakeAutomationStates?.some((s) => s.id === MOCK_TO_BE_AUTOMATED_ID));
   });
 });

@@ -26,6 +26,12 @@ export interface SteeringContext {
 
 const DRAFT_NOTE = "Note: All created test cases are draft. Review and publish manually or use adv_update_test_case.";
 
+const TEST_RUN_METADATA_DISCOVERY =
+  `  - Env/Build badges: adv_get_test_run_environments + adv_get_test_run_configuration_groups (or resource zebrunner://projects/{project_key}/environments); then adv_manage_test_run action: "update" with environment and configurations if not set at create`;
+
+const IMPORT_NO_RUN_METADATA =
+  `  - Note: import does not set environment or Build/Platform — use adv_manage_test_run action: "update" if the run is missing those badges`;
+
 export function steeringHint(tool: SteeringTool, ctx: SteeringContext): string {
   switch (tool) {
     case "create_test_suite":
@@ -61,11 +67,16 @@ export function steeringHint(tool: SteeringTool, ctx: SteeringContext): string {
       return (
         `\n\nTip: Next steps:\n` +
         `  - Populate the run: adv_manage_test_run with action: "add_cases", test_run_id: ${ctx.id}\n` +
-        `  - Import launch results: adv_import_launch_results_to_test_run with test_run_id: ${ctx.id}`
+        `  - Import launch results: adv_import_launch_results_to_test_run with test_run_id: ${ctx.id}\n` +
+        TEST_RUN_METADATA_DISCOVERY
       );
 
     case "manage_test_run_update":
-      return `\n\nTip: Use adv_list_test_run_test_cases with test_run_id: ${ctx.id} to see current test case assignments.`;
+      return (
+        `\n\nTip: Next steps:\n` +
+        `  - View cases: adv_list_test_run_test_cases with test_run_id: ${ctx.id}\n` +
+        TEST_RUN_METADATA_DISCOVERY
+      );
 
     case "manage_test_run_add_cases":
       return (
@@ -78,7 +89,8 @@ export function steeringHint(tool: SteeringTool, ctx: SteeringContext): string {
       return (
         `\n\nTip: Next steps:\n` +
         `  - View updated statuses: adv_list_test_run_test_cases with test_run_id: ${ctx.id}\n` +
-        `  - Run summary: adv_get_test_run_by_id with id: ${ctx.id}`
+        `  - Run summary: adv_get_test_run_by_id with id: ${ctx.id}\n` +
+        IMPORT_NO_RUN_METADATA
       );
 
     case "rerun_launch_failures":

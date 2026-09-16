@@ -4,7 +4,7 @@
  *
  * Usage:
  *   ZEBRUNNER_URL=... ZEBRUNNER_TOKEN=... ZEBRUNNER_LOGIN=... \
- *     npx tsx scripts/build-history-index.ts MFPAND
+ *     npx tsx scripts/build-history-index.ts PROJ1
  *
  * Options via env:
  *   HISTORY_INDEX_BATCH=150

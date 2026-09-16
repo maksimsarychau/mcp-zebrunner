@@ -1,21 +1,54 @@
 # Change Logs
 
+## v9.4.4 — Test run metadata agent UX
+
+### Changed
+
+- **Tool descriptions** — removed `(Beta)` labels from mutation, launch-mutation, and `adv_generate_report` registrations and from `TOOLS_CATALOG.md` / `tools.json` (GA wording; preview/confirm flows unchanged).
+- **`adv_manage_test_run`** — skip GET `/environments` when `environment` is `{ id }` only; surface a preview warning when catalog load fails.
+- **Test run settings tools** — `resolvePublicApiProjectKey()` (alias map, same as `resolveProjectId`) replaces `length > 3` heuristic for environments / result statuses / configuration groups.
+- **Jira automation plan** — `filterCasesForJiraPlan` relies on prior `enrichCasesWithAutomationCatalog` (removed redundant `catalogNormToId` fallback).
+- **Steering hints** (`src/helpers/steering.ts`) — after `manage_test_run` create/update and `import_launch_results`, agents get pointers to `adv_get_test_run_environments` / `adv_get_test_run_configuration_groups` and a note that import does not set environment or Build/Platform.
+- **`adv_manage_test_run`** — registered tool description adds create example with `environment` + `configurations`; catalog + `tools.json` + regenerated **tool-intel-bundle** expanded for discovery and Public API contract.
+- **Dual-MCP routing** (`buildMcpRoutingContent`) — `test_run_metadata` section: Advanced vs official env discovery, wire format, import limitation.
+
+### Notes
+
+- No Public API behavior change from v9.4.3; documentation and in-chat guidance only.
+- Package version **9.4.4** (`package.json`, `server.json`, MCP catalogs).
+
+---
+
 ## v9.4.3 — Jira automation plan tool
 
 ### Added
 
+- **`adv_get_test_run_environments`** — list project environments (`GET /environments`) for test run create/update; pairs with `adv_manage_test_run` Public API `{ name }` / `{ id }` contract.
 - **`adv_prepare_jira_automation_plan`** — read-only Zebrunner-side plan for Jira parent tasks + per-case subtasks from a suite URL or `project_key` + `suite_id`. Handles top-level sub-suite grouping, dynamic automation-state intake (`Not Automated` / `To be automated`), denylist for **Automated** and **Manual Only** unless `include_automated_or_manual_only: true`, Analytics title/suite split, and `caseId` links (never key-based URLs). Output formats: `json` (default), `compact`, `dto`, `string`, `markdown`.
 - **`jiraAutomationPlan`** block in `zebrunner-config.json` — `targetProject` (default **QAS**), optional `platformByProjectKey`, `componentByPlatform`, `analyticsComponentByPlatform`, `analyticsTagMatch`.
 - **Eval** — `jira_plan.*` prompts (v9.4.3) in `tests/eval/eval-jira-automation-plan-tools.ts`.
 - **`/jira-automation-plan` MCP prompt** — Zebrunner plan via `adv_prepare_jira_automation_plan`, Jira dedup/create via Atlassian MCP with preview/approval gate.
 - **Skill template** — [docs/skills/zebrunner-jira-automation-plan-SKILL.md](docs/skills/zebrunner-jira-automation-plan-SKILL.md) (copy into `.cursor/skills/`).
 
+### Fixed
+
+- **`adv_manage_test_run`** — `environment` on create/update sends Public API `{ name }` or `{ id }` (not `environment.key`). Legacy `{ key }` input is resolved against `GET /environments` (case-insensitive) when possible, then sent as canonical `{ name }`.
+- **`skip_errors`** on `adv_manage_test_run` — parameter description aligned with Zebrunner default (**false**).
+
+### Changed
+
+- **MCP resource** `project_environments` — `zebrunner://projects/{project_key}/environments` (Public API catalog for test runs).
+- **`tests/api-verify.sh`** — P6c/P10b/P11 environment and configuration probes; P10b skips when project has zero configuration groups; build substring informational only; P11b logs sample `environment.name`.
+- **`TOOLS_CATALOG.md`** — `adv_manage_test_run` `environment` parameter (`{id}` / `{name}`; legacy `{key}`); `skip_errors` default **false** on manage_test_run.
+
 ### Notes
 
 - Does **not** call Jira; dedup/create stays in the agent + Atlassian MCP.
-- Configure `platformByProjectKey` or rely on `projectAliases` reverse-map (`ios` / `android`) for platform labels.
-- Inventory: **75** `adv_*` tools in `tools.json` (69 inline-regression registrations + 6 handler-module tools); **22** MCP prompts.
+- Configure `jiraAutomationPlan.platformByProjectKey` per Zebrunner project key for Jira platform labels, or rely on reverse `projectAliases` (e.g. alias `ios` → project key → **iOS** platform label) when overrides are omitted.
+- Default intake automation states are resolved **per project** via the same catalog as **`adv_get_automation_states`** (state **IDs are not global** across projects).
+- Inventory: **76** `adv_*` tools in `tools.json`; **22** MCP prompts; **15** MCP resources.
 - Docs aligned to that inventory: [docs/EVALUATION_FRAMEWORK.md](docs/EVALUATION_FRAMEWORK.md), [docs/EXECUTIVE_SUMMARY.md](docs/EXECUTIVE_SUMMARY.md), [docs/TEST_PROMPTS.md](docs/TEST_PROMPTS.md) (`adv_about_mcp_tools`), [docs/OFFICIAL_MCP_PARITY.md](docs/OFFICIAL_MCP_PARITY.md), [docs/API_COVERAGE.md](docs/API_COVERAGE.md).
+- **Test run environment:** use exact names from `GET /environments` for the project (e.g. `PRODUCTION` on MFP). UI Build/Platform badges still require `configurations` on the run.
 
 ---
 
@@ -145,7 +178,7 @@
 - **`adv_analyze_test_impact`**: bounded test impact analysis from compact semantic change context (features, behaviors, symbols, keywords). Returns hybrid output — regression by theme (automated/manual, confidence) + potential coverage gaps (with **suggestedTestCase** drafts) + optional smoke-suite recommendations.
 - **`/test-impact`** MCP prompt with optional `pr_url`, `project`, and `repository_slug` args; instructs client-side `gh pr view` / git diff before calling the tool.
 - **Test-case URL input**: paste full Zebrunner URLs (`?caseId=`, `?caseKey=`, path form) into get/batch/create/update/validate/improve/coverage tools — shared parser in `zebrunner-test-case-ref.ts`; host mismatch warns only.
-- Optional config keys: `repositoryProjectMap`, `testImpactSmokeSuites`, `testImpactInfraKeywords` (shipped in `zebrunner-config.json` for MFP).
+- Optional config keys: `repositoryProjectMap`, `testImpactSmokeSuites`, `testImpactInfraKeywords` (instance-local `zebrunner-config.json`).
 - Docs: [TEST_IMPACT_WORKFLOW.md](docs/TEST_IMPACT_WORKFLOW.md), [skill template](docs/skills/zebrunner-test-impact-SKILL.md).
 - Eval: 8 new `test_impact.*` routing prompts; 5 new test-case URL prompts; `npm run test:eval:test-impact`.
 
@@ -163,7 +196,7 @@
 - **`adv_analyze_test_impact`**: bounded test impact analysis from compact semantic change context (features, behaviors, symbols, keywords). Returns hybrid output — regression by theme (automated/manual, confidence) + potential coverage gaps (with **suggestedTestCase** drafts) + optional smoke-suite recommendations.
 - **`/test-impact`** MCP prompt with optional `pr_url`, `project`, and `repository_slug` args; instructs client-side `gh pr view` / git diff before calling the tool.
 - **Test-case URL input**: paste full Zebrunner URLs (`?caseId=`, `?caseKey=`, path form) into get/batch/create/update/validate/improve/coverage tools — shared parser in `zebrunner-test-case-ref.ts`; host mismatch warns only.
-- Optional config keys: `repositoryProjectMap`, `testImpactSmokeSuites`, `testImpactInfraKeywords` (shipped in `zebrunner-config.json` for MFP).
+- Optional config keys: `repositoryProjectMap`, `testImpactSmokeSuites`, `testImpactInfraKeywords` (instance-local `zebrunner-config.json`).
 - Docs: [TEST_IMPACT_WORKFLOW.md](docs/TEST_IMPACT_WORKFLOW.md), [skill template](docs/skills/zebrunner-test-impact-SKILL.md).
 - Eval: 8 new `test_impact.*` routing prompts; 5 new test-case URL prompts; `npm run test:eval:test-impact`.
 
@@ -174,7 +207,7 @@
 
 ---
 
-## v9.2.7 — Scaffold Test Case wizard and project aliases
+## v9.2.7 — Scaffold Test Case wizard
 
 ### Added
 
@@ -184,8 +217,8 @@
 - Test case language selection in the wizard (Gherkin vs Plain steps), defaulting to **Gherkin** (Given/When/Then, one Zebrunner step per line). Scoped to the wizard only; `adv_create_test_case` and other tools continue to use plain steps.
 - `adv_create_test_case_wizard`: a dev-friendly alias of `adv_scaffold_test_case` (same handler).
 - `scaffold-test-case` and `create-test-case-wizard` prompts (new "Authoring" category) as discoverable launchers for the wizard.
-- Configurable `projectAliases` in `zebrunner-config.json` (see `.env.example` for `PROJ1`/`PROJ2` placeholder pattern).
-- Eval routing coverage in [`tests/eval/eval-authoring-tools.ts`](tests/eval/eval-authoring-tools.ts) (**12 prompts**; catalog **204**) for wizard selection, project alias routing, suite-id skip paths, and `tool_confusion` negatives.
+- Configurable `projectAliases` in `zebrunner-config.json` (see `.env.example` for `web` / `android` / `ios` / `api` → project key pattern).
+- Eval routing coverage in [`tests/eval/eval-authoring-tools.ts`](tests/eval/eval-authoring-tools.ts) (**12 prompts**; catalog **204**) for wizard selection, **alias routing** (`features`, `android`, …), suite-id skip paths, and `tool_confusion` negatives.
 - Unit coverage in [`tests/unit/scaffold-test-case.test.ts`](tests/unit/scaffold-test-case.test.ts) for Gherkin/plain step parsing, project alias picker, and **suite picker** helpers (Latest/recent/search).
 
 ### Changed
@@ -650,7 +683,7 @@ Introduced `zebrunner-config.json` — an instance-specific configuration file t
 
 | Key | Description |
 |-----|-------------|
-| `projectAliases` | Maps short names (`web`, `android`, etc.) to Zebrunner project keys |
+| `projectAliases` | Short name → Zebrunner project key (used across reporting, wizard, Jira plan, test impact) |
 | `testConnectionProjectKey` | Project key for connection testing |
 | `widgetTemplates` | Numeric IDs for SQL widget templates (tenant-specific) |
 | `dashboardNames` | Dashboard display names for widget SQL queries |
@@ -2023,7 +2056,7 @@ This powerful new tool searches through your test case repository to find and gr
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `project_key` | string | ✅ | - | Project key (e.g., 'MCPAND', 'MCP') |
+| `project_key` | string | ✅ | - | Project key (e.g., 'PROJ1', 'MCP') |
 | `feature_keyword` | string | ✅ | - | Feature keyword to search for |
 | `output_format` | enum | ❌ | `short` | Output format: detailed, short, dto, test_run_rules |
 | `tags_format` | enum | ❌ | `by_root_suite` | TAGS output: by_root_suite or single_line |
@@ -2041,7 +2074,7 @@ This powerful new tool searches through your test case repository to find and gr
 
 ```json
 {
-  "project_key": "MCPAND",
+  "project_key": "PROJ1",
   "feature_keyword": "payment",
   "output_format": "test_run_rules",
   "tags_format": "single_line"

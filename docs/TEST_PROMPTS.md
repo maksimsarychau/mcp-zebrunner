@@ -18,7 +18,7 @@
 10. [Field-Path Filtering](#10-field-path-filtering)
 11. [Reports (adv_generate_report)](#11-reports-adv_generate_report)
 12. [Suite Coverage Report](#12-suite-coverage-report)
-13. [Mutation Tools (Beta)](#13-mutation-tools-beta)
+13. [Mutation Tools](#13-mutation-tools)
 14. [MCP Resources](#14-mcp-resources-v721)
 15. [MCP Prompts](#15-mcp-prompts-v910)
 16. [Tool Annotations](#16-tool-annotations-v721)
@@ -869,7 +869,7 @@
 **Prompt 1 — Tool summary (default)**
 > Give me a summary of all available Zebrunner MCP tools.
 
-**Expected:** Returns categorized list of all **75** registered `adv_*` tools with brief descriptions. The summary footer includes "Additional MCP Capabilities" with **22** prompt and **14** resource counts.
+**Expected:** Returns categorized list of all **76** registered `adv_*` tools with brief descriptions. The summary footer includes "Additional MCP Capabilities" with **22** prompt and **15** resource counts.
 
 **Prompt 2 — Specific tool details**
 > Show me detailed info for the adv_analyze_regression_runtime tool with examples.
@@ -1313,7 +1313,7 @@ These prompts combine multiple tools to collect real business metrics. The LLM s
 
 **Note:** "Manual Only" may exist as an automation state on some projects and as a custom field (`customField.manualOnly`) on others. The prompt handles both cases by checking automation states first.
 
-## 13. Mutation Tools (Beta)
+## 13. Mutation Tools
 
 All mutation tools use a **two-step confirmation flow**: the first call returns a preview with a `confirmation_token`, and only after user approval does the second call with `confirm: true` execute the mutation. Created test cases are always forced to `draft: true` for safety.
 
@@ -1496,10 +1496,10 @@ Guided best-practice authoring wizard. Also registered as the alias `adv_create_
 
 **Expected:** Selects `adv_create_test_case_wizard` (alias of `adv_scaffold_test_case`, same handler).
 
-**Prompt 3 — Project alias + suite**
-> Use the test case creation wizard to add a new case to alias-a suite 20421.
+**Prompt 3 — Project key + suite**
+> Use the test case creation wizard to add a new case to PROJ1 suite 20421.
 
-**Expected:** Selects the wizard with `project: "alias-a"` (resolves per `zebrunner-config.json`) and `test_suite_id: 20421`.
+**Expected:** Selects the wizard with `project: "PROJ1"` and `test_suite_id: 20421`.
 
 **Prompt 4 — Gherkin default**
 > Scaffold a new login test case for PROJ1 and keep the steps in Gherkin.
@@ -1511,25 +1511,25 @@ Guided best-practice authoring wizard. Also registered as the alias `adv_create_
 
 **Expected:** Selects `adv_scaffold_test_case` / `adv_create_test_case_wizard`; must NOT select `adv_create_test_case` or `adv_generate_draft_test_by_key`.
 
-**Prompt 6 — Alias routing (eval: `scaffold.features_alias`)**
-> Start the test case creation wizard for **alias-a** (new feature work).
+**Prompt 6 — Project key (eval: `scaffold.feat_project_key` / `scaffold.features_alias`)**
+> Start the test case creation wizard for **PROJ1** (new feature work).
 
-**Expected:** Selects the wizard with `project: "alias-a"` (alias preserved in args; resolves per `zebrunner-config.json` at runtime).
+**Expected:** Selects the wizard with `project: "PROJ1"`.
 
 **Prompt 7 — Project key + suite (eval: `scaffold.feat_project_key`)**
 > Open the create-test-case wizard for project **PROJ1** suite 20421.
 
 **Expected:** Selects the wizard with `project: "PROJ1"` and `test_suite_id: 20421`.
 
-**Prompt 8 — Another alias (eval: `scaffold.android_alias`)**
-> Use the guided wizard to add a test case to **alias-b**.
+**Prompt 8 — Second project (eval: `scaffold.android_alias` uses local config in CI)**
+> Use the guided wizard to add a test case to **PROJ2**.
 
-**Expected:** Selects the wizard with `project: "alias-b"`.
+**Expected:** Selects the wizard with `project: "PROJ2"`.
 
 **Prompt 9 — Do not list projects (eval: `scaffold.neg.not_list_projects`)**
-> I want the test case wizard for **alias-a** — do NOT call adv_get_available_projects to pick the project.
+> I want the test case wizard for **PROJ1** — do NOT call adv_get_available_projects to pick the project.
 
-**Expected:** Selects the wizard; must NOT call `adv_get_available_projects` (configured aliases are sufficient).
+**Expected:** Selects the wizard; must NOT call `adv_get_available_projects` when the user already named the project key.
 
 **Prompt 10 — Suite id in args, skip list (eval: `scaffold.with_suite_id_skip_list`)**
 > Use the test case creation wizard for PROJ1 suite 20421 — pass the suite id in wizard args, do NOT call adv_list_test_suites first.
@@ -1608,6 +1608,18 @@ Guided best-practice authoring wizard. Also registered as the alias `adv_create_
 > Use adv_manage_test_run to add test cases MCP-1, MCP-2, and MCP-3 to test run 42 in project MCP.
 
 **Expected:** Uses `adv_manage_test_run` with `action: "add_cases"`, `project_key: "MCP"`, `test_run_id: 42`, `test_case_keys: ["MCP-1", "MCP-2", "MCP-3"]`. Preview lists the 3 specific test cases to be added.
+
+**Prompt 4 — Create with environment (Public API)** *(v9.4.3)*
+> Use adv_manage_test_run to create a dry-run test run titled "Env smoke" in project MCP with environment RELEASE.
+
+**Expected:** `action: "create"`, `dry_run: true`, `environment: { "name": "RELEASE" }` or legacy `{ "key": "RELEASE" }` in tool args; preview/dry-run **API payload** shows `environment: { "name": "RELEASE" }` (no `key`). Use `adv_get_test_run_environments` to list valid names.
+
+### `adv_get_test_run_environments`
+
+**Prompt 1 — List environments** *(v9.4.3)*
+> List test run environments for project MCP.
+
+**Expected:** `adv_get_test_run_environments` with `project: "MCP"` (or alias). Returns id + name per environment.
 
 ### `adv_import_launch_results_to_test_run`
 
@@ -1875,7 +1887,7 @@ MCP prompts provide pre-built, tested workflow instructions accessible via the `
 
 ## 16. Tool Annotations *(v7.2.2)*
 
-All **75** registered `adv_*` tools include MCP Tool Annotations (readOnlyHint, destructiveHint, idempotentHint, openWorldHint) that inform clients about tool behavior characteristics. (Unit smoke coverage still exercises **69** inline registrations; handler-module tools are covered via `tools.json` sync and dedicated tests.)
+All **76** registered `adv_*` tools include MCP Tool Annotations (readOnlyHint, destructiveHint, idempotentHint, openWorldHint) that inform clients about tool behavior characteristics. (Unit smoke coverage still exercises **70** inline registrations; handler-module tools are covered via `tools.json` sync and dedicated tests.)
 
 **Verification 1 — Read-only tools respected**
 > In the MCP Inspector, examine any read-only tool (e.g., `adv_list_test_suites`). Check its annotations.
@@ -2634,4 +2646,4 @@ Copy [docs/skills/zebrunner-jira-automation-plan-SKILL.md](skills/zebrunner-jira
 
 ---
 
-*Last Updated: v9.4.3 — September 2026 (§20 Jira automation plan + `/jira-automation-plan` prompt)*
+*Last Updated: v9.4.4 — September 2026 (v9.4.4 steering/routing for test-run env/config; §20 Jira plan from v9.4.3)*

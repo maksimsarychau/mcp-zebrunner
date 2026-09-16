@@ -295,7 +295,7 @@ export type AnalyzeTestExecutionVideoInput = z.infer<typeof AnalyzeTestExecution
 
 // Aggregate Test Cases by Feature Input Schema
 export const AggregateTestCasesByFeatureInputSchema = z.object({
-  project_key: z.string().min(1).describe("Project key (e.g., 'MCPAND', 'MCP')"),
+  project_key: z.string().min(1).describe("Project key (e.g., 'PROJ1', 'MCP')"),
   feature_keyword: z.string().min(1).describe("Feature keyword to search for (case-insensitive, partial match). Searches in title, description, preconditions, and test steps."),
   output_format: z.enum(['detailed', 'short', 'dto', 'test_run_rules']).default('short').describe(
     "Output format:\n" +

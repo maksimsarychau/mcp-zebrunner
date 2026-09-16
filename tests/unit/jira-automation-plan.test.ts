@@ -3,9 +3,11 @@ import { strict as assert } from "node:assert";
 import {
   buildParentTasksForGroups,
   buildParentSummary,
+  enrichCasesWithAutomationCatalog,
   filterCasesForJiraPlan,
   matchesAnalyticsTag,
   requireCaseNumericId,
+  buildAllowedStateNameSet,
   resolveAutomationStatesForPlan,
   resolveDefaultIntakeStateNames,
   resolveSuiteGroups,
@@ -76,6 +78,45 @@ describe("filterCasesForJiraPlan", () => {
     assert.equal(kept.length, 1);
     assert.equal(kept[0].key, "PROJ-1");
     assert.equal(warnings.length, 2);
+  });
+
+  it("keeps To Be Automated (catalog spelling) via case-insensitive match", () => {
+    const catalog = [
+      { id: 1, name: "Not Automated" },
+      { id: 14, name: "To Be Automated" },
+    ];
+    const { allowedStateIds } = resolveAutomationStatesForPlan(catalog, undefined);
+    const allowedNames = buildAllowedStateNameSet(catalog, allowedStateIds);
+    const cases = [
+      {
+        id: 3300,
+        key: "PROJ1-945",
+        automationState: { id: 14, name: "To Be Automated" },
+      },
+    ];
+    const w: PlanWarning[] = [];
+    const kept = filterCasesForJiraPlan(
+      cases,
+      allowedStateIds,
+      allowedNames,
+      false,
+      w,
+    );
+    assert.equal(kept.length, 1);
+    assert.equal(kept[0].key, "PROJ1-945");
+  });
+
+  it("warns when case is outside plan automation states", () => {
+    const w: PlanWarning[] = [];
+    const kept = filterCasesForJiraPlan(
+      [{ id: 9, key: "PROJ-9", automationState: { id: 99, name: "Semi-Automated" } }],
+      allowedIds,
+      allowedNames,
+      false,
+      w,
+    );
+    assert.equal(kept.length, 0);
+    assert.equal(w[0]?.reason, "excluded_not_in_plan_automation_states");
   });
 
   it("allows Automated when include flag set", () => {
@@ -181,6 +222,30 @@ describe("resolveAutomationStatesForPlan", () => {
     );
     assert.deepEqual([...allowedStateIds].sort(), [1, 2]);
     assert.equal(unmatchedExplicitNames.length, 0);
+  });
+});
+
+describe("enrichCasesWithAutomationCatalog", () => {
+  const TO_BE_AUTOMATED_ID = 502;
+  const catalog = [
+    { id: TO_BE_AUTOMATED_ID, name: "To Be Automated" },
+    { id: 501, name: "Not Automated" },
+  ];
+
+  it("fills name from id when list payload is id-only", () => {
+    const [out] = enrichCasesWithAutomationCatalog(
+      [{ id: 3300, key: "PROJ1-945", automationState: { id: TO_BE_AUTOMATED_ID } }],
+      catalog,
+    );
+    assert.equal(out.automationState?.name, "To Be Automated");
+  });
+
+  it("fills id from name when list payload is name-only", () => {
+    const [out] = enrichCasesWithAutomationCatalog(
+      [{ id: 3300, key: "PROJ1-945", automationState: { name: "To Be Automated" } }],
+      catalog,
+    );
+    assert.equal(out.automationState?.id, TO_BE_AUTOMATED_ID);
   });
 });
 

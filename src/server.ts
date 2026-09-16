@@ -19,6 +19,14 @@ import {
   truncateBulkItems,
 } from "./utils/bulk-truncation.js";
 import { appendResponseSizeNotice } from "./utils/response-size.js";
+import {
+  environmentInputNeedsCatalog,
+  environmentResolutionPreviewLines,
+  resolveEnvironmentForPublicApi,
+  type EnvironmentCatalogItem,
+  type EnvironmentRefInput,
+  type ResolvedEnvironmentRef,
+} from "./utils/test-run-payload.js";
 import { capDuplicateAnalysisJson } from "./utils/duplicate-json-cap.js";
 import { mapWithConcurrency } from "./utils/batch-concurrency.js";
 import { HierarchyProcessor } from "./utils/hierarchy.js";
@@ -412,6 +420,12 @@ async function resolveProjectId(project: string | number): Promise<{ projectId: 
       throw new Error(`Project "${project}" not found. Use adv_get_available_projects tool to see available projects.`);
     }
   }
+}
+
+/** Zebrunner Public API `projectKey` query param (config aliases, else literal key). */
+function resolvePublicApiProjectKey(project: string): string {
+  const aliases = getProjectAliases();
+  return aliases[project] ?? project;
 }
 
 /** Build an automation-state ID→name map for a project (used by history enrichment). */
@@ -4233,7 +4247,7 @@ Supports two modes:
     }
   );
 
-  // ========== MUTATION TOOLS (Beta) ==========
+  // ========== MUTATION TOOLS ==========
 
   // Boolean that also accepts string "true"/"false" from MCP clients that
   // serialise booleans as strings (e.g. Zebrunner MCP Inspector, some XML transports).
@@ -4303,7 +4317,7 @@ Supports two modes:
   server.registerTool(
     "create_test_suite",
     {
-      description: `🔧 (Beta) Create a new Test Suite in a Zebrunner project.
+      description: `🔧 Create a new Test Suite in a Zebrunner project.
 Requires Engineer role or higher in the target project.
 Suites can be nested at any depth by providing parent_suite_id.
 Omit parent_suite_id to create a root-level suite.
@@ -4424,7 +4438,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
   server.registerTool(
     "update_test_suite",
     {
-      description: `🔧 (Beta) Update an existing Test Suite by its numeric ID.
+      description: `🔧 Update an existing Test Suite by its numeric ID.
 Requires Engineer role or higher in the target project.
 ⚠️ IMPORTANT: This uses PUT (full replacement). You must always provide 'title' even if you only want to change another field.
 Setting parent_suite_id to null or omitting it will promote the suite to root level.
@@ -4553,7 +4567,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
     z.object({ name: z.string().min(1) }),
   ]);
 
-  // ========== adv_manage_test_run (Beta) ==========
+  // ========== adv_manage_test_run ==========
 
   const TestRunConfigurationSchema = z.object({
     group: IdOrName.describe("Configuration group — provide { id } or { name }"),
@@ -4586,8 +4600,12 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       .describe("Test run description. Max 10,000 characters."),
     milestone: IdOrName.optional()
       .describe("Milestone — provide { id } or { name } of an existing milestone."),
-    environment: z.object({ key: z.string().min(1) }).optional()
-      .describe("Environment — provide { key } (e.g., 'pre-prod')."),
+    environment: z
+      .union([IdOrName, z.object({ key: z.string().min(1) })])
+      .optional()
+      .describe(
+        "Environment — Public API expects { name } (e.g. 'PRODUCTION') or { id }. Legacy { key } is accepted and sent as { name } with the same string; use exact names from GET /environments for the project.",
+      ),
     configurations: z.array(TestRunConfigurationSchema).max(100).optional()
       .describe("Configuration group/option pairs. WARNING on update: this list is ATOMIC — it REPLACES all existing configurations."),
     requirements: z.array(TestRunRequirementSchema).optional()
@@ -4598,7 +4616,9 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       .describe("Test suites whose cases should be added. Only for 'add_cases' action."),
     all_project_test_cases: z.boolean().optional()
       .describe("If true, add ALL project test cases to the run. Only for 'add_cases' action."),
-    skip_errors: BoolParam.describe("Tolerate non-fatal errors (e.g., unknown milestone). Default: true."),
+    skip_errors: BoolParam.describe(
+      "Tolerate non-fatal errors (e.g., unknown milestone or environment). Default: false (Zebrunner API default).",
+    ),
     create_missing_configurations: BoolParam.optional()
       .describe("Auto-create configuration groups/options that don't exist. API default: true."),
     dry_run: BoolParam.describe("If true, returns raw payload for debugging (skips validation)."),
@@ -4610,7 +4630,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
   server.registerTool(
     "manage_test_run",
     {
-      description: `🏃 (Beta) Create, update, or add test cases to a Zebrunner Test Run.
+      description: `🏃 Create, update, or add test cases to a Zebrunner Test Run.
 Requires Engineer role or higher in the target project.
 
 ACTIONS:
@@ -4619,7 +4639,16 @@ ACTIONS:
              WARNING: 'configurations' is atomic — providing it REPLACES ALL existing configs.
   add_cases — Add test cases to an existing test run by keys, suite IDs, or all project cases.
 
-Use 'adv_get_test_run_configuration_groups' and 'adv_get_test_run_result_statuses' to discover valid configuration values.
+Use 'adv_get_test_run_environments', 'adv_get_test_run_configuration_groups', and 'adv_get_test_run_result_statuses' to discover valid values (or MCP resource zebrunner://projects/{project_key}/environments for the env catalog).
+Environment on create/update must use { name } or { id } per Public API (not environment.key). Legacy { key } is accepted and resolved against the project catalog when possible.
+
+EXAMPLE (create with environment + Build):
+  action: "create", title: "Release smoke", project_key: "MFPIOS",
+  environment: { name: "RELEASE" },
+  configurations: [
+    { group: { name: "Build" }, option: { name: "26.19.0" } },
+    { group: { name: "Platform" }, option: { name: "iOS" } }
+  ]
 
 TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + confirmation_token. 2) After user approval, call with ONLY confirm: true and the confirmation_token. The full payload is stored server-side — do NOT re-send other fields.`,
       inputSchema: ManageTestRunSchema,
@@ -4646,6 +4675,37 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         if (args.skip_errors !== undefined) opts.skipErrors = !!args.skip_errors;
         if (args.create_missing_configurations !== undefined) opts.createMissingConfigurations = !!args.create_missing_configurations;
 
+        let environmentCatalogWarning: string | undefined;
+
+        const loadEnvironmentCatalog = async (): Promise<EnvironmentCatalogItem[]> => {
+          try {
+            const res = await client.listEnvironments({ projectKey });
+            return res.items;
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            environmentCatalogWarning =
+              `  ⚠ Could not load GET /environments for ${projectKey}: ${msg}. Using passthrough name/id only.`;
+            return [];
+          }
+        };
+
+        const resolveEnvironmentForPayload = async (): Promise<ResolvedEnvironmentRef | null> => {
+          if (args.environment === undefined) return null;
+          const envInput = args.environment as EnvironmentRefInput;
+          const needsCatalog = environmentInputNeedsCatalog(envInput);
+          const catalog = needsCatalog ? await loadEnvironmentCatalog() : undefined;
+          return resolveEnvironmentForPublicApi(envInput, catalog);
+        };
+
+        const environmentPreviewLines = (resolved: ResolvedEnvironmentRef): string[] => {
+          const lines = environmentResolutionPreviewLines(resolved);
+          if (environmentCatalogWarning) lines.push(environmentCatalogWarning);
+          if (args.skip_errors !== true) {
+            lines.push("  ℹ Unknown environment names fail the API unless skip_errors is true.");
+          }
+          return lines;
+        };
+
         // ─── ACTION: CREATE ───
         if (args.action === "create") {
           if (!args.title) {
@@ -4654,7 +4714,8 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           const payload: Record<string, unknown> = { title: args.title };
           if (args.description !== undefined) payload.description = args.description;
           if (args.milestone !== undefined) payload.milestone = args.milestone;
-          if (args.environment !== undefined) payload.environment = args.environment;
+          const envResolved = await resolveEnvironmentForPayload();
+          if (envResolved) payload.environment = envResolved.ref;
           if (args.configurations !== undefined) payload.configurations = args.configurations;
           if (args.requirements !== undefined) payload.requirements = args.requirements;
 
@@ -4676,7 +4737,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
             ];
             if (args.description !== undefined) lines.push(`  description      → ${args.description.slice(0, 80)}${args.description.length > 80 ? "..." : ""}`);
             if (args.milestone !== undefined) lines.push(`  milestone        → ${JSON.stringify(args.milestone)}`);
-            if (args.environment !== undefined) lines.push(`  environment      → ${JSON.stringify(args.environment)}`);
+            if (envResolved) lines.push(...environmentPreviewLines(envResolved));
             if (args.configurations !== undefined) lines.push(`  configurations   → ${args.configurations.length} config(s)`);
             if (args.requirements !== undefined) lines.push(`  requirements     → ${args.requirements.length} requirement(s)`);
             lines.push("");
@@ -4716,7 +4777,8 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           if (args.title !== undefined) payload.title = args.title;
           if (args.description !== undefined) payload.description = args.description;
           if (args.milestone !== undefined) payload.milestone = args.milestone;
-          if (args.environment !== undefined) payload.environment = args.environment;
+          const envResolvedUpdate = await resolveEnvironmentForPayload();
+          if (envResolvedUpdate) payload.environment = envResolvedUpdate.ref;
           if (args.configurations !== undefined) payload.configurations = args.configurations;
           if (args.requirements !== undefined) payload.requirements = args.requirements;
 
@@ -4741,7 +4803,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
             if (args.title !== undefined) lines.push(`  title            → ${args.title}`);
             if (args.description !== undefined) lines.push(`  description      → ${args.description.slice(0, 80)}${args.description.length > 80 ? "..." : ""}`);
             if (args.milestone !== undefined) lines.push(`  milestone        → ${JSON.stringify(args.milestone)}`);
-            if (args.environment !== undefined) lines.push(`  environment      → ${JSON.stringify(args.environment)}`);
+            if (envResolvedUpdate) lines.push(...environmentPreviewLines(envResolvedUpdate));
             if (args.configurations !== undefined) {
               lines.push(`  configurations   → ${args.configurations.length} config(s)`);
               lines.push(`  ⚠️ WARNING: configurations is ATOMIC — this will REPLACE ALL existing configurations!`);
@@ -4873,7 +4935,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
     }
   );
 
-  // ========== adv_import_launch_results_to_test_run (Beta) ==========
+  // ========== adv_import_launch_results_to_test_run ==========
 
   const DEFAULT_STATUS_MAP: Record<string, string> = {
     PASSED: "Passed",
@@ -4910,7 +4972,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
   server.registerTool(
     "import_launch_results_to_test_run",
     {
-      description: `📊 (Beta) Import automation launch results into a TCM Test Run.
+      description: `📊 Import automation launch results into a TCM Test Run.
 
 Bridges the Reporting API (launches/tests) to the Public API (test runs/test cases).
 Reads test results from a launch, maps test case keys and statuses, and imports them
@@ -5155,7 +5217,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
     }
   );
 
-  // ========== adv_rerun_launch_failures (Beta) ==========
+  // ========== adv_rerun_launch_failures ==========
 
   const RerunLaunchFailuresSchema = z.object({
     project: z.union([z.enum(["web", "android", "ios", "api"]), z.string(), z.number()])
@@ -5255,7 +5317,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
   server.registerTool(
     "rerun_launch_failures",
     {
-      description: `🔄 (Beta) Rerun failed/aborted tests for one or more automation launches via the Reporting API.
+      description: `🔄 Rerun failed/aborted tests for one or more automation launches via the Reporting API.
 
 Single mode: provide launch_id. Batch mode: omit launch_id — scans launches (optional milestone/query filters),
 collects eligible launches with failures, capped by max_launches (default 10, max 50; see zebrunner-config.json relaunchFailures.maxLaunchesPerPlatform for prompt workflows).
@@ -5440,7 +5502,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
     }
   );
 
-  // ========== adv_start_launch (Beta) ==========
+  // ========== adv_start_launch ==========
 
   const StartLaunchSchema = z.object({
     project: z.union([z.enum(["web", "android", "ios", "api"]), z.string(), z.number()])
@@ -5485,7 +5547,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
   server.registerTool(
     "start_launch",
     {
-      description: `🚀 (Beta) Start a new automation launch via Zebrunner "Build now" (Reporting API job/parameters + job:build).
+      description: `🚀 Start a new automation launch via Zebrunner "Build now" (Reporting API job/parameters + job:build).
 
 IMPORTANT: ${START_LAUNCH_JENKINS_ONLY_NOTE}
 
@@ -5714,7 +5776,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
   server.registerTool(
     "create_test_case",
     {
-      description: `🔧 (Beta) Create a new Test Case in a Zebrunner project.
+      description: `🔧 Create a new Test Case in a Zebrunner project.
 Requires Engineer role or higher in the target project.
 Available automation states and priorities can be discovered via adv_get_automation_states and adv_get_automation_priorities tools (the project's project_fields_layout resource also exposes them).
 Custom field keys must use systemName values (not display names) — discover them via the zebrunner://projects/{project_key}/fields resource or via the official Zebrunner MCP list_custom_fields tool when dual-MCP.
@@ -6097,7 +6159,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
   server.registerTool(
     "update_test_case",
     {
-      description: `🔧 (Beta) Partially update an existing Test Case by its numeric ID or string key.
+      description: `🔧 Partially update an existing Test Case by its numeric ID or string key.
 Requires Engineer role or higher in the target project.
 Auto-detects the endpoint: numeric identifier → /test-cases/{id}, string identifier → /test-cases/key:{key}.
 Both use PATCH — only provided fields are updated.
@@ -7750,7 +7812,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
   server.registerTool(
     "generate_report",
     {
-      description: "📊 (Beta) Universal report generator. Supports 6 report types: quality_dashboard (HTML+Markdown with 6 panels), coverage (per-suite test coverage table), pass_rate (per-platform with targets), runtime_efficiency (with delta vs previous milestone), executive_dashboard (standup-ready combined report), release_readiness (Go/No-Go assessment). Can generate single or multiple reports per call.",
+      description: "📊 Universal report generator. Supports 6 report types: quality_dashboard (HTML+Markdown with 6 panels), coverage (per-suite test coverage table), pass_rate (per-platform with targets), runtime_efficiency (with delta vs previous milestone), executive_dashboard (standup-ready combined report), release_readiness (Go/No-Go assessment). Can generate single or multiple reports per call.",
     inputSchema: {
       report_types: z.array(z.enum([
         'quality_dashboard', 'coverage', 'pass_rate',
@@ -9798,7 +9860,7 @@ ${detailsInfo.map((detail, i) => {
   registerScaffoldTestCaseTool(server, {
     client,
     mutationClient,
-    resolveProjectKey: (project: string) => getProjectAliases()[project] || project,
+    resolveProjectKey: resolvePublicApiProjectKey,
     projectAliases: getProjectAliases(),
     webBaseUrl: WIDGET_BASE_URL,
     debugLog,
@@ -9860,7 +9922,7 @@ ${detailsInfo.map((detail, i) => {
     client,
     webBaseUrl: WIDGET_BASE_URL,
     debugLog,
-    resolveProjectKey: (project: string) => getProjectAliases()[project] || project,
+    resolveProjectKey: resolvePublicApiProjectKey,
   });
 
   registerFindFieldHistoryChangesTool(server, {
@@ -10833,6 +10895,70 @@ ${detailsInfo.map((detail, i) => {
   // ========== TEST RUN SETTINGS TOOLS ==========
 
   server.registerTool(
+    "get_test_run_environments",
+    {
+      description:
+        "List Environments configured for a project (Public API GET /environments). Use exact `name` or `id` in adv_manage_test_run — legacy `{ key }` is still accepted and resolved case-insensitively when possible.",
+      inputSchema: {
+        project: z
+          .union([z.enum(["web", "android", "ios", "api"]), z.string()])
+          .describe("Project alias ('web', 'android', 'ios', 'api') or project key"),
+        format: z.enum(["raw", "formatted"]).default("formatted").describe("Output format"),
+      },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async (args) => {
+      debugLog("adv_get_test_run_environments called", args);
+
+      try {
+        await resolveProjectId(args.project);
+
+        const projectKey = resolvePublicApiProjectKey(String(args.project));
+
+        const response = await client.listEnvironments({ projectKey });
+
+        if (args.format === "raw") {
+          return {
+            content: [{ type: "text" as const, text: JSON.stringify(response, null, 2) }],
+          };
+        }
+
+        const envs = response.items;
+        let result = `🌍 **Environments for Project ${projectKey}**\n\n`;
+        if (envs.length === 0) {
+          result += "No environments configured.\n";
+        } else {
+          result += `Found ${envs.length} environment${envs.length === 1 ? "" : "s"} (use \`name\` or \`id\` on test run create/update):\n\n`;
+          for (const env of envs) {
+            result += `**${env.name}** (ID: ${env.id})\n`;
+            if (env.description) {
+              result += `  ${env.description}\n`;
+            }
+            result += "\n";
+          }
+        }
+
+        return { content: [{ type: "text" as const, text: result }] };
+      } catch (error: any) {
+        debugLog("Error in adv_get_test_run_environments", { error: error.message, args });
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `❌ Error getting environments: ${error?.message || error}`,
+            },
+          ],
+        };
+      }
+    },
+  );
+
+  server.registerTool(
     "get_test_run_result_statuses",
     {
       description: "Get list of Result Statuses configured for a project. These statuses are used when assigning results to Test Cases.",
@@ -10852,17 +10978,9 @@ ${detailsInfo.map((detail, i) => {
       debugLog("adv_get_test_run_result_statuses called", args);
 
       try {
-        // Resolve project using dynamic resolution (same as other tools)
-        const { projectId, suggestions } = await resolveProjectId(args.project);
+        await resolveProjectId(args.project);
 
-        // For Public API, we need the project key, not the project ID
-        const projectKey = typeof args.project === 'string' && args.project.length > 3
-          ? args.project
-          : getProjectAliases()[args.project as string];
-
-        if (!projectKey) {
-          throw new Error(`Invalid project: ${args.project}. ${suggestions || 'Use web, android, ios, api, or a valid project key.'}`);
-        }
+        const projectKey = resolvePublicApiProjectKey(String(args.project));
 
         const response = await client.listResultStatuses({ projectKey });
 
@@ -10930,17 +11048,9 @@ ${detailsInfo.map((detail, i) => {
       debugLog("adv_get_test_run_configuration_groups called", args);
 
       try {
-        // Resolve project using dynamic resolution (same as other tools)
-        const { projectId, suggestions } = await resolveProjectId(args.project);
+        await resolveProjectId(args.project);
 
-        // For Public API, we need the project key, not the project ID
-        const projectKey = typeof args.project === 'string' && args.project.length > 3
-          ? args.project
-          : getProjectAliases()[args.project as string];
-
-        if (!projectKey) {
-          throw new Error(`Invalid project: ${args.project}. ${suggestions || 'Use web, android, ios, api, or a valid project key.'}`);
-        }
+        const projectKey = resolvePublicApiProjectKey(String(args.project));
 
         const response = await client.listConfigurationGroups({ projectKey });
 
@@ -11757,7 +11867,7 @@ ${detailsInfo.map((detail, i) => {
     "Groups results by Root Suite and Feature Suite, avoiding duplicates.\n" +
     "Output formats: detailed (full hierarchy), short (summary), dto (JSON), test_run_rules (for automation tags)",
     inputSchema: {
-      project_key: z.string().min(1).describe("Project key (e.g., 'MCPAND', 'MCP')"),
+      project_key: z.string().min(1).describe("Project key (e.g., 'PROJ1', 'MCP')"),
       feature_keyword: z.string().min(1).describe("Feature keyword to search for (case-insensitive, partial match)"),
       output_format: z.enum(['detailed', 'short', 'dto', 'test_run_rules']).default('short').describe(
         "Output format: detailed, short, dto, or test_run_rules"
