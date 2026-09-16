@@ -13,7 +13,7 @@ import {
   type PlanWarning,
   renderJiraAutomationPlanMarkdown,
   renderJiraAutomationPlanString,
-  resolveAllowedAutomationStateIds,
+  resolveAutomationStatesForPlan,
   resolveRootModuleName,
   resolveSuiteGroups,
   suiteDisplayName,
@@ -124,9 +124,19 @@ export async function runPrepareJiraAutomationPlan(
   const groups = resolveSuiteGroups(suiteId, targetName, processedSuites, allSuites);
 
   const catalog = await deps.client.getAutomationStatesForProject(projectKey);
-  const allowedStateIds = resolveAllowedAutomationStateIds(catalog, args.automation_states);
+  const { allowedStateIds, unmatchedExplicitNames } = resolveAutomationStatesForPlan(
+    catalog,
+    args.automation_states,
+  );
+  if (unmatchedExplicitNames.length > 0) {
+    return {
+      error:
+        `No automation states matched: ${unmatchedExplicitNames.map((n) => `"${n}"`).join(", ")}. ` +
+        `Check names with adv_get_automation_states for project ${projectKey}.`,
+    };
+  }
   const allowedStateNames = buildAllowedStateNameSet(catalog, allowedStateIds);
-  if (allowedStateIds.size === 0 && (!args.automation_states || args.automation_states.length === 0)) {
+  if (allowedStateIds.size === 0) {
     return {
       error:
         `No automation states matched default intake names (Not Automated / To be automated) for project ${projectKey}. ` +
@@ -140,6 +150,7 @@ export async function runPrepareJiraAutomationPlan(
   const warnings: PlanWarning[] = [];
   const casesByGroupId = new Map<number, CaseLike[]>();
 
+  // One fetch per top-level suite group (serial) to avoid burst rate limits; each call may batch suite IN internally.
   for (const group of groups) {
     const subtreeIds = collectGroupSubtreeSuiteIds(group.suiteId, processedSuites);
     const rawCases = await fetchCasesForSubtree(deps.client, projectKey, subtreeIds);

@@ -34,11 +34,7 @@ export function resolveJiraAutomationPlatform(
 
   for (const [alias, mappedKey] of Object.entries(config.projectAliases)) {
     if (mappedKey === key || mappedKey.toUpperCase() === upper) {
-      const platform = capitalizePlatformFromAlias(alias);
-      if (config.jiraAutomationPlan.componentByPlatform[platform]) {
-        return platform;
-      }
-      return platform;
+      return capitalizePlatformFromAlias(alias);
     }
   }
 

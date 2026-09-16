@@ -116,24 +116,51 @@ export function resolveDefaultIntakeStateNames(
   return names;
 }
 
+export type AutomationStatesForPlan = {
+  allowedStateIds: Set<number>;
+  /** Names from an explicit `automation_states` arg that did not match the project catalog. */
+  unmatchedExplicitNames: string[];
+};
+
+export function resolveAutomationStatesForPlan(
+  catalog: AutomationStateLike[],
+  requestedNames: string[] | undefined,
+): AutomationStatesForPlan {
+  const nameToId = new Map(
+    catalog.map((s) => [normalizeAutomationStateName(s.name), s.id]),
+  );
+  const explicit = Boolean(requestedNames && requestedNames.length > 0);
+  const names = explicit ? requestedNames! : resolveDefaultIntakeStateNames(catalog);
+
+  const allowedStateIds = new Set<number>();
+  const unmatchedExplicitNames: string[] = [];
+  for (const name of names) {
+    const id = nameToId.get(normalizeAutomationStateName(name));
+    if (id !== undefined) {
+      allowedStateIds.add(id);
+    } else if (explicit) {
+      unmatchedExplicitNames.push(name);
+    }
+  }
+  return { allowedStateIds, unmatchedExplicitNames };
+}
+
 export function resolveAllowedAutomationStateIds(
   catalog: AutomationStateLike[],
   requestedNames: string[] | undefined,
 ): Set<number> {
-  const nameToId = new Map(
-    catalog.map((s) => [normalizeAutomationStateName(s.name), s.id]),
-  );
-  const names =
-    requestedNames && requestedNames.length > 0
-      ? requestedNames
-      : resolveDefaultIntakeStateNames(catalog);
+  return resolveAutomationStatesForPlan(catalog, requestedNames).allowedStateIds;
+}
 
-  const ids = new Set<number>();
-  for (const name of names) {
-    const id = nameToId.get(normalizeAutomationStateName(name));
-    if (id !== undefined) ids.add(id);
+/** Cases passed into buildParentTasksForGroups must have numeric ids (caseId URLs). */
+export function requireCaseNumericId(tc: CaseLike): number {
+  const id = tc.id;
+  if (id == null || !Number.isFinite(id) || id <= 0) {
+    throw new Error(
+      `Test case ${tc.key ?? "(unknown)"} is missing a numeric id — cannot build caseId links.`,
+    );
   }
-  return ids;
+  return id;
 }
 
 export function filterCasesForJiraPlan(
@@ -309,7 +336,7 @@ export function buildParentTasksForGroups(input: BuildParentTasksInput): {
 
     const toSubtasks = (list: CaseLike[]): PlanSubtask[] =>
       list.map((tc) => {
-        const id = tc.id!;
+        const id = requireCaseNumericId(tc);
         const key = tc.key ?? String(id);
         return {
           summary: key,

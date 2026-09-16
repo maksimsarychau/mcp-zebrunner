@@ -5,6 +5,8 @@ import {
   buildParentSummary,
   filterCasesForJiraPlan,
   matchesAnalyticsTag,
+  requireCaseNumericId,
+  resolveAutomationStatesForPlan,
   resolveDefaultIntakeStateNames,
   resolveSuiteGroups,
   renderJiraAutomationPlanMarkdown,
@@ -144,6 +146,51 @@ describe("renderers", () => {
     };
     assert.match(renderJiraAutomationPlanString(plan), /Parent tasks: 1/);
     assert.match(renderJiraAutomationPlanMarkdown(plan), /## \[iOS - ROOT\]/);
+  });
+});
+
+describe("resolveAutomationStatesForPlan", () => {
+  const catalog = [
+    { id: 1, name: "Not Automated" },
+    { id: 2, name: "To be automated" },
+    { id: 3, name: "Automated" },
+  ];
+
+  it("reports unmatched names when automation_states is explicit", () => {
+    const { allowedStateIds, unmatchedExplicitNames } = resolveAutomationStatesForPlan(
+      catalog,
+      ["Not Automatd"],
+    );
+    assert.equal(allowedStateIds.size, 0);
+    assert.deepEqual(unmatchedExplicitNames, ["Not Automatd"]);
+  });
+
+  it("resolves explicit valid names", () => {
+    const { allowedStateIds, unmatchedExplicitNames } = resolveAutomationStatesForPlan(
+      catalog,
+      ["Automated"],
+    );
+    assert.deepEqual([...allowedStateIds], [3]);
+    assert.equal(unmatchedExplicitNames.length, 0);
+  });
+
+  it("uses defaults when automation_states omitted", () => {
+    const { allowedStateIds, unmatchedExplicitNames } = resolveAutomationStatesForPlan(
+      catalog,
+      undefined,
+    );
+    assert.deepEqual([...allowedStateIds].sort(), [1, 2]);
+    assert.equal(unmatchedExplicitNames.length, 0);
+  });
+});
+
+describe("requireCaseNumericId", () => {
+  it("throws when id missing", () => {
+    assert.throws(() => requireCaseNumericId({ key: "PROJ-1" }), /missing a numeric id/);
+  });
+
+  it("returns id when present", () => {
+    assert.equal(requireCaseNumericId({ id: 42, key: "PROJ-1" }), 42);
   });
 });
 
