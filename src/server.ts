@@ -11757,7 +11757,7 @@ ${detailsInfo.map((detail, i) => {
     "Groups results by Root Suite and Feature Suite, avoiding duplicates.\n" +
     "Output formats: detailed (full hierarchy), short (summary), dto (JSON), test_run_rules (for automation tags)",
     inputSchema: {
-      project_key: z.string().min(1).describe("Project key (e.g., 'MCPAND', 'MCP')"),
+      project_key: z.string().min(1).describe("Project key (e.g., 'PROJ1', 'MCP')"),
       feature_keyword: z.string().min(1).describe("Feature keyword to search for (case-insensitive, partial match)"),
       output_format: z.enum(['detailed', 'short', 'dto', 'test_run_rules']).default('short').describe(
         "Output format: detailed, short, dto, or test_run_rules"

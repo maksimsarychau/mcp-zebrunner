@@ -6,8 +6,10 @@ import { getConfig } from "../utils/config-loader.js";
 import { resolveJiraAutomationPlatform } from "../utils/jira-automation-platform.js";
 import {
   buildAllowedStateNameSet,
+  buildAutomationCatalogNormToId,
   buildParentTasksForGroups,
   collectGroupSubtreeSuiteIds,
+  enrichCasesWithAutomationCatalog,
   filterCasesForJiraPlan,
   type JiraAutomationPlan,
   type PlanWarning,
@@ -136,6 +138,10 @@ export async function runPrepareJiraAutomationPlan(
     };
   }
   const allowedStateNames = buildAllowedStateNameSet(catalog, allowedStateIds);
+  const catalogNormToId = buildAutomationCatalogNormToId(catalog);
+  const intakeAutomationStates = catalog
+    .filter((s) => allowedStateIds.has(s.id))
+    .map((s) => ({ id: s.id, name: s.name }));
   if (allowedStateIds.size === 0) {
     return {
       error:
@@ -165,12 +171,14 @@ export async function runPrepareJiraAutomationPlan(
       withIds.push(tc);
     }
 
+    const enriched = enrichCasesWithAutomationCatalog(withIds, catalog);
     const filtered = filterCasesForJiraPlan(
-      withIds,
+      enriched,
       allowedStateIds,
       allowedStateNames,
       includeExcluded,
       warnings,
+      catalogNormToId,
     );
     casesByGroupId.set(group.suiteId, filtered);
   }
@@ -194,6 +202,7 @@ export async function runPrepareJiraAutomationPlan(
     parentTasks,
     skippedGroups,
     warnings,
+    intakeAutomationStates,
   };
 }
 
@@ -205,7 +214,9 @@ export function registerPrepareJiraAutomationPlanTool(
     description:
       "📋 Prepare a structured Jira automation task plan from a Zebrunner test suite URL or suite id — " +
       "suite grouping, automation-state filtering, Analytics split, and caseId-based links. " +
-      "Plan only: does not read or write Jira. Default automation intake: Not Automated + To be automated; " +
+      "Plan only: does not read or write Jira. Resolves automation states per project (same catalog as adv_get_automation_states; " +
+      "IDs are not portable across projects). Default intake by name: Not Automated + To be automated " +
+      "(case-insensitive; Zebrunner often labels this \"To Be Automated\"); " +
       "excludes Automated and Manual Only unless include_automated_or_manual_only is true.",
     inputSchema: {
       suite_url: z
@@ -221,7 +232,10 @@ export function registerPrepareJiraAutomationPlanTool(
       automation_states: z
         .array(z.string())
         .optional()
-        .describe('Automation state names to include (default: "Not Automated" and "To be automated" for the project)'),
+        .describe(
+          'Automation state names to include (default: "Not Automated" and "To be automated" for the project; ' +
+            "use adv_get_automation_states to list valid names and per-project IDs)",
+        ),
       include_automated_or_manual_only: z
         .boolean()
         .default(false)

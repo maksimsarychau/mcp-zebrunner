@@ -483,7 +483,7 @@ The `/relaunch-regression-failures` prompt embeds these values so the agent know
 
 ### Non-PROJ / multi-tenant checklist
 
-1. Update `projectAliases` to your Zebrunner project keys.
+1. Set `projectAliases` and other keys in your local `zebrunner-config.json` (map short prompt names to Zebrunner keys like `MCP` / `PROJ1`; see README).
 2. Set `localeTestRunRules.enabled` to `false` **or** replace `projectKeys` / `enUsOnlyFeatureSuites` with your suite names.
 3. Adjust `relaunchFailures.excludeLaunchNamePatterns` for your launch naming (or `[]`).
 4. Override via `ZEBRUNNER_CONFIG_JSON` in Docker/K8s without editing the repo file.

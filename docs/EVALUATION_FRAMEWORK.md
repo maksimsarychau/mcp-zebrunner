@@ -498,10 +498,10 @@ Because the judge's `checkToolSelection` matches with `.some(...)`, alias prompt
 | `scaffold.alias_wizard` | 2 | The `adv_create_test_case_wizard` alias routes to the same handler |
 | `scaffold.neg.not_raw_create` | 2 | Picks the wizard; **forbids** `adv_create_test_case` (tool confusion) |
 | `scaffold.neg.not_generate_draft` | 2 | Picks the wizard; **forbids** `adv_generate_draft_test_by_key` (tool confusion) |
-| `scaffold.features_alias` | 2 | User says configured **alias-a** → wizard with `project: "alias-a"` (alias, not resolved key) |
+| `scaffold.features_alias` | 2 | User names a **local-config short name** (see `eval-authoring-tools.ts`) → wizard with that `project` arg |
 | `scaffold.feat_project_key` | 2 | User says project **PROJ1** + suite → wizard with `project: "PROJ1"` and `test_suite_id` |
-| `scaffold.android_alias` | 2 | User says **alias-b** → wizard with `project: "alias-b"` |
-| `scaffold.neg.not_list_projects` | 2 | Wizard for **alias-a**; **forbids** `adv_get_available_projects` (uses configured aliases) |
+| `scaffold.android_alias` | 2 | Same pattern with another local short name → wizard `project` arg |
+| `scaffold.neg.not_list_projects` | 2 | Wizard when user named project; **forbids** `adv_get_available_projects` |
 | `scaffold.with_suite_id_skip_list` | 2 | Wizard with `project` + `test_suite_id`; **forbids** listing suites first |
 | `scaffold.project_only_no_suite_arg` | 2 | Wizard with `project` only; suite chosen inside the wizard |
 | `scaffold.neg.not_list_suites_wizard` | 2 | Wizard for {{project_key}}; **forbids** `adv_list_test_suites` |

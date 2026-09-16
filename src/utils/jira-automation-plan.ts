@@ -54,6 +54,8 @@ export interface JiraAutomationPlan {
   parentTasks: PlanParentTask[];
   skippedGroups: SkippedGroup[];
   warnings: PlanWarning[];
+  /** Resolved intake states for this project (ids from adv_get_automation_states catalog). */
+  intakeAutomationStates?: { id: number; name: string }[];
 }
 
 export interface SuiteLike {
@@ -82,7 +84,11 @@ export function suiteDisplayName(suite: SuiteLike): string {
 }
 
 export function normalizeAutomationStateName(name: string | undefined): string {
-  return (name ?? "").trim().toLowerCase();
+  return (name ?? "")
+    .normalize("NFKC")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
 }
 
 export function isManualOnlyAutomationState(stateName: string | undefined): boolean {
@@ -163,12 +169,56 @@ export function requireCaseNumericId(tc: CaseLike): number {
   return id;
 }
 
+export function buildAutomationCatalogNormToId(
+  catalog: AutomationStateLike[],
+): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const state of catalog) {
+    map.set(normalizeAutomationStateName(state.name), state.id);
+  }
+  return map;
+}
+
+/** Fill missing automation state id/name on list payloads using the project catalog. */
+export function enrichCasesWithAutomationCatalog(
+  cases: CaseLike[],
+  catalog: AutomationStateLike[],
+): CaseLike[] {
+  const normToId = buildAutomationCatalogNormToId(catalog);
+  const idToName = new Map(catalog.map((s) => [s.id, s.name]));
+
+  return cases.map((tc) => {
+    const raw = tc.automationState;
+    if (!raw) return tc;
+
+    let id = raw.id;
+    let name = raw.name?.trim();
+
+    if (id != null && !name) {
+      name = idToName.get(id);
+    }
+    if ((id == null || !Number.isFinite(id)) && name) {
+      id = normToId.get(normalizeAutomationStateName(name));
+    }
+
+    if (id == null && !name) return tc;
+    return {
+      ...tc,
+      automationState: {
+        id: id ?? raw.id,
+        name: name ?? raw.name,
+      },
+    };
+  });
+}
+
 export function filterCasesForJiraPlan(
   cases: CaseLike[],
   allowedStateIds: Set<number>,
   allowedStateNamesNormalized: Set<string>,
   includeAutomatedOrManualOnly: boolean,
   warnings: PlanWarning[],
+  catalogNormToId?: Map<string, number>,
 ): CaseLike[] {
   const kept: CaseLike[] = [];
 
@@ -188,9 +238,22 @@ export function filterCasesForJiraPlan(
     }
 
     const normName = normalizeAutomationStateName(stateName);
-    const idAllowed = stateId != null && allowedStateIds.has(stateId);
+    const resolvedId =
+      stateId != null && Number.isFinite(stateId)
+        ? stateId
+        : normName !== "unknown"
+          ? catalogNormToId?.get(normName)
+          : undefined;
+    const idAllowed = resolvedId != null && allowedStateIds.has(resolvedId);
     const nameAllowed = allowedStateNamesNormalized.has(normName);
     if (!idAllowed && !nameAllowed) {
+      if (tc.key) {
+        warnings.push({
+          reason: "excluded_not_in_plan_automation_states",
+          testCaseKey: tc.key,
+          automationState: stateName,
+        });
+      }
       continue;
     }
 

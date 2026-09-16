@@ -230,7 +230,7 @@ export const PROJECT_OTHER_SENTINEL = "Other (enter project key)";
 
 /**
  * Invert alias map: project key → sorted list of alias names that resolve to it.
- * Example: { PROJ1: ["alias-a", "alias-b"], PROJ2: ["alias-c"], … }
+ * Example: { PROJ1: ["short-a", "short-b"], PROJ2: ["short-c"], … } (instance-local; not in public docs)
  */
 export function groupAliasesByProjectKey(aliases: Record<string, string>): Record<string, string[]> {
   const grouped: Record<string, string[]> = {};

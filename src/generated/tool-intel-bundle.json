@@ -1,7 +1,7 @@
 {
   "sourceHashes": {
     "toolsJson": "f6adb1c6d2bcb888",
-    "catalog": "d19277fe943c0de6",
+    "catalog": "e5fb7191a5c7a207",
     "benefits": "1c7370f3df9e2d38"
   },
   "tools": [
@@ -38,7 +38,7 @@
       "category": "Feature-Based Test Case Aggregation",
       "examples": [
         "\"Find all test cases related to 'login' feature in project MCP\"",
-        "\"Aggregate test cases for 'payment' in project MCPAND with detailed output\"",
+        "\"Aggregate test cases for 'payment' in project PROJ1 with detailed output\"",
         "\"Get automation tags for all test cases mentioning 'diary' feature\"",
         "\"Show me all 'food search' related test cases grouped by suite\"",
         "\"Generate test run rules for 'onboarding' feature\""
@@ -120,7 +120,7 @@
       "examples": [
         "\"Which MCP test cases had Manual Only change from Yes to No since 2026-01-01?\"",
         "\"Find automation state transitions to Semi-Automated in root suite 66 last quarter\"",
-        "`{ project_key: \"MFPAND\", field: \"Manual Only\", from_value: \"Yes\", to_value: \"No\", index_mode: \"auto\" }`"
+        "`{ project_key: \"PROJ1\", field: \"Manual Only\", from_value: \"Yes\", to_value: \"No\", index_mode: \"auto\" }`"
       ]
     },
     {
@@ -129,7 +129,7 @@
       "category": "Platform & Results Analysis",
       "examples": [
         "\"Build the field history index for project MCP\"",
-        "\"Continue indexing MFPAND history — last batch was incomplete\"",
+        "\"Continue indexing PROJ1 history — last batch was incomplete\"",
         "After index is complete: \"Scan index for Manual Only Yes→No changes in the last 90 days\" (via find tool)"
       ]
     },
@@ -160,7 +160,7 @@
         "\"Scaffold a new test case in project PROJ1 suite 20421\"",
         "\"Help me write a new feature test case following best practices\"",
         "\"Open the create-test-case wizard for PROJ1 so I can write a new case step by step\" (alias `adv_create_test_case_wizard`)",
-        "\"Use the test case creation wizard to add a new case to alias-a suite 20421\" (alias resolves per `zebrunner-config.json`)",
+        "\"Use the test case creation wizard to add a new case to PROJ1 suite 20421\"",
         "\"Scaffold a new login test case for PROJ1 and keep the steps in Gherkin\" (default language)"
       ]
     },
@@ -318,7 +318,7 @@
     },
     {
       "name": "adv_get_automation_states",
-      "description": "[Advanced Zebrunner MCP] List all available automation states for a project.",
+      "description": "[Advanced Zebrunner MCP] List all available automation states for a project (each state has an **ID that is valid only in that project**). Use before filtering by `automation_state_id`, interpreting `adv_prepare_jira_automation_plan` intake, or calling `adv_get_test_cases_by_automation_state`.",
       "category": "Test Case Management",
       "examples": [
         "\"What automation states are available for project MCP?\"",
@@ -423,7 +423,7 @@
     },
     {
       "name": "adv_get_platform_results_by_period",
-      "description": "[Advanced Zebrunner MCP] Get aggregated test results, pass rate, and statistics for a project over a time period (last 7 days, last 30 days, etc.). Returns total passed/failed/skipped/aborted counts and pass rate percentage. Use this when asked for \"results\", \"pass rate\", \"test statistics\", or \"results for last N days\". Accepts any Zebrunner project key (e.g. `DEF`, `MCP`) or aliases (`web`/`android`/`ios`/`api`).",
+      "description": "[Advanced Zebrunner MCP] Get aggregated test results, pass rate, and statistics for a project over a time period (last 7 days, last 30 days, etc.). Returns total passed/failed/skipped/aborted counts and pass rate percentage. Use this when asked for \"results\", \"pass rate\", \"test statistics\", or \"results for last N days\". Accepts any Zebrunner project key (e.g. `DEF`, `MCP`, `PROJ1`).",
       "category": "Platform & Results Analysis",
       "examples": [
         "\"Get results for MCP during last 7 days\"",
@@ -1049,7 +1049,7 @@
     },
     "adv_get_automation_states": {
       "name": "adv_get_automation_states",
-      "description": "List all available automation states for a project.",
+      "description": "List all available automation states for a project (each state has an **ID that is valid only in that project**). Use before filtering by `automation_state_id`, interpreting `adv_prepare_jira_automation_plan` intake, or calling `adv_get_test_cases_by_automation_state`.",
       "category": "Test Case Management",
       "examples": [
         "\"What automation states are available for project MCP?\"",
@@ -1214,7 +1214,7 @@
         "\"Scaffold a new test case in project PROJ1 suite 20421\"",
         "\"Help me write a new feature test case following best practices\"",
         "\"Open the create-test-case wizard for PROJ1 so I can write a new case step by step\" (alias `adv_create_test_case_wizard`)",
-        "\"Use the test case creation wizard to add a new case to alias-a suite 20421\" (alias resolves per `zebrunner-config.json`)",
+        "\"Use the test case creation wizard to add a new case to PROJ1 suite 20421\"",
         "\"Scaffold a new login test case for PROJ1 and keep the steps in Gherkin\" (default language)"
       ]
     },
@@ -1356,7 +1356,7 @@
       "category": "Feature-Based Test Case Aggregation",
       "examples": [
         "\"Find all test cases related to 'login' feature in project MCP\"",
-        "\"Aggregate test cases for 'payment' in project MCPAND with detailed output\"",
+        "\"Aggregate test cases for 'payment' in project PROJ1 with detailed output\"",
         "\"Get automation tags for all test cases mentioning 'diary' feature\"",
         "\"Show me all 'food search' related test cases grouped by suite\"",
         "\"Generate test run rules for 'onboarding' feature\""
@@ -1414,7 +1414,7 @@
     },
     "adv_get_platform_results_by_period": {
       "name": "adv_get_platform_results_by_period",
-      "description": "Get aggregated test results, pass rate, and statistics for a project over a time period (last 7 days, last 30 days, etc.). Returns total passed/failed/skipped/aborted counts and pass rate percentage. Use this when asked for \"results\", \"pass rate\", \"test statistics\", or \"results for last N days\". Accepts any Zebrunner project key (e.g. `DEF`, `MCP`) or aliases (`web`/`android`/`ios`/`api`).",
+      "description": "Get aggregated test results, pass rate, and statistics for a project over a time period (last 7 days, last 30 days, etc.). Returns total passed/failed/skipped/aborted counts and pass rate percentage. Use this when asked for \"results\", \"pass rate\", \"test statistics\", or \"results for last N days\". Accepts any Zebrunner project key (e.g. `DEF`, `MCP`, `PROJ1`).",
       "category": "Platform & Results Analysis",
       "examples": [
         "\"Get results for MCP during last 7 days\"",
@@ -1477,7 +1477,7 @@
       "examples": [
         "\"Which MCP test cases had Manual Only change from Yes to No since 2026-01-01?\"",
         "\"Find automation state transitions to Semi-Automated in root suite 66 last quarter\"",
-        "`{ project_key: \"MFPAND\", field: \"Manual Only\", from_value: \"Yes\", to_value: \"No\", index_mode: \"auto\" }`"
+        "`{ project_key: \"PROJ1\", field: \"Manual Only\", from_value: \"Yes\", to_value: \"No\", index_mode: \"auto\" }`"
       ]
     },
     "adv_build_field_history_index": {
@@ -1486,7 +1486,7 @@
       "category": "Platform & Results Analysis",
       "examples": [
         "\"Build the field history index for project MCP\"",
-        "\"Continue indexing MFPAND history — last batch was incomplete\"",
+        "\"Continue indexing PROJ1 history — last batch was incomplete\"",
         "After index is complete: \"Scan index for Manual Only Yes→No changes in the last 90 days\" (via find tool)"
       ]
     },

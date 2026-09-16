@@ -1496,10 +1496,10 @@ Guided best-practice authoring wizard. Also registered as the alias `adv_create_
 
 **Expected:** Selects `adv_create_test_case_wizard` (alias of `adv_scaffold_test_case`, same handler).
 
-**Prompt 3 — Project alias + suite**
-> Use the test case creation wizard to add a new case to alias-a suite 20421.
+**Prompt 3 — Project key + suite**
+> Use the test case creation wizard to add a new case to PROJ1 suite 20421.
 
-**Expected:** Selects the wizard with `project: "alias-a"` (resolves per `zebrunner-config.json`) and `test_suite_id: 20421`.
+**Expected:** Selects the wizard with `project: "PROJ1"` and `test_suite_id: 20421`.
 
 **Prompt 4 — Gherkin default**
 > Scaffold a new login test case for PROJ1 and keep the steps in Gherkin.
@@ -1511,25 +1511,25 @@ Guided best-practice authoring wizard. Also registered as the alias `adv_create_
 
 **Expected:** Selects `adv_scaffold_test_case` / `adv_create_test_case_wizard`; must NOT select `adv_create_test_case` or `adv_generate_draft_test_by_key`.
 
-**Prompt 6 — Alias routing (eval: `scaffold.features_alias`)**
-> Start the test case creation wizard for **alias-a** (new feature work).
+**Prompt 6 — Project key (eval: `scaffold.feat_project_key` / `scaffold.features_alias`)**
+> Start the test case creation wizard for **PROJ1** (new feature work).
 
-**Expected:** Selects the wizard with `project: "alias-a"` (alias preserved in args; resolves per `zebrunner-config.json` at runtime).
+**Expected:** Selects the wizard with `project: "PROJ1"`.
 
 **Prompt 7 — Project key + suite (eval: `scaffold.feat_project_key`)**
 > Open the create-test-case wizard for project **PROJ1** suite 20421.
 
 **Expected:** Selects the wizard with `project: "PROJ1"` and `test_suite_id: 20421`.
 
-**Prompt 8 — Another alias (eval: `scaffold.android_alias`)**
-> Use the guided wizard to add a test case to **alias-b**.
+**Prompt 8 — Second project (eval: `scaffold.android_alias` uses local config in CI)**
+> Use the guided wizard to add a test case to **PROJ2**.
 
-**Expected:** Selects the wizard with `project: "alias-b"`.
+**Expected:** Selects the wizard with `project: "PROJ2"`.
 
 **Prompt 9 — Do not list projects (eval: `scaffold.neg.not_list_projects`)**
-> I want the test case wizard for **alias-a** — do NOT call adv_get_available_projects to pick the project.
+> I want the test case wizard for **PROJ1** — do NOT call adv_get_available_projects to pick the project.
 
-**Expected:** Selects the wizard; must NOT call `adv_get_available_projects` (configured aliases are sufficient).
+**Expected:** Selects the wizard; must NOT call `adv_get_available_projects` when the user already named the project key.
 
 **Prompt 10 — Suite id in args, skip list (eval: `scaffold.with_suite_id_skip_list`)**
 > Use the test case creation wizard for PROJ1 suite 20421 — pass the suite id in wizard args, do NOT call adv_list_test_suites first.

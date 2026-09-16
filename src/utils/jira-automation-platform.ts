@@ -18,7 +18,7 @@ function capitalizePlatformFromAlias(aliasKey: string): string {
 
 /**
  * Resolve display platform for Jira plan titles/components.
- * Order: jiraAutomationPlan.platformByProjectKey → reverse projectAliases → error.
+ * Order: jiraAutomationPlan.platformByProjectKey → optional local alias map in config → error.
  */
 export function resolveJiraAutomationPlatform(
   projectKey: string,
@@ -41,8 +41,7 @@ export function resolveJiraAutomationPlatform(
   return {
     error:
       `Cannot resolve Jira automation platform for Zebrunner project "${key}". ` +
-      `Add jiraAutomationPlan.platformByProjectKey["${key}"] in zebrunner-config.json ` +
-      `or ensure projectAliases maps an alias (e.g. ios/android) to this project key.`,
+      `Add jiraAutomationPlan.platformByProjectKey["${key}"] in zebrunner-config.json.`,
   };
 }
 

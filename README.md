@@ -12,7 +12,7 @@ A **Model Context Protocol (MCP)** server that brings advanced analytics, report
 >
 > **v9.3.0** — Multi-PR / period test impact: `change_batches[]`, `/test-impact-period`, extended `/test-impact`. See [TEST_IMPACT_WORKFLOW.md](docs/TEST_IMPACT_WORKFLOW.md) and [TEST_IMPACT_PR_PERIOD_DESIGN.md](docs/TEST_IMPACT_PR_PERIOD_DESIGN.md).
 >
-> 🆕 **v9.2.7** — New `adv_scaffold_test_case` wizard (hybrid form/conversational) to author test cases from best practices with an automatic warn-only similar-case check, plus configurable `projectAliases` in `zebrunner-config.json`. See [release notes](docs/releases/v9.2.7.md).
+> 🆕 **v9.2.7** — New `adv_scaffold_test_case` wizard (hybrid form/conversational) to author test cases from best practices with an automatic warn-only similar-case check, plus optional `projectAliases` in `zebrunner-config.json` so tools accept short names as well as Zebrunner project keys. See [release notes](docs/releases/v9.2.7.md).
 >
 > 🆕 **v9.2.5** — `adv_get_test_authoring_trend` (TAM template 7) completes **22/22** dashboard widget MCP coverage. Hub tools, pass-rate views, period modes. See **[TEST_PROMPTS.md §18](docs/TEST_PROMPTS.md#18-dashboard-widgets-22-templates--v925)** and [change-logs.md](change-logs.md#v925--test-authoring-trend-template-7).
 
@@ -1598,7 +1598,7 @@ The MCP server ships with a `zebrunner-config.json` in the project root that con
 
 | Key                        | Description                                                                                                                                                                                                   |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `projectAliases`           | Maps short names (`web`, `android`, etc.) to actual Zebrunner project keys. Update these to match your projects.                                                                                              |
+| `projectAliases`           | Maps short names (`web`, `android`, `ios`, `api`, etc.) to Zebrunner **project keys** (`WEB`, `AND`, …). Used by reporting tools, the scaffold wizard picker, `adv_prepare_jira_automation_plan`, test-impact routing, and Jira platform inference when `platformByProjectKey` is not set. |
 | `testConnectionProjectKey` | Project key used by the `adv_test_reporting_connection` tool when no env var is set.                                                                                                                          |
 | `widgetTemplates`          | Numeric IDs for SQL widget templates used by reporting tools. These IDs are tenant-specific — check your Zebrunner instance if reports return empty data.                                                     |
 | `dashboardNames`           | Dashboard display names used by widget SQL queries. Must match dashboard names in your Zebrunner workspace.                                                                                                   |
@@ -1656,7 +1656,7 @@ These optional blocks configure **launch mutation workflows** per project. They 
 *Generic / non-CUSTOMER deployment* (e.g. only project `MCP` for demos, no locale exclusions):
 
 ```json
-"projectAliases": { "demo": "MCP" },
+"projectAliases": { "web": "WEB", "android": "AND", "ios": "IOS", "api": "WEB" },
 "testConnectionProjectKey": "MCP",
 "localeTestRunRules": { "enabled": false },
 "relaunchFailures": {

@@ -14,7 +14,7 @@ Complete reference of all available tools with natural language usage examples.
 
 > **v9.2.8:** [`adv_analyze_test_impact`](#adv_analyze_test_impact) — PR/local change → regression candidates; [TEST_IMPACT_WORKFLOW.md](docs/TEST_IMPACT_WORKFLOW.md).
 
-> **v9.2.7:** [`adv_scaffold_test_case`](#adv_scaffold_test_case) wizard + alias [`adv_create_test_case_wizard`](#adv_create_test_case_wizard); `projectAliases` in config.
+> **v9.2.7:** [`adv_scaffold_test_case`](#adv_scaffold_test_case) wizard + alias [`adv_create_test_case_wizard`](#adv_create_test_case_wizard).
 
 > **v9.2.6:** Opt-in `includeDetailedStatuses` on launch summary tools (see [`adv_get_launch_test_summary`](#adv_get_launch_test_summary)).
 
@@ -88,9 +88,9 @@ All tools marked with chart support accept these two parameters:
 
 **Description:** Read-only **Jira automation intake plan** from a Zebrunner suite URL or `project_key` + `suite_id`. Builds parent-task summaries and per-test-case subtasks (top-level sub-suite grouping, dynamic automation-state intake, optional Analytics split, `caseId=` links in descriptions). Does **not** call Jira — use the agent + **Atlassian MCP** (or [`/jira-automation-plan`](#adv_prepare_jira_automation_plan) slash prompt) for dedup, preview, and create after user approval.
 
-**Key parameters:** `suite_url` or `project_key` + `suite_id`; `format` (`json` default, `compact`, `dto`, `string`, `markdown`); `automation_states` (default **Not Automated** + **To be automated** per project); `include_automated_or_manual_only` (default `false` — excludes **Automated** and **Manual Only** unless `true`); `analytics_tag_match` (default from `jiraAutomationPlan.analyticsTagMatch` in config).
+**Key parameters:** `suite_url` or `project_key` + `suite_id`; `format` (`json` default, `compact`, `dto`, `string`, `markdown`); `automation_states` (default **Not Automated** + **To be automated** per project, matched by **name** against that project's catalog from **`adv_get_automation_states`** — state IDs differ per project); `include_automated_or_manual_only` (default `false` — excludes **Automated** and **Manual Only** unless `true`); `analytics_tag_match` (default from `jiraAutomationPlan.analyticsTagMatch` in config).
 
-**Config:** `jiraAutomationPlan` in `zebrunner-config.json` — `targetProject` (default **QAS**), optional `platformByProjectKey`, `componentByPlatform`, `analyticsComponentByPlatform`.
+**Config:** `jiraAutomationPlan` in `zebrunner-config.json` — `targetProject` (default **QAS**), optional `platformByProjectKey`, `componentByPlatform`, `analyticsComponentByPlatform`. `project_key` / suite URL project segments accept Zebrunner keys or `projectAliases` short names; platform label falls back to reverse `projectAliases` when `platformByProjectKey` is unset.
 
 **Example Prompts:**
 
@@ -404,7 +404,7 @@ Weekly stability report for project MCP using:
 
 **Parameters:**
 
-- `project` (required) — Project key or alias (e.g., `"android"`, `"MCPAND"`)
+- `project` (required) — Zebrunner project key (e.g., `"PROJ1"`, `"MCP"`)
 - `milestone` — Filter launches by milestone name (e.g., `"develop-49771"`)
 - `build` — Filter launches by build number
 - `suite_names` — Array of suite names to include
@@ -443,7 +443,7 @@ Weekly stability report for project MCP using:
 
 **Parameters:**
 
-- `project` (required) — Project key or alias (e.g., `"android"`, `"MCPAND"`)
+- `project` (required) — Zebrunner project key (e.g., `"PROJ1"`, `"MCP"`)
 - `period_days` — Number of days to look back (default: `14`)
 - `min_flip_count` — Minimum status flips to be considered flaky (default: `2`)
 - `stability_threshold` — Pass-rate threshold below which a test is considered flaky (default: `0.8`)
@@ -604,7 +604,7 @@ Weekly stability report for project MCP using:
 
 ### `adv_get_automation_states`
 
-**Description:** List all available automation states for a project.
+**Description:** List all available automation states for a project (each state has an **ID that is valid only in that project**). Use before filtering by `automation_state_id`, interpreting `adv_prepare_jira_automation_plan` intake, or calling `adv_get_test_cases_by_automation_state`.
 
 **Example Prompts:**
 
@@ -853,14 +853,14 @@ Weekly stability report for project MCP using:
 
 | Parameter        | Type   | Required | Description                                                                                     |
 | ---------------- | ------ | -------- | ----------------------------------------------------------------------------------------------- |
-| `project`        | string |          | Target project key (e.g. `PROJ1`) or a configured alias (see `zebrunner-config.json`). Asked if omitted.       |
+| `project`        | string |          | Target Zebrunner project key or `projectAliases` short name (e.g. `PROJ1`). Asked if omitted (wizard picker uses keys from local config).       |
 | `test_suite_id`  | number |          | Target test suite id. If omitted, wizard shows Latest + recent named suites + search. Numeric ids still accepted. |
 
 **Behavior:**
 
 - Detects `clientCapabilities.elicitation.form`; runs the native form wizard when available, else the conversational fallback.
 - Wizard steps: target (project/suite) → basics (title, feature area, priority, automation state, **test case language**) → context (preconditions, steps, optional source case) → similarity warning → advisory quality pre-check → final confirm.
-- **Form 0 project picker:** when `project` is omitted and `zebrunner-config.json` defines `projectAliases`, the wizard shows a dropdown of **deduplicated project keys** (e.g. `PROJ1`, `PROJ2`, …) with configured alias hints in the field description (e.g. `PROJ1 — alias-a, alias-b`). **Other (enter project key)** opens a follow-up prompt for raw keys not in the map. The conversational fallback (Claude Desktop) lists the same grouped keys in Step 0. Actual keys and aliases live only in `zebrunner-config.json`.
+- **Form 0 project picker:** when `project` is omitted, the wizard can show a dropdown of deduplicated project keys from `projectAliases` in `zebrunner-config.json`, plus **Other (enter project key)**. The conversational fallback lists the same keys (and may mention configured short names in descriptions). Passing a short name in `project` resolves via `projectAliases` at runtime.
 - **Form 0 suite picker:** when `test_suite_id` is omitted, the wizard fetches suites for the selected project and shows **Latest available** (most recently modified), a shortlist of recently modified suites by hierarchy path/name, and **Other (search or enter suite ID)**. Passing `test_suite_id` skips the picker entirely. API failure or an empty suite list falls back to a numeric id prompt.
 - Test case language defaults to **Gherkin** (Given/When/Then, one step per line); **Plain steps** (`action => expected result`) is the alternative. This affects only the wizard; `adv_create_test_case` and other tools keep plain steps.
 - Similarity is warn-only and never blocks; choosing "reuse" suggests `adv_create_test_case` with `source_case_key` of the closest match.
@@ -871,7 +871,7 @@ Weekly stability report for project MCP using:
 - "Scaffold a new test case in project PROJ1 suite 20421"
 - "Help me write a new feature test case following best practices"
 - "Open the create-test-case wizard for PROJ1 so I can write a new case step by step" (alias `adv_create_test_case_wizard`)
-- "Use the test case creation wizard to add a new case to alias-a suite 20421" (alias resolves per `zebrunner-config.json`)
+- "Use the test case creation wizard to add a new case to PROJ1 suite 20421"
 - "Scaffold a new login test case for PROJ1 and keep the steps in Gherkin" (default language)
 
 ### `adv_create_test_case_wizard` *(v9.2.7 — alias)*
@@ -1015,7 +1015,7 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 
 | Parameter | Type | Required | Description |
 | --------- | ---- | -------- | ----------- |
-| `project` | string / number | yes | Project alias, key, or numeric ID |
+| `project` | string / number | yes | Zebrunner project key, configured `projectAliases` short name, or numeric ID (e.g. `MCP`, `PROJ1`) |
 | `launch_id` | number | | Single launch mode — Reporting API launch ID |
 | `milestone` | string | | Batch filter by milestone name |
 | `query` | string | | Batch filter by build number or launch name |
@@ -1052,7 +1052,7 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 
 | Parameter | Type | Required | Description |
 | --------- | ---- | -------- | ----------- |
-| `project` | string / number | yes | Project alias, key, or numeric ID |
+| `project` | string / number | yes | Zebrunner project key, configured `projectAliases` short name, or numeric ID (e.g. `MCP`, `PROJ1`) |
 | `launch_id` | number | | Explicit template launch ID |
 | `template_query` / `launch_name` | string | | Search past launches by name substring |
 | `suite_path` | string | | Match hidden CI `suite` param (e.g. `PROJ/android/critical-flow`) |
@@ -1173,7 +1173,7 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 
 **Parameters:**
 
-- `project_key` (required) - Project key (e.g., 'MCPAND', 'MCP')
+- `project_key` (required) - Project key (e.g., 'PROJ1', 'MCP')
 - `feature_keyword` (required) - Feature keyword to search for
 - `output_format` - Output format: `detailed`, `short` (default), `dto`, `test_run_rules`
 - `tags_format` - Tags output: `by_root_suite` (default) or `single_line`
@@ -1182,7 +1182,7 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 **Example Prompts:**
 
 - "Find all test cases related to 'login' feature in project MCP"
-- "Aggregate test cases for 'payment' in project MCPAND with detailed output"
+- "Aggregate test cases for 'payment' in project PROJ1 with detailed output"
 - "Get automation tags for all test cases mentioning 'diary' feature"
 - "Show me all 'food search' related test cases grouped by suite"
 - "Generate test run rules for 'onboarding' feature"
@@ -1263,7 +1263,7 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 
 ### `adv_get_platform_results_by_period`
 
-**Description:** Get aggregated test results, pass rate, and statistics for a project over a time period (last 7 days, last 30 days, etc.). Returns total passed/failed/skipped/aborted counts and pass rate percentage. Use this when asked for "results", "pass rate", "test statistics", or "results for last N days". Accepts any Zebrunner project key (e.g. `DEF`, `MCP`) or aliases (`web`/`android`/`ios`/`api`).
+**Description:** Get aggregated test results, pass rate, and statistics for a project over a time period (last 7 days, last 30 days, etc.). Returns total passed/failed/skipped/aborted counts and pass rate percentage. Use this when asked for "results", "pass rate", "test statistics", or "results for last N days". Accepts any Zebrunner project key (e.g. `DEF`, `MCP`, `PROJ1`).
 
 **Pass-rate views (v9.2.4):** `view` selects the dashboard widget template:
 
@@ -1417,7 +1417,7 @@ Omitting `view` preserves pre-v9.2.4 behavior (template 8 pie, `period` default 
 
 - "Which MCP test cases had Manual Only change from Yes to No since 2026-01-01?"
 - "Find automation state transitions to Semi-Automated in root suite 66 last quarter"
-- `{ project_key: "MFPAND", field: "Manual Only", from_value: "Yes", to_value: "No", index_mode: "auto" }`
+- `{ project_key: "PROJ1", field: "Manual Only", from_value: "Yes", to_value: "No", index_mode: "auto" }`
 
 **Related:** [`adv_build_field_history_index`](#adv_build_field_history_index); CLI `npm run history-index:build -- <project_key>`.
 
@@ -1430,7 +1430,7 @@ Omitting `view` preserves pre-v9.2.4 behavior (template 8 pie, `period` default 
 **Example Prompts:**
 
 - "Build the field history index for project MCP"
-- "Continue indexing MFPAND history — last batch was incomplete"
+- "Continue indexing PROJ1 history — last batch was incomplete"
 - After index is complete: "Scan index for Manual Only Yes→No changes in the last 90 days" (via find tool)
 
 ### `adv_get_tcm_case_analytics` *(v9.2.4 — TCM widgets 37777–37779)*
@@ -1526,7 +1526,7 @@ Omitting `view` preserves pre-v9.2.4 behavior (template 8 pie, `period` default 
 | Parameter                | Type                      | Description                                                                                                      |
 | ------------------------ | ------------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | `report_types`           | `string[]`                | Report type(s) to generate (required). See report types below.                                                   |
-| `projects`               | `string[]`                | Project aliases or keys (e.g., `["android", "ios"]`)                                                             |
+| `projects`               | `string[]`                | Zebrunner project keys or configured `projectAliases` names (e.g., `["PROJ1", "PROJ2", "MCP"]`)                  |
 | `period`                 | `string`                  | Preset time period for flaky/milestones and widget legs when `widget_period_mode` omitted (e.g., `"Last 30 Days"`) |
 | `widget_period_mode`     | `preset\|absolute\|dynamic?` | Widget SQL period for **pass_rate/bugs only** (does not affect flaky/runtime) |
 | `widget_period_start_date` / `widget_period_end_date` | `string?` | Absolute widget window (YYYY-MM-DD) |
@@ -1534,7 +1534,7 @@ Omitting `view` preserves pre-v9.2.4 behavior (template 8 pie, `period` default 
 | `milestone`              | `string?`                 | Optional milestone filter                                                                                        |
 | `top_bugs_limit`         | `number?`                 | Top bugs count for `quality_dashboard` / `executive_dashboard` (default: 10)                                     |
 | `sections`               | `string[]?`               | Sections for `quality_dashboard`: `pass_rate`, `runtime`, `coverage`, `bugs`, `milestones`, `flaky`              |
-| `targets`                | `Record<string, number>?` | Pass rate targets per project (e.g., `{"android": 90, "web": 65}`). Defaults: android=90, ios=90, web=65         |
+| `targets`                | `Record<string, number>?` | Pass rate targets per project key (e.g., `{"PROJ1": 90, "PROJ2": 65}`)                                           |
 | `exclude_suite_patterns` | `string[]?`               | Suite patterns to exclude from TOTAL REGRESSION in `coverage` report (e.g., `["MA", "Critical", "Performance"]`) |
 | `previous_milestone`     | `string?`                 | Baseline milestone for delta comparison in `runtime_efficiency` / `release_readiness`                            |
 
