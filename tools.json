@@ -272,6 +272,10 @@
     "description": "List test suites with pagination"
   },
   {
+    "name": "adv_prepare_jira_automation_plan",
+    "description": "Prepare a structured Jira automation task plan from a Zebrunner suite URL or suite id (grouping, automation-state filtering, Analytics split, caseId links). Plan only — does not read or write Jira."
+  },
+  {
     "name": "adv_manage_test_run",
     "description": "Create, update, or add test cases to a Zebrunner Test Run (Beta)"
   },

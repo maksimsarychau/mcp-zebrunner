@@ -94,6 +94,7 @@ import { registerWidgetHubTools } from "./handlers/widget-hub-tools.js";
 import { registerTestAuthoringTrendTool } from "./handlers/widget-authoring-trend-tool.js";
 import { registerScaffoldTestCaseTool } from "./handlers/scaffold-test-case-tool.js";
 import { registerAnalyzeTestImpactTool } from "./handlers/analyze-test-impact-tool.js";
+import { registerPrepareJiraAutomationPlanTool } from "./handlers/prepare-jira-automation-plan-tool.js";
 import { registerFindFieldHistoryChangesTool } from "./handlers/find-field-history-changes-tool.js";
 import { registerBuildFieldHistoryIndexTool } from "./handlers/build-field-history-index-tool.js";
 import {
@@ -9853,6 +9854,13 @@ ${detailsInfo.map((detail, i) => {
     client,
     webBaseUrl: WIDGET_BASE_URL,
     debugLog,
+  });
+
+  registerPrepareJiraAutomationPlanTool(server, {
+    client,
+    webBaseUrl: WIDGET_BASE_URL,
+    debugLog,
+    resolveProjectKey: (project: string) => getProjectAliases()[project] || project,
   });
 
   registerFindFieldHistoryChangesTool(server, {

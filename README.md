@@ -6,7 +6,9 @@ A **Model Context Protocol (MCP)** server that brings advanced analytics, report
 
 > Tool naming: every tool on this server is registered under the canonical `adv_<name>` form (e.g. `adv_create_test_case`, `adv_list_test_runs`) so it never collides with the official Zebrunner MCP. The legacy names are kept as **deprecated aliases** so prompts/scripts that called the old names continue to work for now; aliases will be removed in the next major release. 
 
-> 🆕 **v9.3.1** — TCM pagination fixes: correct `get_all` token walks, `root_suite_id` subtree scoping, honest bulk metadata. See [PUBLIC_API_PAGINATION.md](docs/PUBLIC_API_PAGINATION.md) and [change-logs.md](change-logs.md#v931--tcm-pagination-correctness-and-honest-bulk-metadata).
+> 🆕 **v9.4.3** — **`adv_prepare_jira_automation_plan`** + **`/jira-automation-plan`** prompt: Zebrunner suite → structured Jira plan (grouping, automation-state gate, Analytics split, `caseId` links); optional Atlassian MCP for dedup/create after preview. Configure `jiraAutomationPlan` in `zebrunner-config.json`. See [change-logs.md](change-logs.md#v943--jira-automation-plan-tool), [TEST_PROMPTS.md §1 / §15 / §20](docs/TEST_PROMPTS.md#20-jira-automation-plan-v943).
+>
+> **v9.3.1** — TCM pagination fixes: correct `get_all` token walks, `root_suite_id` subtree scoping, honest bulk metadata. See [PUBLIC_API_PAGINATION.md](docs/PUBLIC_API_PAGINATION.md) and [change-logs.md](change-logs.md#v931--tcm-pagination-correctness-and-honest-bulk-metadata).
 >
 > **v9.3.0** — Multi-PR / period test impact: `change_batches[]`, `/test-impact-period`, extended `/test-impact`. See [TEST_IMPACT_WORKFLOW.md](docs/TEST_IMPACT_WORKFLOW.md) and [TEST_IMPACT_PR_PERIOD_DESIGN.md](docs/TEST_IMPACT_PR_PERIOD_DESIGN.md).
 >
@@ -30,7 +32,7 @@ A **Model Context Protocol (MCP)** server that brings advanced analytics, report
 
 ## 🔥 Why This Server
 
-This is the **Advanced Zebrunner MCP Server** — built to go well beyond basic test case management and help QA teams work smarter and faster with AI. Compared to the official Zebrunner MCP (beta, ~70 tools spanning Public REST + Reporting/TAM/Launcher), this server provides **69 analytics-focused tools** (`adv_`* prefix) and is safe to run side-by-side with the official server:
+This is the **Advanced Zebrunner MCP Server** — built to go well beyond basic test case management and help QA teams work smarter and faster with AI. Compared to the official Zebrunner MCP (beta, ~70 tools spanning Public REST + Reporting/TAM/Launcher), this server provides **75** registered `adv_*` tools (69 inline-regression suite + 6 handler-module tools; see `tools.json`) and is safe to run side-by-side with the official server:
 
 - **[Reporting & Analytics](#-reporting--analytics)** — dashboards, pass-rate trends, regression stability reports, runtime efficiency analysis, bug reviews, and weekly delta tracking
 - **[Test Coverage & Analysis](#-test-coverage--analysis)** — coverage gaps, automation readiness scoring, and cross-suite analysis
@@ -642,7 +644,7 @@ Inside chat, ask `adv_about_mcp_tools` with `mode: "routing"` or open the
 
 ## 🛠️ Available Tools
 
-Once connected, you can use these tools through natural language in your AI assistant. This section highlights all **69 tools** organized by category. For the complete catalog with natural-language examples for every tool, see **[TOOLS_CATALOG.md](TOOLS_CATALOG.md)**.
+Once connected, you can use these tools through natural language in your AI assistant. This section highlights all **75** `adv_*` tools (see [`tools.json`](tools.json)) organized by category. For the complete catalog with natural-language examples for every tool, see **[TOOLS_CATALOG.md](TOOLS_CATALOG.md)**.
 
 **Dashboard widgets:** All **22** Zebrunner dashboard templates have MCP coverage (v9.2.5). See **[docs/TEST_PROMPTS.md](docs/TEST_PROMPTS.md) §18** for example prompts and `npm run test:api` verification.
 
@@ -1005,7 +1007,7 @@ Use the `/test-impact` MCP prompt (optional `pr_url`) for guided workflow. See [
 
 > **Full guide:** [docs/RESOURCES_AND_PROMPTS.md](docs/RESOURCES_AND_PROMPTS.md) — detailed usage, examples, reference tables, and contributor guide.
 
-In addition to 69 tools, the server now provides **14 resources** and **17 prompts** that improve discoverability and automate complex workflows.
+In addition to tools, the server provides **14 resources** and **22 MCP prompts** (`/pass-rate`, `/jira-automation-plan`, etc.) that improve discoverability and automate complex workflows.
 
 ### Resources — `@` Context Injection
 
@@ -1985,7 +1987,7 @@ Leverage intelligent validation:
 
 ### 📖 Tool References
 
-- **[TOOLS_CATALOG.md](TOOLS_CATALOG.md)** - Complete catalog of all **69** tools with natural language examples
+- **[TOOLS_CATALOG.md](TOOLS_CATALOG.md)** - Complete catalog of all **75** `adv_*` tools with natural language examples
 - **[docs/TEST_PROMPTS.md](docs/TEST_PROMPTS.md)** - Test prompts per tool; **§18** covers all **22 dashboard widgets** (MCP + API verify)
 - **[docs/archive/TCM_TAM_WIDGET_BACKLOG.md](docs/archive/TCM_TAM_WIDGET_BACKLOG.md)** - Archived widget template ↔ MCP matrix (live: TEST_PROMPTS §18)
 - **[docs/RESOURCES_AND_PROMPTS.md](docs/RESOURCES_AND_PROMPTS.md)** - MCP Resources & Prompts — full usage guide, reference tables, and contributor guide

@@ -25,6 +25,7 @@
 17. [Tool Metrics & Token Tracking](#17-tool-metrics--token-tracking-v721)
 18. [Dashboard Widgets (22 templates)](#18-dashboard-widgets-22-templates--v925)
 19. [Pagination & suite-scope regression (v9.4.2)](#19-pagination--suite-scope-regression-v942)
+20. [Jira automation plan (v9.4.3)](#20-jira-automation-plan-v943)
 
 ---
 
@@ -868,7 +869,7 @@
 **Prompt 1 — Tool summary (default)**
 > Give me a summary of all available Zebrunner MCP tools.
 
-**Expected:** Returns categorized list of all 69 tools with brief descriptions. The summary footer includes "Additional MCP Capabilities" with prompt and resource counts.
+**Expected:** Returns categorized list of all **75** registered `adv_*` tools with brief descriptions. The summary footer includes "Additional MCP Capabilities" with **22** prompt and **14** resource counts.
 
 **Prompt 2 — Specific tool details**
 > Show me detailed info for the adv_analyze_regression_runtime tool with examples.
@@ -878,7 +879,7 @@
 **Prompt 3 — List all prompts** *(v7.2.2)*
 > What prompts are available in Zebrunner MCP? Use mode "prompts".
 
-**Expected:** Returns a table of all 13 `/prompts` grouped by category (E2E Metrics, Analysis, Role-Specific) with titles, descriptions, and accepted arguments.
+**Expected:** Returns a table of all **22** `/prompts` grouped by category (E2E Metrics, Analysis, Role-Specific, etc.) with titles, descriptions, and accepted arguments.
 
 **Prompt 4 — List all resources** *(v7.2.2)*
 > What MCP resources are available? Use mode "resources".
@@ -1359,6 +1360,47 @@ The `steeringHint()` helper in `src/helpers/steering.ts` is a pure, deterministi
 
 **Expected:** Uses `adv_create_test_case` with `draft: false`, but the preview shows `draft → true (forced for safety)`. The created test case is always a draft. The user must use `adv_update_test_case` to publish it.
 
+### `adv_prepare_jira_automation_plan` *(v9.4.3)*
+
+Read-only **Jira automation intake plan** from a Zebrunner suite URL (or `project_key` + `suite_id`). Returns `parentTasks`, `skippedGroups`, and `warnings` — no Jira API calls. Configure **`jiraAutomationPlan`** in `zebrunner-config.json` (`targetProject` default **QAS**, optional `platformByProjectKey`, components, `analyticsTagMatch`). See also [§20](#20-jira-automation-plan-v943) and slash prompt [§15 Prompt 8e](#prompt-8e--jira-automation-plan-via-jira-automation-plan-v943).
+
+| Parameter | Notes |
+|-----------|--------|
+| `suite_url` | `.../projects/<KEY>/test-cases?suiteId=<id>` |
+| `project_key` + `suite_id` | Alternative to `suite_url` |
+| `format` | `json` (default), `compact`, `dto`, `string`, `markdown` |
+| `automation_states` | Optional; default resolves **Not Automated** + **To be automated** per project |
+| `include_automated_or_manual_only` | Default `false` — excludes **Automated** and **Manual Only** unless `true` |
+| `analytics_tag_match` | Optional; default from config (`analytics`) |
+
+**Prompt 1 — Suite URL (JSON plan)** *(eval: `jira_plan.suite_url`)*
+> Prepare a Jira automation plan from: `https://example.zebrunner.com/projects/PROJ/test-cases?suiteId=42`
+
+**Expected:** `adv_prepare_jira_automation_plan` with `suite_url`, default `format: json`. Subtask `description` URLs use `caseId=`, not `caseKey`.
+
+**Prompt 2 — Project + suite id** *(eval: `jira_plan.project_suite`)*
+> Use adv_prepare_jira_automation_plan for project PROJ suite 42.
+
+**Expected:** `project_key` + `suite_id`; same plan shape as Prompt 1.
+
+**Prompt 3 — Markdown preview**
+> Same suite as Prompt 1 with `format: markdown` for a human-readable preview.
+
+**Expected:** Markdown sections/tables; same underlying plan as JSON.
+
+**Prompt 4 — Tool confusion: not suite_smart** *(eval: `jira_plan.neg.not_suite_smart`)*
+> From suite URL `https://example.zebrunner.com/projects/PROJ/test-cases?suiteId=42`, build the Jira automation plan with adv_prepare_jira_automation_plan — not adv_get_test_cases_by_suite_smart.
+
+**Expected:** Plan tool only; no bulk suite_smart fetch for manual Jira task building.
+
+**Prompt 5 — End-to-end with Jira (slash)** *(see §15 Prompt 8e)*
+> `/jira-automation-plan` with `suite_url` (requires **Atlassian MCP** for dedup/create after preview).
+
+**Example prompts (quick reference):**
+
+- "Prepare Jira automation tasks from this Zebrunner suite link: …"
+- `/jira-automation-plan` with your suite URL
+
 ### `adv_analyze_test_impact` *(v9.2.8, extended v9.3.0)*
 
 Bounded test impact analysis from **compact semantic change context** (features, behaviors, symbols, keywords) — not raw git diffs. Client resolves PR/git metadata locally; Zebrunner MCP does not call GitHub or run `gh`.
@@ -1701,7 +1743,7 @@ MCP resources provide read-only reference data accessible via the `@` menu in MC
 
 ## 15. MCP Prompts *(v9.1.0, test impact v9.2.8 / v9.3.0)*
 
-> **21 prompts** registered (was 17 in v9.1.0). v9.2.8 adds `/test-impact`; v9.3.0 adds `/test-impact-period` and extends `/test-impact` with `pr_urls` and multi-PR `change_batches` guidance. See [GitHub Release v9.3.0](releases/v9.3.0.md).
+> **22 prompts** registered. v9.4.3 adds `/jira-automation-plan`. v9.2.8 adds `/test-impact`; v9.3.0 adds `/test-impact-period`. See [change-logs.md](../change-logs.md#v943--jira-automation-plan-tool).
 
 MCP prompts provide pre-built, tested workflow instructions accessible via the `/` command in MCP clients. Each prompt injects expert-crafted multi-step instructions that guide Claude through complex multi-tool workflows.
 
@@ -1766,6 +1808,13 @@ MCP prompts provide pre-built, tested workflow instructions accessible via the `
 
 **Expected:** Prompt drives adv_aggregate_test_cases_by_feature (test_run_rules format, by_root_suite), builds TAGS=>featureSuiteId=... filter, resolves suite_path from args/recent launches/user, previews adv_start_launch, waits for approval, confirms.
 
+**Prompt 8e — Jira automation plan via /jira-automation-plan** *(v9.4.3)*
+> Use `/jira-automation-plan` with suite_url: "https://example.zebrunner.com/projects/PROJ/test-cases?suiteId=42"
+
+**Prerequisites:** Atlassian MCP connected for Jira search/create.
+
+**Expected:** Calls `adv_prepare_jira_automation_plan` with the suite URL; dedups each subtask summary via Atlassian JQL (exact summary, To Do/In Progress); shows preview table; waits for approval; creates parent/subtask issues; final response is one line per parent created (no per-subtask enumeration). Does not create Jira issues before user confirms.
+
 **Prompt 9 — Flaky test review via /flaky-review**
 > Use `/flaky-review` with project: "android"
 
@@ -1826,7 +1875,7 @@ MCP prompts provide pre-built, tested workflow instructions accessible via the `
 
 ## 16. Tool Annotations *(v7.2.2)*
 
-All 69 tools now include MCP Tool Annotations (readOnlyHint, destructiveHint, idempotentHint, openWorldHint) that inform clients about tool behavior characteristics.
+All **75** registered `adv_*` tools include MCP Tool Annotations (readOnlyHint, destructiveHint, idempotentHint, openWorldHint) that inform clients about tool behavior characteristics. (Unit smoke coverage still exercises **69** inline registrations; handler-module tools are covered via `tools.json` sync and dedicated tests.)
 
 **Verification 1 — Read-only tools respected**
 > In the MCP Inspector, examine any read-only tool (e.g., `adv_list_test_suites`). Check its annotations.
@@ -2545,4 +2594,44 @@ ZEBRUNNER_AUDIT_PROJECTS=<your_project_key> ZEBRUNNER_PAGINATION_SUITE_ID=<paren
 
 ---
 
-*Last Updated: v9.4.2 — September 2026 (§19 pagination regression prompts)*
+## 20. Jira automation plan (v9.4.3)
+
+Manual prompts for **`adv_prepare_jira_automation_plan`** (plan only — no Jira I/O). Use a real suite URL locally; examples use generic hosts and project keys.
+
+### Prompt 1 — Suite URL (default JSON plan)
+
+> Prepare a Jira automation plan from this Zebrunner suite link: `https://example.zebrunner.com/projects/PROJ/test-cases?suiteId=42`
+
+**Expected:** `adv_prepare_jira_automation_plan` with `suite_url`, default `format: json`. Response includes `parentTasks`, `skippedGroups`, and subtask `description` URLs with `caseId=` (not `caseKey`).
+
+### Prompt 2 — Markdown preview
+
+> Same suite as Prompt 1, but show me a human-readable markdown preview of the Jira automation plan before any Jira calls.
+
+**Expected:** `format: markdown` — same plan logic as JSON, rendered as sections/tables.
+
+### Prompt 3 — Automation intake only
+
+> Build the Jira automation plan for suite 42 in project PROJ. Include only default intake automation states; do not include Automated or Manual Only cases.
+
+**Expected:** Default states resolved via project automation-state catalog; no `include_automated_or_manual_only: true`. Excluded cases may appear in `warnings` with `excluded_automation_state`.
+
+### Prompt 4 — Negative (no bulk suite_smart)
+
+> From suite URL `https://example.zebrunner.com/projects/PROJ/test-cases?suiteId=42`, prepare Jira automation tasks using the dedicated plan tool — not `adv_get_test_cases_by_suite_smart`.
+
+**Expected:** `adv_prepare_jira_automation_plan` only.
+
+### Prompt 5 — Full workflow via slash prompt
+
+> Use `/jira-automation-plan` with suite_url: `https://example.zebrunner.com/projects/PROJ/test-cases?suiteId=42`
+
+**Expected:** Same end-to-end behavior as [§15 Prompt 8e](#prompt-8e--jira-automation-plan-via-jira-automation-plan-v943) (plan tool + Atlassian MCP + confirmation gate).
+
+### Cursor / Claude Code skill
+
+Copy [docs/skills/zebrunner-jira-automation-plan-SKILL.md](skills/zebrunner-jira-automation-plan-SKILL.md) into your app repo under `.cursor/skills/zebrunner-jira-automation-plan/SKILL.md`.
+
+---
+
+*Last Updated: v9.4.3 — September 2026 (§20 Jira automation plan + `/jira-automation-plan` prompt)*
