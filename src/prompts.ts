@@ -732,6 +732,81 @@ If user declines a root suite, skip it and continue with others only if user ask
 Present Phase 1 discovery summary BEFORE any adv_start_launch preview.`;
 }
 
+export function buildJiraAutomationPlanPrompt(suiteUrl: string): string {
+  return `Create Jira automation parent tasks and per-test-case subtasks from this Zebrunner suite link. Zebrunner planning uses adv_prepare_jira_automation_plan; Jira read/write uses the **Atlassian MCP** (this server has no Jira credentials).
+
+**Suite URL:** ${suiteUrl}
+
+## Prerequisites
+- **Atlassian MCP** connected (Jira search + issue create).
+- **Zebrunner MCP** connected (this server).
+- Optional: confirm **assignee**, **reporter**, and **large-suite** policy with the user before creating issues (team defaults may live in Jira project settings — not configured in zebrunner-config.json).
+
+## CRITICAL RULES
+1. **Never create Jira issues** until the user explicitly approves the preview plan (parents + subtasks to create vs skip).
+2. **All suite/case logic** comes from **adv_prepare_jira_automation_plan** — do not re-derive grouping, titles, components, or case links manually.
+3. **Dedup lives in the agent + Atlassian MCP** — exact subtask summary match, status **To Do** or **In Progress** counts as already covered.
+4. **Subtask description** must be the Zebrunner \`caseId\` URL from the plan (never rebuild from case key).
+5. **Final user-facing summary:** one line per **parent task actually created** (key, title, link). Do **not** enumerate every subtask. Omit parents where nothing was created (skipped groups / all subtasks deduped).
+
+## Phase 1 — Zebrunner plan (read-only)
+
+1. Call **adv_prepare_jira_automation_plan** with:
+   - suite_url: "${suiteUrl}"
+   - format: "json" (use format: "markdown" only if the user asked for a readable preview first)
+
+2. Parse \`parentTasks\`, \`skippedGroups\`, and \`warnings\` (e.g. excluded Automated / Manual Only cases).
+
+3. If the plan is empty (\`parentTasks.length === 0\`), explain \`skippedGroups\` and stop — do not call Jira.
+
+4. Optional sanity check: if total subtasks across all parents is very large (e.g. > 100), **warn the user** and ask whether to continue before Jira dedup/create.
+
+## Phase 2 — Jira dedup (Atlassian MCP)
+
+For **each** subtask in **each** parent task in the plan:
+
+1. Run **searchJiraIssuesUsingJql** (or equivalent Atlassian MCP search) with:
+   - Jira project from \`parentTasks[].project\` (from plan — default QAS unless configured in zebrunner-config.json \`jiraAutomationPlan.targetProject\`)
+   - **Exact** summary match on the subtask \`summary\` (test case key, e.g. PROJ-1234)
+   - Status in **To Do** or **In Progress**
+
+2. Mark subtask as **skip** if a match exists; **create** otherwise.
+
+3. Optionally check whether a **parent** with the same \`summary\` already exists:
+   - If yes, **ask the user** whether to reuse that parent and add only missing subtasks, or skip — do not assume without confirmation.
+
+## Phase 3 — Preview and approval
+
+Present a concise table:
+
+| Parent summary | Component | Subtasks to create | Subtasks skipped (dedup) |
+|----------------|-----------|--------------------|---------------------------|
+
+List \`skippedGroups\` from the plan (zero in-scope cases).
+
+**STOP — wait for explicit user approval** to create issues in Jira.
+
+## Phase 4 — Create issues (Atlassian MCP)
+
+Only after approval:
+
+1. For each parent that has at least one subtask to create:
+   - Create the **parent** issue in the plan's \`project\` with \`summary\`, \`component\` (map to Jira component field per your Atlassian MCP).
+   - Create **subtasks** (or linked issues per your team's Jira schema) for each non-deduped subtask:
+     - summary: subtask \`summary\` (case key)
+     - description: subtask \`description\` (Zebrunner caseId URL)
+
+2. **Assignee / reporter:** set only if the user provided them in this session; otherwise leave Jira defaults.
+
+## Phase 5 — Final report
+
+- One line per parent **actually created** this run: \`KEY — [title] — <browse URL>\`
+- Brief note on skipped groups and deduped subtask counts (no per-subtask list).
+- Remind user that \`adv_prepare_jira_automation_plan\` is plan-only; re-run the slash command to refresh after Zebrunner suite changes.
+
+Present Phase 3 preview BEFORE any Jira create calls.`;
+}
+
 // ── Prompt catalog (used by adv_about_mcp_tools) ────────────────────────────────
 
 export type PromptMeta = {
@@ -754,6 +829,7 @@ export function getPromptsCatalog(): PromptMeta[] {
     { name: "launch-triage", title: "Launch Failure Triage", description: "Post-regression failure analysis: find unlinked failures, analyze root causes, recommend actions", category: "Analysis", args: ["project"] },
     { name: "relaunch-regression-failures", title: "Relaunch Regression Failures", description: "Find failed launches (milestone/build or last 7 days), apply relaunchFailures config exclusions, and batch-rerun failures", category: "Analysis", args: ["projects", "milestone?", "build?", "period?"] },
     { name: "feature-scoped-launch", title: "Feature-Scoped Build Now", description: "Find tests by feature keyword, build test_run_rules per root suite, preview and trigger adv_start_launch (suite_path resolved dynamically)", category: "Analysis", args: ["project", "feature", "suite_name?", "suite_path?", "build?", "locale?", "template_query?"] },
+    { name: "jira-automation-plan", title: "Jira Automation Plan", description: "Zebrunner suite URL → adv_prepare_jira_automation_plan, Atlassian MCP dedup, preview, then create QAS automation parent/subtask issues", category: "Analysis", args: ["suite_url"] },
     { name: "flaky-review", title: "Flaky Test Review", description: "Find flaky tests, analyze execution history, and recommend stabilization priorities", category: "Analysis", args: ["project"] },
     { name: "find-duplicates", title: "Find Duplicate Test Cases", description: "Analyze test cases for duplicates using structural and optional semantic analysis", category: "Analysis", args: ["project", "suite_id?"] },
     { name: "test-impact", title: "Test Impact Analysis", description: "Analyze code/PR changes and find Zebrunner test cases for regression and new coverage gaps", category: "Analysis", args: ["project?", "repository_slug?", "pr_url?", "pr_urls?"] },
@@ -974,6 +1050,31 @@ export function registerPrompts(server: McpServer): void {
         content: {
           type: "text" as const,
           text: buildFeatureScopedLaunchPrompt(project, feature, suite_name, suite_path, build, locale, template_query),
+        },
+      }],
+    }),
+  );
+
+  server.registerPrompt(
+    "jira-automation-plan",
+    {
+      title: "Jira Automation Plan",
+      description:
+        "Build Jira automation tasks from a Zebrunner suite URL: adv_prepare_jira_automation_plan, dedup via Atlassian MCP, preview, then create parent/subtask issues",
+      argsSchema: {
+        suite_url: z
+          .string()
+          .describe(
+            "Zebrunner suite URL, e.g. https://example.zebrunner.com/projects/PROJ/test-cases?suiteId=42",
+          ),
+      },
+    },
+    async ({ suite_url }) => ({
+      messages: [{
+        role: "user" as const,
+        content: {
+          type: "text" as const,
+          text: buildJiraAutomationPlanPrompt(suite_url),
         },
       }],
     }),

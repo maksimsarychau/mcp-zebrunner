@@ -1,7 +1,7 @@
 {
   "sourceHashes": {
     "toolsJson": "f6adb1c6d2bcb888",
-    "catalog": "ce053e397703d598",
+    "catalog": "8782a352f3f17286",
     "benefits": "1c7370f3df9e2d38"
   },
   "tools": [
@@ -115,15 +115,23 @@
     },
     {
       "name": "adv_find_field_history_changes",
-      "description": "[Advanced Zebrunner MCP] Find test cases whose TCM change history matches a field transition in a date range. Returns only matching change events (key, timestamp, old/new values, concurrentChanges) — not full case payloads. Field aliases match distribution-by-field (Manual Only, automationState, customField.manualOnly). Uses local history index when built (adv_build_field_history_index).",
-      "category": null,
-      "examples": []
+      "description": "[Advanced Zebrunner MCP] Find test cases whose **TCM audit history** matches a field transition in a date range (e.g. Manual Only **Yes → No** in the last 60 days). Scans cases internally; returns compact `{ key, timestamp, oldValue, newValue, concurrentChanges }` — not full case payloads. Field names/aliases align with [`adv_get_test_case_distribution_by_field`](#adv_get_test_case_distribution_by_field).",
+      "category": "Platform & Results Analysis",
+      "examples": [
+        "\"Which MCP test cases had Manual Only change from Yes to No since 2026-01-01?\"",
+        "\"Find automation state transitions to Semi-Automated in root suite 66 last quarter\"",
+        "`{ project_key: \"MFPAND\", field: \"Manual Only\", from_value: \"Yes\", to_value: \"No\", index_mode: \"auto\" }`"
+      ]
     },
     {
       "name": "adv_build_field_history_index",
-      "description": "[Advanced Zebrunner MCP] Build or refresh the local TCM field-history index for a project. Run in batches until complete=true; then adv_find_field_history_changes queries in milliseconds. Stored under ~/.mcp-zebrunner/history-index/.",
-      "category": null,
-      "examples": []
+      "description": "[Advanced Zebrunner MCP] Build or refresh a **local** TCM history index for a project (`~/.mcp-zebrunner/history-index/<projectKey>/`). Run in batches until `complete: true`; then `adv_find_field_history_changes` with `index_mode: auto` (default) answers in milliseconds instead of live `/changes` scans.",
+      "category": "Platform & Results Analysis",
+      "examples": [
+        "\"Build the field history index for project MCP\"",
+        "\"Continue indexing MFPAND history — last batch was incomplete\"",
+        "After index is complete: \"Scan index for Manual Only Yes→No changes in the last 90 days\" (via find tool)"
+      ]
     },
     {
       "name": "adv_batch_get_test_cases",
@@ -158,9 +166,11 @@
     },
     {
       "name": "adv_create_test_case_wizard",
-      "description": "[Advanced Zebrunner MCP] (Beta) Dev-friendly alias of adv_scaffold_test_case — the same guided best-practice test case authoring wizard (similar-case warning + advisory quality pre-check + forced draft).",
-      "category": null,
-      "examples": []
+      "description": "[Advanced Zebrunner MCP] Deprecated-alias registration of the same handler as **`adv_scaffold_test_case`**. Prefer `adv_scaffold_test_case` in new prompts; use this name only when matching legacy evals or user wording. MCP prompts: `scaffold-test-case`, `create-test-case-wizard`.",
+      "category": "Mutation Tools (Beta)",
+      "examples": [
+        "Same as [`adv_scaffold_test_case`](#adv_scaffold_test_case) — e.g. \"Open the create-test-case wizard for PROJ1\""
+      ]
     },
     {
       "name": "adv_create_test_suite",
@@ -721,9 +731,13 @@
     },
     {
       "name": "adv_prepare_jira_automation_plan",
-      "description": "[Advanced Zebrunner MCP] Prepare a structured Jira automation task plan from a Zebrunner suite URL or suite id (grouping, automation-state filtering, Analytics split, caseId links). Plan only — does not read or write Jira.",
-      "category": null,
-      "examples": []
+      "description": "[Advanced Zebrunner MCP] Read-only **Jira automation intake plan** from a Zebrunner suite URL or `project_key` + `suite_id`. Builds parent-task summaries and per-test-case subtasks (top-level sub-suite grouping, dynamic automation-state intake, optional Analytics split, `caseId=` links in descriptions). Does **not** call Jira — use the agent + **Atlassian MCP** (or [`/jira-automation-plan`](#adv_prepare_jira_automation_plan) slash prompt) for dedup, preview, and create after user approval.",
+      "category": "Jira Automation Plan *(v9.4.3, QAT-32410)*",
+      "examples": [
+        "\"Prepare a Jira automation plan from this Zebrunner suite link: `https://example.zebrunner.com/projects/PROJ/test-cases?suiteId=42`\"",
+        "\"Use adv_prepare_jira_automation_plan for project PROJ suite 42 with format markdown\"",
+        "`/jira-automation-plan` with your suite URL (plan + Atlassian MCP workflow)"
+      ]
     },
     {
       "name": "adv_manage_test_run",
@@ -796,6 +810,16 @@
       "description": "Discover and rank Zebrunner test cases likely affected by production-code changes. Accepts compact semantic change context (features, behaviors, symbols, keywords) — **not** raw git diffs. Returns regression candidates by theme (automated vs manual, confidence), potential coverage gaps, optional smoke-suite recommendations, and scoping notes.",
       "category": "Test Impact Analysis *(v9.2.8)*",
       "examples": []
+    },
+    "adv_prepare_jira_automation_plan": {
+      "name": "adv_prepare_jira_automation_plan",
+      "description": "Read-only **Jira automation intake plan** from a Zebrunner suite URL or `project_key` + `suite_id`. Builds parent-task summaries and per-test-case subtasks (top-level sub-suite grouping, dynamic automation-state intake, optional Analytics split, `caseId=` links in descriptions). Does **not** call Jira — use the agent + **Atlassian MCP** (or [`/jira-automation-plan`](#adv_prepare_jira_automation_plan) slash prompt) for dedup, preview, and create after user approval.",
+      "category": "Jira Automation Plan *(v9.4.3, QAT-32410)*",
+      "examples": [
+        "\"Prepare a Jira automation plan from this Zebrunner suite link: `https://example.zebrunner.com/projects/PROJ/test-cases?suiteId=42`\"",
+        "\"Use adv_prepare_jira_automation_plan for project PROJ suite 42 with format markdown\"",
+        "`/jira-automation-plan` with your suite URL (plan + Atlassian MCP workflow)"
+      ]
     },
     "adv_analyze_test_failure": {
       "name": "adv_analyze_test_failure",
@@ -1194,6 +1218,14 @@
         "\"Scaffold a new login test case for PROJ1 and keep the steps in Gherkin\" (default language)"
       ]
     },
+    "adv_create_test_case_wizard": {
+      "name": "adv_create_test_case_wizard",
+      "description": "Deprecated-alias registration of the same handler as **`adv_scaffold_test_case`**. Prefer `adv_scaffold_test_case` in new prompts; use this name only when matching legacy evals or user wording. MCP prompts: `scaffold-test-case`, `create-test-case-wizard`.",
+      "category": "Mutation Tools (Beta)",
+      "examples": [
+        "Same as [`adv_scaffold_test_case`](#adv_scaffold_test_case) — e.g. \"Open the create-test-case wizard for PROJ1\""
+      ]
+    },
     "adv_update_test_case": {
       "name": "adv_update_test_case",
       "description": "(Beta) Partially update an existing Test Case by numeric ID or string key (PATCH). Only provided fields are updated. Accepts `{file_path}` in attachments for local file upload.",
@@ -1436,6 +1468,26 @@
         "\"Show test case distribution by automation state for project MCP\"",
         "\"Pie chart of cases by Priority in MCP\"",
         "`{ project: \"MCP\", system_field: \"AUTOMATION_STATE\", format: \"json\" }`"
+      ]
+    },
+    "adv_find_field_history_changes": {
+      "name": "adv_find_field_history_changes",
+      "description": "Find test cases whose **TCM audit history** matches a field transition in a date range (e.g. Manual Only **Yes → No** in the last 60 days). Scans cases internally; returns compact `{ key, timestamp, oldValue, newValue, concurrentChanges }` — not full case payloads. Field names/aliases align with [`adv_get_test_case_distribution_by_field`](#adv_get_test_case_distribution_by_field).",
+      "category": "Platform & Results Analysis",
+      "examples": [
+        "\"Which MCP test cases had Manual Only change from Yes to No since 2026-01-01?\"",
+        "\"Find automation state transitions to Semi-Automated in root suite 66 last quarter\"",
+        "`{ project_key: \"MFPAND\", field: \"Manual Only\", from_value: \"Yes\", to_value: \"No\", index_mode: \"auto\" }`"
+      ]
+    },
+    "adv_build_field_history_index": {
+      "name": "adv_build_field_history_index",
+      "description": "Build or refresh a **local** TCM history index for a project (`~/.mcp-zebrunner/history-index/<projectKey>/`). Run in batches until `complete: true`; then `adv_find_field_history_changes` with `index_mode: auto` (default) answers in milliseconds instead of live `/changes` scans.",
+      "category": "Platform & Results Analysis",
+      "examples": [
+        "\"Build the field history index for project MCP\"",
+        "\"Continue indexing MFPAND history — last batch was incomplete\"",
+        "After index is complete: \"Scan index for Manual Only Yes→No changes in the last 90 days\" (via find tool)"
       ]
     },
     "adv_get_tcm_case_analytics": {

@@ -43,6 +43,35 @@ describe("zebrunner-config relaunchFailures + localeTestRunRules", () => {
     }
   });
 
+  it("loads jiraAutomationPlan defaults", () => {
+    reloadConfig();
+    const cfg = getConfig();
+    assert.equal(cfg.jiraAutomationPlan.targetProject, "QAS");
+    assert.equal(cfg.jiraAutomationPlan.analyticsTagMatch, "analytics");
+    assert.ok(cfg.jiraAutomationPlan.componentByPlatform.iOS);
+    assert.deepEqual(cfg.jiraAutomationPlan.platformByProjectKey, {});
+  });
+
+  it("merges jiraAutomationPlan from ZEBRUNNER_CONFIG_JSON override", () => {
+    const prev = process.env.ZEBRUNNER_CONFIG_JSON;
+    process.env.ZEBRUNNER_CONFIG_JSON = JSON.stringify({
+      jiraAutomationPlan: {
+        targetProject: "QAT",
+        platformByProjectKey: { PROJ: "iOS" },
+      },
+    });
+    try {
+      reloadConfig();
+      const cfg = getConfig();
+      assert.equal(cfg.jiraAutomationPlan.targetProject, "QAT");
+      assert.equal(cfg.jiraAutomationPlan.platformByProjectKey.PROJ, "iOS");
+    } finally {
+      if (prev === undefined) delete process.env.ZEBRUNNER_CONFIG_JSON;
+      else process.env.ZEBRUNNER_CONFIG_JSON = prev;
+      reloadConfig();
+    }
+  });
+
   it("merges test impact config from ZEBRUNNER_CONFIG_JSON override", () => {
     const prev = process.env.ZEBRUNNER_CONFIG_JSON;
     process.env.ZEBRUNNER_CONFIG_JSON = JSON.stringify({

@@ -2,6 +2,22 @@
 
 Complete reference of all available tools with natural language usage examples.
 
+> **v9.4.3:** [`adv_prepare_jira_automation_plan`](#adv_prepare_jira_automation_plan) + **`/jira-automation-plan`** — Zebrunner suite URL → structured Jira automation intake plan (read-only; Jira via Atlassian MCP). Configure `jiraAutomationPlan` in `zebrunner-config.json`. See [TEST_PROMPTS.md §1 / §15 / §20](docs/TEST_PROMPTS.md#20-jira-automation-plan-v943) and [change-logs.md](change-logs.md#v943--jira-automation-plan-tool-qat-32410).
+
+> **v9.4.2:** `include_sub_suites` on [`adv_get_test_cases_advanced`](#adv_get_test_cases_advanced); shared suite-scope batching. Prefer `page_token` + `count_only` over numeric `page` (see [docs/PUBLIC_API_PAGINATION.md](docs/PUBLIC_API_PAGINATION.md)).
+
+> **v9.4.0–v9.4.1:** [`adv_find_field_history_changes`](#adv_find_field_history_changes) + [`adv_build_field_history_index`](#adv_build_field_history_index) — TCM audit transitions (e.g. Manual Only Yes→No); local index under `~/.mcp-zebrunner/history-index/`.
+
+> **v9.3.0:** `change_batches[]` on [`adv_analyze_test_impact`](#adv_analyze_test_impact); MCP prompts **`/test-impact-period`**, extended **`/test-impact`**.
+
+> **v9.3.1:** Honest pagination metadata (`page_token`, `fetched_count`, `truncation_reason`) on bulk TCM list tools; `root_suite_id` subtree scoping fix on `adv_get_test_cases_advanced`.
+
+> **v9.2.8:** [`adv_analyze_test_impact`](#adv_analyze_test_impact) — PR/local change → regression candidates; [TEST_IMPACT_WORKFLOW.md](docs/TEST_IMPACT_WORKFLOW.md).
+
+> **v9.2.7:** [`adv_scaffold_test_case`](#adv_scaffold_test_case) wizard + alias [`adv_create_test_case_wizard`](#adv_create_test_case_wizard); `projectAliases` in config.
+
+> **v9.2.6:** Opt-in `includeDetailedStatuses` on launch summary tools (see [`adv_get_launch_test_summary`](#adv_get_launch_test_summary)).
+
 > **v9.2.5:** `adv_get_test_authoring_trend` — template 7 completes **22/22** widget MCP coverage. See [TEST_PROMPTS.md §18](docs/TEST_PROMPTS.md#18-dashboard-widgets-22-templates--v925) and [docs/releases/v9.2.5.md](docs/releases/v9.2.5.md).
 
 > **v9.2.1:** LLM-visible metrics (`include_call_metrics`, session breakdown), compact on 19 additional bulk/reporting tools, format/truncation fixes. See [docs/TOKEN_EFFICIENCY.md](docs/TOKEN_EFFICIENCY.md) and [change-logs.md](change-logs.md).
@@ -50,7 +66,9 @@ All tools marked with chart support accept these two parameters:
 
 **Description:** Discover and rank Zebrunner test cases likely affected by production-code changes. Accepts compact semantic change context (features, behaviors, symbols, keywords) — **not** raw git diffs. Returns regression candidates by theme (automated vs manual, confidence), potential coverage gaps, optional smoke-suite recommendations, and scoping notes.
 
-**Key parameters:** `project_key` or `repository_slug`, `change_summary`, `features`, `behaviors`, `changed_symbols`, `changed_files`, `keywords`, `max_candidates` (default 50), `max_results` (default 20), `format: compact`.
+**Key parameters:** `project_key` or `repository_slug`, `change_summary`, `features`, `behaviors`, `changed_symbols`, `changed_files`, `keywords`, `max_candidates` (default 50), `max_results` (default 20), `format: compact`. **v9.3.0:** `change_batches[]` (max 20) for multi-PR / period rollups — regression rows include `sources`.
+
+**MCP prompts:** `/test-impact` (single PR or `pr_urls`), `/test-impact-period` (date window + `gh` / GitHub MCP listing, then one tool call).
 
 **Example prompts:**
 
@@ -61,6 +79,26 @@ All tools marked with chart support accept these two parameters:
 **Token efficiency:** Bounded title search + shortlist enrichment only; never full-project or full-suite export on the normal path.
 
 **Workflow guide:** [docs/TEST_IMPACT_WORKFLOW.md](docs/TEST_IMPACT_WORKFLOW.md)
+
+---
+
+## Jira Automation Plan *(v9.4.3, QAT-32410)*
+
+### `adv_prepare_jira_automation_plan`
+
+**Description:** Read-only **Jira automation intake plan** from a Zebrunner suite URL or `project_key` + `suite_id`. Builds parent-task summaries and per-test-case subtasks (top-level sub-suite grouping, dynamic automation-state intake, optional Analytics split, `caseId=` links in descriptions). Does **not** call Jira — use the agent + **Atlassian MCP** (or [`/jira-automation-plan`](#adv_prepare_jira_automation_plan) slash prompt) for dedup, preview, and create after user approval.
+
+**Key parameters:** `suite_url` or `project_key` + `suite_id`; `format` (`json` default, `compact`, `dto`, `string`, `markdown`); `automation_states` (default **Not Automated** + **To be automated** per project); `include_automated_or_manual_only` (default `false` — excludes **Automated** and **Manual Only** unless `true`); `analytics_tag_match` (default from `jiraAutomationPlan.analyticsTagMatch` in config).
+
+**Config:** `jiraAutomationPlan` in `zebrunner-config.json` — `targetProject` (default **QAS**), optional `platformByProjectKey`, `componentByPlatform`, `analyticsComponentByPlatform`.
+
+**Example Prompts:**
+
+- "Prepare a Jira automation plan from this Zebrunner suite link: `https://example.zebrunner.com/projects/PROJ/test-cases?suiteId=42`"
+- "Use adv_prepare_jira_automation_plan for project PROJ suite 42 with format markdown"
+- `/jira-automation-plan` with your suite URL (plan + Atlassian MCP workflow)
+
+**Related:** [docs/TEST_PROMPTS.md §20](docs/TEST_PROMPTS.md#20-jira-automation-plan-v943) (tool-only prompts), [docs/RESOURCES_AND_PROMPTS.md](docs/RESOURCES_AND_PROMPTS.md) (`/jira-automation-plan`).
 
 ---
 
@@ -515,6 +553,8 @@ Weekly stability report for project MCP using:
 
 **Description:** Advanced filtering with automation states, dates, priority, and more. Supports **generic field-path filtering** via `field_path`, `field_value`, and `field_match` parameters for any field including custom fields.
 
+**Pagination & scope (v9.3.1+ / v9.4.2):** Prefer **`page_token`** over numeric `page` (deprecated warning). Responses may include `fetched_count`, `returned_count`, `truncation_reason`, `next_page_token`. **`root_suite_id`** scopes to descendant suites via RQL (not full project). **`include_sub_suites`** (default `false`, v9.4.2) with `suite_id` aligns subtree scope with `adv_get_test_cases_by_suite_smart` when `true`. Large suite IN filters are batched automatically.
+
 **Field-Path Filtering Parameters:**
 
 
@@ -608,7 +648,9 @@ Weekly stability report for project MCP using:
 
 **Description:** Smart suite-based test case retrieval. Automatically detects whether the suite is root or child and uses the right filtering strategy.
 
-**Change History Parameters:** Same as `adv_get_test_case_by_key` (`include_history`, `history_filter`, `history_limit`).
+**Pagination (v9.3.1+):** Paginated mode uses **`page_token`**; `get_all: true` uses token-walking pagination. Response metadata includes `fetched_count`, `truncation_reason`, `next_page_token` where applicable. Prefer **`count_only`** + tokens for large suites.
+
+**Change History Parameters:** Same as `adv_get_test_case_by_key` (`include_history`, `history_filter`, `history_limit`). **v9.3.2:** `LAYOUT_UPDATE` audit rows included for custom-layout tenants when querying history; use `history_filter: all` for Manual Only transition rows.
 
 **Example Prompts:**
 
@@ -802,7 +844,7 @@ Weekly stability report for project MCP using:
 - "Create a test case with priority High and 3 steps in suite 491"
 - "Create a test case in MCP suite 20421 using source_case_key MCP-123 but override priority to Low"
 
-### `adv_scaffold_test_case`
+### `adv_scaffold_test_case` *(v9.2.7)*
 
 **Description:** (Beta) Guided best-practice wizard to author a NEW test case. On clients that support form elicitation (e.g. Claude Code, Cursor) it presents an interactive questionnaire; on clients without elicitation (e.g. Claude Desktop) it returns a conversational questionnaire that finishes through `adv_create_test_case`. Automatically performs a warn-only similarity check against the target + root suite and offers to reuse the closest match, then runs an **advisory** rules-based quality pre-check (using the same rules as `adv_validate_test_case`) before creation and the authoritative quality review after creation. The pre-check never blocks. Created cases are always forced to `draft=true`. There is no default project — it is always chosen explicitly (first question). Also available as the alias `adv_create_test_case_wizard`, and via the `scaffold-test-case` / `create-test-case-wizard` prompts.
 
@@ -831,6 +873,14 @@ Weekly stability report for project MCP using:
 - "Open the create-test-case wizard for PROJ1 so I can write a new case step by step" (alias `adv_create_test_case_wizard`)
 - "Use the test case creation wizard to add a new case to alias-a suite 20421" (alias resolves per `zebrunner-config.json`)
 - "Scaffold a new login test case for PROJ1 and keep the steps in Gherkin" (default language)
+
+### `adv_create_test_case_wizard` *(v9.2.7 — alias)*
+
+**Description:** Deprecated-alias registration of the same handler as **`adv_scaffold_test_case`**. Prefer `adv_scaffold_test_case` in new prompts; use this name only when matching legacy evals or user wording. MCP prompts: `scaffold-test-case`, `create-test-case-wizard`.
+
+**Example Prompts:**
+
+- Same as [`adv_scaffold_test_case`](#adv_scaffold_test_case) — e.g. "Open the create-test-case wizard for PROJ1"
 
 ### `adv_update_test_case`
 
@@ -1347,6 +1397,42 @@ Omitting `view` preserves pre-v9.2.4 behavior (template 8 pie, `period` default 
 - "Pie chart of cases by Priority in MCP"
 - `{ project: "MCP", system_field: "AUTOMATION_STATE", format: "json" }`
 
+**Notes (v9.3.1 / v9.4.1):** `system_field: MANUAL_ONLY` and **`CASE_STATUS`** resolve to layout `customFieldId` on tenants where those labels are custom fields (avoids widget HTTP 500).
+
+### `adv_find_field_history_changes` *(v9.4.0)*
+
+**Description:** Find test cases whose **TCM audit history** matches a field transition in a date range (e.g. Manual Only **Yes → No** in the last 60 days). Scans cases internally; returns compact `{ key, timestamp, oldValue, newValue, concurrentChanges }` — not full case payloads. Field names/aliases align with [`adv_get_test_case_distribution_by_field`](#adv_get_test_case_distribution_by_field).
+
+**Key parameters:** `project_key`, `field`, optional `from_value` / `to_value`, `changed_after` / `changed_before`, optional `suite_id` or `root_suite_id` scope, `index_mode` (`auto` | `scan` | `index`, v9.4.1), `max_results`, `max_cases_to_scan`, `history_limit` (TCM paginates `/changes` at 20/page internally).
+
+**When to use vs other tools:**
+
+| Need | Tool |
+|------|------|
+| Project-wide transition search | **This tool** (build index first on large projects) |
+| History on cases you already have | `adv_get_test_case_by_key` + `include_history` |
+| Current field value filter | `adv_get_test_cases_advanced` + `field_path` |
+
+**Example Prompts:**
+
+- "Which MCP test cases had Manual Only change from Yes to No since 2026-01-01?"
+- "Find automation state transitions to Semi-Automated in root suite 66 last quarter"
+- `{ project_key: "MFPAND", field: "Manual Only", from_value: "Yes", to_value: "No", index_mode: "auto" }`
+
+**Related:** [`adv_build_field_history_index`](#adv_build_field_history_index); CLI `npm run history-index:build -- <project_key>`.
+
+### `adv_build_field_history_index` *(v9.4.1)*
+
+**Description:** Build or refresh a **local** TCM history index for a project (`~/.mcp-zebrunner/history-index/<projectKey>/`). Run in batches until `complete: true`; then `adv_find_field_history_changes` with `index_mode: auto` (default) answers in milliseconds instead of live `/changes` scans.
+
+**Key parameters:** `project_key`, `max_cases_per_batch` (default 150), `continue_build`, `force_refresh`, `history_limit`, `history_concurrency`.
+
+**Example Prompts:**
+
+- "Build the field history index for project MCP"
+- "Continue indexing MFPAND history — last batch was incomplete"
+- After index is complete: "Scan index for Manual Only Yes→No changes in the last 90 days" (via find tool)
+
 ### `adv_get_tcm_case_analytics` *(v9.2.4 — TCM widgets 37777–37779)*
 
 **Modes:** `net_change` | `created_by_user` | `updated_by_user`
@@ -1661,6 +1747,6 @@ For large datasets, you can specify filters and limits:
 
 ---
 
-**Last Updated:** v9.2.8 - August 2026
+**Last Updated:** v9.4.3 — September 2026 (catalog covers **75** `adv_*` tools in `tools.json`)
 
 For the latest features and updates, see [change-logs.md](change-logs.md).

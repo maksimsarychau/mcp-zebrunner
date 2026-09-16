@@ -1,6 +1,6 @@
 # MCP Resources & Prompts Guide
 
-This guide covers two MCP features that complement the existing 70 tools:
+This guide covers two MCP features that complement the existing **75** `adv_*` tools (`tools.json`):
 
 - **Resources** (`@` menu) — read-only reference data injected into the conversation context
 - **Prompts** (`/` commands) — pre-built, tested workflow instructions that guide the AI through multi-tool orchestrations
@@ -365,6 +365,22 @@ End-to-end workflow: find tests matching a feature keyword, group by root suite,
 
 **Best for:** Targeted feature validation runs without executing an entire regression suite.
 
+#### `/jira-automation-plan`
+
+**Parameters:** `suite_url` (required) — Zebrunner suite link (`.../projects/<KEY>/test-cases?suiteId=<id>`)
+
+End-to-end workflow for QAT-style automation intake: **adv_prepare_jira_automation_plan** (grouping, automation states, Analytics split, `caseId` links) → Atlassian MCP JQL dedup per subtask → preview → user approval → create parent/subtask issues in the Jira project from the plan (`jiraAutomationPlan.targetProject` in zebrunner-config.json, default QAS).
+
+- **Requires Atlassian MCP** for Jira; this Zebrunner server does not read or write Jira.
+- **Preview gate** — no Jira creates until the user approves the plan table.
+- **Assignee/reporter** — set only when the user provides them; otherwise Jira project defaults.
+
+**Example:** *Create QAS automation tasks for suite https://example.zebrunner.com/projects/PROJ/test-cases?suiteId=42*
+
+**Best for:** Turning a Zebrunner feature suite into Jira parent tasks + one subtask per in-scope manual test case.
+
+**Cursor / Claude Code skill:** copy [docs/skills/zebrunner-jira-automation-plan-SKILL.md](skills/zebrunner-jira-automation-plan-SKILL.md) to `.cursor/skills/zebrunner-jira-automation-plan/SKILL.md`.
+
 #### `/flaky-review`
 
 **Parameters:** `project` (single project key)
@@ -565,6 +581,7 @@ The AI knows exactly which custom fields and automation states exist, avoiding t
 | `/launch-triage` | Analysis | `project` | Yes | Post-regression failure triage |
 | `/relaunch-regression-failures` | Analysis | `projects`, `milestone?`, `build?`, `period?` | Yes | Batch-rerun failed launches (uses relaunchFailures config) |
 | `/feature-scoped-launch` | Analysis | `project`, `feature`, `suite_name?`, `suite_path?`, `build?`, `locale?`, `template_query?` | Yes | Feature keyword → test_run_rules → Build Now per root suite |
+| `/jira-automation-plan` | Analysis | `suite_url` | Yes | Suite URL → Zebrunner plan + Atlassian dedup/create (preview gate) |
 | `/flaky-review` | Analysis | `project` | Yes | Flaky test detection + plan |
 | `/find-duplicates` | Analysis | `project`, `suite_id?` | Yes | Structural + semantic duplicates |
 | `/test-impact` | Analysis | `project?`, `repository_slug?`, `pr_url?`, `pr_urls?` | Yes | PR/code-change test impact via `adv_analyze_test_impact` — client reads git/gh/GitHub MCP locally; multi-PR via `change_batches` |
@@ -583,7 +600,7 @@ The AI knows exactly which custom fields and automation states exist, avoiding t
 ```
 src/
   resources.ts       # ResourceCache class + registerResources() — 14 resources
-  prompts.ts         # Prompt builders + registerPrompts() — 17 prompts
+  prompts.ts         # Prompt builders + registerPrompts() — 22 prompts
   server.ts          # Wires resources and prompts: registerResources(server, deps) + registerPrompts(server)
 
 tests/

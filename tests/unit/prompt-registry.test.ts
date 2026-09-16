@@ -13,6 +13,7 @@ import {
   buildLaunchTriagePrompt,
   buildRelaunchRegressionFailuresPrompt,
   buildFeatureScopedLaunchPrompt,
+  buildJiraAutomationPlanPrompt,
   buildFlakyReviewPrompt,
   buildFindDuplicatesPrompt,
   buildDailyQaStandupPrompt,
@@ -46,7 +47,7 @@ describe("Prompt Registry Coverage", () => {
   const registeredPrompts = extractPromptRegistrations(promptSource);
 
   it("registers the expected number of prompts", () => {
-    assert.equal(registeredPrompts.length, 21, `Expected 21 prompts, got ${registeredPrompts.length}: ${registeredPrompts.join(", ")}`);
+    assert.equal(registeredPrompts.length, 22, `Expected 22 prompts, got ${registeredPrompts.length}: ${registeredPrompts.join(", ")}`);
   });
 
   it("has unique prompt names", () => {
@@ -65,6 +66,7 @@ describe("Prompt Registry Coverage", () => {
       "launch-triage",
       "relaunch-regression-failures",
       "feature-scoped-launch",
+      "jira-automation-plan",
       "flaky-review",
       "find-duplicates",
       "test-impact",
@@ -338,6 +340,27 @@ describe("Relaunch Regression Failures Prompt", () => {
   });
 });
 
+describe("Jira Automation Plan Prompt", () => {
+  const exampleUrl =
+    "https://example.zebrunner.com/projects/TEST_PROJ/test-cases?suiteId=42";
+
+  it("references prepare_jira_automation_plan and Atlassian dedup", () => {
+    const text = buildJiraAutomationPlanPrompt(exampleUrl);
+    assert.ok(text.includes("adv_prepare_jira_automation_plan"));
+    assert.ok(text.includes("searchJiraIssuesUsingJql"));
+    assert.ok(text.includes(exampleUrl));
+    assert.ok(text.includes("STOP"));
+    assert.ok(text.includes("caseId"));
+  });
+
+  it("requires preview before Jira create", () => {
+    const text = buildJiraAutomationPlanPrompt(exampleUrl);
+    assert.ok(text.includes("Never create Jira issues"));
+    assert.ok(text.includes("Phase 3"));
+    assert.ok(text.includes("Phase 4"));
+  });
+});
+
 describe("Feature-Scoped Launch Prompt", () => {
   it("references aggregate_test_cases_by_feature and start_launch", () => {
     const text = buildFeatureScopedLaunchPrompt("PROJ_A", "Water", "Regression Alpha");
@@ -521,8 +544,8 @@ describe("Test Impact Period Prompt", () => {
 describe("getPromptsCatalog()", () => {
   const catalog = getPromptsCatalog();
 
-  it("returns exactly 21 prompts matching registered count", () => {
-    assert.equal(catalog.length, 21);
+  it("returns exactly 22 prompts matching registered count", () => {
+    assert.equal(catalog.length, 22);
   });
 
   it("every entry has required fields", () => {

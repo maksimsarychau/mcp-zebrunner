@@ -7,11 +7,15 @@
 - **`adv_prepare_jira_automation_plan`** — read-only Zebrunner-side plan for Jira parent tasks + per-case subtasks from a suite URL or `project_key` + `suite_id`. Handles top-level sub-suite grouping, dynamic automation-state intake (`Not Automated` / `To be automated`), denylist for **Automated** and **Manual Only** unless `include_automated_or_manual_only: true`, Analytics title/suite split, and `caseId` links (never key-based URLs). Output formats: `json` (default), `compact`, `dto`, `string`, `markdown`.
 - **`jiraAutomationPlan`** block in `zebrunner-config.json` — `targetProject` (default **QAS**), optional `platformByProjectKey`, `componentByPlatform`, `analyticsComponentByPlatform`, `analyticsTagMatch`.
 - **Eval** — `jira_plan.*` prompts (v9.4.3) in `tests/eval/eval-jira-automation-plan-tools.ts`.
+- **`/jira-automation-plan` MCP prompt** — Zebrunner plan via `adv_prepare_jira_automation_plan`, Jira dedup/create via Atlassian MCP with preview/approval gate.
+- **Skill template** — [docs/skills/zebrunner-jira-automation-plan-SKILL.md](docs/skills/zebrunner-jira-automation-plan-SKILL.md) (QAT-32410; copy into `.cursor/skills/`).
 
 ### Notes
 
 - Does **not** call Jira; dedup/create stays in the agent + Atlassian MCP.
 - Configure `platformByProjectKey` or rely on `projectAliases` reverse-map (`ios` / `android`) for platform labels.
+- Inventory: **75** `adv_*` tools in `tools.json` (69 inline-regression registrations + 6 handler-module tools); **22** MCP prompts.
+- Docs aligned to that inventory: [docs/EVALUATION_FRAMEWORK.md](docs/EVALUATION_FRAMEWORK.md), [docs/EXECUTIVE_SUMMARY.md](docs/EXECUTIVE_SUMMARY.md), [docs/TEST_PROMPTS.md](docs/TEST_PROMPTS.md) (`adv_about_mcp_tools`), [docs/OFFICIAL_MCP_PARITY.md](docs/OFFICIAL_MCP_PARITY.md), [docs/API_COVERAGE.md](docs/API_COVERAGE.md).
 
 ---
 
@@ -347,7 +351,7 @@
 ### Documentation
 
 - [docs/TOKEN_EFFICIENCY.md](docs/TOKEN_EFFICIENCY.md) — v9.2.0 vs v9.2.1 compact matrix, truncation note, metrics footer.
-- [docs/EVALUATION_FRAMEWORK.md](docs/EVALUATION_FRAMEWORK.md) — 69 tools, default/cloud eval suites (~40 / ~149 prompts).
+- [docs/EVALUATION_FRAMEWORK.md](docs/EVALUATION_FRAMEWORK.md) — 69 tools at v9.2.1 (inventory **75** as of v9.4.3); default/cloud eval suites (~40 / ~149 prompts).
 - [TOOLS_CATALOG.md](TOOLS_CATALOG.md) — `adv_about_mcp_tools` metrics/routing params.
 - [docs/releases/v9.2.1.md](docs/releases/v9.2.1.md) — local GitHub release draft (gitignored).
 

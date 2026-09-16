@@ -109,6 +109,7 @@ export const PROMPT_MANIFEST: Record<string, { category: "e2e" | "analysis" | "r
   "launch-triage":        { category: "analysis", args: ["project"] },
   "relaunch-regression-failures": { category: "analysis", args: ["projects", "milestone", "build", "period"] },
   "feature-scoped-launch": { category: "analysis", args: ["project", "feature", "suite_name", "suite_path", "build", "locale", "template_query"] },
+  "jira-automation-plan": { category: "analysis", args: ["suite_url"] },
   "flaky-review":         { category: "analysis", args: ["project"] },
   "find-duplicates":      { category: "analysis", args: ["project", "suite_id"] },
   "daily-qa-standup":     { category: "role",     args: ["projects"] },
