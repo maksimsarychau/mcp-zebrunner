@@ -1360,7 +1360,7 @@ The `steeringHint()` helper in `src/helpers/steering.ts` is a pure, deterministi
 
 **Expected:** Uses `adv_create_test_case` with `draft: false`, but the preview shows `draft → true (forced for safety)`. The created test case is always a draft. The user must use `adv_update_test_case` to publish it.
 
-### `adv_prepare_jira_automation_plan` *(v9.4.3, QAT-32410)*
+### `adv_prepare_jira_automation_plan` *(v9.4.3)*
 
 Read-only **Jira automation intake plan** from a Zebrunner suite URL (or `project_key` + `suite_id`). Returns `parentTasks`, `skippedGroups`, and `warnings` — no Jira API calls. Configure **`jiraAutomationPlan`** in `zebrunner-config.json` (`targetProject` default **QAS**, optional `platformByProjectKey`, components, `analyticsTagMatch`). See also [§20](#20-jira-automation-plan-v943) and slash prompt [§15 Prompt 8e](#prompt-8e--jira-automation-plan-via-jira-automation-plan-v943).
 
@@ -1743,7 +1743,7 @@ MCP resources provide read-only reference data accessible via the `@` menu in MC
 
 ## 15. MCP Prompts *(v9.1.0, test impact v9.2.8 / v9.3.0)*
 
-> **22 prompts** registered. v9.4.3 adds `/jira-automation-plan` (QAT-32410). v9.2.8 adds `/test-impact`; v9.3.0 adds `/test-impact-period`. See [change-logs.md](../change-logs.md#v943--jira-automation-plan-tool-qat-32410).
+> **22 prompts** registered. v9.4.3 adds `/jira-automation-plan`. v9.2.8 adds `/test-impact`; v9.3.0 adds `/test-impact-period`. See [change-logs.md](../change-logs.md#v943--jira-automation-plan-tool).
 
 MCP prompts provide pre-built, tested workflow instructions accessible via the `/` command in MCP clients. Each prompt injects expert-crafted multi-step instructions that guide Claude through complex multi-tool workflows.
 

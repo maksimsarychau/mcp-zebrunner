@@ -1,6 +1,6 @@
 # Change Logs
 
-## v9.4.3 — Jira automation plan tool (QAT-32410)
+## v9.4.3 — Jira automation plan tool
 
 ### Added
 
@@ -8,7 +8,7 @@
 - **`jiraAutomationPlan`** block in `zebrunner-config.json` — `targetProject` (default **QAS**), optional `platformByProjectKey`, `componentByPlatform`, `analyticsComponentByPlatform`, `analyticsTagMatch`.
 - **Eval** — `jira_plan.*` prompts (v9.4.3) in `tests/eval/eval-jira-automation-plan-tools.ts`.
 - **`/jira-automation-plan` MCP prompt** — Zebrunner plan via `adv_prepare_jira_automation_plan`, Jira dedup/create via Atlassian MCP with preview/approval gate.
-- **Skill template** — [docs/skills/zebrunner-jira-automation-plan-SKILL.md](docs/skills/zebrunner-jira-automation-plan-SKILL.md) (QAT-32410; copy into `.cursor/skills/`).
+- **Skill template** — [docs/skills/zebrunner-jira-automation-plan-SKILL.md](docs/skills/zebrunner-jira-automation-plan-SKILL.md) (copy into `.cursor/skills/`).
 
 ### Notes
 

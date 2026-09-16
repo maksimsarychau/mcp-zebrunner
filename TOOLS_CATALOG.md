@@ -2,7 +2,7 @@
 
 Complete reference of all available tools with natural language usage examples.
 
-> **v9.4.3:** [`adv_prepare_jira_automation_plan`](#adv_prepare_jira_automation_plan) + **`/jira-automation-plan`** — Zebrunner suite URL → structured Jira automation intake plan (read-only; Jira via Atlassian MCP). Configure `jiraAutomationPlan` in `zebrunner-config.json`. See [TEST_PROMPTS.md §1 / §15 / §20](docs/TEST_PROMPTS.md#20-jira-automation-plan-v943) and [change-logs.md](change-logs.md#v943--jira-automation-plan-tool-qat-32410).
+> **v9.4.3:** [`adv_prepare_jira_automation_plan`](#adv_prepare_jira_automation_plan) + **`/jira-automation-plan`** — Zebrunner suite URL → structured Jira automation intake plan (read-only; Jira via Atlassian MCP). Configure `jiraAutomationPlan` in `zebrunner-config.json`. See [TEST_PROMPTS.md §1 / §15 / §20](docs/TEST_PROMPTS.md#20-jira-automation-plan-v943) and [change-logs.md](change-logs.md#v943--jira-automation-plan-tool).
 
 > **v9.4.2:** `include_sub_suites` on [`adv_get_test_cases_advanced`](#adv_get_test_cases_advanced); shared suite-scope batching. Prefer `page_token` + `count_only` over numeric `page` (see [docs/PUBLIC_API_PAGINATION.md](docs/PUBLIC_API_PAGINATION.md)).
 
@@ -82,7 +82,7 @@ All tools marked with chart support accept these two parameters:
 
 ---
 
-## Jira Automation Plan *(v9.4.3, QAT-32410)*
+## Jira Automation Plan *(v9.4.3)*
 
 ### `adv_prepare_jira_automation_plan`
 

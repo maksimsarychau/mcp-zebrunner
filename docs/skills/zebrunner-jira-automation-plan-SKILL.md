@@ -2,16 +2,14 @@
 name: zebrunner-jira-automation-plan
 description: >-
   Build Jira automation parent tasks and per-test-case subtasks from a Zebrunner
-  suite URL. Use when the user mentions QAT-32410, Jira automation intake, QAS
-  automation tasks, suite link to Jira, adv_prepare_jira_automation_plan, or
+  suite URL. Use when the user mentions Jira automation intake, QAS automation
+  tasks, suite link to Jira, adv_prepare_jira_automation_plan, or
   /jira-automation-plan.
 ---
 
-# Zebrunner → Jira automation plan (QAT-32410)
+# Zebrunner → Jira automation plan
 
 Copy this file into your app repo as `.cursor/skills/zebrunner-jira-automation-plan/SKILL.md` (or use as a Claude Code project skill).
-
-**Driving ticket:** QAT-32410 — auto-create Jira automation tasks from a Zebrunner test suite link.
 
 ## Setup
 
@@ -85,10 +83,9 @@ Markdown preview first:
 
 ## Config
 
-See `jiraAutomationPlan` in `zebrunner-config.json` and [change-logs.md v9.4.3](../../change-logs.md#v943--jira-automation-plan-tool-qat-32410).
+See `jiraAutomationPlan` in `zebrunner-config.json` and [change-logs.md v9.4.3](../../change-logs.md#v943--jira-automation-plan-tool).
 
 ## Reference
 
 - [TEST_PROMPTS.md §20](../TEST_PROMPTS.md#20-jira-automation-plan-v943) — manual eval-style prompts
 - [RESOURCES_AND_PROMPTS.md](../RESOURCES_AND_PROMPTS.md) — `/jira-automation-plan` slash prompt
-- [QAT-32410 spec](../investigation/QAT-32410-adv_prepare_jira_automation_plan-spec.md)

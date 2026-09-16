@@ -1,7 +1,7 @@
 {
   "sourceHashes": {
     "toolsJson": "f6adb1c6d2bcb888",
-    "catalog": "8782a352f3f17286",
+    "catalog": "d19277fe943c0de6",
     "benefits": "1c7370f3df9e2d38"
   },
   "tools": [
@@ -732,7 +732,7 @@
     {
       "name": "adv_prepare_jira_automation_plan",
       "description": "[Advanced Zebrunner MCP] Read-only **Jira automation intake plan** from a Zebrunner suite URL or `project_key` + `suite_id`. Builds parent-task summaries and per-test-case subtasks (top-level sub-suite grouping, dynamic automation-state intake, optional Analytics split, `caseId=` links in descriptions). Does **not** call Jira — use the agent + **Atlassian MCP** (or [`/jira-automation-plan`](#adv_prepare_jira_automation_plan) slash prompt) for dedup, preview, and create after user approval.",
-      "category": "Jira Automation Plan *(v9.4.3, QAT-32410)*",
+      "category": "Jira Automation Plan *(v9.4.3)*",
       "examples": [
         "\"Prepare a Jira automation plan from this Zebrunner suite link: `https://example.zebrunner.com/projects/PROJ/test-cases?suiteId=42`\"",
         "\"Use adv_prepare_jira_automation_plan for project PROJ suite 42 with format markdown\"",
@@ -814,7 +814,7 @@
     "adv_prepare_jira_automation_plan": {
       "name": "adv_prepare_jira_automation_plan",
       "description": "Read-only **Jira automation intake plan** from a Zebrunner suite URL or `project_key` + `suite_id`. Builds parent-task summaries and per-test-case subtasks (top-level sub-suite grouping, dynamic automation-state intake, optional Analytics split, `caseId=` links in descriptions). Does **not** call Jira — use the agent + **Atlassian MCP** (or [`/jira-automation-plan`](#adv_prepare_jira_automation_plan) slash prompt) for dedup, preview, and create after user approval.",
-      "category": "Jira Automation Plan *(v9.4.3, QAT-32410)*",
+      "category": "Jira Automation Plan *(v9.4.3)*",
       "examples": [
         "\"Prepare a Jira automation plan from this Zebrunner suite link: `https://example.zebrunner.com/projects/PROJ/test-cases?suiteId=42`\"",
         "\"Use adv_prepare_jira_automation_plan for project PROJ suite 42 with format markdown\"",
