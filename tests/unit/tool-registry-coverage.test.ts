@@ -48,16 +48,16 @@ function extractHandlerModuleTools(root: string): string[] {
   return handlerFiles.flatMap((f) => extractServerTools(fs.readFileSync(f, "utf-8")));
 }
 
-describe("Tool Registry Coverage (69 tools)", () => {
+describe("Tool Registry Coverage (70 inline tools)", () => {
   it("ensures every registered server tool has smoke coverage metadata", () => {
     const root = getProjectRoot();
     const serverTools = extractAllRegisteredTools(root);
 
-    assert.equal(serverTools.length, 69, "registered tools should total exactly 69");
-    assert.equal(new Set(serverTools).size, 69, "all registered tools should be unique");
+    assert.equal(serverTools.length, 70, "registered tools should total exactly 70");
+    assert.equal(new Set(serverTools).size, 70, "all registered tools should be unique");
 
     const coverageKeys = Object.keys(TOOL_SMOKE_INPUTS);
-    assert.equal(coverageKeys.length, 69, "smoke coverage map should include 69 tools");
+    assert.equal(coverageKeys.length, 70, "smoke coverage map should include 70 tools");
 
     const missingCoverage = serverTools.filter(tool => !( `adv_${tool}` in TOOL_SMOKE_INPUTS));
     assert.deepEqual(missingCoverage, [], `missing smoke coverage for: ${missingCoverage.join(", ")}`);
@@ -150,7 +150,7 @@ describe("Critical Tool Intelligence Checks", () => {
 
 // ── Tool Annotations Coverage ─────────────────────────────────────────────────
 
-describe("Tool Annotations Coverage (69 tools)", () => {
+describe("Tool Annotations Coverage (70 inline tools)", () => {
   const root = getProjectRoot();
   const registrationSource = [
     fs.readFileSync(path.join(root, "src", "server.ts"), "utf-8"),
@@ -190,7 +190,7 @@ describe("Tool Annotations Coverage (69 tools)", () => {
     while ((match = toolsRegex.exec(registrationSource)) !== null) {
       allTools.push(match[1]);
     }
-    assert.equal(allTools.length, 69, "should have 69 registered tools");
+    assert.equal(allTools.length, 70, "should have 70 registered tools");
 
     const missing: string[] = [];
     for (const tool of allTools) {
@@ -200,7 +200,7 @@ describe("Tool Annotations Coverage (69 tools)", () => {
     assert.deepEqual(missing, [], `tools missing annotations: ${missing.join(", ")}`);
   });
 
-  it("all 55 read-only tools have readOnlyHint: true", () => {
+  it("all 56 read-only tools have readOnlyHint: true", () => {
     const toolsRegex = /server\.registerTool\(\s*[\n\s]*['"]([^'"]+)['"]/g;
     let match: RegExpExecArray | null;
     const errors: string[] = [];

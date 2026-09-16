@@ -49,19 +49,19 @@
   },
   {
     "name": "adv_create_test_case",
-    "description": "(Beta) Create a new Test Case with runtime validation of priorities, automation states, and custom fields. Accepts { file_path } in attachments for local file upload. Optional source_case_key to pre-populate from an existing test case. Requires preview approval."
+    "description": "Create a new Test Case with runtime validation of priorities, automation states, and custom fields. Accepts { file_path } in attachments for local file upload. Optional source_case_key to pre-populate from an existing test case. Requires preview approval."
   },
   {
     "name": "adv_scaffold_test_case",
-    "description": "(Beta) Guided best-practice wizard to author a new Test Case. Uses interactive form elicitation when the client supports it (e.g. Claude Code, Cursor), otherwise returns a conversational questionnaire (e.g. Claude Desktop). Automatically warns about similar existing cases in the target + root suite (warn-only), runs an advisory rules-based quality pre-check before creation, and runs the authoritative quality review after creation. Creates a forced draft; no default project. Also available as adv_create_test_case_wizard."
+    "description": "Guided best-practice wizard to author a new Test Case. Uses interactive form elicitation when the client supports it (e.g. Claude Code, Cursor), otherwise returns a conversational questionnaire (e.g. Claude Desktop). Automatically warns about similar existing cases in the target + root suite (warn-only), runs an advisory rules-based quality pre-check before creation, and runs the authoritative quality review after creation. Creates a forced draft; no default project. Also available as adv_create_test_case_wizard."
   },
   {
     "name": "adv_create_test_case_wizard",
-    "description": "(Beta) Dev-friendly alias of adv_scaffold_test_case — the same guided best-practice test case authoring wizard (similar-case warning + advisory quality pre-check + forced draft)."
+    "description": "Dev-friendly alias of adv_scaffold_test_case — the same guided best-practice test case authoring wizard (similar-case warning + advisory quality pre-check + forced draft)."
   },
   {
     "name": "adv_create_test_suite",
-    "description": "(Beta) Create a new Test Suite in a Zebrunner project. Requires preview approval before execution."
+    "description": "Create a new Test Suite in a Zebrunner project. Requires preview approval before execution."
   },
   {
     "name": "adv_detailed_analyze_launch_failures",
@@ -249,15 +249,15 @@
   },
   {
     "name": "adv_import_launch_results_to_test_run",
-    "description": "Import automation launch results into a TCM Test Run by bridging Reporting API launches to Public API test runs (Beta)"
+    "description": "Import automation launch results into a TCM Test Run by bridging Reporting API launches to Public API test runs"
   },
   {
     "name": "adv_rerun_launch_failures",
-    "description": "Rerun failed/aborted tests for one or more automation launches via the Reporting API (Beta)"
+    "description": "Rerun failed/aborted tests for one or more automation launches via the Reporting API"
   },
   {
     "name": "adv_start_launch",
-    "description": "Trigger Zebrunner Build Now (Jenkins integration only, not Launch Launchers) via job parameters and job:build (Beta)"
+    "description": "Trigger Zebrunner Build Now (Jenkins integration only, not Launch Launchers) via job parameters and job:build"
   },
   {
     "name": "adv_improve_test_case",
@@ -281,7 +281,7 @@
   },
   {
     "name": "adv_manage_test_run",
-    "description": "Create, update, or add test cases to a Zebrunner Test Run (Beta)"
+    "description": "Create, update, or add test cases to a Test Run; Public API environment {name|id}, configurations for Build/Platform"
   },
   {
     "name": "adv_regression_results_analyzer",
@@ -293,11 +293,11 @@
   },
   {
     "name": "adv_update_test_case",
-    "description": "(Beta) Partially update an existing Test Case by numeric ID or string key (PATCH). Accepts { file_path } in attachments for local file upload. Requires preview approval."
+    "description": "Partially update an existing Test Case by numeric ID or string key (PATCH). Accepts { file_path } in attachments for local file upload. Requires preview approval."
   },
   {
     "name": "adv_update_test_suite",
-    "description": "(Beta) Update an existing Test Suite (full PUT replacement). Requires preview approval before execution."
+    "description": "Update an existing Test Suite (full PUT replacement). Requires preview approval before execution."
   },
   {
     "name": "adv_validate_test_case",

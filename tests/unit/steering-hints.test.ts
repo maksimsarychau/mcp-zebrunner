@@ -110,6 +110,12 @@ describe("Steering Hints", () => {
       assert.ok(hint.includes("import_launch_results_to_test_run"), "should suggest import");
       assert.ok(hint.includes("test_run_id: 42"), "should reference run ID");
     });
+
+    it("mentions env/config discovery", () => {
+      const hint = steeringHint("manage_test_run_create", { id: 42 });
+      assert.ok(hint.includes("adv_get_test_run_environments"));
+      assert.ok(hint.includes("adv_get_test_run_configuration_groups"));
+    });
   });
 
   describe("manage_test_run_update", () => {
@@ -117,6 +123,11 @@ describe("Steering Hints", () => {
       const hint = steeringHint("manage_test_run_update", { id: 42 });
       assert.ok(hint.includes("list_test_run_test_cases"), "should suggest listing cases");
       assert.ok(hint.includes("test_run_id: 42"), "should reference run ID");
+    });
+
+    it("mentions env/config discovery", () => {
+      const hint = steeringHint("manage_test_run_update", { id: 42 });
+      assert.ok(hint.includes("adv_get_test_run_environments"));
     });
 
     it("starts with Tip:", () => {
@@ -140,6 +151,12 @@ describe("Steering Hints", () => {
       assert.ok(hint.includes("list_test_run_test_cases"), "should suggest viewing statuses");
       assert.ok(hint.includes("get_test_run_by_id"), "should suggest run summary");
       assert.ok(hint.includes("77"), "should reference run ID in both hints");
+    });
+
+    it("notes import does not set environment or configurations", () => {
+      const hint = steeringHint("import_launch_results", { id: 77 });
+      assert.ok(hint.includes("does not set environment"));
+      assert.ok(hint.includes('action: "update"'));
     });
   });
 

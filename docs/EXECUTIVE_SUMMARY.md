@@ -49,7 +49,7 @@ MCP Zebrunner provides a natural‑language interface for test management. Inste
 
 ### 📋 Test Case Management
 - Retrieve, search, and filter test cases  
-- **Create and update** test cases and suites via natural language (Beta)  
+- **Create and update** test cases and suites via natural language  
 - Validate quality against best practices  
 - AI‑powered improvement suggestions  
 - Duplicate detection (exact and semantic)
@@ -107,7 +107,7 @@ MCP Zebrunner provides a natural‑language interface for test management. Inste
 - ⚠️ **MCP Registry** — publication in progress
 
 ### Scale
-- **75** `adv_*` tools in [`tools.json`](../tools.json) (**69** inline smoke-regression registrations + **6** handler-module tools)  
+- **76** `adv_*` tools in [`tools.json`](../tools.json) (**70** inline smoke-regression registrations + **6** handler-module tools)  
 - **22** MCP prompts (e.g. `/pass-rate`, `/jira-automation-plan`) and **14** resources  
 - **Multiple integrations** — Claude Desktop, Cursor, ChatGPT Desktop, IntelliJ IDEA, Docker  
 - **Rules engine** for quality validation  

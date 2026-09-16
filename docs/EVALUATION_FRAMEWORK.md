@@ -2,7 +2,7 @@
 
 **Author:** Maksim Sarychau  
 **Version:** 1.1  
-**Last Updated:** v9.4.3 — September 2026
+**Last Updated:** v9.4.4 — September 2026
 
 ---
 
@@ -27,7 +27,7 @@
 
 ## 1. Executive Summary
 
-The Advanced Zebrunner MCP Server exposes **75** registered `adv_*` tools (see [`tools.json`](../tools.json): **69** inline server registrations in the smoke-regression suite + **6** handler-module tools) to AI assistants (Claude, Cursor, ChatGPT). When a user asks "Show me the latest test failures," the AI must:
+The Advanced Zebrunner MCP Server exposes **76** registered `adv_*` tools (see [`tools.json`](../tools.json): **70** inline server registrations in the smoke-regression suite + **6** handler-module tools) to AI assistants (Claude, Cursor, ChatGPT). When a user asks "Show me the latest test failures," the AI must:
 
 1. **Pick the right tool** from those options (e.g., `adv_detailed_analyze_launch_failures`)
 2. **Provide the right arguments** (e.g., `project: "MY_PROJECT"`, `launch_id: 12345`)
@@ -55,7 +55,7 @@ The Evaluation Framework automatically tests all three of these steps using a re
 
 ### The Problem
 
-The Advanced Zebrunner MCP Server has **75** `adv_*` tools with overlapping capabilities. For example:
+The Advanced Zebrunner MCP Server has **76** `adv_*` tools with overlapping capabilities. For example:
 
 - `adv_list_test_suites` vs `adv_get_tcm_test_suites_by_project` — both list suites
 - `adv_get_test_cases_advanced` vs `adv_get_test_cases_by_suite_smart` — both retrieve test cases by suite
@@ -108,7 +108,7 @@ The framework uses a **layered evaluation** approach. Each layer tests a differe
 **Question answered:** "Given a user prompt, does the LLM select the correct tool?"
 
 **How it works:**
-1. Send a natural-language prompt to the LLM along with all **75** tool definitions from `tools/list`
+1. Send a natural-language prompt to the LLM along with all **76** tool definitions from `tools/list`
 2. Claude responds with a tool_use block naming which tool it wants to call
 3. Compare the selected tool against the expected tool(s)
 
@@ -623,7 +623,7 @@ Each LLM call sends the following to Claude:
 | Component | Approximate Tokens | Notes |
 |-----------|--------------------|-------|
 | System prompt | ~50 | Fixed "You are a QA assistant..." |
-| Tool definitions (75 tools) | ~14,000–17,000 | Each tool: name + description + JSON schema |
+| Tool definitions (76 tools) | ~14,000–17,000 | Each tool: name + description + JSON schema |
 | User prompt | ~30–100 | The populated eval prompt |
 | **Total input per call** | **~14,000** | |
 | **Output per call** | **~200–500** | tool_use block with name + args |
@@ -786,7 +786,7 @@ npm run test:eval:cloud:l2
    ├── Fetch first test case → <project_key>-1
    └── (L3 only) Fetch launches, milestones, automation states
 3. Start the MCP server (dist/server.js via stdio)
-4. Load **75** tool schemas from the running server (`tools/list`)
+4. Load **76** tool schemas from the running server (`tools/list`)
 5. For each prompt:
    ├── Populate template variables ({{project_key}} → <discovered_value>)
    ├── Send to LLM API with all registered tool definitions

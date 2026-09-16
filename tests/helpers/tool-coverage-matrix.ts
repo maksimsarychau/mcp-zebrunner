@@ -90,6 +90,7 @@ export const RESOURCE_MANIFEST: Record<string, { uri: string; type: "static" | "
   adv_output_formats:                  { uri: "zebrunner://formats",                                       type: "static" },
   adv_project_milestones:              { uri: "zebrunner://projects/{project_key}/milestones",              type: "template" },
   adv_project_result_statuses:         { uri: "zebrunner://projects/{project_key}/result-statuses",        type: "template" },
+  adv_project_environments:            { uri: "zebrunner://projects/{project_key}/environments",         type: "template" },
   adv_project_configuration_groups:    { uri: "zebrunner://projects/{project_key}/configuration-groups",   type: "template" },
   adv_project_fields_layout:           { uri: "zebrunner://projects/{project_key}/fields",                 type: "template" },
   adv_project_suite_hierarchy:         { uri: "zebrunner://projects/{project_key}/suite-hierarchy",        type: "template" },

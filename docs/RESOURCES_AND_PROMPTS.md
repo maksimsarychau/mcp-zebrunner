@@ -1,6 +1,6 @@
 # MCP Resources & Prompts Guide
 
-This guide covers two MCP features that complement the existing **75** `adv_*` tools (`tools.json`):
+This guide covers two MCP features that complement the existing **76** `adv_*` tools (`tools.json`):
 
 - **Resources** (`@` menu) — read-only reference data injected into the conversation context
 - **Prompts** (`/` commands) — pre-built, tested workflow instructions that guide the AI through multi-tool orchestrations
@@ -599,7 +599,7 @@ The AI knows exactly which custom fields and automation states exist, avoiding t
 
 ```
 src/
-  resources.ts       # ResourceCache class + registerResources() — 14 resources
+  resources.ts       # ResourceCache class + registerResources() — 15 resources
   prompts.ts         # Prompt builders + registerPrompts() — 22 prompts
   server.ts          # Wires resources and prompts: registerResources(server, deps) + registerPrompts(server)
 

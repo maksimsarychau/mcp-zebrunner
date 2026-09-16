@@ -1427,6 +1427,9 @@ except Exception as e:
     log_fail "Unexpected configuration groups response"
   fi
 
+  if [[ "$P10_COUNT" -eq 0 ]]; then
+    log_skip "P10b: no configuration groups for project (Build/Platform audit N/A)"
+  else
   local BUILD_SUBSTR="${ZEBRUNNER_VERIFY_BUILD_SUBSTRING:-}"
   export ZEBRUNNER_VERIFY_BUILD_SUBSTRING="$BUILD_SUBSTR"
   local P10B_RAW P10B_SUMMARY P10B_MATCH
@@ -1485,6 +1488,7 @@ except Exception as e:
     else
       log_skip "P10b: build substring search (set ZEBRUNNER_VERIFY_BUILD_SUBSTRING)"
     fi
+  fi
   fi
 
   do_public_get "/environments?projectKey=$TEST_PROJECT"

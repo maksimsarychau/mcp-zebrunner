@@ -4240,7 +4240,7 @@ Supports two modes:
     }
   );
 
-  // ========== MUTATION TOOLS (Beta) ==========
+  // ========== MUTATION TOOLS ==========
 
   // Boolean that also accepts string "true"/"false" from MCP clients that
   // serialise booleans as strings (e.g. Zebrunner MCP Inspector, some XML transports).
@@ -4310,7 +4310,7 @@ Supports two modes:
   server.registerTool(
     "create_test_suite",
     {
-      description: `🔧 (Beta) Create a new Test Suite in a Zebrunner project.
+      description: `🔧 Create a new Test Suite in a Zebrunner project.
 Requires Engineer role or higher in the target project.
 Suites can be nested at any depth by providing parent_suite_id.
 Omit parent_suite_id to create a root-level suite.
@@ -4431,7 +4431,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
   server.registerTool(
     "update_test_suite",
     {
-      description: `🔧 (Beta) Update an existing Test Suite by its numeric ID.
+      description: `🔧 Update an existing Test Suite by its numeric ID.
 Requires Engineer role or higher in the target project.
 ⚠️ IMPORTANT: This uses PUT (full replacement). You must always provide 'title' even if you only want to change another field.
 Setting parent_suite_id to null or omitting it will promote the suite to root level.
@@ -4560,7 +4560,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
     z.object({ name: z.string().min(1) }),
   ]);
 
-  // ========== adv_manage_test_run (Beta) ==========
+  // ========== adv_manage_test_run ==========
 
   const TestRunConfigurationSchema = z.object({
     group: IdOrName.describe("Configuration group — provide { id } or { name }"),
@@ -4623,7 +4623,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
   server.registerTool(
     "manage_test_run",
     {
-      description: `🏃 (Beta) Create, update, or add test cases to a Zebrunner Test Run.
+      description: `🏃 Create, update, or add test cases to a Zebrunner Test Run.
 Requires Engineer role or higher in the target project.
 
 ACTIONS:
@@ -4632,8 +4632,16 @@ ACTIONS:
              WARNING: 'configurations' is atomic — providing it REPLACES ALL existing configs.
   add_cases — Add test cases to an existing test run by keys, suite IDs, or all project cases.
 
-Use 'adv_get_test_run_environments', 'adv_get_test_run_configuration_groups', and 'adv_get_test_run_result_statuses' to discover valid values.
+Use 'adv_get_test_run_environments', 'adv_get_test_run_configuration_groups', and 'adv_get_test_run_result_statuses' to discover valid values (or MCP resource zebrunner://projects/{project_key}/environments for the env catalog).
 Environment on create/update must use { name } or { id } per Public API (not environment.key). Legacy { key } is accepted and resolved against the project catalog when possible.
+
+EXAMPLE (create with environment + Build):
+  action: "create", title: "Release smoke", project_key: "MFPIOS",
+  environment: { name: "RELEASE" },
+  configurations: [
+    { group: { name: "Build" }, option: { name: "26.19.0" } },
+    { group: { name: "Platform" }, option: { name: "iOS" } }
+  ]
 
 TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + confirmation_token. 2) After user approval, call with ONLY confirm: true and the confirmation_token. The full payload is stored server-side — do NOT re-send other fields.`,
       inputSchema: ManageTestRunSchema,
@@ -4912,7 +4920,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
     }
   );
 
-  // ========== adv_import_launch_results_to_test_run (Beta) ==========
+  // ========== adv_import_launch_results_to_test_run ==========
 
   const DEFAULT_STATUS_MAP: Record<string, string> = {
     PASSED: "Passed",
@@ -4949,7 +4957,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
   server.registerTool(
     "import_launch_results_to_test_run",
     {
-      description: `📊 (Beta) Import automation launch results into a TCM Test Run.
+      description: `📊 Import automation launch results into a TCM Test Run.
 
 Bridges the Reporting API (launches/tests) to the Public API (test runs/test cases).
 Reads test results from a launch, maps test case keys and statuses, and imports them
@@ -5194,7 +5202,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
     }
   );
 
-  // ========== adv_rerun_launch_failures (Beta) ==========
+  // ========== adv_rerun_launch_failures ==========
 
   const RerunLaunchFailuresSchema = z.object({
     project: z.union([z.enum(["web", "android", "ios", "api"]), z.string(), z.number()])
@@ -5294,7 +5302,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
   server.registerTool(
     "rerun_launch_failures",
     {
-      description: `🔄 (Beta) Rerun failed/aborted tests for one or more automation launches via the Reporting API.
+      description: `🔄 Rerun failed/aborted tests for one or more automation launches via the Reporting API.
 
 Single mode: provide launch_id. Batch mode: omit launch_id — scans launches (optional milestone/query filters),
 collects eligible launches with failures, capped by max_launches (default 10, max 50; see zebrunner-config.json relaunchFailures.maxLaunchesPerPlatform for prompt workflows).
@@ -5479,7 +5487,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
     }
   );
 
-  // ========== adv_start_launch (Beta) ==========
+  // ========== adv_start_launch ==========
 
   const StartLaunchSchema = z.object({
     project: z.union([z.enum(["web", "android", "ios", "api"]), z.string(), z.number()])
@@ -5524,7 +5532,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
   server.registerTool(
     "start_launch",
     {
-      description: `🚀 (Beta) Start a new automation launch via Zebrunner "Build now" (Reporting API job/parameters + job:build).
+      description: `🚀 Start a new automation launch via Zebrunner "Build now" (Reporting API job/parameters + job:build).
 
 IMPORTANT: ${START_LAUNCH_JENKINS_ONLY_NOTE}
 
@@ -5753,7 +5761,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
   server.registerTool(
     "create_test_case",
     {
-      description: `🔧 (Beta) Create a new Test Case in a Zebrunner project.
+      description: `🔧 Create a new Test Case in a Zebrunner project.
 Requires Engineer role or higher in the target project.
 Available automation states and priorities can be discovered via adv_get_automation_states and adv_get_automation_priorities tools (the project's project_fields_layout resource also exposes them).
 Custom field keys must use systemName values (not display names) — discover them via the zebrunner://projects/{project_key}/fields resource or via the official Zebrunner MCP list_custom_fields tool when dual-MCP.
@@ -6136,7 +6144,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
   server.registerTool(
     "update_test_case",
     {
-      description: `🔧 (Beta) Partially update an existing Test Case by its numeric ID or string key.
+      description: `🔧 Partially update an existing Test Case by its numeric ID or string key.
 Requires Engineer role or higher in the target project.
 Auto-detects the endpoint: numeric identifier → /test-cases/{id}, string identifier → /test-cases/key:{key}.
 Both use PATCH — only provided fields are updated.
@@ -7789,7 +7797,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
   server.registerTool(
     "generate_report",
     {
-      description: "📊 (Beta) Universal report generator. Supports 6 report types: quality_dashboard (HTML+Markdown with 6 panels), coverage (per-suite test coverage table), pass_rate (per-platform with targets), runtime_efficiency (with delta vs previous milestone), executive_dashboard (standup-ready combined report), release_readiness (Go/No-Go assessment). Can generate single or multiple reports per call.",
+      description: "📊 Universal report generator. Supports 6 report types: quality_dashboard (HTML+Markdown with 6 panels), coverage (per-suite test coverage table), pass_rate (per-platform with targets), runtime_efficiency (with delta vs previous milestone), executive_dashboard (standup-ready combined report), release_readiness (Go/No-Go assessment). Can generate single or multiple reports per call.",
     inputSchema: {
       report_types: z.array(z.enum([
         'quality_dashboard', 'coverage', 'pass_rate',

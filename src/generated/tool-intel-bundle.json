@@ -1,7 +1,7 @@
 {
   "sourceHashes": {
-    "toolsJson": "f6adb1c6d2bcb888",
-    "catalog": "6ae945d558501df6",
+    "toolsJson": "adf5f60a1a8d5c39",
+    "catalog": "39e5e5b0d3734e71",
     "benefits": "1c7370f3df9e2d38"
   },
   "tools": [
@@ -144,8 +144,8 @@
     },
     {
       "name": "adv_create_test_case",
-      "description": "[Advanced Zebrunner MCP] (Beta) Create a new Test Case in a Zebrunner project. Validates priority, automation state, and custom fields against project settings at runtime. Optionally accepts `source_case_key` to pre-populate fields from an existing test case.",
-      "category": "Mutation Tools (Beta)",
+      "description": "[Advanced Zebrunner MCP] Create a new Test Case in a Zebrunner project. Validates priority, automation state, and custom fields against project settings at runtime. Optionally accepts `source_case_key` to pre-populate fields from an existing test case.",
+      "category": "Mutation Tools",
       "examples": [
         "\"Create a test case 'Verify login with valid credentials' in suite 17470 for project MCP\"",
         "\"Create a test case with priority High and 3 steps in suite 491\"",
@@ -154,8 +154,8 @@
     },
     {
       "name": "adv_scaffold_test_case",
-      "description": "[Advanced Zebrunner MCP] (Beta) Guided best-practice wizard to author a NEW test case. On clients that support form elicitation (e.g. Claude Code, Cursor) it presents an interactive questionnaire; on clients without elicitation (e.g. Claude Desktop) it returns a conversational questionnaire that finishes through `adv_create_test_case`. Automatically performs a warn-only similarity check against the target + root suite and offers to reuse the closest match, then runs an **advisory** rules-based quality pre-check (using the same rules as `adv_validate_test_case`) before creation and the authoritative quality review after creation. The pre-check never blocks. Created cases are always forced to `draft=true`. There is no default project — it is always chosen explicitly (first question). Also available as the alias `adv_create_test_case_wizard`, and via the `scaffold-test-case` / `create-test-case-wizard` prompts.",
-      "category": "Mutation Tools (Beta)",
+      "description": "[Advanced Zebrunner MCP] Guided best-practice wizard to author a NEW test case. On clients that support form elicitation (e.g. Claude Code, Cursor) it presents an interactive questionnaire; on clients without elicitation (e.g. Claude Desktop) it returns a conversational questionnaire that finishes through `adv_create_test_case`. Automatically performs a warn-only similarity check against the target + root suite and offers to reuse the closest match, then runs an **advisory** rules-based quality pre-check (using the same rules as `adv_validate_test_case`) before creation and the authoritative quality review after creation. The pre-check never blocks. Created cases are always forced to `draft=true`. There is no default project — it is always chosen explicitly (first question). Also available as the alias `adv_create_test_case_wizard`, and via the `scaffold-test-case` / `create-test-case-wizard` prompts.",
+      "category": "Mutation Tools",
       "examples": [
         "\"Scaffold a new test case in project PROJ1 suite 20421\"",
         "\"Help me write a new feature test case following best practices\"",
@@ -167,15 +167,15 @@
     {
       "name": "adv_create_test_case_wizard",
       "description": "[Advanced Zebrunner MCP] Deprecated-alias registration of the same handler as **`adv_scaffold_test_case`**. Prefer `adv_scaffold_test_case` in new prompts; use this name only when matching legacy evals or user wording. MCP prompts: `scaffold-test-case`, `create-test-case-wizard`.",
-      "category": "Mutation Tools (Beta)",
+      "category": "Mutation Tools",
       "examples": [
         "Same as [`adv_scaffold_test_case`](#adv_scaffold_test_case) — e.g. \"Open the create-test-case wizard for PROJ1\""
       ]
     },
     {
       "name": "adv_create_test_suite",
-      "description": "[Advanced Zebrunner MCP] (Beta) Create a new Test Suite in a Zebrunner project. Requires Engineer role or higher.",
-      "category": "Mutation Tools (Beta)",
+      "description": "[Advanced Zebrunner MCP] Create a new Test Suite in a Zebrunner project. Requires Engineer role or higher.",
+      "category": "Mutation Tools",
       "examples": [
         "\"Create a new root test suite called 'Payments' in project MCP\"",
         "\"Create a child suite 'Edge Cases' under suite 18697 in project android\""
@@ -639,6 +639,16 @@
       ]
     },
     {
+      "name": "adv_get_test_run_environments",
+      "description": "[Advanced Zebrunner MCP] List environments configured for a project (`GET /environments`). Use returned `name` or `id` in `adv_manage_test_run` create/update. Legacy `{ key }` on manage_test_run is still accepted and resolved case-insensitively against this list when possible. Same data via MCP resource `zebrunner://projects/{project_key}/environments`.",
+      "category": "Test Run Management",
+      "examples": [
+        "\"What environments exist for project MFPIOS?\"",
+        "\"List test run environments for android\"",
+        "\"Show PRODUCTION / RELEASE env ids for MCP\""
+      ]
+    },
+    {
       "name": "adv_get_test_run_result_statuses",
       "description": "[Advanced Zebrunner MCP] Get available result statuses configured for a project.",
       "category": "Test Run Management",
@@ -660,8 +670,8 @@
     },
     {
       "name": "adv_import_launch_results_to_test_run",
-      "description": "[Advanced Zebrunner MCP] (Beta) Import automation launch results into a TCM Test Run. Bridges the Reporting API (launches/tests) to the Public API (test runs/test cases). Reads test results from a launch, maps test case keys and statuses, and imports them via the `:import` endpoint.",
-      "category": "Mutation Tools (Beta)",
+      "description": "[Advanced Zebrunner MCP] Import automation launch results into a TCM Test Run. Bridges the Reporting API (launches/tests) to the Public API (test runs/test cases). Reads test results from a launch, maps test case keys and statuses, and imports them via the `:import` endpoint. Does **not** set test-run `environment` or `configurations` (Build/Platform) — use `adv_manage_test_run` with action `update` if those badges are missing.",
+      "category": "Mutation Tools",
       "examples": [
         "\"Import results from launch 98765 into test run 123 for project MCP\"",
         "\"Import only MCP-82 and MCP-83 results from launch 98765 to test run 123\"",
@@ -670,7 +680,7 @@
     },
     {
       "name": "adv_rerun_launch_failures",
-      "description": "[Advanced Zebrunner MCP] (Beta) Rerun failed/aborted tests for one or more automation launches via the Reporting API. Triggers real CI/automation reruns. Single mode: provide `launch_id`. Batch mode: omit `launch_id` and optionally filter by `milestone` or `query`; capped by `max_launches` (default 10).",
+      "description": "[Advanced Zebrunner MCP] Rerun failed/aborted tests for one or more automation launches via the Reporting API. Triggers real CI/automation reruns. Single mode: provide `launch_id`. Batch mode: omit `launch_id` and optionally filter by `milestone` or `query`; capped by `max_launches` (default 10).",
       "category": "Launch mutations & instance configuration",
       "examples": [
         "\"Rerun failures for launch 132522 in project MCP\"",
@@ -680,7 +690,7 @@
     },
     {
       "name": "adv_start_launch",
-      "description": "[Advanced Zebrunner MCP] (Beta) Trigger Zebrunner **Build Now** (Jenkins integration only) — start a new automation launch via Reporting API `job/parameters` + `job:build`. **Does NOT work with Launch Launchers.** Resolves a template launch by `launch_id`, launch name query, and/or `suite_path`; merges validated parameter overrides; preview/confirm before triggering CI.",
+      "description": "[Advanced Zebrunner MCP] Trigger Zebrunner **Build Now** (Jenkins integration only) — start a new automation launch via Reporting API `job/parameters` + `job:build`. **Does NOT work with Launch Launchers.** Resolves a template launch by `launch_id`, launch name query, and/or `suite_path`; merges validated parameter overrides; preview/confirm before triggering CI.",
       "category": "Launch mutations & instance configuration",
       "examples": [
         "\"Start Minimal-Acceptance launch for latest build in project MCP\"",
@@ -741,10 +751,11 @@
     },
     {
       "name": "adv_manage_test_run",
-      "description": "[Advanced Zebrunner MCP] (Beta) Create, update, or add test cases to a Zebrunner Test Run. Requires Engineer role or higher.",
-      "category": "Mutation Tools (Beta)",
+      "description": "[Advanced Zebrunner MCP] Create, update, or add test cases to a Zebrunner Test Run. Requires Engineer role or higher. Discover valid values with `adv_get_test_run_environments`, `adv_get_test_run_configuration_groups`, and `adv_get_test_run_result_statuses` (env catalog also via MCP resource `zebrunner://projects/{project_key}/environments`). On create/update, Public API `environment` must be `{ name }` or `{ id }`; legacy `{ key }` is accepted and resolved case-insensitively against `GET /environments` when possible. `configurations` sets Build/Platform badges; on **update**, the list is atomic (replaces all).",
+      "category": "Mutation Tools",
       "examples": [
         "\"Create a test run called 'Sprint 42 Regression' in project MCP\"",
+        "\"Create test run 'Release smoke' in MFPIOS with environment RELEASE and Build 26.19.0\"",
         "\"Create a test run 'Browser Matrix' with configurations Browser:Chrome and Browser:Firefox in project MCP\"",
         "\"Update test run 123 in project MCP to set the milestone to 'Release 3.0'\"",
         "\"Add test cases MCP-1, MCP-2, MCP-3 to test run 123 in project MCP\"",
@@ -775,8 +786,8 @@
     },
     {
       "name": "adv_update_test_case",
-      "description": "[Advanced Zebrunner MCP] (Beta) Partially update an existing Test Case by numeric ID or string key (PATCH). Only provided fields are updated. Accepts `{file_path}` in attachments for local file upload.",
-      "category": "Mutation Tools (Beta)",
+      "description": "[Advanced Zebrunner MCP] Partially update an existing Test Case by numeric ID or string key (PATCH). Only provided fields are updated. Accepts `{file_path}` in attachments for local file upload.",
+      "category": "Mutation Tools",
       "examples": [
         "\"Update test case MCP-42 title to 'Verify login with SSO'\"",
         "\"Change automation state to 'Automated' for test case 12345 in project android\"",
@@ -786,8 +797,8 @@
     },
     {
       "name": "adv_update_test_suite",
-      "description": "[Advanced Zebrunner MCP] (Beta) Update an existing Test Suite by numeric ID (full PUT replacement). Requires Engineer role or higher.",
-      "category": "Mutation Tools (Beta)",
+      "description": "[Advanced Zebrunner MCP] Update an existing Test Suite by numeric ID (full PUT replacement). Requires Engineer role or higher.",
+      "category": "Mutation Tools",
       "examples": [
         "\"Rename suite 18697 to 'Login & Registration' in project MCP\"",
         "\"Move suite 491 under parent suite 18697 in project android\""
@@ -1180,8 +1191,8 @@
     },
     "adv_create_test_suite": {
       "name": "adv_create_test_suite",
-      "description": "(Beta) Create a new Test Suite in a Zebrunner project. Requires Engineer role or higher.",
-      "category": "Mutation Tools (Beta)",
+      "description": "Create a new Test Suite in a Zebrunner project. Requires Engineer role or higher.",
+      "category": "Mutation Tools",
       "examples": [
         "\"Create a new root test suite called 'Payments' in project MCP\"",
         "\"Create a child suite 'Edge Cases' under suite 18697 in project android\""
@@ -1189,8 +1200,8 @@
     },
     "adv_update_test_suite": {
       "name": "adv_update_test_suite",
-      "description": "(Beta) Update an existing Test Suite by numeric ID (full PUT replacement). Requires Engineer role or higher.",
-      "category": "Mutation Tools (Beta)",
+      "description": "Update an existing Test Suite by numeric ID (full PUT replacement). Requires Engineer role or higher.",
+      "category": "Mutation Tools",
       "examples": [
         "\"Rename suite 18697 to 'Login & Registration' in project MCP\"",
         "\"Move suite 491 under parent suite 18697 in project android\""
@@ -1198,8 +1209,8 @@
     },
     "adv_create_test_case": {
       "name": "adv_create_test_case",
-      "description": "(Beta) Create a new Test Case in a Zebrunner project. Validates priority, automation state, and custom fields against project settings at runtime. Optionally accepts `source_case_key` to pre-populate fields from an existing test case.",
-      "category": "Mutation Tools (Beta)",
+      "description": "Create a new Test Case in a Zebrunner project. Validates priority, automation state, and custom fields against project settings at runtime. Optionally accepts `source_case_key` to pre-populate fields from an existing test case.",
+      "category": "Mutation Tools",
       "examples": [
         "\"Create a test case 'Verify login with valid credentials' in suite 17470 for project MCP\"",
         "\"Create a test case with priority High and 3 steps in suite 491\"",
@@ -1208,8 +1219,8 @@
     },
     "adv_scaffold_test_case": {
       "name": "adv_scaffold_test_case",
-      "description": "(Beta) Guided best-practice wizard to author a NEW test case. On clients that support form elicitation (e.g. Claude Code, Cursor) it presents an interactive questionnaire; on clients without elicitation (e.g. Claude Desktop) it returns a conversational questionnaire that finishes through `adv_create_test_case`. Automatically performs a warn-only similarity check against the target + root suite and offers to reuse the closest match, then runs an **advisory** rules-based quality pre-check (using the same rules as `adv_validate_test_case`) before creation and the authoritative quality review after creation. The pre-check never blocks. Created cases are always forced to `draft=true`. There is no default project — it is always chosen explicitly (first question). Also available as the alias `adv_create_test_case_wizard`, and via the `scaffold-test-case` / `create-test-case-wizard` prompts.",
-      "category": "Mutation Tools (Beta)",
+      "description": "Guided best-practice wizard to author a NEW test case. On clients that support form elicitation (e.g. Claude Code, Cursor) it presents an interactive questionnaire; on clients without elicitation (e.g. Claude Desktop) it returns a conversational questionnaire that finishes through `adv_create_test_case`. Automatically performs a warn-only similarity check against the target + root suite and offers to reuse the closest match, then runs an **advisory** rules-based quality pre-check (using the same rules as `adv_validate_test_case`) before creation and the authoritative quality review after creation. The pre-check never blocks. Created cases are always forced to `draft=true`. There is no default project — it is always chosen explicitly (first question). Also available as the alias `adv_create_test_case_wizard`, and via the `scaffold-test-case` / `create-test-case-wizard` prompts.",
+      "category": "Mutation Tools",
       "examples": [
         "\"Scaffold a new test case in project PROJ1 suite 20421\"",
         "\"Help me write a new feature test case following best practices\"",
@@ -1221,15 +1232,15 @@
     "adv_create_test_case_wizard": {
       "name": "adv_create_test_case_wizard",
       "description": "Deprecated-alias registration of the same handler as **`adv_scaffold_test_case`**. Prefer `adv_scaffold_test_case` in new prompts; use this name only when matching legacy evals or user wording. MCP prompts: `scaffold-test-case`, `create-test-case-wizard`.",
-      "category": "Mutation Tools (Beta)",
+      "category": "Mutation Tools",
       "examples": [
         "Same as [`adv_scaffold_test_case`](#adv_scaffold_test_case) — e.g. \"Open the create-test-case wizard for PROJ1\""
       ]
     },
     "adv_update_test_case": {
       "name": "adv_update_test_case",
-      "description": "(Beta) Partially update an existing Test Case by numeric ID or string key (PATCH). Only provided fields are updated. Accepts `{file_path}` in attachments for local file upload.",
-      "category": "Mutation Tools (Beta)",
+      "description": "Partially update an existing Test Case by numeric ID or string key (PATCH). Only provided fields are updated. Accepts `{file_path}` in attachments for local file upload.",
+      "category": "Mutation Tools",
       "examples": [
         "\"Update test case MCP-42 title to 'Verify login with SSO'\"",
         "\"Change automation state to 'Automated' for test case 12345 in project android\"",
@@ -1239,10 +1250,11 @@
     },
     "adv_manage_test_run": {
       "name": "adv_manage_test_run",
-      "description": "(Beta) Create, update, or add test cases to a Zebrunner Test Run. Requires Engineer role or higher.",
-      "category": "Mutation Tools (Beta)",
+      "description": "Create, update, or add test cases to a Zebrunner Test Run. Requires Engineer role or higher. Discover valid values with `adv_get_test_run_environments`, `adv_get_test_run_configuration_groups`, and `adv_get_test_run_result_statuses` (env catalog also via MCP resource `zebrunner://projects/{project_key}/environments`). On create/update, Public API `environment` must be `{ name }` or `{ id }`; legacy `{ key }` is accepted and resolved case-insensitively against `GET /environments` when possible. `configurations` sets Build/Platform badges; on **update**, the list is atomic (replaces all).",
+      "category": "Mutation Tools",
       "examples": [
         "\"Create a test run called 'Sprint 42 Regression' in project MCP\"",
+        "\"Create test run 'Release smoke' in MFPIOS with environment RELEASE and Build 26.19.0\"",
         "\"Create a test run 'Browser Matrix' with configurations Browser:Chrome and Browser:Firefox in project MCP\"",
         "\"Update test run 123 in project MCP to set the milestone to 'Release 3.0'\"",
         "\"Add test cases MCP-1, MCP-2, MCP-3 to test run 123 in project MCP\"",
@@ -1251,8 +1263,8 @@
     },
     "adv_import_launch_results_to_test_run": {
       "name": "adv_import_launch_results_to_test_run",
-      "description": "(Beta) Import automation launch results into a TCM Test Run. Bridges the Reporting API (launches/tests) to the Public API (test runs/test cases). Reads test results from a launch, maps test case keys and statuses, and imports them via the `:import` endpoint.",
-      "category": "Mutation Tools (Beta)",
+      "description": "Import automation launch results into a TCM Test Run. Bridges the Reporting API (launches/tests) to the Public API (test runs/test cases). Reads test results from a launch, maps test case keys and statuses, and imports them via the `:import` endpoint. Does **not** set test-run `environment` or `configurations` (Build/Platform) — use `adv_manage_test_run` with action `update` if those badges are missing.",
+      "category": "Mutation Tools",
       "examples": [
         "\"Import results from launch 98765 into test run 123 for project MCP\"",
         "\"Import only MCP-82 and MCP-83 results from launch 98765 to test run 123\"",
@@ -1261,7 +1273,7 @@
     },
     "adv_rerun_launch_failures": {
       "name": "adv_rerun_launch_failures",
-      "description": "(Beta) Rerun failed/aborted tests for one or more automation launches via the Reporting API. Triggers real CI/automation reruns. Single mode: provide `launch_id`. Batch mode: omit `launch_id` and optionally filter by `milestone` or `query`; capped by `max_launches` (default 10).",
+      "description": "Rerun failed/aborted tests for one or more automation launches via the Reporting API. Triggers real CI/automation reruns. Single mode: provide `launch_id`. Batch mode: omit `launch_id` and optionally filter by `milestone` or `query`; capped by `max_launches` (default 10).",
       "category": "Launch mutations & instance configuration",
       "examples": [
         "\"Rerun failures for launch 132522 in project MCP\"",
@@ -1271,7 +1283,7 @@
     },
     "adv_start_launch": {
       "name": "adv_start_launch",
-      "description": "(Beta) Trigger Zebrunner **Build Now** (Jenkins integration only) — start a new automation launch via Reporting API `job/parameters` + `job:build`. **Does NOT work with Launch Launchers.** Resolves a template launch by `launch_id`, launch name query, and/or `suite_path`; merges validated parameter overrides; preview/confirm before triggering CI.",
+      "description": "Trigger Zebrunner **Build Now** (Jenkins integration only) — start a new automation launch via Reporting API `job/parameters` + `job:build`. **Does NOT work with Launch Launchers.** Resolves a template launch by `launch_id`, launch name query, and/or `suite_path`; merges validated parameter overrides; preview/confirm before triggering CI.",
       "category": "Launch mutations & instance configuration",
       "examples": [
         "\"Start Minimal-Acceptance launch for latest build in project MCP\"",
@@ -1390,6 +1402,16 @@
         "\"Show me all test cases in test run 12345\"",
         "\"List test cases for test run 67890\"",
         "\"What test cases were in test run 54321?\""
+      ]
+    },
+    "adv_get_test_run_environments": {
+      "name": "adv_get_test_run_environments",
+      "description": "List environments configured for a project (`GET /environments`). Use returned `name` or `id` in `adv_manage_test_run` create/update. Legacy `{ key }` on manage_test_run is still accepted and resolved case-insensitively against this list when possible. Same data via MCP resource `zebrunner://projects/{project_key}/environments`.",
+      "category": "Test Run Management",
+      "examples": [
+        "\"What environments exist for project MFPIOS?\"",
+        "\"List test run environments for android\"",
+        "\"Show PRODUCTION / RELEASE env ids for MCP\""
       ]
     },
     "adv_get_test_run_result_statuses": {
