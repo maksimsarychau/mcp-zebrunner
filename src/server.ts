@@ -20,6 +20,7 @@ import {
 } from "./utils/bulk-truncation.js";
 import { appendResponseSizeNotice } from "./utils/response-size.js";
 import {
+  environmentInputNeedsCatalog,
   environmentResolutionPreviewLines,
   resolveEnvironmentForPublicApi,
   type EnvironmentCatalogItem,
@@ -419,6 +420,12 @@ async function resolveProjectId(project: string | number): Promise<{ projectId: 
       throw new Error(`Project "${project}" not found. Use adv_get_available_projects tool to see available projects.`);
     }
   }
+}
+
+/** Zebrunner Public API `projectKey` query param (config aliases, else literal key). */
+function resolvePublicApiProjectKey(project: string): string {
+  const aliases = getProjectAliases();
+  return aliases[project] ?? project;
 }
 
 /** Build an automation-state ID→name map for a project (used by history enrichment). */
@@ -4668,23 +4675,31 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         if (args.skip_errors !== undefined) opts.skipErrors = !!args.skip_errors;
         if (args.create_missing_configurations !== undefined) opts.createMissingConfigurations = !!args.create_missing_configurations;
 
+        let environmentCatalogWarning: string | undefined;
+
         const loadEnvironmentCatalog = async (): Promise<EnvironmentCatalogItem[]> => {
           try {
             const res = await client.listEnvironments({ projectKey });
             return res.items;
-          } catch {
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            environmentCatalogWarning =
+              `  ⚠ Could not load GET /environments for ${projectKey}: ${msg}. Using passthrough name/id only.`;
             return [];
           }
         };
 
         const resolveEnvironmentForPayload = async (): Promise<ResolvedEnvironmentRef | null> => {
           if (args.environment === undefined) return null;
-          const catalog = await loadEnvironmentCatalog();
-          return resolveEnvironmentForPublicApi(args.environment as EnvironmentRefInput, catalog);
+          const envInput = args.environment as EnvironmentRefInput;
+          const needsCatalog = environmentInputNeedsCatalog(envInput);
+          const catalog = needsCatalog ? await loadEnvironmentCatalog() : undefined;
+          return resolveEnvironmentForPublicApi(envInput, catalog);
         };
 
         const environmentPreviewLines = (resolved: ResolvedEnvironmentRef): string[] => {
           const lines = environmentResolutionPreviewLines(resolved);
+          if (environmentCatalogWarning) lines.push(environmentCatalogWarning);
           if (args.skip_errors !== true) {
             lines.push("  ℹ Unknown environment names fail the API unless skip_errors is true.");
           }
@@ -9845,7 +9860,7 @@ ${detailsInfo.map((detail, i) => {
   registerScaffoldTestCaseTool(server, {
     client,
     mutationClient,
-    resolveProjectKey: (project: string) => getProjectAliases()[project] || project,
+    resolveProjectKey: resolvePublicApiProjectKey,
     projectAliases: getProjectAliases(),
     webBaseUrl: WIDGET_BASE_URL,
     debugLog,
@@ -9907,7 +9922,7 @@ ${detailsInfo.map((detail, i) => {
     client,
     webBaseUrl: WIDGET_BASE_URL,
     debugLog,
-    resolveProjectKey: (project: string) => getProjectAliases()[project] || project,
+    resolveProjectKey: resolvePublicApiProjectKey,
   });
 
   registerFindFieldHistoryChangesTool(server, {
@@ -10903,14 +10918,7 @@ ${detailsInfo.map((detail, i) => {
       try {
         await resolveProjectId(args.project);
 
-        const projectKey =
-          typeof args.project === "string" && args.project.length > 3
-            ? args.project
-            : getProjectAliases()[args.project as string];
-
-        if (!projectKey) {
-          throw new Error(`Invalid project: ${args.project}. Use web, android, ios, api, or a valid project key.`);
-        }
+        const projectKey = resolvePublicApiProjectKey(String(args.project));
 
         const response = await client.listEnvironments({ projectKey });
 
@@ -10970,17 +10978,9 @@ ${detailsInfo.map((detail, i) => {
       debugLog("adv_get_test_run_result_statuses called", args);
 
       try {
-        // Resolve project using dynamic resolution (same as other tools)
-        const { projectId, suggestions } = await resolveProjectId(args.project);
+        await resolveProjectId(args.project);
 
-        // For Public API, we need the project key, not the project ID
-        const projectKey = typeof args.project === 'string' && args.project.length > 3
-          ? args.project
-          : getProjectAliases()[args.project as string];
-
-        if (!projectKey) {
-          throw new Error(`Invalid project: ${args.project}. ${suggestions || 'Use web, android, ios, api, or a valid project key.'}`);
-        }
+        const projectKey = resolvePublicApiProjectKey(String(args.project));
 
         const response = await client.listResultStatuses({ projectKey });
 
@@ -11048,17 +11048,9 @@ ${detailsInfo.map((detail, i) => {
       debugLog("adv_get_test_run_configuration_groups called", args);
 
       try {
-        // Resolve project using dynamic resolution (same as other tools)
-        const { projectId, suggestions } = await resolveProjectId(args.project);
+        await resolveProjectId(args.project);
 
-        // For Public API, we need the project key, not the project ID
-        const projectKey = typeof args.project === 'string' && args.project.length > 3
-          ? args.project
-          : getProjectAliases()[args.project as string];
-
-        if (!projectKey) {
-          throw new Error(`Invalid project: ${args.project}. ${suggestions || 'Use web, android, ios, api, or a valid project key.'}`);
-        }
+        const projectKey = resolvePublicApiProjectKey(String(args.project));
 
         const response = await client.listConfigurationGroups({ projectKey });
 

@@ -6,7 +6,6 @@ import { getConfig } from "../utils/config-loader.js";
 import { resolveJiraAutomationPlatform } from "../utils/jira-automation-platform.js";
 import {
   buildAllowedStateNameSet,
-  buildAutomationCatalogNormToId,
   buildParentTasksForGroups,
   collectGroupSubtreeSuiteIds,
   enrichCasesWithAutomationCatalog,
@@ -138,7 +137,6 @@ export async function runPrepareJiraAutomationPlan(
     };
   }
   const allowedStateNames = buildAllowedStateNameSet(catalog, allowedStateIds);
-  const catalogNormToId = buildAutomationCatalogNormToId(catalog);
   const intakeAutomationStates = catalog
     .filter((s) => allowedStateIds.has(s.id))
     .map((s) => ({ id: s.id, name: s.name }));
@@ -178,7 +176,6 @@ export async function runPrepareJiraAutomationPlan(
       allowedStateNames,
       includeExcluded,
       warnings,
-      catalogNormToId,
     );
     casesByGroupId.set(group.suiteId, filtered);
   }

@@ -5,6 +5,9 @@
 ### Changed
 
 - **Tool descriptions** — removed `(Beta)` labels from mutation, launch-mutation, and `adv_generate_report` registrations and from `TOOLS_CATALOG.md` / `tools.json` (GA wording; preview/confirm flows unchanged).
+- **`adv_manage_test_run`** — skip GET `/environments` when `environment` is `{ id }` only; surface a preview warning when catalog load fails.
+- **Test run settings tools** — `resolvePublicApiProjectKey()` (alias map, same as `resolveProjectId`) replaces `length > 3` heuristic for environments / result statuses / configuration groups.
+- **Jira automation plan** — `filterCasesForJiraPlan` relies on prior `enrichCasesWithAutomationCatalog` (removed redundant `catalogNormToId` fallback).
 - **Steering hints** (`src/helpers/steering.ts`) — after `manage_test_run` create/update and `import_launch_results`, agents get pointers to `adv_get_test_run_environments` / `adv_get_test_run_configuration_groups` and a note that import does not set environment or Build/Platform.
 - **`adv_manage_test_run`** — registered tool description adds create example with `environment` + `configurations`; catalog + `tools.json` + regenerated **tool-intel-bundle** expanded for discovery and Public API contract.
 - **Dual-MCP routing** (`buildMcpRoutingContent`) — `test_run_metadata` section: Advanced vs official env discovery, wire format, import limitation.

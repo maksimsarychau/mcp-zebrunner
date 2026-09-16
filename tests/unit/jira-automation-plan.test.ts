@@ -1,7 +1,6 @@
 import { describe, it } from "node:test";
 import { strict as assert } from "node:assert";
 import {
-  buildAutomationCatalogNormToId,
   buildParentTasksForGroups,
   buildParentSummary,
   enrichCasesWithAutomationCatalog,
@@ -88,7 +87,6 @@ describe("filterCasesForJiraPlan", () => {
     ];
     const { allowedStateIds } = resolveAutomationStatesForPlan(catalog, undefined);
     const allowedNames = buildAllowedStateNameSet(catalog, allowedStateIds);
-    const normMap = buildAutomationCatalogNormToId(catalog);
     const cases = [
       {
         id: 3300,
@@ -103,7 +101,6 @@ describe("filterCasesForJiraPlan", () => {
       allowedNames,
       false,
       w,
-      normMap,
     );
     assert.equal(kept.length, 1);
     assert.equal(kept[0].key, "PROJ1-945");

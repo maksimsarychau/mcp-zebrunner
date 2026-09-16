@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  environmentInputNeedsCatalog,
   environmentRefForPublicApi,
   resolveEnvironmentForPublicApi,
   usedLegacyEnvironmentKey,
@@ -36,6 +37,18 @@ describe("test-run-payload environmentRefForPublicApi", () => {
     assert.equal(usedLegacyEnvironmentKey({ key: "prod" }), true);
     assert.equal(usedLegacyEnvironmentKey({ name: "PRODUCTION" }), false);
     assert.equal(usedLegacyEnvironmentKey({ id: 1, key: "x" }), false);
+  });
+});
+
+describe("environmentInputNeedsCatalog", () => {
+  it("returns false for id-only input", () => {
+    assert.equal(environmentInputNeedsCatalog({ id: 12 }), false);
+  });
+
+  it("returns true when name or legacy key needs catalog match", () => {
+    assert.equal(environmentInputNeedsCatalog({ name: "PRODUCTION" }), true);
+    assert.equal(environmentInputNeedsCatalog({ key: "release" }), true);
+    assert.equal(environmentInputNeedsCatalog({ id: 1, name: "X" }), true);
   });
 });
 

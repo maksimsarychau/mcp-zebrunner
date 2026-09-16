@@ -42,6 +42,16 @@ export function usedLegacyEnvironmentKey(input: EnvironmentRefInput): boolean {
   );
 }
 
+/** When false, `resolveEnvironmentForPublicApi` only needs `{ id }` — skip GET /environments. */
+export function environmentInputNeedsCatalog(input: EnvironmentRefInput): boolean {
+  const hasName = Boolean(input.name?.trim());
+  const hasNonLegacyKey = Boolean(input.key?.trim()) && !usedLegacyEnvironmentKey(input);
+  if (input.id !== undefined && !hasName && !usedLegacyEnvironmentKey(input) && !hasNonLegacyKey) {
+    return false;
+  }
+  return true;
+}
+
 /**
  * Resolve tool/skill input to Public API `{ id }` or `{ name }` (never `key` on the wire).
  * When `catalog` is provided, matches names case-insensitively and returns canonical `name`.

@@ -212,13 +212,13 @@ export function enrichCasesWithAutomationCatalog(
   });
 }
 
+/** Expects `enrichCasesWithAutomationCatalog` to have run first so automation state ids are filled from names. */
 export function filterCasesForJiraPlan(
   cases: CaseLike[],
   allowedStateIds: Set<number>,
   allowedStateNamesNormalized: Set<string>,
   includeAutomatedOrManualOnly: boolean,
   warnings: PlanWarning[],
-  catalogNormToId?: Map<string, number>,
 ): CaseLike[] {
   const kept: CaseLike[] = [];
 
@@ -238,12 +238,7 @@ export function filterCasesForJiraPlan(
     }
 
     const normName = normalizeAutomationStateName(stateName);
-    const resolvedId =
-      stateId != null && Number.isFinite(stateId)
-        ? stateId
-        : normName !== "unknown"
-          ? catalogNormToId?.get(normName)
-          : undefined;
+    const resolvedId = stateId != null && Number.isFinite(stateId) ? stateId : undefined;
     const idAllowed = resolvedId != null && allowedStateIds.has(resolvedId);
     const nameAllowed = allowedStateNamesNormalized.has(normName);
     if (!idAllowed && !nameAllowed) {
