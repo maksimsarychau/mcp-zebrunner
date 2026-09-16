@@ -1425,6 +1425,19 @@ export class EnhancedZebrunnerClient {
   }
 
   /**
+   * List Environments for a project (Public API — used on Test Runs).
+   */
+  async listEnvironments(options: { projectKey: string }) {
+    const { EnvironmentsResponseSchema } = await import("../types/core.js");
+
+    return this.retryRequest(async () => {
+      const params = { projectKey: options.projectKey };
+      const response = await this.http.get("/environments", { params });
+      return EnvironmentsResponseSchema.parse(response.data);
+    });
+  }
+
+  /**
    * Get all test cases for a root suite by filtering on all child suite IDs
    * Uses the filter approach but splits into smaller batches to avoid API limitations
    */

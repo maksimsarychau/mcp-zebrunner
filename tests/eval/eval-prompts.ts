@@ -1072,6 +1072,19 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
     requiredContext: ["projectKey"],
   },
   {
+    id: "get_test_run_environments.list",
+    toolSection: "Test runs — adv_get_test_run_environments",
+    promptTemplate:
+      "List test run environments for project {{project_key}} using adv_get_test_run_environments.",
+    expectedTools: ["adv_get_test_run_environments"],
+    expectedArgKeys: ["project"],
+    expectedOutputPatterns: ["Environment", "ID:"],
+    category: "test_run",
+    layer: 1,
+    expectedBehavior: "should_select_tool",
+    requiredContext: ["projectKey"],
+  },
+  {
     id: "get_test_run_configuration_groups.config",
     toolSection: "5. Test Run",
     promptTemplate:
@@ -1888,6 +1901,20 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
     layer: 1,
     expectedBehavior: "should_select_tool",
     requiredContext: ["projectKey", "testCaseKey"],
+  },
+  {
+    id: "mut.manage_run.create_with_env",
+    toolSection: "Mutation — adv_manage_test_run (create + environment)",
+    promptTemplate:
+      "Use adv_manage_test_run to create a test run titled 'Sprint env check' in project {{project_key}} " +
+      "with environment RELEASE (legacy key form is ok). Dry run only.",
+    expectedTools: ["adv_manage_test_run"],
+    expectedArgKeys: ["action", "title", "project_key", "environment", "dry_run"],
+    expectedOutputPatterns: ["environment", "DRY RUN"],
+    category: "mutation",
+    layer: 1,
+    expectedBehavior: "should_select_tool",
+    requiredContext: ["projectKey"],
   },
   {
     id: "mut.manage_run.create",

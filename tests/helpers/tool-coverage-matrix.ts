@@ -54,6 +54,7 @@ export const TOOL_SMOKE_INPUTS: Record<string, Record<string, unknown>> = {
   adv_list_test_run_test_cases: { project: "android", testRunId: 1 },
   adv_get_test_run_result_statuses: { project: "android" },
   adv_get_test_run_configuration_groups: { project: "android" },
+  adv_get_test_run_environments: { project: "android" },
   adv_analyze_test_cases_duplicates: { project_key: "MCP", suite_id: 1 },
   adv_analyze_test_cases_duplicates_semantic: { project_key: "MCP", suite_id: 1 },
   adv_aggregate_test_cases_by_feature: { project_key: "MCP", feature_keyword: "login" },

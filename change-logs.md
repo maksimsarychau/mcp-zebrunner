@@ -4,19 +4,31 @@
 
 ### Added
 
+- **`adv_get_test_run_environments`** — list project environments (`GET /environments`) for test run create/update; pairs with `adv_manage_test_run` Public API `{ name }` / `{ id }` contract.
 - **`adv_prepare_jira_automation_plan`** — read-only Zebrunner-side plan for Jira parent tasks + per-case subtasks from a suite URL or `project_key` + `suite_id`. Handles top-level sub-suite grouping, dynamic automation-state intake (`Not Automated` / `To be automated`), denylist for **Automated** and **Manual Only** unless `include_automated_or_manual_only: true`, Analytics title/suite split, and `caseId` links (never key-based URLs). Output formats: `json` (default), `compact`, `dto`, `string`, `markdown`.
 - **`jiraAutomationPlan`** block in `zebrunner-config.json` — `targetProject` (default **QAS**), optional `platformByProjectKey`, `componentByPlatform`, `analyticsComponentByPlatform`, `analyticsTagMatch`.
 - **Eval** — `jira_plan.*` prompts (v9.4.3) in `tests/eval/eval-jira-automation-plan-tools.ts`.
 - **`/jira-automation-plan` MCP prompt** — Zebrunner plan via `adv_prepare_jira_automation_plan`, Jira dedup/create via Atlassian MCP with preview/approval gate.
 - **Skill template** — [docs/skills/zebrunner-jira-automation-plan-SKILL.md](docs/skills/zebrunner-jira-automation-plan-SKILL.md) (copy into `.cursor/skills/`).
 
+### Fixed
+
+- **`adv_manage_test_run`** — `environment` on create/update sends Public API `{ name }` or `{ id }` (not `environment.key`). Legacy `{ key }` input is resolved against `GET /environments` (case-insensitive) when possible, then sent as canonical `{ name }`.
+- **`skip_errors`** on `adv_manage_test_run` — parameter description aligned with Zebrunner default (**false**).
+
+### Changed
+
+- **`tests/api-verify.sh`** — P6c/P10b/P11 environment and configuration probes; P10b build substring is informational only; P11b logs sample `environment.name`.
+- **`TOOLS_CATALOG.md`** — `adv_manage_test_run` `environment` parameter (`{id}` / `{name}`; legacy `{key}`).
+
 ### Notes
 
 - Does **not** call Jira; dedup/create stays in the agent + Atlassian MCP.
 - Configure `jiraAutomationPlan.platformByProjectKey` per Zebrunner project key for Jira platform labels, or rely on reverse `projectAliases` (e.g. alias `ios` → project key → **iOS** platform label) when overrides are omitted.
 - Default intake automation states are resolved **per project** via the same catalog as **`adv_get_automation_states`** (state **IDs are not global** across projects).
-- Inventory: **75** `adv_*` tools in `tools.json` (69 inline-regression registrations + 6 handler-module tools); **22** MCP prompts.
+- Inventory: **76** `adv_*` tools in `tools.json`; **22** MCP prompts.
 - Docs aligned to that inventory: [docs/EVALUATION_FRAMEWORK.md](docs/EVALUATION_FRAMEWORK.md), [docs/EXECUTIVE_SUMMARY.md](docs/EXECUTIVE_SUMMARY.md), [docs/TEST_PROMPTS.md](docs/TEST_PROMPTS.md) (`adv_about_mcp_tools`), [docs/OFFICIAL_MCP_PARITY.md](docs/OFFICIAL_MCP_PARITY.md), [docs/API_COVERAGE.md](docs/API_COVERAGE.md).
+- **Test run environment:** use exact names from `GET /environments` for the project (e.g. `PRODUCTION` on MFP). UI Build/Platform badges still require `configurations` on the run.
 
 ---
 

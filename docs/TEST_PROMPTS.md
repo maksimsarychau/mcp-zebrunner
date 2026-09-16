@@ -1609,6 +1609,18 @@ Guided best-practice authoring wizard. Also registered as the alias `adv_create_
 
 **Expected:** Uses `adv_manage_test_run` with `action: "add_cases"`, `project_key: "MCP"`, `test_run_id: 42`, `test_case_keys: ["MCP-1", "MCP-2", "MCP-3"]`. Preview lists the 3 specific test cases to be added.
 
+**Prompt 4 — Create with environment (Public API)** *(v9.4.3)*
+> Use adv_manage_test_run to create a dry-run test run titled "Env smoke" in project MCP with environment RELEASE.
+
+**Expected:** `action: "create"`, `dry_run: true`, `environment: { "name": "RELEASE" }` or legacy `{ "key": "RELEASE" }` in tool args; preview/dry-run **API payload** shows `environment: { "name": "RELEASE" }` (no `key`). Use `adv_get_test_run_environments` to list valid names.
+
+### `adv_get_test_run_environments`
+
+**Prompt 1 — List environments** *(v9.4.3)*
+> List test run environments for project MCP.
+
+**Expected:** `adv_get_test_run_environments` with `project: "MCP"` (or alias). Returns id + name per environment.
+
 ### `adv_import_launch_results_to_test_run`
 
 **Prompt 1 — Import all launch results** *(v7.2.2)*

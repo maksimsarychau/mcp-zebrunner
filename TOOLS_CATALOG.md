@@ -940,7 +940,7 @@ Weekly stability report for project MCP using:
 | `title`                         | string                                  | create           | Test run title (1-255 chars). Required for create.                               |
 | `description`                   | string                                  |                  | Test run description (max 10,000 chars).                                         |
 | `milestone`                     | `{id}` or `{name}`                      |                  | Milestone reference. Use `adv_get_test_run_configuration_groups` to discover values. |
-| `environment`                   | `{key}`                                 |                  | Environment reference (e.g., `{ key: "pre-prod" }`).                             |
+| `environment`                   | `{id}` or `{name}`; legacy `{key}`      |                  | Public API uses `name` or `id` (e.g. `{ name: "PRODUCTION" }`). Legacy `{ key }` is sent as `{ name }` with the same string. |
 | `configurations`                | array                                   |                  | Configuration group/option pairs. ATOMIC on update — replaces all. Max 100.      |
 | `requirements`                  | array                                   |                  | JIRA or AZURE_DEVOPS requirement references.                                     |
 | `test_case_keys`                | string[]                                | add_cases        | Test case keys to add (e.g., `["MCP-82"]`).                                      |
@@ -1236,6 +1236,16 @@ Details: [README — Project-specific automation rules](README.md#project-specif
 - "Show me all test cases in test run 12345"
 - "List test cases for test run 67890"
 - "What test cases were in test run 54321?"
+
+### `adv_get_test_run_environments`
+
+**Description:** List environments configured for a project (`GET /environments`). Use returned `name` or `id` in `adv_manage_test_run` create/update. Legacy `{ key }` on manage_test_run is still accepted and resolved case-insensitively against this list when possible.
+
+**Example Prompts:**
+
+- "What environments exist for project MFPIOS?"
+- "List test run environments for android"
+- "Show PRODUCTION / RELEASE env ids for MCP"
 
 ### `adv_get_test_run_result_statuses`
 

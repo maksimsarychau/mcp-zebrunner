@@ -1,5 +1,5 @@
 /**
- * Validates Public API test-run JSON against MCP Zod schemas and reports environment.key shape.
+ * Validates Public API test-run JSON against MCP Zod schemas and reports environment shape (id/name; key optional legacy).
  * Used by tests/api-verify.sh (P6b).
  *
  * Usage:
@@ -35,9 +35,9 @@ function reportRawEnvironmentKeys(items: Array<{ id?: number; environment?: unkn
     return 'no runs with environment in this page';
   }
   if (missingRawKey === 0) {
-    return `${withEnv} run(s) with environment; all include API key`;
+    return `${withEnv} run(s) with environment; API includes legacy key field`;
   }
-  return `${withEnv} run(s) with environment; ${missingRawKey} missing raw API key (MCP uses name fallback)`;
+  return `${withEnv} run(s) with environment; name-only API shape (no key — expected on current Public API)`;
 }
 
 try {

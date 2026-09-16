@@ -350,6 +350,16 @@ export const ConfigurationGroupsResponseSchema = z.object({
   items: z.array(ConfigurationGroupResourceSchema)
 });
 
+export const EnvironmentResourceSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  description: z.string().nullable().optional(),
+});
+
+export const EnvironmentsResponseSchema = z.object({
+  items: z.array(EnvironmentResourceSchema),
+});
+
 // Type exports for Public API
 export type PublicTestRunResource = z.infer<typeof PublicTestRunResourceSchema>;
 export type PublicTestRunTestCaseResource = z.infer<typeof PublicTestRunTestCaseResourceSchema>;
@@ -362,3 +372,5 @@ export type ResultStatusResource = z.infer<typeof ResultStatusResourceSchema>;
 export type ConfigurationGroupResource = z.infer<typeof ConfigurationGroupResourceSchema>;
 export type ResultStatusesResponse = z.infer<typeof ResultStatusesResponseSchema>;
 export type ConfigurationGroupsResponse = z.infer<typeof ConfigurationGroupsResponseSchema>;
+export type EnvironmentResource = z.infer<typeof EnvironmentResourceSchema>;
+export type EnvironmentsResponse = z.infer<typeof EnvironmentsResponseSchema>;

@@ -236,6 +236,10 @@
     "description": "Get configuration groups for a test run"
   },
   {
+    "name": "adv_get_test_run_environments",
+    "description": "List project environments for TCM test runs (Public API GET /environments)"
+  },
+  {
     "name": "adv_get_test_run_result_statuses",
     "description": "Get result statuses for a test run"
   },
