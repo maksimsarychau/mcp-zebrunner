@@ -42,7 +42,7 @@ describe(`version consistency (package.json = ${VERSION})`, () => {
   }
 
   it("change-logs.md documents this version", () => {
-    assert.match(read("change-logs.md"), new RegExp(`^## v${VERSION.replace(/\./g, "\\.")}\\b`, "m"));
+    assert.match(read("change-logs.md"), new RegExp(`^## v${VERSION.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "m"));
   });
 
   it("README banner references this version", () => {

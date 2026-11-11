@@ -37,6 +37,10 @@ import { ArtifactTooLargeError, isValidUuid } from "../utils/artifacts.js";
 
 const MAX_FILE_METADATA_CACHE_ENTRIES = 500;
 
+/** Wrong or deleted file uuids (404) and auth failures are not transient: do not retry them. */
+const isFileLookupFatal = (error: unknown): boolean =>
+  error instanceof ZebrunnerAuthError || error instanceof ZebrunnerNotFoundError;
+
 /**
  * Enhanced Zebrunner API Client with improved error handling
  * 
@@ -320,13 +324,14 @@ export class EnhancedZebrunnerClient {
 
   private async retryRequest<T>(
     requestFn: () => Promise<T>,
-    attempts: number = this.config.retryAttempts || 3
+    attempts: number = this.config.retryAttempts || 3,
+    isFatal: (error: unknown) => boolean = (error) => error instanceof ZebrunnerAuthError,
   ): Promise<T> {
     for (let i = 0; i < attempts; i++) {
       try {
         return await requestFn();
       } catch (error) {
-        if (i === attempts - 1 || error instanceof ZebrunnerAuthError) {
+        if (i === attempts - 1 || isFatal(error)) {
           throw error;
         }
         
@@ -548,11 +553,8 @@ export class EnhancedZebrunnerClient {
       throw new ZebrunnerApiError(`Invalid file uuid: '${uuid}'`);
     }
     const key = uuid.toLowerCase();
-    const cached = this.fileMetadataCache.get(key);
-    if (cached) {
-      cached.timestamp = Date.now();
-      return cached.metadata;
-    }
+    const hit = this.touchFileMetadata(key);
+    if (hit) return hit;
 
     return this.retryRequest(async () => {
       const response = await this.http.get(`/files/${key}/metadata`);
@@ -561,7 +563,7 @@ export class EnhancedZebrunnerClient {
       this.fileMetadataCache.set(key, { metadata, timestamp: Date.now() });
       this.evictFileMetadataCache();
       return metadata;
-    });
+    }, undefined, isFileLookupFatal);
   }
 
   /**
@@ -574,10 +576,9 @@ export class EnhancedZebrunnerClient {
     const missing: string[] = [];
 
     for (const u of unique) {
-      const cached = this.fileMetadataCache.get(u);
-      if (cached) {
-        cached.timestamp = Date.now();
-        result.push(cached.metadata);
+      const hit = this.touchFileMetadata(u);
+      if (hit) {
+        result.push(hit);
       } else {
         missing.push(u);
       }
@@ -591,7 +592,7 @@ export class EnhancedZebrunnerClient {
         const body = response.data;
         const list: unknown[] = Array.isArray(body?.items) ? body.items : Array.isArray(body?.data?.items) ? body.data.items : [];
         return list.map((item) => FileMetadataResourceSchema.parse(item));
-      });
+      }, undefined, isFileLookupFatal);
       for (const metadata of items) {
         this.fileMetadataCache.set(metadata.uuid.toLowerCase(), { metadata, timestamp: Date.now() });
         result.push(metadata);
@@ -646,7 +647,7 @@ export class EnhancedZebrunnerClient {
         }
         throw error;
       }
-    });
+    }, undefined, isFileLookupFatal);
     if (outcome.tooLarge || !outcome.response) {
       throw new ArtifactTooLargeError(options.maxBytes + 1, options.maxBytes, purpose);
     }
@@ -666,6 +667,19 @@ export class EnhancedZebrunnerClient {
       contentType: metadata?.contentType ?? (typeof headerType === "string" ? headerType.split(";")[0].trim() : undefined),
       fileName: metadata?.name ?? (nameMatch ? decodeURIComponent(nameMatch[1]) : undefined),
     };
+  }
+
+  /**
+   * Cache hit: move the entry to the most-recently-used position. Map keeps insertion order,
+   * so delete + re-insert makes evictFileMetadataCache() drop the least recently used entry.
+   */
+  private touchFileMetadata(key: string): FileMetadata | undefined {
+    const cached = this.fileMetadataCache.get(key);
+    if (!cached) return undefined;
+    this.fileMetadataCache.delete(key);
+    cached.timestamp = Date.now();
+    this.fileMetadataCache.set(key, cached);
+    return cached.metadata;
   }
 
   private evictFileMetadataCache(): void {
