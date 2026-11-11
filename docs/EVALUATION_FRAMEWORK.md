@@ -44,8 +44,8 @@ The Evaluation Framework automatically tests all three of these steps using a re
 | Argument Correctness | 98.4% |
 | Output Quality (Judge) | 4.73 / 5.0 |
 | Prompts in catalog | **204** (`default` ~45 + `cloud` ~156) |
-| Default suite (local Ollama) | ~40 prompts, relaxed aggregate (80% tool / 70% arg) |
-| Cloud suite (release gate) | ~149 prompts, strict per-prompt (90% tool / 85% arg) |
+| Default suite (local Ollama) | ~80 prompts, relaxed aggregate (80% tool / 70% arg) |
+| Cloud suite (release gate) | ~175 prompts, strict per-prompt (90% tool / 85% arg) |
 | Duration (cloud full L3) | ~8–9 minutes |
 | Estimated Cost (cloud full L3) | ~$23 per run |
 
@@ -404,13 +404,13 @@ The framework uses **real Zebrunner project data** — not hardcoded values. At 
 
 ### Prompt catalog (v9.2.8)
 
-The full catalog lives in `tests/eval/eval-prompts.ts` (**212 prompts**). Counts shift slightly as prompts are added; suite sizes are fixed in `tests/eval/eval-cloud-suite.ts`.
+The full catalog lives in `tests/eval/eval-prompts.ts` (**255 prompts**). Counts shift slightly as prompts are added; suite sizes are fixed in `tests/eval/eval-cloud-suite.ts`.
 
 | Suite | Prompts | When to run | Thresholds |
 |-------|---------|-------------|------------|
-| **`default`** | ~45 | `npm run test:eval` with local Ollama | Relaxed aggregate: 80% tool / 70% arg |
-| **`cloud`** | ~149 | `npm run test:eval:cloud` (sets `EVAL_PROVIDER=anthropic`) | Strict per-prompt: 90% tool / 85% arg |
-| **`all`** | ~204 | `EVAL_SUITE=all npm run test:eval` | Legacy full catalog |
+| **`default`** | ~80 | `npm run test:eval` with local Ollama | Relaxed aggregate: 80% tool / 70% arg |
+| **`cloud`** | ~175 | `npm run test:eval:cloud` (sets `EVAL_PROVIDER=anthropic`) | Strict per-prompt: 90% tool / 85% arg |
+| **`all`** | ~255 | `EVAL_SUITE=all npm run test:eval` | Legacy full catalog |
 
 Categories include TCM, launch, analysis (widgets/hubs/flaky), chart, field_filter, report, resource, mutation, e2e_metric, and negatives (refusal, tool confusion, invalid data).
 
@@ -429,9 +429,25 @@ Four eval prompts verify LLM routing for opt-in compact/summary/batch reads (uni
 
 `detail` / `format` arg checks may be soft misses on small local models — these four prompts live in the **cloud suite** (see below); run `npm run test:eval:cloud` with Claude before release.
 
+### Artifact prompts (v9.4.5)
+
+Eleven Layer-1 prompts in `tests/eval/eval-artifact-tools.ts` check routing and arguments for the artifact tools and the artifact-related options of the analysis tools. They use fixed sample ids (project `DEMO`, launch `123456`, test `654321`) instead of discovery placeholders, so they run on any workspace and are never skipped at Layer 1.
+
+| Prompt ID | Suite | What it checks |
+|-----------|-------|----------------|
+| `artifacts.list` / `artifacts.metadata` / `artifacts.download` | default | `adv_list_test_artifacts`, `adv_get_file_metadata`, `adv_download_artifact` with `launchId` / `uuid` |
+| `artifacts.list.by_name` | cloud | Launch-wide listing for "page source files only" |
+| `artifacts.download.redact` | cloud | `adv_download_artifact` with `redact: true` |
+| `artifacts.analyze_failure.redact` | cloud | `adv_analyze_test_failure` with `redactPageSource: true` |
+| `artifacts.analyze_failure.skip_page_source` | cloud | `adv_analyze_test_failure` with `includePageSource: false` |
+| `artifacts.launch_failures.page_source` | cloud | `adv_detailed_analyze_launch_failures` with `includePageSource: true` |
+| `artifacts.neg.*` (3) | cloud | Screenshot, metadata-only and launch-failure requests do not get hijacked by the artifact tools |
+
+Latest run (Claude, `EVAL_LAYER=1 EVAL_FILTER=artifacts.`): 11/11 executed, tool selection 100%, arguments 100%, negatives 3/3. The harness now treats a tool-confusion prompt that is skipped for missing context as skipped, not failed.
+
 ### Cloud tricky suite (`EVAL_SUITE=cloud`)
 
-**~149 prompts** that need a capable model are listed in `tests/eval/eval-cloud-suite.ts`. Default `npm run test:eval` uses `EVAL_SUITE=default` and **skips** them so local Ollama runs exit cleanly on **80% tool / 70% arg** aggregate thresholds.
+**~175 prompts** that need a capable model are listed in `tests/eval/eval-cloud-suite.ts`. Default `npm run test:eval` uses `EVAL_SUITE=default` and **skips** them so local Ollama runs exit cleanly on **80% tool / 70% arg** aggregate thresholds.
 
 | Group | Why tricky |
 |-------|------------|
@@ -456,7 +472,7 @@ npm run test:eval:cloud
 # Layers 1+2 only (faster, no L3 judge)
 npm run test:eval:cloud:l2
 
-# Local Ollama smoke on default suite only (~40 prompts)
+# Local Ollama smoke on default suite only (~80 prompts)
 EVAL_PROVIDER=local EVAL_MODEL=qwen3.5:2b npm run test:eval
 
 # Targeted re-run
@@ -771,7 +787,7 @@ npm run test:eval:l2
 # Run all layers explicitly
 npm run test:eval:l3
 
-# Cloud tricky suite only (~149 prompts) — npm run test:eval:cloud sets EVAL_PROVIDER=anthropic
+# Cloud tricky suite only (~175 prompts) — npm run test:eval:cloud sets EVAL_PROVIDER=anthropic
 npm run test:eval:cloud
 npm run test:eval:cloud:l2
 ```

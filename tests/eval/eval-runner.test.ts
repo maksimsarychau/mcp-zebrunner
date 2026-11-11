@@ -352,6 +352,9 @@ describe("LLM Evaluation Tests", () => {
       it(`[${ep.id}] LLM picks correct tool, avoids forbidden`, async () => {
         const result = await runToolConfusionTest(ep);
         reporter.addResult(result);
+        // Prompts skipped for missing discovery context must not count as failures
+        // (the other describe blocks do the same).
+        if (result.skipped) return;
         evalAssert(result.negativePass ?? false, result.negativeReason || "LLM used a forbidden tool");
       });
     }

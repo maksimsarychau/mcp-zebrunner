@@ -2061,8 +2061,8 @@ Expect hub parity lines per project (`HUB-TCM`, `HUB-FAILURE`, `HUB-EXEC`, `HUB-
 **Unit + eval (no live tenant):**
 ```bash
 npm test                                    # hub-widget-matrix, eval-widget/hub/authoring prompts
-npm run test:eval                           # default suite (~40 prompts, local Ollama, 80% aggregate)
-npm run test:eval:cloud                     # cloud suite (~149 prompts, Anthropic, strict per-prompt)
+npm run test:eval                           # default suite (~80 prompts, local Ollama, 80% aggregate)
+npm run test:eval:cloud                     # cloud suite (~175 prompts, Anthropic, strict per-prompt)
 EVAL_FILTER=widget.tpl7 npm run test:eval:cloud   # single prompt smoke
 ```
 
