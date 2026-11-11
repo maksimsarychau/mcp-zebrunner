@@ -10,7 +10,7 @@ import { getConfig } from "../utils/config-loader.js";
 import { extractJobSummary } from "../utils/launch-job-build.js";
 import { ArtifactToolHandlers, saveToArtifactLocation } from "./artifact-tools.js";
 import { steeringHint } from "../helpers/steering.js";
-import { ArtifactPathError, extractFileUuid, isImageContentType, safeFileName, compactArtifactSummary, type CompactArtifactSummary } from "../utils/artifacts.js";
+import { ArtifactPathError, MAX_RETURN_BYTES_CAP, extractFileUuid, isImageContentType, safeFileName, compactArtifactSummary, type CompactArtifactSummary } from "../utils/artifacts.js";
 import { DISK_WRITES_DISABLED_MESSAGE, diskWritesAllowed } from "../utils/secure-temp.js";
 import {
   EvidenceBudget,
@@ -3350,8 +3350,20 @@ export class ZebrunnerReportingToolHandlers {
         result.projectKey = projectKey;
       }
 
+      // HTTP mode writes nothing to disk, so without inline bytes the caller gets no image at all.
+      // Return it inline by default there (capped like other artifact returns); explicit returnBase64 is unchanged.
+      const inlineByDefault = !diskWritesAllowed() && !outputPath;
       if (returnBase64) {
         result.base64 = bufferToBase64(imageBuffer);
+      } else if (inlineByDefault) {
+        if (imageBuffer.length <= MAX_RETURN_BYTES_CAP) {
+          result.base64 = bufferToBase64(imageBuffer);
+        } else {
+          result.notes = [
+            ...(result.notes ?? []),
+            `Image is ${imageBuffer.length} bytes, above the ${MAX_RETURN_BYTES_CAP / (1024 * 1024)} MiB inline limit; it was not returned.`,
+          ];
+        }
       }
 
       return {

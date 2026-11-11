@@ -231,6 +231,29 @@ describe("adv_download_test_screenshot regression (XML artifact)", () => {
     assert.equal(refused.reason, "output_path_not_allowed");
     assert.ok(!existsSync("/etc/zbr-shot.png"));
   });
+
+  it("HTTP mode: returns the image inline (base64) and writes nothing when no outputPath is given", async () => {
+    const png = await import("sharp").then((m) =>
+      m.default({ create: { width: 4, height: 4, channels: 3, background: { r: 0, g: 128, b: 255 } } }).png().toBuffer(),
+    );
+    const reporting = buildFakeReportingClient();
+    reporting.downloadScreenshot = async () => png;
+    const handlers = new ZebrunnerReportingToolHandlers(reporting as any);
+
+    const saved = { transport: process.env.MCP_TRANSPORT, allow: process.env.ZEBRUNNER_ALLOW_DISK_WRITES_HTTP };
+    process.env.MCP_TRANSPORT = "http";
+    delete process.env.ZEBRUNNER_ALLOW_DISK_WRITES_HTTP;
+    try {
+      const out = JSON.parse(textOf(await handlers.downloadTestScreenshot({ screenshotUrl: "https://x.test/shot.png" })));
+      assert.equal(out.success, true);
+      assert.equal(out.localPath, undefined, "no file path on the server host in HTTP mode");
+      assert.equal(out.base64, png.toString("base64"), "image is returned inline by default");
+      assert.ok(!existsSync(getDefaultArtifactDir()) || readdirSync(getDefaultArtifactDir()).length === 0);
+    } finally {
+      if (saved.transport === undefined) delete process.env.MCP_TRANSPORT; else process.env.MCP_TRANSPORT = saved.transport;
+      if (saved.allow === undefined) delete process.env.ZEBRUNNER_ALLOW_DISK_WRITES_HTTP; else process.env.ZEBRUNNER_ALLOW_DISK_WRITES_HTTP = saved.allow;
+    }
+  });
 });
 
 // ───────────────────────── analysis wiring ─────────────────────────

@@ -488,7 +488,7 @@ Weekly stability report for project MCP using:
 
 ### `adv_download_test_screenshot`
 
-**Description:** Download protected screenshots from Zebrunner with authentication. **v9.4.5:** non-image files that share the `/files/<uuid>` shape (for example `failure_page_source_*.xml`) are delivered through the artifact download path instead of failing with an image-decoding error; use [`adv_download_artifact`](#adv_download_artifact) for those.
+**Description:** Download protected screenshots from Zebrunner with authentication. **v9.4.5:** non-image files that share the `/files/<uuid>` shape (for example `failure_page_source_*.xml`) are delivered through the artifact download path instead of failing with an image-decoding error; use [`adv_download_artifact`](#adv_download_artifact) for those. **HTTP mode:** nothing is saved to the server's disk unless `ZEBRUNNER_ALLOW_DISK_WRITES_HTTP=true`; without `outputPath` the image is returned inline as `base64` (up to 10 MiB) instead of a `localPath`, and `outputPath` is refused.
 
 **Example Prompts:**
 
