@@ -1,7 +1,7 @@
 {
   "sourceHashes": {
     "toolsJson": "54ea06e1934e3ae7",
-    "catalog": "95ad69189042fb75",
+    "catalog": "a153eeeee78987d1",
     "benefits": "1c7370f3df9e2d38"
   },
   "tools": [
@@ -224,7 +224,7 @@
     },
     {
       "name": "adv_download_test_screenshot",
-      "description": "[Advanced Zebrunner MCP] Download protected screenshots from Zebrunner with authentication. **v9.4.5:** non-image files that share the `/files/<uuid>` shape (for example `failure_page_source_*.xml`) are delivered through the artifact download path instead of failing with an image-decoding error; use [`adv_download_artifact`](#adv_download_artifact) for those.",
+      "description": "[Advanced Zebrunner MCP] Download protected screenshots from Zebrunner with authentication. **v9.4.5:** non-image files that share the `/files/<uuid>` shape (for example `failure_page_source_*.xml`) are delivered through the artifact download path instead of failing with an image-decoding error; use [`adv_download_artifact`](#adv_download_artifact) for those. **HTTP mode:** nothing is saved to the server's disk unless `ZEBRUNNER_ALLOW_DISK_WRITES_HTTP=true`; without `outputPath` the image is returned inline as `base64` (up to 10 MiB) instead of a `localPath`, and `outputPath` is refused.",
       "category": "Video & Screenshot Analysis",
       "examples": [
         "\"Download screenshot from [https://your-workspace.zebrunner.com/files/abc123](https://your-workspace.zebrunner.com/files/abc123)\"",
@@ -1007,7 +1007,7 @@
     },
     "adv_download_test_screenshot": {
       "name": "adv_download_test_screenshot",
-      "description": "Download protected screenshots from Zebrunner with authentication. **v9.4.5:** non-image files that share the `/files/<uuid>` shape (for example `failure_page_source_*.xml`) are delivered through the artifact download path instead of failing with an image-decoding error; use [`adv_download_artifact`](#adv_download_artifact) for those.",
+      "description": "Download protected screenshots from Zebrunner with authentication. **v9.4.5:** non-image files that share the `/files/<uuid>` shape (for example `failure_page_source_*.xml`) are delivered through the artifact download path instead of failing with an image-decoding error; use [`adv_download_artifact`](#adv_download_artifact) for those. **HTTP mode:** nothing is saved to the server's disk unless `ZEBRUNNER_ALLOW_DISK_WRITES_HTTP=true`; without `outputPath` the image is returned inline as `base64` (up to 10 MiB) instead of a `localPath`, and `outputPath` is refused.",
       "category": "Video & Screenshot Analysis",
       "examples": [
         "\"Download screenshot from [https://your-workspace.zebrunner.com/files/abc123](https://your-workspace.zebrunner.com/files/abc123)\"",

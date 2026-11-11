@@ -22,9 +22,9 @@
 ### Security
 
 - **Artifact storage hardening** (`src/utils/secure-temp.ts`): saved artifacts and screenshots are written as new `0600` files in private `0700` folders; a symlinked or foreign-owned default folder is refused; existing files and symlinks are never overwritten or followed. Files in the default temp folders (`zebrunner-artifacts/`, `mcp-zebrunner/screenshots/`) are deleted after `ZEBRUNNER_ARTIFACT_TTL_MINUTES` (default 60, `0` disables); folders in `ZEBRUNNER_ARTIFACT_DIRS` are never cleaned. Default file names get a short uuid prefix.
-- **HTTP mode writes nothing to disk** by default (files would land on the shared server host): text is returned inline and `outputPath` is refused unless `ZEBRUNNER_ALLOW_DISK_WRITES_HTTP=true`.
-- **`adv_download_test_screenshot`**: a non-image fallback (e.g. page-source XML) is now returned inline instead of being saved; `outputPath` is checked against the allow-list and actually written (previously it was reported but not written).
-- Video download and frame extraction folders are unchanged.
+- **HTTP mode saves no artifacts or screenshots to disk** by default (files would land on the shared server host): text is returned inline, screenshots are returned inline as base64 (up to 10 MiB), and `outputPath` is refused unless `ZEBRUNNER_ALLOW_DISK_WRITES_HTTP=true`.
+- **`adv_download_test_screenshot`**: a non-image fallback (e.g. page-source XML) is now returned inline instead of being saved; `outputPath` is checked against the allow-list and actually written (previously it was reported but not written). In HTTP mode the screenshot is returned as base64 by default (previously only a server-side `localPath` was returned, which remote clients could not read); `returnBase64` still works as before in STDIO mode.
+- Video download and frame extraction folders are unchanged; they still write to the server's temp folder in every mode.
 
 ### Changed
 
