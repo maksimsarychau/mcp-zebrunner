@@ -24,7 +24,7 @@ import {
   textOf,
 } from "../helpers/analysis-fixtures.js";
 
-const UUID_XML = "1a1c9e55-48b7-6ce0-f015-a119421211c9";
+const UUID_XML = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
 const UUID_BIG = "3c3e1a77-6ad9-8ea2-1237-c3b3643433eb";
 const UUID_NOMETA = "4d4f2b88-7bea-9fb3-2348-d4c4754544fc";
 const UUID_500 = "5e503c99-8cfb-a0c4-3459-e5d5865655ad";

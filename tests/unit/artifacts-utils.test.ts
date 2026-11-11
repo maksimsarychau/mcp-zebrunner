@@ -29,7 +29,7 @@ import {
 } from "../../src/utils/artifacts.js";
 import { PublicTestRunTestCaseResourceSchema, PublicTestRunRequirementSchema } from "../../src/types/core.js";
 
-const UUID = "1a1c9e55-48b7-6ce0-f015-a119421211c9";
+const UUID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
 
 describe("artifact classification", () => {
   it("treats /files/<uuid> values as downloadable files", () => {

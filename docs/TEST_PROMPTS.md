@@ -2647,23 +2647,23 @@ Copy [docs/skills/zebrunner-jira-automation-plan-SKILL.md](skills/zebrunner-jira
 
 ## 21. Artifacts and artifact-aware analysis (v9.4.5)
 
-Read-only tools: `adv_list_test_artifacts`, `adv_get_file_metadata`, `adv_download_artifact`. Reference data: project **MFPAND**, launch **140961**, file `1a1c9e55-48b7-6ce0-f015-a119421211c9` (`failure_page_source_live.xml`, `application/xml`, 25122 bytes).
+Read-only tools: `adv_list_test_artifacts`, `adv_get_file_metadata`, `adv_download_artifact`. Reference data: project **DEMO**, launch **12345**, file `aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee` (`failure_page_source_live.xml`, `application/xml`, 25122 bytes).
 
 ### Prompt 1 — List artifacts
 
-> List the artifacts of launch 140961 in project MFPAND.
+> List the artifacts of launch 12345 in project DEMO.
 
 **Expected:** `adv_list_test_artifacts`. Returns the `failure_page_source_*.xml` files with uuids (`kind: file`) and the launch-level `app` link marked `kind: reference` (signed query parameters masked).
 
 ### Prompt 2 — Metadata before download
 
-> What is the size and content type of file 1a1c9e55-48b7-6ce0-f015-a119421211c9?
+> What is the size and content type of file aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee?
 
 **Expected:** `adv_get_file_metadata` (not `adv_download_artifact`). Returns `application/xml`, 25122 bytes.
 
 ### Prompt 3 — Read a page source
 
-> Show me the page source XML for file 1a1c9e55-48b7-6ce0-f015-a119421211c9.
+> Show me the page source XML for file aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee.
 
 **Expected:** `adv_download_artifact` with `uuid`. XML returned inline (limit 1 MiB). No "unsupported image format" error.
 
@@ -2675,7 +2675,7 @@ Read-only tools: `adv_list_test_artifacts`, `adv_get_file_metadata`, `adv_downlo
 
 ### Prompt 5 — Save to disk and path safety
 
-> Save artifact 1a1c9e55-48b7-6ce0-f015-a119421211c9 to /etc/page.xml.
+> Save artifact aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee to /etc/page.xml.
 
 **Expected:** refused with `output_path_not_allowed`; a relative `outputPath` (or one inside `ZEBRUNNER_ARTIFACT_DIRS`) saves under `zebrunner-artifacts/`.
 
@@ -2687,31 +2687,31 @@ Read-only tools: `adv_list_test_artifacts`, `adv_get_file_metadata`, `adv_downlo
 
 ### Prompt 7 — Screenshot tool still routes correctly (negative)
 
-> Download this screenshot https://your-workspace.zebrunner.com/files/abc123 for test 5451420.
+> Download this screenshot https://your-workspace.zebrunner.com/files/abc123 for test 67890.
 
 **Expected:** `adv_download_test_screenshot` (not the artifact tools). If the uuid is an XML file, the tool returns the artifact payload instead of failing.
 
 ### Prompt 8 — Failure analysis uses artifacts
 
-> Analyze test failure <testId> in launch 140961 (project MFPAND).
+> Analyze test failure <testId> in launch 12345 (project DEMO).
 
 **Expected:** `adv_analyze_test_failure`. Output has an Artifacts section and page-source signals; the classification can change (for example Locator Issue → Timing Issue when the locator is present). If the test has no artifacts: "No artifacts attached to this test."
 
 ### Prompt 9 — Launch analysis with page sources
 
-> Analyze all failures in launch 140961 and read the page sources of the first 5 failed tests.
+> Analyze all failures in launch 12345 and read the page sources of the first 5 failed tests.
 
 **Expected:** `adv_detailed_analyze_launch_failures` with `includePageSource: true`, `pageSourceMaxTests: 5`. Executive summary shows "Page sources analyzed"; similar-failure groups show "Page-source signals". Without `includePageSource` there are no downloads. Intent stays on this tool (negative: not `adv_analyze_test_failure`).
 
 ### Prompt 10 — Video analysis evidence
 
-> Analyze the video for test <testId> in launch 140961 and include artifact evidence.
+> Analyze the video for test <testId> in launch 12345 and include artifact evidence.
 
 **Expected:** `adv_analyze_test_execution_video`; report contains an "Artifact evidence" section.
 
 ### Prompt 11 — Opt-in summaries
 
-> Show launch 140961 details with a compact artifact summary.
+> Show launch 12345 details with a compact artifact summary.
 
 **Expected:** `adv_get_launch_details` with `compactArtifacts: true`. Default output is unchanged when the flag is omitted. Same pattern: `includeArtifacts` on `adv_get_launch_test_summary`, `include_artifacts` on `adv_find_flaky_tests` / `adv_get_bug_failure_info`.
 

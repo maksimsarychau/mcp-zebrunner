@@ -19,7 +19,7 @@ const SENTINEL = "SENTINEL-TOKEN-9f3a1c77-do-not-leak";
 const USER = "leak.test.user";
 const B64 = Buffer.from(`${USER}:${SENTINEL}`).toString("base64");
 
-const OK = "1a1c9e55-48b7-6ce0-f015-a119421211c9";
+const OK = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
 const BAD = "5e503c99-8cfb-a0c4-3459-e5d5865655ad";
 const BIG = "3c3e1a77-6ad9-8ea2-1237-c3b3643433eb";
 const XML = `<hierarchy><node class="android.widget.TextView" package="android" text="App keeps stopping"/></hierarchy>`;

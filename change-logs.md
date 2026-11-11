@@ -16,7 +16,7 @@
 
 ### Fixed
 
-- **`adv_download_test_screenshot`** no longer fails on non-image files such as `failure_page_source_*.xml`; non-image content is delivered through the artifact download path. **`adv_analyze_screenshot`** refuses non-image artifacts with a pointer to `adv_download_artifact` and accepts an optional `artifactUuid`.
+- **`adv_download_test_screenshot`** no longer fails on non-image files such as `failure_page_source_*.xml`; non-image text is returned inline; binary content is saved to the default artifact folder (or to `outputPath` when given). **`adv_analyze_screenshot`** refuses non-image artifacts with a pointer to `adv_download_artifact` and accepts an optional `artifactUuid`.
 - Public API gap fixes found by comparing `api-docs_261111.json` with the implementation: `AZURE_DEVOPS` accepted as issue type in test run results; `ZebrunnerApiClient.getTestCaseById` unwraps `{ data }`; `getTestSuite` uses `GET /test-suites/{id}` directly (falls back to the cached list); `testConnection` uses `maxPageSize` (the real query parameter).
 
 ### Security

@@ -4644,7 +4644,7 @@ Use 'adv_get_test_run_environments', 'adv_get_test_run_configuration_groups', an
 Environment on create/update must use { name } or { id } per Public API (not environment.key). Legacy { key } is accepted and resolved against the project catalog when possible.
 
 EXAMPLE (create with environment + Build):
-  action: "create", title: "Release smoke", project_key: "MFPIOS",
+  action: "create", title: "Release smoke", project_key: "IOS",
   environment: { name: "RELEASE" },
   configurations: [
     { group: { name: "Build" }, option: { name: "26.19.0" } },
@@ -8088,9 +8088,9 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         "Session video and session logs are not artifacts and are out of scope. " +
         "💡 Pass testId to scope to one test; includeMetadata=true adds content type and size (one bulk call).",
       inputSchema: {
-        projectKey: z.string().min(1).optional().describe("Project key (e.g., 'MFPAND') - alternative to projectId"),
+        projectKey: z.string().min(1).optional().describe("Project key (e.g., 'DEMO') - alternative to projectId"),
         projectId: z.number().int().positive().optional().describe("Project ID - alternative to projectKey"),
-        launchId: z.number().int().positive().describe("Launch ID / test run ID (e.g., 140961)"),
+        launchId: z.number().int().positive().describe("Launch ID / test run ID (e.g., 12345)"),
         testId: z.number().int().positive().optional().describe("Only artifacts of this test (omit for all tests in the launch)"),
         kind: z.enum(["all", "file", "reference"]).default("all").describe("file = uploaded files (/files/<uuid>), reference = external links, all = both"),
         nameContains: z.string().min(1).optional().describe("Case-insensitive filter on the artifact name (e.g., 'page_source')"),
@@ -8123,7 +8123,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
         "🗂️ Get metadata (name, type, content type, size in bytes, upload time) for a Zebrunner file by uuid WITHOUT downloading it. " +
         "Use before adv_download_artifact to check size and content type. Accepts a bare uuid or a '/files/<uuid>' artifact value.",
       inputSchema: {
-        uuid: z.string().min(1).describe("File UUID (e.g., '1a1c9e55-48b7-6ce0-f015-a119421211c9') or '/files/<uuid>'"),
+        uuid: z.string().min(1).describe("File UUID (e.g., 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee') or '/files/<uuid>'"),
       },
       annotations: {
         readOnlyHint: true,

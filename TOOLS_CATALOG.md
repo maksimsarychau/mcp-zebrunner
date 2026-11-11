@@ -115,7 +115,7 @@ All tools marked with chart support accept these two parameters:
 **Example Prompts:**
 
 - "Analyze test failure 5451420 from launch 120806"
-- "Analyze test 5451420 in launch 140961 and check the page source for a crash dialog"
+- "Analyze test 67890 in launch 12345 and check the page source for a crash dialog"
 - "Analyze test 5478492 and compare with the last time it passed"
 - "Deep dive into why test 5455325 failed in launch 120906, include video and compare with last successful run"
 
@@ -126,7 +126,7 @@ All tools marked with chart support accept these two parameters:
 **Example Prompts:**
 
 - "Analyze all failures in launch 120806"
-- "Analyze all failures in launch 140961 and read the page sources for the first 5 tests"
+- "Analyze all failures in launch 12345 and read the page sources for the first 5 tests"
 - "Show me what failed in launch 120906 with executive summary and patterns"
 - "Generate Jira tickets for all failures in launch 120814 in jira format"
 
@@ -512,9 +512,9 @@ Weekly stability report for project MCP using:
 
 **Example Prompts:**
 
-- "List the artifacts of launch 140961 in project MFPAND"
-- "Which page source files are attached to test 5451420 in launch 140961?"
-- "Show only file artifacts with 'page_source' in the name for launch 140961"
+- "List the artifacts of launch 12345 in project DEMO"
+- "Which page source files are attached to test 67890 in launch 12345?"
+- "Show only file artifacts with 'page_source' in the name for launch 12345"
 
 ### `adv_get_file_metadata`
 
@@ -522,8 +522,8 @@ Weekly stability report for project MCP using:
 
 **Example Prompts:**
 
-- "Get metadata for file 1a1c9e55-48b7-6ce0-f015-a119421211c9"
-- "How big is the artifact /files/1a1c9e55-48b7-6ce0-f015-a119421211c9?"
+- "Get metadata for file aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+- "How big is the artifact /files/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee?"
 
 ### `adv_download_artifact`
 
@@ -531,9 +531,9 @@ Weekly stability report for project MCP using:
 
 **Example Prompts:**
 
-- "Download artifact 1a1c9e55-48b7-6ce0-f015-a119421211c9 and show me the XML"
-- "Read failure_page_source_live.xml for test 5451420 in launch 140961 with redaction on"
-- "Save artifact 1a1c9e55-48b7-6ce0-f015-a119421211c9 to disk"
+- "Download artifact aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee and show me the XML"
+- "Read failure_page_source_live.xml for test 67890 in launch 12345 with redaction on"
+- "Save artifact aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee to disk"
 
 ---
 

@@ -242,10 +242,10 @@ describe("deliverBuffer storage", () => {
   const bin = Buffer.from([0, 1, 2, 3, 255]);
 
   it("saves binary to a 0700 default folder as a 0600 file with a uuid prefix", { skip: !POSIX }, () => {
-    const s = statusOf(handlers.deliverBuffer({ buffer: bin, name: "dump.bin", uuid: "1a1c9e55-48b7-6ce0-f015-a119421211c9" }));
+    const s = statusOf(handlers.deliverBuffer({ buffer: bin, name: "dump.bin", uuid: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee" }));
     assert.equal(s.status, "ok");
     assert.ok(s.savedTo.includes("zebrunner-artifacts"));
-    assert.ok(s.savedTo.endsWith("1a1c9e55_dump.bin"));
+    assert.ok(s.savedTo.endsWith("aaaaaaaa_dump.bin"));
     assert.equal(mode(s.savedTo), 0o600);
     assert.equal(mode(getDefaultArtifactDir()), 0o700);
   });

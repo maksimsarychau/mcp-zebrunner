@@ -11,7 +11,7 @@ import type { EvalPrompt } from "./eval-prompts.js";
  * because failed-launch discovery only runs for Layer 3.
  */
 const SECTION = "3. Analysis — Artifacts (v9.4.5)";
-const SAMPLE_UUID = "1a1c9e55-48b7-6ce0-f015-a119421211c9";
+const SAMPLE_UUID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
 
 export const ARTIFACT_EVAL_PROMPTS: EvalPrompt[] = [
   {

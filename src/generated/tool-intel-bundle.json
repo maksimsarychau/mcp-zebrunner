@@ -1,7 +1,7 @@
 {
   "sourceHashes": {
     "toolsJson": "54ea06e1934e3ae7",
-    "catalog": "cd9c01d7082d4223",
+    "catalog": "95ad69189042fb75",
     "benefits": "1c7370f3df9e2d38"
   },
   "tools": [
@@ -72,9 +72,9 @@
       "description": "[Advanced Zebrunner MCP] List artifacts that automation attached to a launch and its tests (page sources, logcat, saved screenshots, reference links). Each item has `scope`, `testId`, `name`, `kind` (`file` with a `uuid`, or `reference` with a masked `url`). Read-only; no file is downloaded. Session video and session logs are not artifacts and are out of scope. Inputs: `projectKey`/`projectId`, `launchId`, optional `testId`, `kind`, `nameContains`, `includeLaunchLevel`, `includeMetadata` (adds content type and size with one bulk call), `limit`.",
       "category": "Video & Screenshot Analysis",
       "examples": [
-        "\"List the artifacts of launch 140961 in project MFPAND\"",
-        "\"Which page source files are attached to test 5451420 in launch 140961?\"",
-        "\"Show only file artifacts with 'page_source' in the name for launch 140961\""
+        "\"List the artifacts of launch 12345 in project DEMO\"",
+        "\"Which page source files are attached to test 67890 in launch 12345?\"",
+        "\"Show only file artifacts with 'page_source' in the name for launch 12345\""
       ]
     },
     {
@@ -82,8 +82,8 @@
       "description": "[Advanced Zebrunner MCP] Get name, type, content type, size in bytes and upload time for a Zebrunner file by uuid, without downloading it (Public API v1 `GET /files/{uuid}/metadata`). Use it before `adv_download_artifact` to check size and type. Accepts a bare uuid or `/files/<uuid>`.",
       "category": "Video & Screenshot Analysis",
       "examples": [
-        "\"Get metadata for file 1a1c9e55-48b7-6ce0-f015-a119421211c9\"",
-        "\"How big is the artifact /files/1a1c9e55-48b7-6ce0-f015-a119421211c9?\""
+        "\"Get metadata for file aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee\"",
+        "\"How big is the artifact /files/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee?\""
       ]
     },
     {
@@ -91,9 +91,9 @@
       "description": "[Advanced Zebrunner MCP] Read or save ONE artifact file exactly as attached (page source XML, logs, JSON, text, binaries) by `uuid` or by `launchId` + `name` (+ `testId`). No image decoding is performed. Text is returned inline by default (limit `maxBytes`, default 1 MiB, hard cap 10 MiB); `outputPath` saves to disk (up to 10 MiB, only inside the default `zebrunner-artifacts/` temp folder or folders in `ZEBRUNNER_ARTIFACT_DIRS`); larger files are refused with a clear message before any bytes are downloaded. `redact=true` masks email addresses and password-node text/value in text artifacts (**off by default** — page sources may contain personal data). Output reports status, size and content type only, never credentials. Saved files are created `0600` in private (`0700`) folders, never overwrite existing files or follow symlinks, and are deleted from the default temp folder after `ZEBRUNNER_ARTIFACT_TTL_MINUTES` (default 60). In HTTP mode nothing is saved (text is returned inline, `outputPath` is refused) unless `ZEBRUNNER_ALLOW_DISK_WRITES_HTTP=true`.",
       "category": "Video & Screenshot Analysis",
       "examples": [
-        "\"Download artifact 1a1c9e55-48b7-6ce0-f015-a119421211c9 and show me the XML\"",
-        "\"Read failure_page_source_live.xml for test 5451420 in launch 140961 with redaction on\"",
-        "\"Save artifact 1a1c9e55-48b7-6ce0-f015-a119421211c9 to disk\""
+        "\"Download artifact aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee and show me the XML\"",
+        "\"Read failure_page_source_live.xml for test 67890 in launch 12345 with redaction on\"",
+        "\"Save artifact aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee to disk\""
       ]
     },
     {
@@ -132,7 +132,7 @@
       "category": "Test Failure Analysis & Debugging",
       "examples": [
         "\"Analyze test failure 5451420 from launch 120806\"",
-        "\"Analyze test 5451420 in launch 140961 and check the page source for a crash dialog\"",
+        "\"Analyze test 67890 in launch 12345 and check the page source for a crash dialog\"",
         "\"Analyze test 5478492 and compare with the last time it passed\"",
         "\"Deep dive into why test 5455325 failed in launch 120906, include video and compare with last successful run\""
       ]
@@ -217,7 +217,7 @@
       "category": "Test Failure Analysis & Debugging",
       "examples": [
         "\"Analyze all failures in launch 120806\"",
-        "\"Analyze all failures in launch 140961 and read the page sources for the first 5 tests\"",
+        "\"Analyze all failures in launch 12345 and read the page sources for the first 5 tests\"",
         "\"Show me what failed in launch 120906 with executive summary and patterns\"",
         "\"Generate Jira tickets for all failures in launch 120814 in jira format\""
       ]
@@ -869,7 +869,7 @@
       "category": "Test Failure Analysis & Debugging",
       "examples": [
         "\"Analyze test failure 5451420 from launch 120806\"",
-        "\"Analyze test 5451420 in launch 140961 and check the page source for a crash dialog\"",
+        "\"Analyze test 67890 in launch 12345 and check the page source for a crash dialog\"",
         "\"Analyze test 5478492 and compare with the last time it passed\"",
         "\"Deep dive into why test 5455325 failed in launch 120906, include video and compare with last successful run\""
       ]
@@ -880,7 +880,7 @@
       "category": "Test Failure Analysis & Debugging",
       "examples": [
         "\"Analyze all failures in launch 120806\"",
-        "\"Analyze all failures in launch 140961 and read the page sources for the first 5 tests\"",
+        "\"Analyze all failures in launch 12345 and read the page sources for the first 5 tests\"",
         "\"Show me what failed in launch 120906 with executive summary and patterns\"",
         "\"Generate Jira tickets for all failures in launch 120814 in jira format\""
       ]
@@ -1030,9 +1030,9 @@
       "description": "List artifacts that automation attached to a launch and its tests (page sources, logcat, saved screenshots, reference links). Each item has `scope`, `testId`, `name`, `kind` (`file` with a `uuid`, or `reference` with a masked `url`). Read-only; no file is downloaded. Session video and session logs are not artifacts and are out of scope. Inputs: `projectKey`/`projectId`, `launchId`, optional `testId`, `kind`, `nameContains`, `includeLaunchLevel`, `includeMetadata` (adds content type and size with one bulk call), `limit`.",
       "category": "Video & Screenshot Analysis",
       "examples": [
-        "\"List the artifacts of launch 140961 in project MFPAND\"",
-        "\"Which page source files are attached to test 5451420 in launch 140961?\"",
-        "\"Show only file artifacts with 'page_source' in the name for launch 140961\""
+        "\"List the artifacts of launch 12345 in project DEMO\"",
+        "\"Which page source files are attached to test 67890 in launch 12345?\"",
+        "\"Show only file artifacts with 'page_source' in the name for launch 12345\""
       ]
     },
     "adv_get_file_metadata": {
@@ -1040,8 +1040,8 @@
       "description": "Get name, type, content type, size in bytes and upload time for a Zebrunner file by uuid, without downloading it (Public API v1 `GET /files/{uuid}/metadata`). Use it before `adv_download_artifact` to check size and type. Accepts a bare uuid or `/files/<uuid>`.",
       "category": "Video & Screenshot Analysis",
       "examples": [
-        "\"Get metadata for file 1a1c9e55-48b7-6ce0-f015-a119421211c9\"",
-        "\"How big is the artifact /files/1a1c9e55-48b7-6ce0-f015-a119421211c9?\""
+        "\"Get metadata for file aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee\"",
+        "\"How big is the artifact /files/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee?\""
       ]
     },
     "adv_download_artifact": {
@@ -1049,9 +1049,9 @@
       "description": "Read or save ONE artifact file exactly as attached (page source XML, logs, JSON, text, binaries) by `uuid` or by `launchId` + `name` (+ `testId`). No image decoding is performed. Text is returned inline by default (limit `maxBytes`, default 1 MiB, hard cap 10 MiB); `outputPath` saves to disk (up to 10 MiB, only inside the default `zebrunner-artifacts/` temp folder or folders in `ZEBRUNNER_ARTIFACT_DIRS`); larger files are refused with a clear message before any bytes are downloaded. `redact=true` masks email addresses and password-node text/value in text artifacts (**off by default** — page sources may contain personal data). Output reports status, size and content type only, never credentials. Saved files are created `0600` in private (`0700`) folders, never overwrite existing files or follow symlinks, and are deleted from the default temp folder after `ZEBRUNNER_ARTIFACT_TTL_MINUTES` (default 60). In HTTP mode nothing is saved (text is returned inline, `outputPath` is refused) unless `ZEBRUNNER_ALLOW_DISK_WRITES_HTTP=true`.",
       "category": "Video & Screenshot Analysis",
       "examples": [
-        "\"Download artifact 1a1c9e55-48b7-6ce0-f015-a119421211c9 and show me the XML\"",
-        "\"Read failure_page_source_live.xml for test 5451420 in launch 140961 with redaction on\"",
-        "\"Save artifact 1a1c9e55-48b7-6ce0-f015-a119421211c9 to disk\""
+        "\"Download artifact aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee and show me the XML\"",
+        "\"Read failure_page_source_live.xml for test 67890 in launch 12345 with redaction on\"",
+        "\"Save artifact aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee to disk\""
       ]
     },
     "adv_batch_get_test_cases": {

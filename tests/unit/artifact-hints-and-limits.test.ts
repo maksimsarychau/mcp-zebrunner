@@ -20,11 +20,11 @@ afterEach(() => {
 
 describe("steeringHint(analyze_launch_failures_artifacts)", () => {
   it("points at includePageSource and the artifact tools with the launch id", () => {
-    const hint = steeringHint("analyze_launch_failures_artifacts", { id: 140961 });
+    const hint = steeringHint("analyze_launch_failures_artifacts", { id: 12345 });
     assert.ok(hint.startsWith("\n\nTip: Next steps:"), "uses the standard Tip format");
     assert.ok(hint.includes("includePageSource: true"));
     assert.ok(hint.includes("pageSourceMaxTests"));
-    assert.ok(hint.includes("adv_list_test_artifacts with launchId: 140961"));
+    assert.ok(hint.includes("adv_list_test_artifacts with launchId: 12345"));
     assert.ok(hint.includes("adv_download_artifact"));
   });
 });
@@ -53,7 +53,7 @@ describe("ARTIFACT_EVIDENCE_MAX_FILES", () => {
 
 // ───────────────────────── launch analysis wiring ─────────────────────────
 
-const UUID = "1a1c9e55-48b7-6ce0-f015-a119421211c9";
+const UUID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
 const HOME = `<?xml version="1.0"?><hierarchy><android.widget.FrameLayout class="android.widget.FrameLayout" package="com.app" resource-id="com.app:id/home_title" text="Home"/></hierarchy>`;
 
 /** Every failed fixture test carries a page-source artifact. */

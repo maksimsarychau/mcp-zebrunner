@@ -83,7 +83,7 @@ export const testsWithArtifactsFixture = testsFixture.map((t) =>
     ? {
         ...t,
         artifacts: [
-          { name: "failure_page_source_live.xml", value: "/files/1a1c9e55-48b7-6ce0-f015-a119421211c9" },
+          { name: "failure_page_source_live.xml", value: "/files/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee" },
           { name: "build link", value: "https://example.test/build/1" },
         ],
       }

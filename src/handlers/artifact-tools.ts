@@ -245,7 +245,7 @@ export class ArtifactToolHandlers {
     try {
       const uuid = extractFileUuid(input.uuid) ?? input.uuid;
       if (!isValidUuid(uuid)) {
-        throw new Error("uuid must be a file UUID (e.g. 1a1c9e55-48b7-6ce0-f015-a119421211c9) or a /files/<uuid> value");
+        throw new Error("uuid must be a file UUID (e.g. aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee) or a /files/<uuid> value");
       }
       const metadata = await this.requireTcm().getFileMetadata(uuid);
       return jsonResult(slimMetadata(metadata));

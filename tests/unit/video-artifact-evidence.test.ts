@@ -12,7 +12,7 @@ import { VideoAnalyzer } from "../../src/utils/video-analysis/analyzer.js";
 import { extractPageSourceSignals } from "../../src/utils/artifact-evidence.js";
 import type { FailureAnalysis } from "../../src/utils/video-analysis/types.js";
 
-const UUID = "1a1c9e55-48b7-6ce0-f015-a119421211c9";
+const UUID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
 
 const xml = (inner: string) => `<?xml version="1.0"?><hierarchy rotation="0">${inner}</hierarchy>`;
 const CRASH = xml(

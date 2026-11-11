@@ -562,7 +562,7 @@ tcm_widget_post() {
 }
 
 # Raw widget API with systemFieldDataType MANUAL_ONLY returns HTTP 500 on custom-layout tenants
-# where "Manual Only" is a CUSTOM field (MFPAND). MCP tool resolves to customFieldId instead.
+# where "Manual Only" is a CUSTOM field (PROJAND). MCP tool resolves to customFieldId instead.
 tcm_widget_post_system_manual_only() {
   local label="$1"
   local manual_field_type="${2:-}"
@@ -579,7 +579,7 @@ tcm_widget_post_system_manual_only() {
   fi
 }
 
-# Case Status is CUSTOM on MFP projects — use customFieldId from fields-layout (MCP resolves the same way).
+# Case Status is CUSTOM on PROJ projects — use customFieldId from fields-layout (MCP resolves the same way).
 tcm_widget_post_case_status() {
   local label="$1"
   local case_status_id="${2:-}"

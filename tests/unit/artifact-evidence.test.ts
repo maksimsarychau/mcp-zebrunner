@@ -19,7 +19,7 @@ import {
 } from "../../src/utils/artifact-evidence.js";
 import { collectArtifacts } from "../../src/utils/artifacts.js";
 
-const UUID = "1a1c9e55-48b7-6ce0-f015-a119421211c9";
+const UUID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
 const UUID2 = "2b2d0f66-59c8-7df1-0126-b2a2532322da";
 
 const androidXml = (inner: string) =>
