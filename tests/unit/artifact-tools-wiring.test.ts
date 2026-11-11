@@ -10,9 +10,8 @@ import { describe, it, before, after } from "node:test";
 import { strict as assert } from "node:assert";
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { existsSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { isolateTmpdir } from "../helpers/isolated-tmpdir.js";
 import { EnhancedZebrunnerClient } from "../../src/api/enhanced-client.js";
 import { ArtifactToolHandlers } from "../../src/handlers/artifact-tools.js";
 import { ZebrunnerReportingToolHandlers } from "../../src/handlers/reporting-tools.js";
@@ -70,21 +69,13 @@ function handle(req: IncomingMessage, res: ServerResponse) {
   json(404, { message: "not found" });
 }
 
-const ORIGINAL_TMPDIR = process.env.TMPDIR;
-let isolatedTmp = "";
-
 before(async () => {
-  isolatedTmp = mkdtempSync(join(tmpdir(), "zbr-wiring-"));
-  process.env.TMPDIR = isolatedTmp;
   server = createServer(handle);
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api/public/v1`;
 });
 after(async () => {
   await new Promise<void>((r) => server.close(() => r()));
-  if (ORIGINAL_TMPDIR === undefined) delete process.env.TMPDIR;
-  else process.env.TMPDIR = ORIGINAL_TMPDIR;
-  rmSync(isolatedTmp, { recursive: true, force: true });
 });
 
 function realClient() {
@@ -140,6 +131,7 @@ describe("credential safety", () => {
 });
 
 describe("ArtifactToolHandlers", () => {
+  isolateTmpdir("zbr-wiring-");
   const withArtifacts = testsFixture.map((t: any) =>
     t.id === 101
       ? { ...t, artifacts: [{ name: "failure_page_source_live.xml", value: `/files/${UUID_XML}` }, { name: "build", value: "https://ci.test/b/1" }] }
@@ -199,6 +191,7 @@ describe("ArtifactToolHandlers", () => {
 });
 
 describe("adv_download_test_screenshot regression (XML artifact)", () => {
+  isolateTmpdir("zbr-wiring-shot-", { perTest: true });
   it("delegates non-image content to the artifact path instead of failing", async () => {
     const reporting = buildFakeReportingClient();
     let imagePipelineCalled = false;
@@ -260,6 +253,7 @@ function fakeTcm(handler: (uuid: string) => Promise<{ buffer: Buffer }>) {
 }
 
 describe("artifact-aware analysis", () => {
+  isolateTmpdir("zbr-wiring-analysis-");
   const base = { testId: 101, testRunId: LAUNCH_ID, projectKey: PROJECT_KEY };
 
   it("analyze_test_failure: lists artifacts and refines classification from the page source", async () => {

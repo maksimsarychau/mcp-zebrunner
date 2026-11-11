@@ -33,7 +33,14 @@ import { ArtifactToolHandlers, sweepDefaultArtifactDir } from "../../src/handler
 import { getDefaultArtifactDir } from "../../src/utils/artifacts.js";
 
 const POSIX = process.platform !== "win32";
-const SAVED_ENV = { ...process.env };
+const ENV_KEYS = [
+  "TMPDIR",
+  "MCP_TRANSPORT",
+  "PORT",
+  "ZEBRUNNER_ALLOW_DISK_WRITES_HTTP",
+  "ZEBRUNNER_ARTIFACT_TTL_MINUTES",
+  "ZEBRUNNER_ARTIFACT_DIRS",
+] as const;
 let root = "";
 
 function mode(p: string): number {
@@ -49,19 +56,26 @@ function statusOf(result: { content: Array<{ text: string }> }): any {
   return JSON.parse(result.content[0].text);
 }
 
+const REAL_TMP = tmpdir();
+
+describe("secure temp storage", () => {
+let saved: Partial<Record<(typeof ENV_KEYS)[number], string>> = {};
+
 beforeEach(() => {
-  root = realpathSync(mkdtempSync(join(tmpdir(), "zbr-secure-")));
+  saved = {};
+  for (const k of ENV_KEYS) {
+    if (process.env[k] !== undefined) saved[k] = process.env[k];
+    delete process.env[k];
+  }
+  root = realpathSync(mkdtempSync(join(REAL_TMP, "zbr-secure-")));
   process.env.TMPDIR = root;
-  delete process.env.MCP_TRANSPORT;
-  delete process.env.PORT;
-  delete process.env.ZEBRUNNER_ALLOW_DISK_WRITES_HTTP;
-  delete process.env.ZEBRUNNER_ARTIFACT_TTL_MINUTES;
-  delete process.env.ZEBRUNNER_ARTIFACT_DIRS;
 });
 
 afterEach(() => {
-  for (const k of Object.keys(process.env)) if (!(k in SAVED_ENV)) delete process.env[k];
-  Object.assign(process.env, SAVED_ENV);
+  for (const k of ENV_KEYS) {
+    if (saved[k] === undefined) delete process.env[k];
+    else process.env[k] = saved[k];
+  }
   rmSync(root, { recursive: true, force: true });
 });
 
@@ -271,4 +285,5 @@ describe("deliverBuffer storage", () => {
     const s = statusOf(handlers.deliverBuffer({ buffer: bin, name: "dump.bin" }));
     assert.ok(s.savedTo && existsSync(s.savedTo));
   });
+});
 });
