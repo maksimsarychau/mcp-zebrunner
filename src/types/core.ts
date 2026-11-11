@@ -184,6 +184,19 @@ export const MetaSchema = z.object({
   hasPrevious: z.boolean().optional()
 });
 
+// File metadata (Public API v1: GET /files/{uuid}/metadata, GET /files/-/metadata)
+export const FileMetadataResourceSchema = z.object({
+  uuid: z.string(),
+  name: z.string().optional(),
+  type: z.string().optional(),
+  sizeInBytes: z.coerce.number().nullable().optional(),
+  contentType: z.string().nullable().optional(),
+  uploadedAt: z.string().nullable().optional(),
+  uploadedBy: z.coerce.number().nullable().optional(),
+}).passthrough();
+
+export type FileMetadata = z.infer<typeof FileMetadataResourceSchema>;
+
 // Generic paged response
 export const PagedResponseSchema = <T extends z.ZodTypeAny>(itemSchema: T): z.ZodObject<{
   items: z.ZodArray<T>;
@@ -291,7 +304,7 @@ export const PublicTestRunTestCaseResourceSchema = z.object({
     }),
     details: z.string().nullable().optional(),
     issue: z.object({
-      type: z.enum(["JIRA", "GITHUB"]),
+      type: z.enum(["JIRA", "GITHUB", "AZURE_DEVOPS"]),
       id: z.string()
     }).nullable().optional(),
     executionTimeInMillis: z.number().nullable().optional(),

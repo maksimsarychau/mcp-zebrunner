@@ -1,6 +1,6 @@
 # MCP Resources & Prompts Guide
 
-This guide covers two MCP features that complement the existing **76** `adv_*` tools (`tools.json`):
+This guide covers two MCP features that complement the existing **79** `adv_*` tools (`tools.json`):
 
 - **Resources** (`@` menu) — read-only reference data injected into the conversation context
 - **Prompts** (`/` commands) — pre-built, tested workflow instructions that guide the AI through multi-tool orchestrations
@@ -751,4 +751,4 @@ The test suite validates:
 
 ---
 
-*Last Updated: v9.1.0 - July 2026*
+*Last Updated: v9.4.5 - November 2026 (tool inventory now 79 `adv_*` tools; resources/prompts unchanged)*

@@ -1,0 +1,331 @@
+# 🎫 Jira Tickets - Launch Fixture Regression
+
+Generated: <NOW>
+
+---
+
+## Full Analysis - Generating Jira Tickets with Smart Grouping
+
+Analyzing 3 tests to detect similar failures...
+
+Progress: 1/3 - Analyzing test 101...
+Progress: 2/3 - Analyzing test 102...
+Progress: 3/3 - Analyzing test 103...
+
+✅ Analysis complete. Grouping similar failures...
+
+---
+
+## 📊 Grouping Summary
+
+- **Total Tests Analyzed:** 3
+- **Unique Error Patterns:** 3
+- **Individual Tickets:** 3
+- **Combined Tickets:** 0
+
+---
+
+## 🎫 Ticket 1: login shows home screen
+
+**Type:** Individual Failure
+**Affected Tests:** 1
+
+### Jira Ticket Content (Copy & Paste)
+
+```
+h1. Locator Issue: login shows home screen
+
+||Field||Value||
+|Priority|Medium|
+|Labels|test-automation, locator-issue|
+|Test ID|[101|https://fixture.zebrunner.test/projects/FIX/automation-launches/9001/tests/101]|
+|Launch ID|[9001|https://fixture.zebrunner.test/projects/FIX/automation-launches/9001]|
+|Launch Name|[Launch 9001|https://fixture.zebrunner.test/projects/FIX/automation-launches/9001]|
+|Test Suite/Class|com.fixture.LoginTests|
+|Stability|50%|
+|Duration|1m 0s|
+|Test Cases|[FIX-1|https://fixture.zebrunner.test/projects/FIX/test-cases]|
+
+h2. Description
+
+Test *login shows home screen* is failing in launch [Launch 9001|https://fixture.zebrunner.test/projects/FIX/automation-launches/9001] with *Locator Issue*.
+
+h3. Error Classification
+*Category:* Locator Issue
+*Confidence:* High
+
+*Reasons:*
+* Error message indicates element not found
+* Likely UI element selector issue or timing problem
+
+h3. Error Message (Short)
+
+{code}
+Element 'home_title' not found on the screen after 10 seconds
+{code}
+
+h3. Error Logs (Top 5)
+
+*1. [ERROR]* 11/14/2023, 10:13:24 PM:
+{code}
+Element 'home_title' not found
+{code}
+
+[View all logs|https://fixture.zebrunner.test/projects/FIX/automation-launches/9001/tests/101]
+
+h3. Expected vs Actual
+
+*Expected:* Test should pass without errors
+*Actual:* Test failed with Locator Issue
+
+h3. Steps to Reproduce
+
+Based on test execution logs:
+# Login button is clicked
+# Navigating to home
+
+h3. Screenshots
+
+*Latest screenshot before failure:*
+[!https://fixture.zebrunner.test/files/aaaaaaaa-0000-0000-0000-000000000001|thumbnail!|https://fixture.zebrunner.test/files/aaaaaaaa-0000-0000-0000-000000000001]
+[View screenshot|https://fixture.zebrunner.test/files/aaaaaaaa-0000-0000-0000-000000000001]
+
+h3. Recommended Actions
+
+### Immediate Actions (High Priority)
+
+# ✅ **Update Element Locator**
+   - Review the page object for element selector
+   - Check if UI has changed and selector needs update
+   - Consider using more robust locator strategies
+
+# ✅ **Add Explicit Waits**
+   - Add wait for element visibility before interaction
+   - Increase timeout if element loads slowly
+
+### Long-term Improvements
+
+# 🌟 **Improve Test Reliability**
+   - Add better error handling
+   - Implement test data cleanup
+   - Consider test isolation improvements
+
+
+
+h3. Links
+
+* [View Test in Zebrunner|https://fixture.zebrunner.test/projects/FIX/automation-launches/9001/tests/101]
+* [View Launch|https://fixture.zebrunner.test/projects/FIX/automation-launches/9001]
+* [📋 Test Case FIX-1|https://fixture.zebrunner.test/projects/FIX/test-cases]
+
+----
+_Generated automatically by MCP Zebrunner Analysis Tool_
+
+```
+
+---
+
+## 🎫 Ticket 2: checkout completes
+
+**Type:** Individual Failure
+**Affected Tests:** 1
+
+### Jira Ticket Content (Copy & Paste)
+
+```
+h1. Timing Issue: checkout completes
+
+||Field||Value||
+|Priority|Medium|
+|Labels|test-automation, timing-issue|
+|Test ID|[102|https://fixture.zebrunner.test/projects/FIX/automation-launches/9001/tests/102]|
+|Launch ID|[9001|https://fixture.zebrunner.test/projects/FIX/automation-launches/9001]|
+|Launch Name|[Launch 9001|https://fixture.zebrunner.test/projects/FIX/automation-launches/9001]|
+|Test Suite/Class|com.fixture.CheckoutTests|
+|Stability|50%|
+|Duration|1m 0s|
+|Test Cases|⚠️ Not linked to test case|
+
+h2. Description
+
+Test *checkout completes* is failing in launch [Launch 9001|https://fixture.zebrunner.test/projects/FIX/automation-launches/9001] with *Timing Issue*.
+
+h3. Error Classification
+*Category:* Timing Issue
+*Confidence:* High
+
+*Reasons:*
+* Timeout detected in error message or logs
+* Element or condition took too long to appear
+
+h3. Error Message (Short)
+
+{code}
+Timeout waiting for payment confirmation
+{code}
+
+h3. Error Logs (Top 5)
+
+*1. [ERROR]* 11/14/2023, 10:13:24 PM:
+{code}
+Element 'home_title' not found
+{code}
+
+[View all logs|https://fixture.zebrunner.test/projects/FIX/automation-launches/9001/tests/102]
+
+h3. Expected vs Actual
+
+*Expected:* Test should pass without errors
+*Actual:* Test failed with Timing Issue
+
+h3. Steps to Reproduce
+
+Based on test execution logs:
+# Login button is clicked
+# Navigating to home
+
+h3. Screenshots
+
+*Latest screenshot before failure:*
+[!https://fixture.zebrunner.test/files/aaaaaaaa-0000-0000-0000-000000000001|thumbnail!|https://fixture.zebrunner.test/files/aaaaaaaa-0000-0000-0000-000000000001]
+[View screenshot|https://fixture.zebrunner.test/files/aaaaaaaa-0000-0000-0000-000000000001]
+
+h3. Recommended Actions
+
+### Immediate Actions (High Priority)
+
+# ✅ **Increase Timeout Values**
+   - Review and increase wait timeouts
+   - Add retry logic for flaky operations
+
+# ✅ **Improve Wait Strategies**
+   - Use explicit waits instead of implicit waits
+   - Wait for specific conditions before proceeding
+
+### Long-term Improvements
+
+# 🌟 **Improve Test Reliability**
+   - Add better error handling
+   - Implement test data cleanup
+   - Consider test isolation improvements
+
+
+
+h3. Links
+
+* [View Test in Zebrunner|https://fixture.zebrunner.test/projects/FIX/automation-launches/9001/tests/102]
+* [View Launch|https://fixture.zebrunner.test/projects/FIX/automation-launches/9001]
+
+----
+_Generated automatically by MCP Zebrunner Analysis Tool_
+
+```
+
+---
+
+## 🎫 Ticket 3: profile saves
+
+**Type:** Individual Failure
+**Affected Tests:** 1
+
+### Jira Ticket Content (Copy & Paste)
+
+```
+h1. Business Issue: profile saves
+
+||Field||Value||
+|Priority|Medium|
+|Labels|test-automation, business-issue|
+|Test ID|[103|https://fixture.zebrunner.test/projects/FIX/automation-launches/9001/tests/103]|
+|Launch ID|[9001|https://fixture.zebrunner.test/projects/FIX/automation-launches/9001]|
+|Launch Name|[Launch 9001|https://fixture.zebrunner.test/projects/FIX/automation-launches/9001]|
+|Test Suite/Class|com.fixture.ProfileTests|
+|Stability|50%|
+|Duration|1m 0s|
+|Test Cases|⚠️ Not linked to test case|
+
+h2. Description
+
+Test *profile saves* is failing in launch [Launch 9001|https://fixture.zebrunner.test/projects/FIX/automation-launches/9001] with *Business Issue*.
+
+h3. Error Classification
+*Category:* Business Issue
+*Confidence:* Medium
+
+*Reasons:*
+* Assertion failure detected
+* Expected vs actual value mismatch
+
+h3. Error Message (Short)
+
+{code}
+Assertion failed: expected 'Saved' but actual was 'Error'
+{code}
+
+h3. Error Logs (Top 5)
+
+*1. [ERROR]* 11/14/2023, 10:13:24 PM:
+{code}
+Element 'home_title' not found
+{code}
+
+[View all logs|https://fixture.zebrunner.test/projects/FIX/automation-launches/9001/tests/103]
+
+h3. Expected vs Actual
+
+*Expected:* Test should pass without errors
+*Actual:* Test failed with Business Issue
+
+h3. Steps to Reproduce
+
+Based on test execution logs:
+# Login button is clicked
+# Navigating to home
+
+h3. Screenshots
+
+*Latest screenshot before failure:*
+[!https://fixture.zebrunner.test/files/aaaaaaaa-0000-0000-0000-000000000001|thumbnail!|https://fixture.zebrunner.test/files/aaaaaaaa-0000-0000-0000-000000000001]
+[View screenshot|https://fixture.zebrunner.test/files/aaaaaaaa-0000-0000-0000-000000000001]
+
+h3. Recommended Actions
+
+### Immediate Actions (High Priority)
+
+# ✅ **Verify Expected Values**
+   - Check if expected values are still valid
+   - Review business logic changes
+   - Validate test data
+
+### Long-term Improvements
+
+# 🌟 **Improve Test Reliability**
+   - Add better error handling
+   - Implement test data cleanup
+   - Consider test isolation improvements
+
+
+
+h3. Links
+
+* [View Test in Zebrunner|https://fixture.zebrunner.test/projects/FIX/automation-launches/9001/tests/103]
+* [View Launch|https://fixture.zebrunner.test/projects/FIX/automation-launches/9001]
+
+----
+_Generated automatically by MCP Zebrunner Analysis Tool_
+
+```
+
+---
+
+
+## ✅ Summary
+
+Generated **3 Jira tickets** ready to paste into your Jira instance.
+
+**Tips:**
+- Copy each ticket content (inside code blocks) and paste directly into Jira
+- Jira will automatically format the markup (h1, h2, tables, links, code blocks)
+- Combined tickets help you fix multiple tests at once
+- Video links are clickable and authenticated
+

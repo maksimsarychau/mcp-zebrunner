@@ -4,6 +4,7 @@ import { VideoDownloader } from './video-downloader.js';
 import { FrameExtractor } from './frame-extractor.js';
 import { TestCaseComparator } from './test-case-comparator.js';
 import { PredictionEngine } from './prediction-engine.js';
+import { loadArtifactEvidence } from '../artifact-evidence.js';
 import {
   VideoAnalysisParams,
   VideoAnalysisResult,
@@ -60,6 +61,20 @@ export class VideoAnalyzer {
       if (this.debug) {
         console.error(`[VideoAnalyzer] Test: ${test.name}, Project: ${projectKey} (${projectId})`);
       }
+
+      // Artifact evidence (page source, artifact list). Never blocks the video analysis:
+      // loadArtifactEvidence converts every failure into a warning.
+      const includeArtifactEvidence = params.includeArtifactEvidence ?? true;
+      const includePageSource = params.includePageSource ?? true;
+      const artifactEvidence = await loadArtifactEvidence({
+        tcm: this.tcmClient,
+        testArtifacts: test.artifacts,
+        testId: params.testId,
+        testName: test.name,
+        errorMessage: test.message,
+        includeArtifacts: includeArtifactEvidence,
+        includePageSource,
+      });
 
       // Step 2: Get video URL and download video
       const videoInfo = await this.downloader.getVideoUrlFromTestSessions(
@@ -237,7 +252,8 @@ export class VideoAnalyzer {
         failureAnalysis,
         testCaseComparison,
         frames,
-        JSON.stringify(logItems)
+        JSON.stringify(logItems),
+        artifactEvidence?.pageSource?.signals
       );
 
       // Step 8: Build video metadata
@@ -311,6 +327,7 @@ export class VideoAnalyzer {
         multiTestCaseComparison: multiTestCaseComparison || undefined,  // NEW: multiple test cases
         failureAnalysis,
         prediction,
+        artifactEvidence,
         summary,
         links
       };

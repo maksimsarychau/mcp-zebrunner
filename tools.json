@@ -13,7 +13,19 @@
   },
   {
     "name": "adv_analyze_screenshot",
-    "description": "Visual analysis of screenshots with OCR, UI element detection, and AI vision analysis"
+    "description": "Visual analysis of screenshots with OCR, UI element detection, and AI vision analysis; refuses non-image artifacts (XML/text) with a pointer to adv_download_artifact"
+  },
+  {
+    "name": "adv_list_test_artifacts",
+    "description": "List artifacts attached by automation to a launch and its tests (page sources, logcat, saved screenshots, reference links) with name, kind (file|reference) and uuid; read-only, no downloads"
+  },
+  {
+    "name": "adv_get_file_metadata",
+    "description": "Get name, type, content type and size of a Zebrunner file by uuid without downloading it (Public API v1 /files/{uuid}/metadata); read-only"
+  },
+  {
+    "name": "adv_download_artifact",
+    "description": "Read or save one artifact file as attached (page source XML, logs, JSON, text) by uuid or launch+name; default inline limit 1 MiB, save up to 10 MiB, optional redact (off by default); read-only"
   },
   {
     "name": "adv_analyze_test_cases_duplicates",
@@ -25,11 +37,11 @@
   },
   {
     "name": "adv_analyze_test_execution_video",
-    "description": "Download and analyze test execution video with AI vision - extracts frames and compares with test steps"
+    "description": "Download and analyze test execution video with AI vision - extracts frames and compares with test steps; adds an Artifact evidence section and feeds page-source signals into the bug-vs-test-issue prediction"
   },
   {
     "name": "adv_analyze_test_failure",
-    "description": "Deep forensic analysis of failed tests including logs, screenshots, error classification, and comparison with last passed execution"
+    "description": "Deep forensic analysis of failed tests including logs, screenshots, artifacts and page-source signals (crash/permission dialog, keyboard, locator present/missing), error classification refined by page source, and comparison with last passed execution"
   },
   {
     "name": "adv_analyze_test_impact",
@@ -65,15 +77,15 @@
   },
   {
     "name": "adv_detailed_analyze_launch_failures",
-    "description": "Analyze ALL failures in a launch with intelligent grouping, executive summary, timeline analysis, and pattern detection"
+    "description": "Analyze ALL failures in a launch with intelligent grouping, executive summary, timeline analysis, and pattern detection; lists each test's artifacts and, with includePageSource, adds page-source signals per test and per error group"
   },
   {
     "name": "adv_download_test_screenshot",
-    "description": "Download protected screenshots from Zebrunner with authentication"
+    "description": "Download protected screenshots from Zebrunner with authentication; non-image files (for example page source XML) are delivered through the artifact download path instead of failing"
   },
   {
     "name": "adv_find_flaky_tests",
-    "description": "Find flaky tests across launches using a 3-phase approach: cross-launch flip-flop analysis, manual test case scan via TCM execution history, and dual-perspective enrichment of top flaky tests with TCM data"
+    "description": "Find flaky tests across launches using a 3-phase approach: cross-launch flip-flop analysis, manual test case scan via TCM execution history, and dual-perspective enrichment of top flaky tests with TCM data; include_artifacts=true attaches the artifact summary of each flaky test's latest failure"
   },
   {
     "name": "adv_generate_draft_test_by_key",
@@ -125,7 +137,7 @@
   },
   {
     "name": "adv_get_bug_failure_info",
-    "description": "Get failure information for a specific bug"
+    "description": "Get failure information for a specific bug; include_artifacts=true adds a compact artifact summary for up to 5 affected tests"
   },
   {
     "name": "adv_get_bug_review",
@@ -145,7 +157,7 @@
   },
   {
     "name": "adv_get_launch_details",
-    "description": "Get comprehensive information about a specific launch including test results, environment, and metadata"
+    "description": "Get comprehensive information about a specific launch including test results, environment, and metadata; compactArtifacts=true adds a launch and per-test artifact summary"
   },
   {
     "name": "adv_get_launch_summary",
@@ -153,7 +165,7 @@
   },
   {
     "name": "adv_get_launch_test_summary",
-    "description": "Lightweight aggregated test results with statistics and most unstable tests. Set includeDetailedStatuses=true for source-aware passed-manually and known-issue counts, overlap, and deduplicated union."
+    "description": "Lightweight aggregated test results with statistics and most unstable tests. Set includeDetailedStatuses=true for source-aware passed-manually and known-issue counts, overlap, and deduplicated union. includeArtifacts=true adds a compact per-test artifact summary."
   },
   {
     "name": "adv_get_platform_results_by_period",

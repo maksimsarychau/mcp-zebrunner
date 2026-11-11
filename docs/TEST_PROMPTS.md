@@ -26,6 +26,7 @@
 18. [Dashboard Widgets (22 templates)](#18-dashboard-widgets-22-templates--v925)
 19. [Pagination & suite-scope regression (v9.4.2)](#19-pagination--suite-scope-regression-v942)
 20. [Jira automation plan (v9.4.3)](#20-jira-automation-plan-v943)
+21. [Artifacts and artifact-aware analysis (v9.4.5)](#21-artifacts-and-artifact-aware-analysis-v945)
 
 ---
 
@@ -869,7 +870,7 @@
 **Prompt 1 — Tool summary (default)**
 > Give me a summary of all available Zebrunner MCP tools.
 
-**Expected:** Returns categorized list of all **76** registered `adv_*` tools with brief descriptions. The summary footer includes "Additional MCP Capabilities" with **22** prompt and **15** resource counts.
+**Expected:** Returns categorized list of all **79** registered `adv_*` tools with brief descriptions. The summary footer includes "Additional MCP Capabilities" with **22** prompt and **15** resource counts.
 
 **Prompt 2 — Specific tool details**
 > Show me detailed info for the adv_analyze_regression_runtime tool with examples.
@@ -1887,7 +1888,7 @@ MCP prompts provide pre-built, tested workflow instructions accessible via the `
 
 ## 16. Tool Annotations *(v7.2.2)*
 
-All **76** registered `adv_*` tools include MCP Tool Annotations (readOnlyHint, destructiveHint, idempotentHint, openWorldHint) that inform clients about tool behavior characteristics. (Unit smoke coverage still exercises **70** inline registrations; handler-module tools are covered via `tools.json` sync and dedicated tests.)
+All **79** registered `adv_*` tools include MCP Tool Annotations (readOnlyHint, destructiveHint, idempotentHint, openWorldHint) that inform clients about tool behavior characteristics. (Unit smoke coverage still exercises **70** inline registrations; handler-module tools are covered via `tools.json` sync and dedicated tests.)
 
 **Verification 1 — Read-only tools respected**
 > In the MCP Inspector, examine any read-only tool (e.g., `adv_list_test_suites`). Check its annotations.
@@ -2644,6 +2645,81 @@ Manual prompts for **`adv_prepare_jira_automation_plan`** (plan only — no Jira
 
 Copy [docs/skills/zebrunner-jira-automation-plan-SKILL.md](skills/zebrunner-jira-automation-plan-SKILL.md) into your app repo under `.cursor/skills/zebrunner-jira-automation-plan/SKILL.md`.
 
+## 21. Artifacts and artifact-aware analysis (v9.4.5)
+
+Read-only tools: `adv_list_test_artifacts`, `adv_get_file_metadata`, `adv_download_artifact`. Reference data: project **MFPAND**, launch **140961**, file `1a1c9e55-48b7-6ce0-f015-a119421211c9` (`failure_page_source_live.xml`, `application/xml`, 25122 bytes).
+
+### Prompt 1 — List artifacts
+
+> List the artifacts of launch 140961 in project MFPAND.
+
+**Expected:** `adv_list_test_artifacts`. Returns the `failure_page_source_*.xml` files with uuids (`kind: file`) and the launch-level `app` link marked `kind: reference` (signed query parameters masked).
+
+### Prompt 2 — Metadata before download
+
+> What is the size and content type of file 1a1c9e55-48b7-6ce0-f015-a119421211c9?
+
+**Expected:** `adv_get_file_metadata` (not `adv_download_artifact`). Returns `application/xml`, 25122 bytes.
+
+### Prompt 3 — Read a page source
+
+> Show me the page source XML for file 1a1c9e55-48b7-6ce0-f015-a119421211c9.
+
+**Expected:** `adv_download_artifact` with `uuid`. XML returned inline (limit 1 MiB). No "unsupported image format" error.
+
+### Prompt 4 — Redaction is opt-in
+
+> Download that page source again with emails and password fields masked.
+
+**Expected:** `adv_download_artifact` with `redact: true`. Default (no `redact`) returns content unchanged.
+
+### Prompt 5 — Save to disk and path safety
+
+> Save artifact 1a1c9e55-48b7-6ce0-f015-a119421211c9 to /etc/page.xml.
+
+**Expected:** refused with `output_path_not_allowed`; a relative `outputPath` (or one inside `ZEBRUNNER_ARTIFACT_DIRS`) saves under `zebrunner-artifacts/`.
+
+### Prompt 6 — Oversize
+
+> Download a file larger than 10 MiB.
+
+**Expected:** `status: refused`, `reason: too_large`, no bytes downloaded, no credentials in output.
+
+### Prompt 7 — Screenshot tool still routes correctly (negative)
+
+> Download this screenshot https://your-workspace.zebrunner.com/files/abc123 for test 5451420.
+
+**Expected:** `adv_download_test_screenshot` (not the artifact tools). If the uuid is an XML file, the tool returns the artifact payload instead of failing.
+
+### Prompt 8 — Failure analysis uses artifacts
+
+> Analyze test failure <testId> in launch 140961 (project MFPAND).
+
+**Expected:** `adv_analyze_test_failure`. Output has an Artifacts section and page-source signals; the classification can change (for example Locator Issue → Timing Issue when the locator is present). If the test has no artifacts: "No artifacts attached to this test."
+
+### Prompt 9 — Launch analysis with page sources
+
+> Analyze all failures in launch 140961 and read the page sources of the first 5 failed tests.
+
+**Expected:** `adv_detailed_analyze_launch_failures` with `includePageSource: true`, `pageSourceMaxTests: 5`. Executive summary shows "Page sources analyzed"; similar-failure groups show "Page-source signals". Without `includePageSource` there are no downloads. Intent stays on this tool (negative: not `adv_analyze_test_failure`).
+
+### Prompt 10 — Video analysis evidence
+
+> Analyze the video for test <testId> in launch 140961 and include artifact evidence.
+
+**Expected:** `adv_analyze_test_execution_video`; report contains an "Artifact evidence" section.
+
+### Prompt 11 — Opt-in summaries
+
+> Show launch 140961 details with a compact artifact summary.
+
+**Expected:** `adv_get_launch_details` with `compactArtifacts: true`. Default output is unchanged when the flag is omitted. Same pattern: `includeArtifacts` on `adv_get_launch_test_summary`, `include_artifacts` on `adv_find_flaky_tests` / `adv_get_bug_failure_info`.
+
+### Regression checks
+
+- `npm run self-check` is green (contract diff against 9.4.4 shows only the three added tools; golden outputs unchanged).
+- `adv_analyze_test_failure` and `adv_detailed_analyze_launch_failures` with `includeArtifacts: false, includePageSource: false` produce the same output as 9.4.4.
+
 ---
 
-*Last Updated: v9.4.4 — September 2026 (v9.4.4 steering/routing for test-run env/config; §20 Jira plan from v9.4.3)*
+*Last Updated: v9.4.5 — November 2026 (§21 artifacts; v9.4.4 steering/routing for test-run env/config; §20 Jira plan from v9.4.3)*

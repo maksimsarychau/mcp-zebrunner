@@ -1,0 +1,139 @@
+# 🔍 Deep Failure Analysis: Test ID 101
+
+## 📊 Executive Summary
+
+- **Test Name:** login shows home screen
+- **Status:** ❌ FAILED
+- **Root Cause:** Locator Issue
+- **Confidence:** High
+- **Stability:** 50%
+- **Test Cases:** 📋 [FIX-1](https://fixture.zebrunner.test/projects/FIX/test-cases)
+- **Bug Status:** ❌ No Bug Linked
+
+## 🔄 Comparison with Last Passed
+
+Comparing current failure with last successful execution:
+
+**Last Passed:** [Launch 8000](https://fixture.zebrunner.test/projects/FIX/automation-launches/8000/tests/55)
+**Date:** 11/13/2023, 10:13:20 PM
+
+## 🧪 Test Session Details
+
+- **Test ID:** [101](https://fixture.zebrunner.test/projects/FIX/automation-launches/9001/tests/101)
+- **Launch ID:** [9001](https://fixture.zebrunner.test/projects/FIX/automation-launches/9001)
+- **Test Class:** com.fixture.LoginTests
+- **Duration:** 1m 0s
+- **Started:** 2023-11-14T22:13:21.000Z
+- **Finished:** 2023-11-14T22:14:21.000Z
+- **Owner:** Unknown
+
+## 🚨 Failure Information
+
+### Error Message (Short)
+
+```
+Element 'home_title' not found on the screen after 10 seconds
+```
+
+### Error Classification
+
+- **Category:** Locator Issue
+- **Confidence:** High
+
+**Reasons:**
+
+- Error message indicates element not found
+- Likely UI element selector issue or timing problem
+
+## 📝 Log Analysis
+
+### Statistics
+
+- **Total Log Lines:** 4
+- **Error Count:** 1
+- **Warning Count:** 1
+- **Info Count:** 2
+
+### Last Actions Before Failure
+
+1. Login button is clicked
+2. Navigating to home
+
+### Error Logs (Top 1)
+
+1. **[ERROR]** 10:13:24 PM:
+```
+Element 'home_title' not found
+```
+
+## 📸 Screenshot Analysis
+
+### Latest Screenshot Before Failure
+
+- **URL:** [View Screenshot](https://fixture.zebrunner.test/files/aaaaaaaa-0000-0000-0000-000000000001)
+
+💡 **Tip:** Use `analyze_screenshot` tool or enable `analyzeScreenshotsWithAI: true` for detailed visual analysis including:
+- Device and screen information
+- OCR text extraction
+- Claude Vision AI analysis
+- UI element detection
+
+## 💡 Root Cause Assessment
+
+### Identified Issues
+
+**Primary Cause (Confidence: High)**
+
+Error message indicates element not found. Likely UI element selector issue or timing problem
+
+## 🎯 Actionable Recommendations
+
+### Immediate Actions (High Priority)
+
+1. ✅ **Update Element Locator**
+   - Review the page object for element selector
+   - Check if UI has changed and selector needs update
+   - Consider using more robust locator strategies
+
+2. ✅ **Add Explicit Waits**
+   - Add wait for element visibility before interaction
+   - Increase timeout if element loads slowly
+
+### Long-term Improvements
+
+3. 🌟 **Improve Test Reliability**
+   - Add better error handling
+   - Implement test data cleanup
+   - Consider test isolation improvements
+
+## 📋 Bug Report Status
+
+**Should Create Bug?** Yes
+
+**Suggested Priority:** P2 (Medium)
+
+**Draft Title:**
+
+```
+[Locator Issue] login shows home screen - Locator Issue
+```
+
+## 🔗 Linked Test Cases
+
+- **[FIX-1](https://fixture.zebrunner.test/projects/FIX/test-cases)** (Type: ZEBRUNNER)
+
+## 📊 Test Stability Context
+
+- **Stability:** 50%
+- **Failure Rate:** 50%
+- **Trend:** ⚠️ Moderately Unstable
+
+## 🔍 Quick Access Links
+
+- **[🔗 Test Session](https://fixture.zebrunner.test/projects/FIX/automation-launches/9001/tests/101)**
+- **[🚀 Launch](https://fixture.zebrunner.test/projects/FIX/automation-launches/9001)**
+- **[📋 Test Case FIX-1](https://fixture.zebrunner.test/projects/FIX/test-cases)**
+
+---
+
+*Analysis generated at <NOW>*

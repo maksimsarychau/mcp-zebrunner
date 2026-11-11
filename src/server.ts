@@ -19,6 +19,7 @@ import {
   truncateBulkItems,
 } from "./utils/bulk-truncation.js";
 import { appendResponseSizeNotice } from "./utils/response-size.js";
+import { compactArtifactSummary, type CompactArtifactSummary } from "./utils/artifacts.js";
 import {
   environmentInputNeedsCatalog,
   environmentResolutionPreviewLines,
@@ -7296,6 +7297,9 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       includeDetailedStatuses: z.boolean().default(false).describe(
         "Include normalized source-aware status counters as siblings; raw launch/test-run payloads remain unchanged."
       ),
+      compactArtifacts: z.boolean().default(false).describe(
+        "Add a compact artifact summary (launch-level and per-test counts + names). Use adv_list_test_artifacts for uuids/links and adv_download_artifact to read a file."
+      ),
       format: z.enum(['dto', 'json', 'string']).default('json').describe("Output format"),
       chart: z.enum(['none', 'png', 'html', 'text']).default('none').describe(
         "When set, returns a chart visualization. 'png' = base64 PNG image, 'html' = Chart.js page, 'text' = ASCII chart."
@@ -7361,6 +7365,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       summaryOnly: z.boolean().default(false).describe("Return only statistics without full test list (most lightweight)"),
       includeLabels: z.boolean().default(false).describe("Include labels array (increases token usage)"),
       includeTestCases: z.boolean().default(false).describe("Include testCases array (increases token usage)"),
+      includeArtifacts: z.boolean().default(false).describe("Add a compact per-test artifact summary (count, files/links, names). No downloads; use adv_list_test_artifacts for uuids"),
       includeDetailedStatuses: z.boolean().default(false).describe(
         "Include separate launch API buckets and per-test manual-pass/known-issue classifications."
       ),
@@ -7750,6 +7755,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       enrich_top_n: z.number().int().min(0).default(10).describe("Number of top automated flaky tests to enrich with TCM data (Phase 3). Set to 0 to skip."),
       limit: z.number().int().positive().max(200).default(50).describe("Max flaky tests to return"),
       include_history: z.boolean().default(false).describe("Include per-test execution timeline with dates, statuses, and MANUAL/AUTOMATED type"),
+      include_artifacts: z.boolean().default(false).describe("Attach a compact artifact summary (count, names) of each flaky test's latest failure, with launch_id and test_id for adv_list_test_artifacts. No downloads"),
       format: z.enum(['json', 'string', 'jira']).default('json').describe("Output format: json, markdown string, or Jira wiki markup"),
       count_only: z.boolean().default(false).describe(
         "When true, returns only the count of automated flaky tests found (Phase 1 only). Skips Phase 2/3."
@@ -7789,6 +7795,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
           enrich_top_n: args.enrich_top_n,
           limit: args.limit,
           include_history: args.include_history,
+          include_artifacts: args.include_artifacts,
           format: args.format,
           count_only: args.count_only,
           chart: args.chart,
@@ -7913,8 +7920,9 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       projectId: z.number().int().positive().optional().describe("Project ID - alternative to projectKey"),
       includeScreenshots: z.boolean().default(true).describe("Include screenshot links"),
       includeLogs: z.boolean().default(true).describe("Include log analysis"),
-      includeArtifacts: z.boolean().default(true).describe("Include all test artifacts"),
-      includePageSource: z.boolean().default(true).describe("Include page source analysis"),
+      includeArtifacts: z.boolean().default(true).describe("List all test artifacts (page sources, logs, reference links) with names, kinds and uuids; prints an explicit 'none' line in the detailed format when the test has no artifacts"),
+      includePageSource: z.boolean().default(true).describe("Fetch the failure page source (failure_page_source*.xml) and add signals: crash/ANR dialog, permission dialog, keyboard, loading, toast, locator present/missing. Refines the error classification. Failures to fetch become a warning, never an error"),
+      redactPageSource: z.boolean().default(false).describe("Mask emails and password-node values in text derived from the page source (default: false). Full file: use adv_download_artifact"),
       includeVideo: z.boolean().default(false).describe("Include video URL"),
       analyzeSimilarFailures: z.boolean().default(true).describe("Find similar failures in the launch"),
       analyzeScreenshotsWithAI: z.boolean().default(true).describe("Download and analyze screenshots with AI (Claude Vision)"),
@@ -8001,7 +8009,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
   server.registerTool(
     "download_test_screenshot",
     {
-      description: "📸 Download test screenshot with authentication from Zebrunner",
+      description: "📸 Download test screenshot with authentication from Zebrunner. Non-image files (e.g. failure_page_source_*.xml) are detected and delivered through the artifact download path instead of failing - prefer adv_download_artifact for those.",
     inputSchema: {
       screenshotUrl: z.string().describe("Screenshot URL (e.g., 'https://your-workspace.zebrunner.com/files/abc123' or '/files/abc123')"),
       testId: z.number().int().positive().optional().describe("Test ID for context"),
@@ -8038,6 +8046,7 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       description: "🔍 Analyze test screenshot with OCR and visual analysis - returns image to Claude Vision for detailed analysis",
     inputSchema: {
       screenshotUrl: z.string().optional().describe("Screenshot URL to download and analyze"),
+      artifactUuid: z.string().optional().describe("File UUID of an image artifact (from adv_list_test_artifacts); shorthand for screenshotUrl '/files/<uuid>'. Non-image files are rejected with a pointer to adv_download_artifact"),
       screenshotPath: z.string().optional().describe("Local path to screenshot file"),
       testId: z.number().int().positive().optional().describe("Test ID for context"),
       enableOCR: z.boolean().default(false).describe("Enable OCR text extraction (slower)"),
@@ -8067,6 +8076,112 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
     }
   );
 
+  // ========== Artifact tools (read-only; Public API v1 /files + Reporting artifacts) ==========
+
+  server.registerTool(
+    "list_test_artifacts",
+    {
+      description:
+        "📎 List artifacts attached by automation to a launch and/or its tests (page sources, logcat, screenshots saved as files, reference links). " +
+        "Returns slim items {scope, testId, name, kind (file|reference), uuid | url, optional contentType/size}. " +
+        "kind=file items have a uuid you can read with adv_download_artifact; kind=reference items are links only (signed query parameters are masked). " +
+        "Session video and session logs are not artifacts and are out of scope. " +
+        "💡 Pass testId to scope to one test; includeMetadata=true adds content type and size (one bulk call).",
+      inputSchema: {
+        projectKey: z.string().min(1).optional().describe("Project key (e.g., 'MFPAND') - alternative to projectId"),
+        projectId: z.number().int().positive().optional().describe("Project ID - alternative to projectKey"),
+        launchId: z.number().int().positive().describe("Launch ID / test run ID (e.g., 140961)"),
+        testId: z.number().int().positive().optional().describe("Only artifacts of this test (omit for all tests in the launch)"),
+        kind: z.enum(["all", "file", "reference"]).default("all").describe("file = uploaded files (/files/<uuid>), reference = external links, all = both"),
+        nameContains: z.string().min(1).optional().describe("Case-insensitive filter on the artifact name (e.g., 'page_source')"),
+        includeLaunchLevel: z.boolean().default(true).describe("Include launch-level artifacts (e.g., the app build link)"),
+        includeMetadata: z.boolean().default(false).describe("Add contentType and sizeInBytes for file artifacts via the bulk file-metadata endpoint"),
+        limit: z.number().int().min(1).max(1000).default(200).describe("Maximum artifacts returned (default: 200)"),
+      },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async (args) => {
+      try {
+        debugLog("adv_list_test_artifacts called", args);
+        return await reportingHandlers.artifactHandlers.listTestArtifacts(args);
+      } catch (error: any) {
+        debugLog("Error in adv_list_test_artifacts", { error: error.message, args });
+        return { content: [{ type: "text" as const, text: `❌ Error listing artifacts: ${error.message}` }] };
+      }
+    }
+  );
+
+  server.registerTool(
+    "get_file_metadata",
+    {
+      description:
+        "🗂️ Get metadata (name, type, content type, size in bytes, upload time) for a Zebrunner file by uuid WITHOUT downloading it. " +
+        "Use before adv_download_artifact to check size and content type. Accepts a bare uuid or a '/files/<uuid>' artifact value.",
+      inputSchema: {
+        uuid: z.string().min(1).describe("File UUID (e.g., '1a1c9e55-48b7-6ce0-f015-a119421211c9') or '/files/<uuid>'"),
+      },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async (args) => {
+      try {
+        debugLog("adv_get_file_metadata called", args);
+        return await reportingHandlers.artifactHandlers.getFileMetadataTool(args);
+      } catch (error: any) {
+        debugLog("Error in adv_get_file_metadata", { error: error.message, args });
+        return { content: [{ type: "text" as const, text: `❌ Error getting file metadata: ${error.message}` }] };
+      }
+    }
+  );
+
+  server.registerTool(
+    "download_artifact",
+    {
+      description:
+        "⬇️ Read or save ONE test/launch artifact file exactly as attached by automation (page source XML, logs, JSON, text, binaries). " +
+        "Identify it by uuid OR by launchId + name (+ testId, + projectKey/projectId). No image decoding is performed, so XML/text never fails on 'unsupported image format'. " +
+        "Delivery: text types are returned inline by default (limit maxBytes, default 1 MiB, max 10 MiB); outputPath saves to disk (max 10 MiB, only inside the default temp folder zebrunner-artifacts/ or folders listed in ZEBRUNNER_ARTIFACT_DIRS); larger files are refused with a clear message. " +
+        "redact=true masks email addresses and password-node text/value in text artifacts (OFF by default - page sources may contain personal data when returned). " +
+        "Output reports status, size and content type only - never credentials.",
+      inputSchema: {
+        uuid: z.string().min(1).optional().describe("File UUID or '/files/<uuid>' (from adv_list_test_artifacts)"),
+        projectKey: z.string().min(1).optional().describe("Project key - required with launchId + name unless projectId is given"),
+        projectId: z.number().int().positive().optional().describe("Project ID - alternative to projectKey"),
+        launchId: z.number().int().positive().optional().describe("Launch ID, used with name to find the file"),
+        testId: z.number().int().positive().optional().describe("Test ID, used with launchId + name for test-level artifacts"),
+        name: z.string().min(1).optional().describe("Artifact name, e.g. 'failure_page_source_live.xml'"),
+        outputPath: z.string().optional().describe("Save to this path (relative = inside the default artifact folder; absolute must be inside an allowed folder). Omit to return text inline."),
+        returnContent: z.boolean().optional().describe("Return text content inline. Default: true for text types when outputPath is not set."),
+        maxBytes: z.number().int().positive().optional().describe("Inline return limit in bytes (default 1048576 = 1 MiB; hard cap 10 MiB)"),
+        redact: z.boolean().default(false).describe("Mask emails and password-node values in text content (default: false)"),
+      },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async (args) => {
+      try {
+        debugLog("adv_download_artifact called", args);
+        return await reportingHandlers.artifactHandlers.downloadArtifact(args);
+      } catch (error: any) {
+        debugLog("Error in adv_download_artifact", { error: error.message, args });
+        return { content: [{ type: "text" as const, text: `❌ Error downloading artifact: ${error.message}` }] };
+      }
+    }
+  );
+
   server.registerTool(
     "analyze_test_execution_video",
     {
@@ -8086,6 +8201,8 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       analyzeSimilarFailures: z.boolean().default(true).describe("Find similar failures in project (last 30 days, top 10)"),
       includeHistoricalTrends: z.boolean().default(true).describe("Analyze test stability and flakiness (last 30 runs)"),
       includeLogCorrelation: z.boolean().default(true).describe("Correlate frames with log timestamps"),
+      includeArtifactEvidence: z.boolean().default(true).describe("List test artifacts (page source, logs, links) in an 'Artifact evidence' section"),
+      includePageSource: z.boolean().default(true).describe("Fetch the failure page source and use its signals (crash/permission dialog, keyboard, loading, toast, locator) in the analysis and prediction"),
       format: z.enum(['detailed', 'summary', 'jira']).default('detailed').describe("Output format"),
       generateVideoReport: z.boolean().default(true).describe("Generate timestamped report")
     },
@@ -8127,6 +8244,10 @@ TWO-STEP FLOW: 1) Call with all fields (without confirm) to get a preview + conf
       filterType: z.enum(['all', 'without_issues']).default('without_issues').describe("Filter: 'without_issues' = only tests without linked Jira tickets (DEFAULT), 'all' = all failed tests"),
       includeScreenshotAnalysis: z.boolean().default(false).describe("Download and analyze screenshots with AI for each test (increases analysis time)"),
       screenshotAnalysisType: z.enum(['basic', 'detailed']).default('detailed').describe("Screenshot analysis type if enabled"),
+      includeArtifacts: z.boolean().default(true).describe("List each analyzed test's artifacts (names come from the launch tests list, no extra calls)"),
+      includePageSource: z.boolean().default(false).describe("Fetch each analyzed test's failure page source and add signals per test and per error group (crash/permission dialog, keyboard, loading, locator). One download per test, capped by pageSourceMaxTests"),
+      pageSourceMaxTests: z.number().int().min(1).max(50).default(10).describe("Max page sources fetched per call when includePageSource is true (also capped by env ARTIFACT_EVIDENCE_MAX_FILES)"),
+      redactPageSource: z.boolean().default(false).describe("Mask emails and password-node values in text derived from page sources (default: false)"),
       format: z.enum(['detailed', 'summary', 'jira']).default('summary').describe("Output format: 'detailed' = full analysis, 'summary' = condensed, 'jira' = ready for Jira tickets with smart grouping"),
       jiraDetailLevel: z.enum(['basic', 'full']).default('full').describe("Jira detail level: 'basic' = fast (no deep analysis), 'full' = comprehensive with deep analysis (DEFAULT, slower but thorough)"),
       executionMode: z.enum(['sequential', 'parallel', 'batches']).default('sequential').describe("Execution mode: sequential (safe), parallel (fast), or batches (balanced)"),
@@ -9540,7 +9661,9 @@ ${priorityAnalysis.statistics.withoutDefects > 0 ? `- **Tracking Gap:** ${priori
         .describe("Time period preset (used when period_mode is preset)"),
       ...widgetPeriodZodFields('Last 14 Days'),
       format: z.enum(['detailed', 'summary', 'json']).default('detailed')
-        .describe("Output format: detailed (full info), summary (concise), or json (raw data)")
+        .describe("Output format: detailed (full info), summary (concise), or json (raw data)"),
+      include_artifacts: z.boolean().default(false)
+        .describe("Add a compact artifact summary (count + names) for up to 5 affected tests (one lookup each). Use adv_list_test_artifacts / adv_download_artifact to read files"),
     },
       annotations: {
         readOnlyHint: true,
@@ -9608,9 +9731,30 @@ ${priorityAnalysis.statistics.withoutDefects > 0 ? `- **Tracking Gap:** ${priori
             testName: testInfo.text,
             testUrl: testInfo.url,
             defectKey: defectInfo.text || "No defect",
-            defectUrl: defectInfo.url
+            defectUrl: defectInfo.url,
+            artifacts: undefined as CompactArtifactSummary | undefined | { error: string }
           };
         });
+
+        // Opt-in: compact artifact summary for the first few affected tests (RUN_ID = launch id)
+        if (args.include_artifacts) {
+          await Promise.all(detailsInfo.slice(0, 5).map(async (detail) => {
+            const launchId = Number(detail.runId);
+            const testId = Number(detail.testId);
+            if (!Number.isFinite(launchId) || !Number.isFinite(testId)) return;
+            try {
+              const t = await reportingClient.getTestById(launchId, testId, projectId);
+              detail.artifacts = compactArtifactSummary((t as any).artifacts);
+            } catch (e: any) {
+              detail.artifacts = { error: `artifacts unavailable: ${String(e?.message || e).slice(0, 120)}` };
+            }
+          }));
+        }
+        const artifactLine = (a: any, indent = ''): string => {
+          if (!a) return '';
+          if (a.error) return `\n${indent}**Artifacts:** ${a.error}`;
+          return a.count > 0 ? `\n${indent}**Artifacts:** ${a.count} (${a.names.join(', ')})` : `\n${indent}**Artifacts:** none`;
+        };
 
         // Format output based on format parameter
         if (args.format === 'json') {
@@ -9647,7 +9791,7 @@ ${detailsInfo.slice(0, 5).map((detail, i) => {
   const testLink = toMarkdownLink(detail.testUrl, detail.testName || `Test ${detail.testId}`);
   const defectLink = toMarkdownLink(detail.defectUrl, detail.defectKey);
   return `${i + 1}. ${testLink}
-   Run: ${detail.runName} | Defect: ${defectLink}`;
+   Run: ${detail.runName} | Defect: ${defectLink}${artifactLine(detail.artifacts, '   ')}`;
 }).join('\n\n')}
 
 ${detailsInfo.length > 5 ? `\n*...and ${detailsInfo.length - 5} more failures*` : ''}`;
@@ -9688,7 +9832,7 @@ ${detailsInfo.map((detail, i) => {
 **Run:** ${detail.runName}
 **Run ID:** ${detail.runId}
 **Test ID:** ${detail.testId}
-**Defect:** ${defectLink}`;
+**Defect:** ${defectLink}${artifactLine(detail.artifacts)}`;
 }).join('\n\n')}`;
 
         return {

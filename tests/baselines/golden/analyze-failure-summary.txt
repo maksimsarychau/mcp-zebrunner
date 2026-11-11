@@ -1,0 +1,25 @@
+# 🔍 Test Failure Summary: 101
+
+**Test:** login shows home screen
+**Test ID:** [101](https://fixture.zebrunner.test/projects/FIX/automation-launches/9001/tests/101)
+**Status:** ❌ FAILED
+**Suite/Test Class:** com.fixture.LoginTests
+**Error Type:** Locator Issue (High confidence)
+**Stability:** 50%
+**Duration:** 1m 0s
+**Test Cases:** 📋 [FIX-1](https://fixture.zebrunner.test/projects/FIX/test-cases)
+
+**Error (Short):**
+```
+Element 'home_title' not found on the screen after 10 seconds
+```
+
+**Error Logs (Top 1):**
+
+1. **[ERROR]** 10:13:24 PM:
+```
+Element 'home_title' not found
+```
+
+
+**[View Test Details](https://fixture.zebrunner.test/projects/FIX/automation-launches/9001/tests/101)** | **[View Launch](https://fixture.zebrunner.test/projects/FIX/automation-launches/9001)**

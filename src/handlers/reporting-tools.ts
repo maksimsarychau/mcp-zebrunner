@@ -8,6 +8,53 @@ import type { TestEffectiveDuration, TestSessionBreakdown, SessionResolutionStra
 import { buildChartResponse, type ChartConfig } from "../utils/chart-generator.js";
 import { getConfig } from "../utils/config-loader.js";
 import { extractJobSummary } from "../utils/launch-job-build.js";
+import { ArtifactToolHandlers } from "./artifact-tools.js";
+import { steeringHint } from "../helpers/steering.js";
+import { extractFileUuid, isImageContentType, compactArtifactSummary, type CompactArtifactSummary } from "../utils/artifacts.js";
+import {
+  EvidenceBudget,
+  getEvidenceMaxFiles,
+  diffArtifactNames,
+  diffSignals,
+  loadArtifactEvidence,
+  refineClassification,
+  renderEvidenceJira,
+  renderEvidenceMarkdown,
+  signalSummary,
+  type ArtifactEvidence,
+} from "../utils/artifact-evidence.js";
+
+/** Arguments of analyzeTestFailureById (also used internally by launch-level analysis). */
+export interface AnalyzeTestFailureArgs {
+  testId: number;
+  testRunId: number;
+  projectKey?: string;
+  projectId?: number;
+  includeScreenshots?: boolean;
+  includeLogs?: boolean;
+  includeArtifacts?: boolean;
+  includePageSource?: boolean;
+  includeVideo?: boolean;
+  analyzeSimilarFailures?: boolean;
+  analyzeScreenshotsWithAI?: boolean;
+  screenshotAnalysisType?: 'basic' | 'detailed';
+  format?: 'detailed' | 'summary' | 'jira';
+  compareWithLastPassed?: {
+    enabled: boolean;
+    includeLogs?: boolean;
+    includeScreenshots?: boolean;
+    includeVideo?: boolean;
+    includeEnvironment?: boolean;
+    includeDuration?: boolean;
+  };
+  jira_base_url?: string;
+  /** Mask emails and password-node values in text derived from the page source (default: false). */
+  redactPageSource?: boolean;
+  /** Internal: shared download budget for bulk analyses. */
+  evidenceBudget?: EvidenceBudget;
+  /** Internal: bulk callers set this to keep per-test output compact (no "no artifacts" line). */
+  suppressNoArtifactsLine?: boolean;
+}
 import {
   getLaunchDetailedStatusCounts,
   getTestRunDetailedStatusCounts,
@@ -18,6 +65,15 @@ import {
  */
 export class ZebrunnerReportingToolHandlers {
   private videoAnalyzer: VideoAnalyzer | null = null;
+  private _artifactHandlers: ArtifactToolHandlers | null = null;
+
+  /** Artifact read-only helpers (list / metadata / download) bound to this handler's clients. */
+  get artifactHandlers(): ArtifactToolHandlers {
+    if (!this._artifactHandlers) {
+      this._artifactHandlers = new ArtifactToolHandlers(this.reportingClient, this.tcmClient);
+    }
+    return this._artifactHandlers;
+  }
 
   constructor(
     private reportingClient: ZebrunnerReportingClient,
@@ -41,6 +97,7 @@ export class ZebrunnerReportingToolHandlers {
       includeTestSessions,
       includeJobParameters,
       includeDetailedStatuses,
+      compactArtifacts,
       format 
     } = input;
 
@@ -74,6 +131,9 @@ export class ZebrunnerReportingToolHandlers {
         try {
           const launchDetails = await this.reportingClient.getLaunch(launchId, resolvedProjectId!);
           results.launch = launchDetails;
+          if (compactArtifacts) {
+            results.launchArtifactsSummary = compactArtifactSummary((launchDetails as any).artifacts);
+          }
           if (includeDetailedStatuses) {
             results.launchDetailedStatuses = getLaunchDetailedStatusCounts(
               launchDetails,
@@ -125,6 +185,17 @@ export class ZebrunnerReportingToolHandlers {
               });
 
               results.testRunsSummary = summary;
+              if (compactArtifacts) {
+                const withArtifacts = testRuns.items
+                  .map((t: any) => ({ testId: t.id, ...compactArtifactSummary(t.artifacts, 5) }))
+                  .filter((t: any) => t.count > 0);
+                results.testArtifactsSummary = {
+                  testsWithArtifacts: withArtifacts.length,
+                  totalArtifacts: withArtifacts.reduce((n: number, t: any) => n + t.count, 0),
+                  tests: withArtifacts.slice(0, 50),
+                  hint: 'Use adv_list_test_artifacts for uuids/links and adv_download_artifact to read a file.',
+                };
+              }
               if (includeDetailedStatuses) {
                 results.testRunsDetailedStatuses = getTestRunDetailedStatusCounts(
                   testRuns.items,
@@ -220,6 +291,8 @@ export class ZebrunnerReportingToolHandlers {
     summaryOnly?: boolean;
     includeLabels?: boolean;
     includeTestCases?: boolean;
+    /** Opt-in: add a compact artifact summary (count + names) to each test. */
+    includeArtifacts?: boolean;
     format?: 'dto' | 'json' | 'string';
     session_resolution?: SessionResolutionStrategy;
     jira_base_url?: string;
@@ -240,6 +313,7 @@ export class ZebrunnerReportingToolHandlers {
       summaryOnly = false,
       includeLabels = false,
       includeTestCases = false,
+      includeArtifacts = false,
       format = 'json',
       session_resolution = 'auto',
       jira_base_url,
@@ -381,6 +455,11 @@ export class ZebrunnerReportingToolHandlers {
         // Optionally include test cases (can be large)
         if (includeTestCases) {
           baseTest.testCases = test.testCases || [];
+        }
+
+        // Optionally include a compact artifact summary (names only; no downloads)
+        if (includeArtifacts) {
+          baseTest.artifacts = compactArtifactSummary((test as any).artifacts);
         }
         
         return baseTest;
@@ -1822,30 +1901,19 @@ export class ZebrunnerReportingToolHandlers {
   /**
    * Analyze test failure by ID - Deep forensic analysis
    */
-  async analyzeTestFailureById(input: {
-    testId: number;
-    testRunId: number;
-    projectKey?: string;
-    projectId?: number;
-    includeScreenshots?: boolean;
-    includeLogs?: boolean;
-    includeArtifacts?: boolean;
-    includePageSource?: boolean;
-    includeVideo?: boolean;
-    analyzeSimilarFailures?: boolean;
-    analyzeScreenshotsWithAI?: boolean;
-    screenshotAnalysisType?: 'basic' | 'detailed';
-    format?: 'detailed' | 'summary' | 'jira';
-    compareWithLastPassed?: {
-      enabled: boolean;
-      includeLogs?: boolean;
-      includeScreenshots?: boolean;
-      includeVideo?: boolean;
-      includeEnvironment?: boolean;
-      includeDuration?: boolean;
-    };
-    jira_base_url?: string;
-  }) {
+  async analyzeTestFailureById(input: AnalyzeTestFailureArgs) {
+    return (await this.analyzeTestFailureWithEvidence(input)).result;
+  }
+
+  /**
+   * Core of analyzeTestFailureById. Returns the rendered result AND the structured artifact
+   * evidence (side channel used by analyzeLaunchFailures so it never has to parse evidence text).
+   */
+  private async analyzeTestFailureWithEvidence(input: AnalyzeTestFailureArgs): Promise<{
+    result: { content: Array<{ type: "text"; text: string }> };
+    evidence: ArtifactEvidence | null;
+  }> {
+    let evidence: ArtifactEvidence | null = null;
     const {
       testId,
       testRunId,
@@ -1861,7 +1929,8 @@ export class ZebrunnerReportingToolHandlers {
       screenshotAnalysisType = 'detailed',
       format = 'detailed',
       compareWithLastPassed,
-      jira_base_url
+      jira_base_url,
+      redactPageSource = false
     } = input;
 
     try {
@@ -1884,6 +1953,19 @@ export class ZebrunnerReportingToolHandlers {
       if (!testRun) {
         throw new Error(`Test ID ${testId} not found in launch ${testRunId} (${allTestRuns.items.length} tests scanned)`);
       }
+
+      // Artifact evidence (never throws; failures become warnings). Null when both flags are off.
+      evidence = await loadArtifactEvidence({
+        tcm: this.tcmClient,
+        testArtifacts: testRun.artifacts,
+        testId,
+        testName: testRun.name,
+        errorMessage: testRun.message,
+        includeArtifacts,
+        includePageSource,
+        redact: redactPageSource,
+        budget: input.evidenceBudget,
+      });
 
       let logsAndScreenshots;
       let logsFetchError: string | null = null;
@@ -1922,8 +2004,11 @@ export class ZebrunnerReportingToolHandlers {
         }
       }
 
-      // Classify the error
-      const errorClassification = this.classifyError(testRun.message || '', logAnalysis?.errorLogs || []);
+      // Classify the error (page-source signals refine the category when available)
+      const errorClassification = refineClassification(
+        this.classifyError(testRun.message || '', logAnalysis?.errorLogs || []),
+        evidence
+      );
 
       if (format === 'jira') {
         const jiraTicket = await this.generateJiraTicketForTest({
@@ -1938,16 +2023,20 @@ export class ZebrunnerReportingToolHandlers {
           screenshots,
           similarFailures,
           baseUrl: this.reportingClient['config'].baseUrl,
-          jiraBaseUrlOverride: jira_base_url
+          jiraBaseUrlOverride: jira_base_url,
+          evidence
         });
 
         return {
-          content: [
-            {
-              type: "text" as const,
-              text: jiraTicket
-            }
-          ]
+          result: {
+            content: [
+              {
+                type: "text" as const,
+                text: jiraTicket
+              }
+            ]
+          },
+          evidence
         };
       }
 
@@ -1984,7 +2073,9 @@ export class ZebrunnerReportingToolHandlers {
               currentTestRun: testRun,
               currentLogs: logsAndScreenshots,
               compareOptions: compareWithLastPassed,
-              lastPassedExecution: lastPassed
+              lastPassedExecution: lastPassed,
+              currentEvidence: evidence,
+              redactPageSource
             });
           }
         } catch (error: any) {
@@ -2010,7 +2101,9 @@ export class ZebrunnerReportingToolHandlers {
         analyzeScreenshotsWithAI,
         screenshotAnalysisType,
         comparisonData,
-        jiraBaseUrlOverride: jira_base_url
+        jiraBaseUrlOverride: jira_base_url,
+        evidence,
+        showNoArtifactsLine: !input.suppressNoArtifactsLine
       });
 
       const warnings: string[] = [];
@@ -2022,22 +2115,28 @@ export class ZebrunnerReportingToolHandlers {
         : '';
 
       return {
-        content: [
-          {
-            type: "text" as const,
-            text: analysisReport + warningBlock
-          }
-        ]
+        result: {
+          content: [
+            {
+              type: "text" as const,
+              text: analysisReport + warningBlock
+            }
+          ]
+        },
+        evidence
       };
 
     } catch (error: any) {
       return {
-        content: [
-          {
-            type: "text" as const,
-            text: `Error analyzing test failure: ${error.message}`
-          }
-        ]
+        result: {
+          content: [
+            {
+              type: "text" as const,
+              text: `Error analyzing test failure: ${error.message}`
+            }
+          ]
+        },
+        evidence
       };
     }
   }
@@ -2255,6 +2354,8 @@ export class ZebrunnerReportingToolHandlers {
     currentLogs: any;
     compareOptions: any;
     lastPassedExecution: any;
+    currentEvidence?: ArtifactEvidence | null;
+    redactPageSource?: boolean;
   }): Promise<any> {
     const { testId, projectId, currentTestRun, currentLogs, compareOptions, lastPassedExecution } = params;
 
@@ -2366,6 +2467,39 @@ export class ZebrunnerReportingToolHandlers {
       }
     }
 
+    // Compare artifacts / page-source signals (only when artifact evidence was requested for the current run)
+    if (params.currentEvidence) {
+      try {
+        const passedEvidence = await loadArtifactEvidence({
+          tcm: this.tcmClient,
+          testArtifacts: lastPassedTestRun.artifacts,
+          testId: lastPassedTestRun.id,
+          testName: lastPassedTestRun.name,
+          includeArtifacts: true,
+          includePageSource: !!params.currentEvidence.pageSource,
+          redact: params.redactPageSource,
+        });
+        if (passedEvidence) {
+          const names = diffArtifactNames(params.currentEvidence.artifacts, passedEvidence.artifacts);
+          const signalDiffs =
+            params.currentEvidence.pageSource && passedEvidence.pageSource
+              ? diffSignals(params.currentEvidence.pageSource.signals, passedEvidence.pageSource.signals)
+              : [];
+          comparisonData.artifacts = {
+            currentCount: params.currentEvidence.artifacts.length,
+            lastPassedCount: passedEvidence.artifacts.length,
+            onlyInFailed: names.onlyFailed,
+            onlyInLastPassed: names.onlyPassed,
+            signalDifferences: signalDiffs,
+            pageSourceCompared: !!(params.currentEvidence.pageSource && passedEvidence.pageSource),
+            warnings: passedEvidence.warnings,
+          };
+        }
+      } catch (error: any) {
+        comparisonData.artifacts = { error: 'Failed to compare artifacts' };
+      }
+    }
+
     return comparisonData;
   }
 
@@ -2388,6 +2522,8 @@ export class ZebrunnerReportingToolHandlers {
     screenshotAnalysisType?: 'basic' | 'detailed';
     comparisonData?: any;
     jiraBaseUrlOverride?: string;
+    evidence?: ArtifactEvidence | null;
+    showNoArtifactsLine?: boolean;
   }): Promise<string> {
     const {
       testRun,
@@ -2404,7 +2540,9 @@ export class ZebrunnerReportingToolHandlers {
       analyzeScreenshotsWithAI = false,
       screenshotAnalysisType = 'detailed',
       comparisonData,
-      jiraBaseUrlOverride
+      jiraBaseUrlOverride,
+      evidence,
+      showNoArtifactsLine = true
     } = params;
 
     const wallClockDuration = testRun.finishTime && testRun.startTime
@@ -2438,7 +2576,8 @@ export class ZebrunnerReportingToolHandlers {
         screenshots,
         similarFailures,
         testSessionUrl,
-        baseUrl
+        baseUrl,
+        evidence
       });
     }
 
@@ -2544,6 +2683,29 @@ export class ZebrunnerReportingToolHandlers {
           } else {
             report += `- Current Screenshots: ${comparisonData.screenshots.currentCount}\n`;
             report += `- Last Passed Screenshots: ${comparisonData.screenshots.lastPassedCount}\n`;
+          }
+          report += `\n`;
+        }
+
+        if (comparisonData.artifacts) {
+          report += `**Artifact Comparison:**\n`;
+          if (comparisonData.artifacts.error) {
+            report += `- ⚠️ ${comparisonData.artifacts.error}\n`;
+          } else {
+            report += `- Current Artifacts: ${comparisonData.artifacts.currentCount}\n`;
+            report += `- Last Passed Artifacts: ${comparisonData.artifacts.lastPassedCount}\n`;
+            if (comparisonData.artifacts.onlyInFailed.length > 0) {
+              report += `- Only in failed run: ${comparisonData.artifacts.onlyInFailed.join(', ')}\n`;
+            }
+            if (comparisonData.artifacts.onlyInLastPassed.length > 0) {
+              report += `- Only in last passed run: ${comparisonData.artifacts.onlyInLastPassed.join(', ')}\n`;
+            }
+            for (const d of comparisonData.artifacts.signalDifferences) {
+              report += `- 🔶 ${d}\n`;
+            }
+            for (const w of comparisonData.artifacts.warnings || []) {
+              report += `- ⚠️ ${w}\n`;
+            }
           }
           report += `\n`;
         }
@@ -2691,6 +2853,9 @@ export class ZebrunnerReportingToolHandlers {
         }
       }
     }
+
+    // Artifacts and page-source signals (empty string when evidence was not requested)
+    report += renderEvidenceMarkdown(evidence, { format: 'detailed', baseUrl, showNone: showNoArtifactsLine });
 
     // Screenshots with optional AI analysis (from test sessions)
     // Collect all screenshots from all sessions
@@ -2885,6 +3050,7 @@ export class ZebrunnerReportingToolHandlers {
     similarFailures: any[];
     testSessionUrl: string;
     baseUrl: string;
+    evidence?: ArtifactEvidence | null;
   }): Promise<string> {
     const {
       testRun,
@@ -2899,7 +3065,8 @@ export class ZebrunnerReportingToolHandlers {
       screenshots,
       similarFailures,
       testSessionUrl,
-      baseUrl
+      baseUrl,
+      evidence
     } = params;
 
     let report = `# 🔍 Test Failure Summary: ${testId}\n\n`;
@@ -2994,6 +3161,8 @@ export class ZebrunnerReportingToolHandlers {
       report += `**Similar Failures:** ${similarFailures.length} found in this launch\n`;
     }
 
+    report += renderEvidenceMarkdown(evidence, { format: 'summary', baseUrl });
+
     const launchUrl = `${baseUrl}/projects/${projectKey}/automation-launches/${testRunId}`;
     report += `\n**[View Test Details](${testSessionUrl})** | **[View Launch](${launchUrl})**\n`;
 
@@ -3023,6 +3192,16 @@ export class ZebrunnerReportingToolHandlers {
       recommendations += `2. ✅ **Improve Wait Strategies**\n`;
       recommendations += `   - Use explicit waits instead of implicit waits\n`;
       recommendations += `   - Wait for specific conditions before proceeding\n\n`;
+    } else if (errorClassification.category === 'Application Crash / ANR') {
+      recommendations += `### Immediate Actions (High Priority)\n\n`;
+      recommendations += `1. ✅ **Investigate the App Crash / ANR**\n`;
+      recommendations += `   - Check device logs (logcat) and crash reports for this build\n`;
+      recommendations += `   - Re-run on another device to rule out device-specific problems\n\n`;
+    } else if (errorClassification.category === 'Test Setup Issue') {
+      recommendations += `### Immediate Actions (High Priority)\n\n`;
+      recommendations += `1. ✅ **Handle the Permission Dialog**\n`;
+      recommendations += `   - Grant required permissions in test setup or auto-accept them\n`;
+      recommendations += `   - Reset app permissions between runs\n\n`;
     } else if (errorClassification.category === 'Business Issue') {
       recommendations += `### Immediate Actions (High Priority)\n\n`;
       recommendations += `1. ✅ **Verify Expected Values**\n`;
@@ -3075,11 +3254,48 @@ export class ZebrunnerReportingToolHandlers {
         detectImageFormat 
       } = await import('../utils/screenshot-analyzer.js');
 
+      // Non-image guard (v9.4.5): artifacts such as failure_page_source_*.xml share the /files/<uuid>
+      // URL shape with screenshots. Never push them through the image pipeline.
+      const fileUuid = extractFileUuid(screenshotUrl);
+      let fileMeta: { contentType?: string | null; name?: string } | null = null;
+      if (fileUuid && this.tcmClient) {
+        try {
+          fileMeta = await this.tcmClient.getFileMetadata(fileUuid);
+        } catch {
+          fileMeta = null; // metadata is best-effort; byte sniffing below still protects us
+        }
+        if (fileMeta?.contentType && !isImageContentType(fileMeta.contentType)) {
+          return this.artifactHandlers.downloadByUuid(
+            fileUuid,
+            { outputPath, returnContent: false, maxBytes: undefined },
+            { delegatedFrom: "adv_download_test_screenshot", note: `Not an image (${fileMeta.contentType}); delivered through the artifact download path. Use adv_download_artifact to read it.`, ...(testId ? { testId } : {}) },
+          );
+        }
+      }
+
       // Download screenshot using authenticated client
       const imageBuffer = await this.reportingClient.downloadScreenshot(screenshotUrl);
 
-      // Get metadata
-      const metadata = await getImageMetadata(imageBuffer);
+      // Get metadata (falls back to the artifact path if the bytes are not a decodable image)
+      let metadata;
+      try {
+        metadata = await getImageMetadata(imageBuffer);
+      } catch (imageError) {
+        if (detectImageFormat(imageBuffer) !== 'unknown') throw imageError;
+        return this.artifactHandlers.deliverBuffer({
+          buffer: imageBuffer,
+          uuid: fileUuid,
+          name: fileMeta?.name,
+          contentType: fileMeta?.contentType ?? undefined,
+          outputPath,
+          returnContent: false,
+          context: {
+            delegatedFrom: "adv_download_test_screenshot",
+            note: "Content is not an image; delivered through the artifact download path. Use adv_download_artifact to read it.",
+            ...(testId ? { testId } : {}),
+          },
+        });
+      }
       const format = detectImageFormat(imageBuffer);
 
       // Determine filename
@@ -3139,6 +3355,21 @@ export class ZebrunnerReportingToolHandlers {
     }
   }
 
+  /** True when the bytes decode as an image (magic bytes first, then the image library). */
+  private async isDecodableImage(
+    buffer: Buffer,
+    getImageMetadata: (b: Buffer) => Promise<unknown>
+  ): Promise<boolean> {
+    const { detectImageFormat } = await import('../utils/screenshot-analyzer.js');
+    if (detectImageFormat(buffer) !== 'unknown') return true;
+    try {
+      await getImageMetadata(buffer);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   /**
    * Analyze screenshot with optional OCR and visual analysis
    * Returns analysis that can be used by Claude's vision capabilities via MCP
@@ -3150,10 +3381,12 @@ export class ZebrunnerReportingToolHandlers {
     enableOCR?: boolean;
     analysisType?: 'basic' | 'detailed';
     expectedState?: string;
+    artifactUuid?: string;
   }) {
     const {
-      screenshotUrl,
+      screenshotUrl: screenshotUrlInput,
       screenshotPath,
+      artifactUuid,
       testId,
       enableOCR = false,
       analysisType = 'basic',
@@ -3171,6 +3404,13 @@ export class ZebrunnerReportingToolHandlers {
 
       let imageBuffer: Buffer;
 
+      // artifactUuid (from adv_list_test_artifacts) is shorthand for /files/<uuid>
+      const normalizedUuid = artifactUuid ? extractFileUuid(artifactUuid) : undefined;
+      if (artifactUuid && !normalizedUuid) {
+        throw new Error('artifactUuid must be a file UUID or a /files/<uuid> value');
+      }
+      const screenshotUrl = screenshotUrlInput ?? (normalizedUuid ? `/files/${normalizedUuid}` : undefined);
+
       // Get image buffer from URL or path
       if (screenshotUrl) {
         imageBuffer = await this.reportingClient.downloadScreenshot(screenshotUrl);
@@ -3178,7 +3418,25 @@ export class ZebrunnerReportingToolHandlers {
         const fs = await import('fs');
         imageBuffer = await fs.promises.readFile(screenshotPath);
       } else {
-        throw new Error('Either screenshotUrl or screenshotPath must be provided');
+        throw new Error('Either screenshotUrl, artifactUuid or screenshotPath must be provided');
+      }
+
+      // Non-image guard (v9.4.5): page sources / logs must not go through the image pipeline.
+      if (!(await this.isDecodableImage(imageBuffer, getImageMetadata))) {
+        const guardUuid = extractFileUuid(screenshotUrl);
+        let contentType: string | undefined;
+        if (guardUuid && this.tcmClient) {
+          try {
+            contentType = (await this.tcmClient.getFileMetadata(guardUuid)).contentType ?? undefined;
+          } catch { /* best effort */ }
+        }
+        return {
+          content: [{
+            type: "text" as const,
+            text: `This file is not an image${contentType ? ` (${contentType})` : ''}, so screenshot analysis does not apply. ` +
+              `Use adv_download_artifact${guardUuid ? ` with uuid ${guardUuid}` : ''} to read it as text.`
+          }]
+        };
       }
 
       // Perform basic analysis
@@ -3609,6 +3867,7 @@ export class ZebrunnerReportingToolHandlers {
     similarFailures: any[];
     baseUrl: string;
     jiraBaseUrlOverride?: string;
+    evidence?: ArtifactEvidence | null;
   }): Promise<string> {
     const {
       testRun,
@@ -3621,7 +3880,8 @@ export class ZebrunnerReportingToolHandlers {
       logAnalysis,
       screenshots,
       similarFailures,
-      baseUrl
+      baseUrl,
+      evidence
     } = params;
 
     const wallClockDur = testRun.finishTime && testRun.startTime
@@ -3793,6 +4053,9 @@ export class ZebrunnerReportingToolHandlers {
       }
     }
 
+    // Artifacts and page-source signals (empty when evidence was not requested or nothing found)
+    jiraContent += renderEvidenceJira(evidence, baseUrl);
+
     // Similar Failures
     if (similarFailures.length > 0) {
       jiraContent += `h3. Similar Failures Pattern\n\n`;
@@ -3855,6 +4118,9 @@ export class ZebrunnerReportingToolHandlers {
     detailLevel: 'basic' | 'full';
     includeScreenshotAnalysis: boolean;
     screenshotAnalysisType: 'basic' | 'detailed';
+    includePageSource?: boolean;
+    redactPageSource?: boolean;
+    pageSourceLimit?: number;
     baseUrl: string;
   }) {
     const {
@@ -3866,8 +4132,12 @@ export class ZebrunnerReportingToolHandlers {
       detailLevel,
       includeScreenshotAnalysis,
       screenshotAnalysisType,
+      includePageSource = false,
+      redactPageSource = false,
+      pageSourceLimit = 10,
       baseUrl
     } = params;
+    const jiraEvidenceBudget = new EvidenceBudget(pageSourceLimit);
 
     let output = `# 🎫 Jira Tickets - Launch ${launchName}\n\n`;
     output += `Generated: ${new Date().toLocaleString()}\n\n`;
@@ -3966,7 +4236,9 @@ export class ZebrunnerReportingToolHandlers {
           includeScreenshots: true,
           includeLogs: true,
           includeArtifacts: true,
-          includePageSource: false,
+          includePageSource,
+          redactPageSource,
+          evidenceBudget: jiraEvidenceBudget,
           includeVideo: true,
           analyzeSimilarFailures: true,
           analyzeScreenshotsWithAI: includeScreenshotAnalysis,
@@ -4357,6 +4629,10 @@ export class ZebrunnerReportingToolHandlers {
     count_only?: boolean;
     chart?: 'none' | 'png' | 'html' | 'text';
     chart_type?: 'auto' | 'pie' | 'bar' | 'stacked_bar' | 'horizontal_bar' | 'line';
+    includeArtifacts?: boolean;
+    includePageSource?: boolean;
+    pageSourceMaxTests?: number;
+    redactPageSource?: boolean;
   }) {
     const {
       testRunId,
@@ -4364,6 +4640,10 @@ export class ZebrunnerReportingToolHandlers {
       projectId,
       filterType = 'without_issues',
       includeScreenshotAnalysis = false,
+      includeArtifacts = true,
+      includePageSource = false,
+      pageSourceMaxTests = 10,
+      redactPageSource = false,
       screenshotAnalysisType = 'detailed',
       format = 'summary',
       jiraDetailLevel = 'full',
@@ -4554,6 +4834,34 @@ export class ZebrunnerReportingToolHandlers {
       const analysisResults: any[] = [];
       const startTime = Date.now();
 
+      // Structured artifact evidence per test (side channel: never parsed back out of the text).
+      const evidenceByTest = new Map<number, ArtifactEvidence | null>();
+      const pageSourceLimit = Math.min(pageSourceMaxTests, getEvidenceMaxFiles());
+      const evidenceBudget = new EvidenceBudget(pageSourceLimit);
+      const analyzeOne = async (test: any) => {
+        const { result, evidence } = await this.analyzeTestFailureWithEvidence({
+          testId: test.id,
+          testRunId,
+          projectKey,
+          projectId: resolvedProjectId,
+          includeScreenshots: true,
+          includeLogs: true,
+          includeArtifacts,
+          // Jira format runs its own analysis below; avoid spending the budget twice
+          includePageSource: format === 'jira' ? false : includePageSource,
+          redactPageSource,
+          evidenceBudget,
+          suppressNoArtifactsLine: true,
+          includeVideo: false,
+          analyzeSimilarFailures: false,
+          analyzeScreenshotsWithAI: includeScreenshotAnalysis,
+          screenshotAnalysisType,
+          format: format === 'detailed' ? 'detailed' : 'summary'
+        });
+        evidenceByTest.set(test.id, evidence);
+        return result;
+      };
+
       report += `## 🔬 Analyzing Tests...\n\n`;
 
       if (executionMode === 'sequential') {
@@ -4563,21 +4871,7 @@ export class ZebrunnerReportingToolHandlers {
           try {
             report += `Progress: ${i + 1}/${actualLimit} - Analyzing test ${test.id}...\n`;
             
-            const analysis = await this.analyzeTestFailureById({
-              testId: test.id,
-              testRunId,
-              projectKey,
-              projectId: resolvedProjectId,
-              includeScreenshots: true,
-              includeLogs: true,
-              includeArtifacts: false,
-              includePageSource: false,
-              includeVideo: false,
-              analyzeSimilarFailures: false,
-              analyzeScreenshotsWithAI: includeScreenshotAnalysis,
-              screenshotAnalysisType,
-              format: format === 'detailed' ? 'detailed' : 'summary'
-            });
+            const analysis = await analyzeOne(test);
 
             analysisResults.push({
               testId: test.id,
@@ -4602,21 +4896,7 @@ export class ZebrunnerReportingToolHandlers {
         // Parallel execution
         const promises = testsToAnalyze.map(async (test: any) => {
           try {
-            const analysis = await this.analyzeTestFailureById({
-              testId: test.id,
-              testRunId,
-              projectKey,
-              projectId: resolvedProjectId,
-              includeScreenshots: true,
-              includeLogs: true,
-              includeArtifacts: false,
-              includePageSource: false,
-              includeVideo: false,
-              analyzeSimilarFailures: false,
-              analyzeScreenshotsWithAI: includeScreenshotAnalysis,
-              screenshotAnalysisType,
-              format: format === 'detailed' ? 'detailed' : 'summary'
-            });
+            const analysis = await analyzeOne(test);
 
             return {
               testId: test.id,
@@ -4647,21 +4927,7 @@ export class ZebrunnerReportingToolHandlers {
 
           const batchPromises = batch.map(async (test: any) => {
             try {
-              const analysis = await this.analyzeTestFailureById({
-                testId: test.id,
-                testRunId,
-                projectKey,
-                projectId: resolvedProjectId,
-                includeScreenshots: true,
-                includeLogs: true,
-                includeArtifacts: false,
-                includePageSource: false,
-                includeVideo: false,
-                analyzeSimilarFailures: false,
-                analyzeScreenshotsWithAI: includeScreenshotAnalysis,
-                screenshotAnalysisType,
-                format: format === 'detailed' ? 'detailed' : 'summary'
-              });
+              const analysis = await analyzeOne(test);
 
               return {
                 testId: test.id,
@@ -4793,6 +5059,10 @@ export class ZebrunnerReportingToolHandlers {
       report += `**Key Findings:**\n\n`;
       report += `- **${actualLimit} failed tests analyzed** across ${errorClassifications.size} distinct error categories\n`;
       report += `- **${errorGroups.size} unique failure patterns** detected\n`;
+      if (includePageSource) {
+        const withSource = Array.from(evidenceByTest.values()).filter(e => e?.pageSource).length;
+        report += `- **Page sources analyzed:** ${withSource} of ${evidenceByTest.size} test(s) (limit ${pageSourceLimit})\n`;
+      }
       report += `- **Average test stability:** ${avgStability}% (${avgStabilityNum < 50 ? '🔴 Critical' : avgStabilityNum < 80 ? '🟡 Needs Attention' : '🟢 Acceptable'})\n`;
       
       // Identify most critical issues
@@ -5025,6 +5295,15 @@ export class ZebrunnerReportingToolHandlers {
               report += `- [Test ${test.testId}](${testUrl}): [${clickableTestName}](${testUrl})\n`;
             }
             report += `\n`;
+            // Page-source signals shared across the group (only when evidence was requested)
+            const groupSignals = new Set<string>();
+            for (const test of tests) {
+              const s = signalSummary(evidenceByTest.get(test.testId));
+              if (s) groupSignals.add(s);
+            }
+            if (groupSignals.size > 0) {
+              report += `**Page-source signals:** ${Array.from(groupSignals).join(' | ')}\n\n`;
+            }
             groupNum++;
           }
         }
@@ -5286,8 +5565,15 @@ export class ZebrunnerReportingToolHandlers {
           detailLevel: jiraDetailLevel,
           includeScreenshotAnalysis,
           screenshotAnalysisType,
+          includePageSource,
+          redactPageSource,
+          pageSourceLimit,
           baseUrl: this.reportingClient['config'].baseUrl
         });
+      }
+
+      if (includeArtifacts && !includePageSource) {
+        report += steeringHint("analyze_launch_failures_artifacts", { id: testRunId });
       }
 
       return {
@@ -5395,6 +5681,13 @@ async analyzeTestExecutionVideoTool(input: AnalyzeTestExecutionVideoInput): Prom
       if (result.failureAnalysis.stackTrace) {
         report += `<details>\n<summary>📋 Full Stack Trace (click to expand)</summary>\n\n\`\`\`\n${result.failureAnalysis.stackTrace.substring(0, 3000)}\n\`\`\`\n</details>\n\n`;
       }
+
+      // Artifact evidence (page source signals, artifact list) - empty when not requested
+      report += renderEvidenceMarkdown(result.artifactEvidence, {
+        format: 'detailed',
+        baseUrl: this.reportingClient['config'].baseUrl,
+        showNone: true
+      });
 
       // NEW: Multi-Test Case Comparison (for tests with multiple TCs)
       if (result.multiTestCaseComparison) {
@@ -6547,6 +6840,8 @@ async analyzeTestExecutionVideoTool(input: AnalyzeTestExecutionVideoInput): Prom
     enrich_top_n?: number;
     limit?: number;
     include_history?: boolean;
+    /** Opt-in: attach the artifact summary (names/kinds, no downloads) of each flaky test's latest failure. */
+    include_artifacts?: boolean;
     format?: 'json' | 'string' | 'jira';
     count_only?: boolean;
     chart?: 'none' | 'png' | 'html' | 'text';
@@ -6565,6 +6860,7 @@ async analyzeTestExecutionVideoTool(input: AnalyzeTestExecutionVideoInput): Prom
       enrich_top_n = 10,
       limit = 50,
       include_history = false,
+      include_artifacts = false,
       format = 'json',
       count_only = false,
       chart = 'none',
@@ -6613,6 +6909,7 @@ async analyzeTestExecutionVideoTool(input: AnalyzeTestExecutionVideoInput): Prom
       const testMap = new Map<string, Array<{
         launchId: number; status: string; stability: number; date: number;
         testClass: string; testCaseIds: number[];
+        testId?: number; artifacts?: any[];
       }>>();
 
       const discoveredSuiteNames = new Set<string>();
@@ -6630,6 +6927,7 @@ async analyzeTestExecutionVideoTool(input: AnalyzeTestExecutionVideoInput): Prom
               date: t.startTime || launch.startedAt || 0,
               testClass: t.testClass || '',
               testCaseIds: (t.testCases || []).map((tc: any) => tc.testCaseId || tc.id).filter(Boolean),
+              ...(include_artifacts ? { testId: t.id, artifacts: (t as any).artifacts } : {}),
             });
             if (launch.name) discoveredSuiteNames.add(launch.name.split(/[\s/|\\]/)[0]);
           }
@@ -6644,6 +6942,7 @@ async analyzeTestExecutionVideoTool(input: AnalyzeTestExecutionVideoInput): Prom
         tcm_enriched?: boolean; tcm_pass_rate?: string; tcm_executions?: number;
         manual_vs_auto?: string; test_case_key?: string;
         history?: Array<{ date: string; status: string; type: string; launch_id?: number; environment?: string }>;
+        last_failure?: { launch_id: number; test_id?: number; artifacts: CompactArtifactSummary };
       };
 
       const automatedFlaky: FlakyEntry[] = [];
@@ -6691,6 +6990,17 @@ async analyzeTestExecutionVideoTool(input: AnalyzeTestExecutionVideoInput): Prom
             type: 'AUTOMATED',
             launch_id: e.launchId,
           }));
+        }
+
+        if (include_artifacts) {
+          const lastFailed = [...sorted].reverse().find(e => e.status === 'FAILED');
+          if (lastFailed) {
+            entry.last_failure = {
+              launch_id: lastFailed.launchId,
+              test_id: lastFailed.testId,
+              artifacts: compactArtifactSummary(lastFailed.artifacts),
+            };
+          }
         }
 
         automatedFlaky.push(entry);

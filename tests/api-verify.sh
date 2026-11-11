@@ -1894,6 +1894,28 @@ for PROJECT_KEY in $STARRED_PROJECTS; do
 done
 
 # =====================================================================
+# v9.4.5 — Public API v1 /files probes (optional; read-only, never prints content)
+#   ZEBRUNNER_VERIFY_FILE_UUID=<uuid>  e.g. a failure_page_source_*.xml artifact uuid
+# =====================================================================
+
+if [[ -n "${ZEBRUNNER_VERIFY_FILE_UUID:-}" ]]; then
+  log_section "Files API (v1) — /files/{uuid}/metadata"
+  do_public_get "/files/${ZEBRUNNER_VERIFY_FILE_UUID}/metadata"
+  check_status "FILES-METADATA" 200
+  if [[ "$_STATUS" == "200" ]]; then
+    for _field in name contentType size; do
+      if echo "$_BODY" | python3 -c "import sys,json; d=json.load(sys.stdin); d=d.get('data',d); sys.exit(0 if '$_field' in d else 1)" 2>/dev/null; then
+        log_pass "FILES-METADATA: field '$_field' present"
+      else
+        log_fail "FILES-METADATA: field '$_field' missing"
+      fi
+    done
+  fi
+else
+  log_skip "FILES-METADATA (set ZEBRUNNER_VERIFY_FILE_UUID)"
+fi
+
+# =====================================================================
 # Summary
 # =====================================================================
 

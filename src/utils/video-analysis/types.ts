@@ -1,6 +1,7 @@
 /**
  * Type definitions for video analysis
  */
+import type { ArtifactEvidence } from '../artifact-evidence.js';
 
 export interface TestSessionVideo {
   sessionId: string;
@@ -233,6 +234,10 @@ export interface VideoAnalysisParams {
   analyzeSimilarFailures: boolean;
   includeHistoricalTrends: boolean;
   includeLogCorrelation: boolean;
+
+  // Artifact evidence (v9.4.5). Optional so existing callers keep working.
+  includeArtifactEvidence?: boolean;
+  includePageSource?: boolean;
   
   // Output Format
   format: 'detailed' | 'summary' | 'jira';
@@ -262,6 +267,8 @@ export interface VideoAnalysisResult {
   prediction: Prediction;
   similarFailures?: SimilarFailure[];
   historicalTrends?: HistoricalTrends;
+  /** Artifacts + page-source signals (null/undefined when not requested). */
+  artifactEvidence?: ArtifactEvidence | null;
   summary: string;
   links: AnalysisLinks;
 }

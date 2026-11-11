@@ -5,6 +5,7 @@ import { AUTHORING_EVAL_PROMPTS } from "./eval-authoring-prompts.js";
 import { AUTHORING_TOOLS_EVAL_PROMPTS } from "./eval-authoring-tools.js";
 import { TEST_IMPACT_EVAL_PROMPTS } from "./eval-test-impact-tools.js";
 import { JIRA_AUTOMATION_PLAN_EVAL_PROMPTS } from "./eval-jira-automation-plan-tools.js";
+import { ARTIFACT_EVAL_PROMPTS } from "./eval-artifact-tools.js";
 import { FIELD_HISTORY_EVAL_PROMPTS } from "./eval-field-history-tools.js";
 import { WIDGET_EVAL_PROMPTS } from "./eval-widget-prompts.js";
 
@@ -909,6 +910,9 @@ export const EVAL_PROMPTS: EvalPrompt[] = [
 
   // Jira automation plan (v9.4.3) — see eval-jira-automation-plan-tools.ts
   ...JIRA_AUTOMATION_PLAN_EVAL_PROMPTS,
+
+  // Artifact tools (v9.4.5) — see eval-artifact-tools.ts
+  ...ARTIFACT_EVAL_PROMPTS,
 
   ...FIELD_HISTORY_EVAL_PROMPTS,
 

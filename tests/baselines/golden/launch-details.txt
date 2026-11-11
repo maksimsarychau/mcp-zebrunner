@@ -1,0 +1,116 @@
+{
+  "launchId": 9001,
+  "projectId": 42,
+  "project": {
+    "id": 42,
+    "key": "FIX",
+    "name": "Fixture",
+    "deleted": false,
+    "createdAt": "2023-01-01"
+  },
+  "launch": {
+    "id": 9001,
+    "name": "Fixture Regression",
+    "status": "FAILED",
+    "projectId": 42,
+    "user": {
+      "id": 1,
+      "username": "fixture.user",
+      "email": "fixture@example.test"
+    },
+    "testSuite": {
+      "id": 77,
+      "name": "Fixture Suite",
+      "projectId": 42
+    },
+    "startedAt": 1700000000000,
+    "endedAt": 1700001800000,
+    "environment": "stage",
+    "build": "app-1.2.3.apk",
+    "platform": "android",
+    "passed": 1,
+    "failed": 3,
+    "skipped": 0,
+    "artifacts": [
+      {
+        "name": "app link",
+        "value": "https://example.test/app.apk"
+      }
+    ]
+  },
+  "testRuns": {
+    "items": [
+      {
+        "id": 101,
+        "name": "login shows home screen",
+        "status": "FAILED",
+        "message": "Element 'home_title' not found on the screen after 10 seconds",
+        "startTime": 1700000001000,
+        "finishTime": 1700000061000,
+        "issueReferences": [],
+        "testClass": "com.fixture.LoginTests",
+        "testCases": [
+          {
+            "testId": 101,
+            "tcmType": "ZEBRUNNER",
+            "testCaseId": "FIX-1"
+          }
+        ],
+        "stability": 0.5,
+        "testRunId": 9001
+      },
+      {
+        "id": 102,
+        "name": "checkout completes",
+        "status": "FAILED",
+        "message": "Timeout waiting for payment confirmation",
+        "startTime": 1700000001000,
+        "finishTime": 1700000061000,
+        "issueReferences": [],
+        "testClass": "com.fixture.CheckoutTests",
+        "stability": 0.5,
+        "testRunId": 9001
+      },
+      {
+        "id": 103,
+        "name": "profile saves",
+        "status": "FAILED",
+        "message": "Assertion failed: expected 'Saved' but actual was 'Error'",
+        "startTime": 1700000001000,
+        "finishTime": 1700000061000,
+        "issueReferences": [],
+        "testClass": "com.fixture.ProfileTests",
+        "stability": 0.5,
+        "testRunId": 9001
+      },
+      {
+        "id": 104,
+        "name": "logout works",
+        "status": "PASSED",
+        "startTime": 1700000001000,
+        "finishTime": 1700000061000,
+        "issueReferences": [],
+        "testClass": "com.fixture.LoginTests",
+        "stability": 1,
+        "testRunId": 9001
+      }
+    ]
+  },
+  "testRunsSummary": {
+    "totalTests": 4,
+    "totalTestCasesCovered": 1,
+    "testsWithZeroTestCases": 3,
+    "testsWithOneTestCase": 1,
+    "testsWithMultipleTestCases": 0,
+    "statuses": {
+      "FAILED": 3,
+      "PASSED": 1
+    },
+    "owners": {},
+    "testClasses": {
+      "com.fixture.LoginTests": 2,
+      "com.fixture.CheckoutTests": 1,
+      "com.fixture.ProfileTests": 1
+    }
+  }
+}
