@@ -295,9 +295,17 @@ export function resolveOutputPath(
   outputPath: string | undefined,
   fileName: string,
   env: NodeJS.ProcessEnv = process.env,
+  options: { excludeDefaultDir?: boolean } = {},
 ): string {
-  const allowed = getAllowedArtifactDirs(env).map((d) => realpathOfExistingAncestor(d));
   const defaultDir = getDefaultArtifactDir();
+  const roots = getAllowedArtifactDirs(env).filter((d) => !(options.excludeDefaultDir && d === defaultDir));
+  const allowed = roots.map((d) => realpathOfExistingAncestor(d));
+
+  if (options.excludeDefaultDir && (!outputPath || !outputPath.trim() || !isAbsolute(outputPath.trim()))) {
+    throw new ArtifactPathError(
+      `The default artifact folder ${defaultDir} is not safe to use; pass an absolute outputPath inside ZEBRUNNER_ARTIFACT_DIRS.`,
+    );
+  }
 
   let target: string;
   if (!outputPath || !outputPath.trim()) {
@@ -313,7 +321,7 @@ export function resolveOutputPath(
   const real = realpathOfExistingAncestor(target);
   if (!allowed.some((root) => isInside(root, real))) {
     throw new ArtifactPathError(
-      `outputPath is outside the allowed directories. Allowed roots: ${getAllowedArtifactDirs(env).join(", ")}. ` +
+      `outputPath is outside the allowed directories. Allowed roots: ${roots.join(", ") || "(none)"}. ` +
         `Set ZEBRUNNER_ARTIFACT_DIRS (absolute paths, "${delimiter}" separated) to allow additional folders.`,
     );
   }

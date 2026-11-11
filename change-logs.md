@@ -19,8 +19,16 @@
 - **`adv_download_test_screenshot`** no longer fails on non-image files such as `failure_page_source_*.xml`; non-image content is delivered through the artifact download path. **`adv_analyze_screenshot`** refuses non-image artifacts with a pointer to `adv_download_artifact` and accepts an optional `artifactUuid`.
 - Public API gap fixes found by comparing `api-docs_261111.json` with the implementation: `AZURE_DEVOPS` accepted as issue type in test run results; `ZebrunnerApiClient.getTestCaseById` unwraps `{ data }`; `getTestSuite` uses `GET /test-suites/{id}` directly (falls back to the cached list); `testConnection` uses `maxPageSize` (the real query parameter).
 
+### Security
+
+- **Artifact storage hardening** (`src/utils/secure-temp.ts`): saved artifacts and screenshots are written as new `0600` files in private `0700` folders; a symlinked or foreign-owned default folder is refused; existing files and symlinks are never overwritten or followed. Files in the default temp folders (`zebrunner-artifacts/`, `mcp-zebrunner/screenshots/`) are deleted after `ZEBRUNNER_ARTIFACT_TTL_MINUTES` (default 60, `0` disables); folders in `ZEBRUNNER_ARTIFACT_DIRS` are never cleaned. Default file names get a short uuid prefix.
+- **HTTP mode writes nothing to disk** by default (files would land on the shared server host): text is returned inline and `outputPath` is refused unless `ZEBRUNNER_ALLOW_DISK_WRITES_HTTP=true`.
+- **`adv_download_test_screenshot`**: a non-image fallback (e.g. page-source XML) is now returned inline instead of being saved; `outputPath` is checked against the allow-list and actually written (previously it was reported but not written).
+- Video download and frame extraction folders are unchanged.
+
 ### Changed
 
+- Milestones stay read-only (`adv_get_project_milestones`); creating milestones and assigning launches is documented as official-MCP-only in `docs/API_COVERAGE.md` and the `zebrunner://mcp-routing` resource.
 - With artifact flags off (or tests without artifacts), analysis output is byte-for-byte the 9.4.4 output (golden tests). With defaults, the detailed single-test format adds one explicit "No artifacts attached to this test." line when a test has none.
 
 ### Notes

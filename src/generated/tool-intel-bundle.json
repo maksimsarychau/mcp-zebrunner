@@ -1,7 +1,7 @@
 {
   "sourceHashes": {
     "toolsJson": "54ea06e1934e3ae7",
-    "catalog": "354f77bce5888dd0",
+    "catalog": "cd9c01d7082d4223",
     "benefits": "1c7370f3df9e2d38"
   },
   "tools": [
@@ -88,7 +88,7 @@
     },
     {
       "name": "adv_download_artifact",
-      "description": "[Advanced Zebrunner MCP] Read or save ONE artifact file exactly as attached (page source XML, logs, JSON, text, binaries) by `uuid` or by `launchId` + `name` (+ `testId`). No image decoding is performed. Text is returned inline by default (limit `maxBytes`, default 1 MiB, hard cap 10 MiB); `outputPath` saves to disk (up to 10 MiB, only inside the default `zebrunner-artifacts/` temp folder or folders in `ZEBRUNNER_ARTIFACT_DIRS`); larger files are refused with a clear message before any bytes are downloaded. `redact=true` masks email addresses and password-node text/value in text artifacts (**off by default** — page sources may contain personal data). Output reports status, size and content type only, never credentials.",
+      "description": "[Advanced Zebrunner MCP] Read or save ONE artifact file exactly as attached (page source XML, logs, JSON, text, binaries) by `uuid` or by `launchId` + `name` (+ `testId`). No image decoding is performed. Text is returned inline by default (limit `maxBytes`, default 1 MiB, hard cap 10 MiB); `outputPath` saves to disk (up to 10 MiB, only inside the default `zebrunner-artifacts/` temp folder or folders in `ZEBRUNNER_ARTIFACT_DIRS`); larger files are refused with a clear message before any bytes are downloaded. `redact=true` masks email addresses and password-node text/value in text artifacts (**off by default** — page sources may contain personal data). Output reports status, size and content type only, never credentials. Saved files are created `0600` in private (`0700`) folders, never overwrite existing files or follow symlinks, and are deleted from the default temp folder after `ZEBRUNNER_ARTIFACT_TTL_MINUTES` (default 60). In HTTP mode nothing is saved (text is returned inline, `outputPath` is refused) unless `ZEBRUNNER_ALLOW_DISK_WRITES_HTTP=true`.",
       "category": "Video & Screenshot Analysis",
       "examples": [
         "\"Download artifact 1a1c9e55-48b7-6ce0-f015-a119421211c9 and show me the XML\"",
@@ -469,7 +469,7 @@
     },
     {
       "name": "adv_get_project_milestones",
-      "description": "[Advanced Zebrunner MCP] Get all milestones configured for a project.",
+      "description": "[Advanced Zebrunner MCP] Get all milestones configured for a project. Read-only: this server cannot create milestones or assign launches to them; use the official Zebrunner MCP (`create_milestone`, `assign_launches_to_milestone`).",
       "category": "Platform & Results Analysis",
       "examples": [
         "\"Get all milestones for project MCP\"",
@@ -1046,7 +1046,7 @@
     },
     "adv_download_artifact": {
       "name": "adv_download_artifact",
-      "description": "Read or save ONE artifact file exactly as attached (page source XML, logs, JSON, text, binaries) by `uuid` or by `launchId` + `name` (+ `testId`). No image decoding is performed. Text is returned inline by default (limit `maxBytes`, default 1 MiB, hard cap 10 MiB); `outputPath` saves to disk (up to 10 MiB, only inside the default `zebrunner-artifacts/` temp folder or folders in `ZEBRUNNER_ARTIFACT_DIRS`); larger files are refused with a clear message before any bytes are downloaded. `redact=true` masks email addresses and password-node text/value in text artifacts (**off by default** — page sources may contain personal data). Output reports status, size and content type only, never credentials.",
+      "description": "Read or save ONE artifact file exactly as attached (page source XML, logs, JSON, text, binaries) by `uuid` or by `launchId` + `name` (+ `testId`). No image decoding is performed. Text is returned inline by default (limit `maxBytes`, default 1 MiB, hard cap 10 MiB); `outputPath` saves to disk (up to 10 MiB, only inside the default `zebrunner-artifacts/` temp folder or folders in `ZEBRUNNER_ARTIFACT_DIRS`); larger files are refused with a clear message before any bytes are downloaded. `redact=true` masks email addresses and password-node text/value in text artifacts (**off by default** — page sources may contain personal data). Output reports status, size and content type only, never credentials. Saved files are created `0600` in private (`0700`) folders, never overwrite existing files or follow symlinks, and are deleted from the default temp folder after `ZEBRUNNER_ARTIFACT_TTL_MINUTES` (default 60). In HTTP mode nothing is saved (text is returned inline, `outputPath` is refused) unless `ZEBRUNNER_ALLOW_DISK_WRITES_HTTP=true`.",
       "category": "Video & Screenshot Analysis",
       "examples": [
         "\"Download artifact 1a1c9e55-48b7-6ce0-f015-a119421211c9 and show me the XML\"",
@@ -1618,7 +1618,7 @@
     },
     "adv_get_project_milestones": {
       "name": "adv_get_project_milestones",
-      "description": "Get all milestones configured for a project.",
+      "description": "Get all milestones configured for a project. Read-only: this server cannot create milestones or assign launches to them; use the official Zebrunner MCP (`create_milestone`, `assign_launches_to_milestone`).",
       "category": "Platform & Results Analysis",
       "examples": [
         "\"Get all milestones for project MCP\"",

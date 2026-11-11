@@ -10,9 +10,12 @@
  *   - Public API v1 files endpoints (/files/{uuid}/metadata, /files/{uuid}) via the TCM client
  *
  * Nothing in this module writes to Zebrunner; files are only written to the local disk
- * inside the allow-listed artifact directories.
+ * inside the allow-listed artifact directories (0700 folders, 0600 files, TTL cleanup of
+ * the default folder, and no disk writes at all in HTTP mode unless an admin opts in).
  */
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import { tmpdir } from "node:os";
 import { dirname } from "node:path";
 import type { ZebrunnerReportingClient } from "../api/reporting-client.js";
 import type { EnhancedZebrunnerClient } from "../api/enhanced-client.js";
@@ -25,6 +28,7 @@ import {
   collectArtifacts,
   extractFileUuid,
   formatBytes,
+  getDefaultArtifactDir,
   isImageContentType,
   isTextualContent,
   isValidUuid,
@@ -34,6 +38,58 @@ import {
   type ArtifactItem,
   type ArtifactKind,
 } from "../utils/artifacts.js";
+import {
+  DISK_WRITES_DISABLED_MESSAGE,
+  InsecureDirectoryError,
+  diskWritesAllowed,
+  ensureSecureDir,
+  getArtifactTtlMs,
+  sweepExpired,
+  writeSecureFile,
+} from "../utils/secure-temp.js";
+
+/** Remove expired files from the default artifact folder (never from ZEBRUNNER_ARTIFACT_DIRS). */
+export function sweepDefaultArtifactDir(): number {
+  const ttl = getArtifactTtlMs();
+  if (ttl <= 0) return 0;
+  return sweepExpired(getDefaultArtifactDir(), ttl);
+}
+
+try {
+  sweepDefaultArtifactDir();
+} catch {
+  /* best effort */
+}
+
+/**
+ * Save bytes to `outputPath` (allow-listed) or the default artifact folder, as a new 0600 file.
+ * Callers must check diskWritesAllowed() first. Throws ArtifactPathError when the path is refused.
+ * Returns the path actually written; warnings are appended to `notes`.
+ */
+export function saveToArtifactLocation(
+  body: Buffer,
+  outputPath: string | undefined,
+  fileName: string,
+  notes: string[] = [],
+): string {
+  let defaultDirUnsafe = false;
+  try {
+    ensureSecureDir(getDefaultArtifactDir(), { root: tmpdir(), strict: true });
+  } catch (error) {
+    if (!(error instanceof InsecureDirectoryError)) throw error;
+    defaultDirUnsafe = true;
+    notes.push(error.message);
+  }
+  const target = resolveOutputPath(outputPath, fileName, process.env, { excludeDefaultDir: defaultDirUnsafe });
+  mkdirSync(dirname(target), { recursive: true, mode: 0o700 });
+  const written = writeSecureFile(target, body);
+  try {
+    sweepDefaultArtifactDir();
+  } catch {
+    /* best effort */
+  }
+  return written;
+}
 
 type ToolResult = { content: Array<{ type: "text"; text: string }> };
 
@@ -264,6 +320,9 @@ export class ArtifactToolHandlers {
   ): Promise<ToolResult> {
     const tcm = this.requireTcm();
     const save = !!opts.outputPath;
+    if (save && !diskWritesAllowed()) {
+      return jsonResult({ status: "refused", reason: "disk_writes_disabled", uuid, message: DISK_WRITES_DISABLED_MESSAGE, ...context });
+    }
     // Download as much as either delivery mode needs; each mode is re-checked in deliverBuffer.
     const limit = Math.max(save ? MAX_SAVE_BYTES : 0, clampReturnBytes(opts.maxBytes));
 
@@ -319,10 +378,15 @@ export class ArtifactToolHandlers {
     const extra: string[] = [];
 
     // Default delivery: text -> return inline, anything else -> save to the default artifact dir.
+    const writesAllowed = diskWritesAllowed();
     const saveRequested = !!input.outputPath;
-    const returnRequested = input.returnContent ?? (!saveRequested && textual);
-    const saveToDefault = !saveRequested && !returnRequested;
+    if (saveRequested && !writesAllowed) {
+      return jsonResult({ ...status, status: "refused", reason: "disk_writes_disabled", message: DISK_WRITES_DISABLED_MESSAGE });
+    }
+    const returnRequested = input.returnContent ?? (!saveRequested && (textual || !writesAllowed));
+    const saveToDefault = writesAllowed && !saveRequested && !returnRequested;
     const shouldSave = saveRequested || saveToDefault;
+    if (!writesAllowed) extra.push(DISK_WRITES_DISABLED_MESSAGE);
 
     let body = buffer;
     let redactions = 0;
@@ -348,14 +412,21 @@ export class ArtifactToolHandlers {
         });
       }
       try {
-        const target = resolveOutputPath(input.outputPath, safeFileName(name));
-        mkdirSync(dirname(target), { recursive: true });
-        writeFileSync(target, body);
-        status.savedTo = target;
+        // Default names are prefixed so repeated downloads of same-named artifacts never collide.
+        const fileName = saveRequested
+          ? safeFileName(name)
+          : `${(uuid ?? randomBytes(4).toString("hex")).slice(0, 8)}_${safeFileName(name)}`;
+        status.savedTo = saveToArtifactLocation(body, input.outputPath, fileName, extra);
         status.savedBytes = body.length;
       } catch (error) {
         if (error instanceof ArtifactPathError) {
-          return jsonResult({ ...status, status: "refused", reason: "output_path_not_allowed", message: error.message });
+          return jsonResult({
+            ...status,
+            status: "refused",
+            reason: "output_path_not_allowed",
+            message: error.message,
+            ...(extra.length ? { notes: extra } : {}),
+          });
         }
         throw error;
       }
@@ -368,8 +439,12 @@ export class ArtifactToolHandlers {
         status.contentIncluded = false;
         extra.push(
           isImageContentType(contentType)
-            ? "Image content is not returned inline by this tool; use adv_analyze_screenshot or save with outputPath."
-            : "Binary content cannot be returned inline; save it with outputPath instead.",
+            ? writesAllowed
+              ? "Image content is not returned inline by this tool; use adv_analyze_screenshot or save with outputPath."
+              : "Image content is not returned inline by this tool; use adv_analyze_screenshot or the official get_image_file_content."
+            : writesAllowed
+              ? "Binary content cannot be returned inline; save it with outputPath instead."
+              : "Binary content cannot be returned inline; run the server in STDIO mode to save it.",
         );
       } else if (body.length > returnLimit) {
         status.contentIncluded = false;

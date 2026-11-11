@@ -527,7 +527,7 @@ Weekly stability report for project MCP using:
 
 ### `adv_download_artifact`
 
-**Description:** Read or save ONE artifact file exactly as attached (page source XML, logs, JSON, text, binaries) by `uuid` or by `launchId` + `name` (+ `testId`). No image decoding is performed. Text is returned inline by default (limit `maxBytes`, default 1 MiB, hard cap 10 MiB); `outputPath` saves to disk (up to 10 MiB, only inside the default `zebrunner-artifacts/` temp folder or folders in `ZEBRUNNER_ARTIFACT_DIRS`); larger files are refused with a clear message before any bytes are downloaded. `redact=true` masks email addresses and password-node text/value in text artifacts (**off by default** — page sources may contain personal data). Output reports status, size and content type only, never credentials.
+**Description:** Read or save ONE artifact file exactly as attached (page source XML, logs, JSON, text, binaries) by `uuid` or by `launchId` + `name` (+ `testId`). No image decoding is performed. Text is returned inline by default (limit `maxBytes`, default 1 MiB, hard cap 10 MiB); `outputPath` saves to disk (up to 10 MiB, only inside the default `zebrunner-artifacts/` temp folder or folders in `ZEBRUNNER_ARTIFACT_DIRS`); larger files are refused with a clear message before any bytes are downloaded. `redact=true` masks email addresses and password-node text/value in text artifacts (**off by default** — page sources may contain personal data). Output reports status, size and content type only, never credentials. Saved files are created `0600` in private (`0700`) folders, never overwrite existing files or follow symlinks, and are deleted from the default temp folder after `ZEBRUNNER_ARTIFACT_TTL_MINUTES` (default 60). In HTTP mode nothing is saved (text is returned inline, `outputPath` is refused) unless `ZEBRUNNER_ALLOW_DISK_WRITES_HTTP=true`.
 
 **Example Prompts:**
 
@@ -1550,7 +1550,7 @@ Omitting `view` preserves pre-v9.2.4 behavior (template 8 pie, `period` default 
 
 ### `adv_get_project_milestones`
 
-**Description:** Get all milestones configured for a project.
+**Description:** Get all milestones configured for a project. Read-only: this server cannot create milestones or assign launches to them; use the official Zebrunner MCP (`create_milestone`, `assign_launches_to_milestone`).
 
 **Example Prompts:**
 

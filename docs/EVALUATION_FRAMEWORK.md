@@ -717,12 +717,25 @@ cost = (84 × 14,000 × $0.000003) + (8 × 17,000 × $0.000003)
    npm run build
    ```
 
+### Default Anthropic model
+
+With `EVAL_PROVIDER=anthropic` the default model (and judge) is **`claude-sonnet-5-5`** (Claude Sonnet 5.5, API ID has no date suffix; see the [models overview](https://platform.claude.com/docs/en/models/overview)). It is defined in `tests/eval/eval-config.ts` (`DEFAULT_MODELS`), priced in `tests/eval/eval-report.ts` ($2 / $10 per MTok) and can be overridden with `EVAL_MODEL` / `EVAL_JUDGE_MODEL`.
+
+Sonnet 5.5 rejects a few request settings with HTTP 400, and the eval client already avoids them:
+
+| Setting | Handling in `tests/eval/eval-llm-client.ts` |
+|---------|----------------------------------------------|
+| `temperature` (sampling parameters) | Omitted for Sonnet/Opus 5+ (`anthropicSupportsTemperature`) |
+| Forced `tool_choice` (`tool` / `any`) | The Layer 3 judge sends `auto` plus "call the `score_output` tool" in the prompt (`anthropicSupportsForcedToolChoice`) |
+
+Latest numbers in the "Key Numbers" table above were recorded on Claude Sonnet 5 and have not been re-baselined on 5.5.
+
 ### Environment Variables
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `EVAL_PROVIDER` | No | auto-detect | `anthropic`, `openai`, `gemini`, or `local` (Ollama/LM Studio) |
-| `EVAL_MODEL` | No | provider default | Model name (e.g. `claude-sonnet-5`, `qwen3.5:2b`, `gpt-4o-mini`) |
+| `EVAL_MODEL` | No | provider default | Model name (e.g. `claude-sonnet-5-5`, `qwen3.5:2b`, `gpt-4o-mini`) |
 | `EVAL_JUDGE_MODEL` | No | Same as `EVAL_MODEL` | Model for Layer 3 LLM judge |
 | `EVAL_BASE_URL` | For `local` override | `http://localhost:11434/v1` when `local` | OpenAI-compatible base URL |
 | `EVAL_API_KEY` | Provider-dependent | provider keys / `ollama` | Unified API key override |
@@ -753,7 +766,7 @@ EVAL_LAYER=1
 # Claude (release gating / targeted re-runs)
 # EVAL_PROVIDER=anthropic
 # ANTHROPIC_API_KEY=sk-ant-api03-YOUR_KEY_HERE
-# EVAL_MODEL=claude-sonnet-5
+# EVAL_MODEL=claude-sonnet-5-5
 # EVAL_STRICT=true
 # EVAL_FILTER=field_filter.custom_field_exact,report.pass_rate
 ```

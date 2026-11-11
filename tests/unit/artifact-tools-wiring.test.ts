@@ -10,7 +10,9 @@ import { describe, it, before, after } from "node:test";
 import { strict as assert } from "node:assert";
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { EnhancedZebrunnerClient } from "../../src/api/enhanced-client.js";
 import { ArtifactToolHandlers } from "../../src/handlers/artifact-tools.js";
 import { ZebrunnerReportingToolHandlers } from "../../src/handlers/reporting-tools.js";
@@ -68,13 +70,21 @@ function handle(req: IncomingMessage, res: ServerResponse) {
   json(404, { message: "not found" });
 }
 
+const ORIGINAL_TMPDIR = process.env.TMPDIR;
+let isolatedTmp = "";
+
 before(async () => {
+  isolatedTmp = mkdtempSync(join(tmpdir(), "zbr-wiring-"));
+  process.env.TMPDIR = isolatedTmp;
   server = createServer(handle);
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api/public/v1`;
 });
 after(async () => {
   await new Promise<void>((r) => server.close(() => r()));
+  if (ORIGINAL_TMPDIR === undefined) delete process.env.TMPDIR;
+  else process.env.TMPDIR = ORIGINAL_TMPDIR;
+  rmSync(isolatedTmp, { recursive: true, force: true });
 });
 
 function realClient() {
@@ -202,6 +212,31 @@ describe("adv_download_test_screenshot regression (XML artifact)", () => {
     assert.ok(out.includes("application/xml"));
     assert.ok(out.includes("adv_download_test_screenshot"));
     assert.ok(!/Input buffer|unsupported image|Error downloading screenshot/i.test(out), out.slice(0, 300));
+    const status = JSON.parse(out.slice(0, out.indexOf("\n}") + 2));
+    assert.equal(status.contentIncluded, true, "textual fallback is returned inline");
+    assert.equal(status.savedTo, undefined, "nothing is written to disk without outputPath");
+    assert.ok(out.includes(CRASH_XML.slice(0, 20)));
+    const dir = getDefaultArtifactDir();
+    assert.ok(!existsSync(dir) || readdirSync(dir).length === 0);
+  });
+
+  it("writes an image to an allow-listed outputPath and refuses paths outside it", async () => {
+    const png = await import("sharp").then((m) =>
+      m.default({ create: { width: 4, height: 4, channels: 3, background: { r: 255, g: 0, b: 0 } } }).png().toBuffer(),
+    );
+    const reporting = buildFakeReportingClient();
+    reporting.downloadScreenshot = async () => png;
+    const handlers = new ZebrunnerReportingToolHandlers(reporting as any);
+
+    const ok = JSON.parse(textOf(await handlers.downloadTestScreenshot({ screenshotUrl: "https://x.test/shot.png", outputPath: "shots/" })));
+    assert.equal(ok.success, true);
+    assert.ok(ok.localPath && existsSync(ok.localPath), "file really exists at localPath");
+    assert.ok(ok.localPath.includes("zebrunner-artifacts"));
+
+    const refused = JSON.parse(textOf(await handlers.downloadTestScreenshot({ screenshotUrl: "https://x.test/shot.png", outputPath: "/etc/zbr-shot.png" })));
+    assert.equal(refused.success, false);
+    assert.equal(refused.reason, "output_path_not_allowed");
+    assert.ok(!existsSync("/etc/zbr-shot.png"));
   });
 });
 

@@ -13,6 +13,24 @@ describe("Eval Token Tracking", () => {
       assert.equal(cost.total, cost.input + cost.output);
     });
 
+    it("should calculate cost for claude-sonnet-5-5 (current default anthropic eval model)", () => {
+      const cost = estimateCost("claude-sonnet-5-5", 100_000, 10_000);
+      assert.equal(cost.input, (100_000 / 1_000_000) * 2);
+      assert.equal(cost.output, (10_000 / 1_000_000) * 10);
+      assert.equal(cost.total, cost.input + cost.output);
+    });
+
+    it("claude-sonnet-5-5 resolves to its own pricing row, not the claude-sonnet-5 prefix row", async () => {
+      // Pricing is looked up with `includes()` and the first hit wins; both rows are $2/$10 today, so
+      // pin the ORDER (specific before prefix) in the source so a future price change cannot misroute.
+      const { readFileSync } = await import("node:fs");
+      const src = readFileSync(new URL("../eval/eval-report.ts", import.meta.url), "utf8");
+      assert.ok(
+        src.indexOf('"claude-sonnet-5-5"') > -1 && src.indexOf('"claude-sonnet-5-5"') < src.indexOf('"claude-sonnet-5":'),
+        "claude-sonnet-5-5 must be listed before claude-sonnet-5",
+      );
+    });
+
     it("should calculate cost for claude-sonnet-4-6", () => {
       const cost = estimateCost("claude-sonnet-4-6", 100_000, 10_000);
       assert.equal(cost.input, (100_000 / 1_000_000) * 3);

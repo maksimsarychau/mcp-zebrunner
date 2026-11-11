@@ -9,6 +9,9 @@ import { describe, it, before, after } from "node:test";
 import { strict as assert } from "node:assert";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { EnhancedZebrunnerClient } from "../../src/api/enhanced-client.js";
 import { ArtifactToolHandlers } from "../../src/handlers/artifact-tools.js";
 import { ZebrunnerReportingToolHandlers } from "../../src/handlers/reporting-tools.js";
@@ -25,8 +28,12 @@ const XML = `<hierarchy><node class="android.widget.TextView" package="android" 
 
 let server: Server;
 let baseUrl = "";
+const ORIGINAL_TMPDIR = process.env.TMPDIR;
+let isolatedTmp = "";
 
 before(async () => {
+  isolatedTmp = mkdtempSync(join(tmpdir(), "zbr-leak-"));
+  process.env.TMPDIR = isolatedTmp;
   server = createServer((req, res) => {
     const url = req.url ?? "";
     const json = (code: number, body: unknown) => {
@@ -47,6 +54,9 @@ before(async () => {
 });
 after(async () => {
   await new Promise<void>((r) => server.close(() => r()));
+  if (ORIGINAL_TMPDIR === undefined) delete process.env.TMPDIR;
+  else process.env.TMPDIR = ORIGINAL_TMPDIR;
+  rmSync(isolatedTmp, { recursive: true, force: true });
 });
 
 function captureStderr<T>(fn: () => Promise<T>): Promise<{ result: T; stderr: string }> {

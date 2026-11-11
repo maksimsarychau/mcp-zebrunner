@@ -8,9 +8,10 @@ import type { TestEffectiveDuration, TestSessionBreakdown, SessionResolutionStra
 import { buildChartResponse, type ChartConfig } from "../utils/chart-generator.js";
 import { getConfig } from "../utils/config-loader.js";
 import { extractJobSummary } from "../utils/launch-job-build.js";
-import { ArtifactToolHandlers } from "./artifact-tools.js";
+import { ArtifactToolHandlers, saveToArtifactLocation } from "./artifact-tools.js";
 import { steeringHint } from "../helpers/steering.js";
-import { extractFileUuid, isImageContentType, compactArtifactSummary, type CompactArtifactSummary } from "../utils/artifacts.js";
+import { ArtifactPathError, extractFileUuid, isImageContentType, safeFileName, compactArtifactSummary, type CompactArtifactSummary } from "../utils/artifacts.js";
+import { DISK_WRITES_DISABLED_MESSAGE, diskWritesAllowed } from "../utils/secure-temp.js";
 import {
   EvidenceBudget,
   getEvidenceMaxFiles,
@@ -3267,7 +3268,7 @@ export class ZebrunnerReportingToolHandlers {
         if (fileMeta?.contentType && !isImageContentType(fileMeta.contentType)) {
           return this.artifactHandlers.downloadByUuid(
             fileUuid,
-            { outputPath, returnContent: false, maxBytes: undefined },
+            { outputPath, maxBytes: undefined },
             { delegatedFrom: "adv_download_test_screenshot", note: `Not an image (${fileMeta.contentType}); delivered through the artifact download path. Use adv_download_artifact to read it.`, ...(testId ? { testId } : {}) },
           );
         }
@@ -3288,7 +3289,6 @@ export class ZebrunnerReportingToolHandlers {
           name: fileMeta?.name,
           contentType: fileMeta?.contentType ?? undefined,
           outputPath,
-          returnContent: false,
           context: {
             delegatedFrom: "adv_download_test_screenshot",
             note: "Content is not an image; delivered through the artifact download path. Use adv_download_artifact to read it.",
@@ -3301,16 +3301,35 @@ export class ZebrunnerReportingToolHandlers {
       // Determine filename
       const timestamp = Date.now();
       const testIdPart = testId ? `_test${testId}` : '';
-      const filename = outputPath || `screenshot${testIdPart}_${timestamp}.${format}`;
+      const filename = `screenshot${testIdPart}_${timestamp}.${format}`;
 
-      // Save to temp directory if not using custom path
-      const localPath = outputPath || await saveScreenshotToTemp(imageBuffer, filename);
+      let localPath: string | undefined;
+      const notes: string[] = [];
+      if (!diskWritesAllowed()) {
+        if (outputPath) {
+          return {
+            content: [{ type: "text" as const, text: JSON.stringify({ success: false, screenshotUrl, reason: "disk_writes_disabled", message: DISK_WRITES_DISABLED_MESSAGE }, null, 2) }],
+          };
+        }
+        notes.push(DISK_WRITES_DISABLED_MESSAGE);
+      } else if (outputPath) {
+        try {
+          localPath = saveToArtifactLocation(imageBuffer, outputPath, safeFileName(filename), notes);
+        } catch (pathError) {
+          if (!(pathError instanceof ArtifactPathError)) throw pathError;
+          return {
+            content: [{ type: "text" as const, text: JSON.stringify({ success: false, screenshotUrl, reason: "output_path_not_allowed", message: pathError.message }, null, 2) }],
+          };
+        }
+      } else {
+        localPath = await saveScreenshotToTemp(imageBuffer, filename);
+      }
 
-      // Prepare response
       const result: any = {
         success: true,
         screenshotUrl,
-        localPath,
+        ...(localPath ? { localPath } : {}),
+        ...(notes.length ? { notes } : {}),
         metadata: {
           fileSize: imageBuffer.length,
           format,

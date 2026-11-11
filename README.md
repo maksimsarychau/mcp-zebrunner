@@ -960,6 +960,8 @@ Read-only access to the files automation attaches to launches and tests (Public 
 | `adv_get_file_metadata`    | Name, content type and size of a file by uuid without downloading it                                     | `"Get metadata for file 1a1c9e55-48b7-6ce0-f015-a119421211c9"`            | **Automation Engineers, Developers**   |
 | `adv_download_artifact`    | Read (inline, default 1 MiB) or save (up to 10 MiB) one artifact; optional `redact` (off by default)     | `"Download the failure page source for test 5451420 in launch 140961"`    | **QA Engineers, SDETs, Developers**    |
 
+Storage: analysis tools read artifacts in memory and never save them. Downloads return text inline; only binaries or an explicit `outputPath` are saved. Saved folders are private (`0700`), files are `0600`, existing files and symlinks are never overwritten, and files in the default temp folders are deleted after `ZEBRUNNER_ARTIFACT_TTL_MINUTES` (default 60). In HTTP mode nothing is written to the server's disk unless `ZEBRUNNER_ALLOW_DISK_WRITES_HTTP=true`.
+
 Safety: tools are read-only; the API version path comes from one place (`/api/public/v1`); saved files only go to the default temp folder `zebrunner-artifacts/` or folders listed in `ZEBRUNNER_ARTIFACT_DIRS`; files over 10 MiB (or over `maxBytes` for inline return) are refused before download; credentials are never logged or returned. Redaction masks emails and password-node values only when `redact: true` is set (page sources can contain personal data when returned in full).
 
 
@@ -976,7 +978,7 @@ Safety: tools are read-only; the API version path comes from one place (`/api/pu
 | `adv_get_top_bugs`                   | Most frequent defects                                                                        | `"Show me top 10 bugs from last week"`                                   | **Managers, Developers**     |
 | `adv_get_bug_review`                 | Detailed bug review with failure analysis, priority breakdown, and automatic detail fetching | `"Get bug review with full failure details for top 10 bugs"`             | **Managers, QA, Developers** |
 | `adv_get_bug_failure_info`           | Comprehensive failure info by hashcode (alternative to auto-fetch)                           | `"Get failure info for hashcode 1051677506"`                             | **Developers, SDETs**        |
-| `adv_get_project_milestones`         | Available milestones                                                                         | `"Get all milestones for project MCP"`                                   | **Managers, PMs**            |
+| `adv_get_project_milestones`         | Available milestones (read-only; create milestones with the official MCP `create_milestone`) | `"Get all milestones for project MCP"`                                   | **Managers, PMs**            |
 
 
 **Period behavior for reporting widgets:** `period` is passed to Zebrunner widgets **as-is** (for example `Today`, `Month`, `Last 30 Days`). If a selected widget does not support a specific period label, the API will return an error.
@@ -1557,6 +1559,8 @@ MAX_PAGE_SIZE=100                 # Maximum items per page (optional)
 # Optional - Artifacts (v9.4.5)
 ZEBRUNNER_ARTIFACT_DIRS=          # Extra absolute folders allowed for adv_download_artifact outputPath (path-delimiter or comma separated); default is the temp folder zebrunner-artifacts/
 ARTIFACT_EVIDENCE_MAX_FILES=10    # Max page sources fetched per analysis call (cost control for includePageSource)
+ZEBRUNNER_ARTIFACT_TTL_MINUTES=60 # Delete saved artifacts/screenshots in the default temp folders after N minutes (0 disables)
+ZEBRUNNER_ALLOW_DISK_WRITES_HTTP=false # HTTP mode only: allow saving files on the server host (off by default)
 
 # Optional - Intelligent Rules System
 ENABLE_RULES_ENGINE=true          # Enable intelligent rules (auto-detected if rules file exists)
