@@ -1,0 +1,156 @@
+# 🔍 Launch Failure Analysis Report
+
+## 🚀 Launch Information
+
+- **Launch:** [Fixture Regression](https://fixture.zebrunner.test/projects/FIX/automation-launches/9001)
+- **Launch ID:** [9001](https://fixture.zebrunner.test/projects/FIX/automation-launches/9001)
+- **Project:** FIX
+- **Status:** FAILED
+- **Test Suite:** [Fixture Suite](https://fixture.zebrunner.test/projects/FIX/test-cases?suiteId=77)
+- **Build:** app-1.2.3.apk
+- **Environment:** stage
+- **Platform:** android
+- **Duration:** 30m 0s
+- **Started:** 11/14/2023, 10:13:20 PM
+- **Finished:** 11/14/2023, 10:43:20 PM
+- **Owner:** fixture.user
+- **Analysis Date:** <NOW>
+
+---
+
+## 📊 Overview Statistics
+
+- **Total Tests in Launch:** 4
+- **Failed Tests (Total):** 3
+- **Tests Being Analyzed:** 3
+- **Filter:** 📋 All failed tests
+- **Screenshot Analysis:** ❌ Disabled
+- **Execution Mode:** sequential
+
+## 🔬 Analyzing Tests...
+
+Progress: 1/3 - Analyzing test 101...
+Progress: 2/3 - Analyzing test 102...
+Progress: 3/3 - Analyzing test 103...
+
+✅ Analysis completed in <T>s
+
+---
+
+## 🎯 Executive Summary
+
+**Key Findings:**
+
+- **3 failed tests analyzed** across 0 distinct error categories
+- **3 unique failure patterns** detected
+- **Average test stability:** 50.0% (🟡 Needs Attention)
+
+---
+
+## 🟡 Priority 2 - Medium Failures (31-70% Stability)
+
+### Other
+
+| Test | Stability | Issue | Evidence |
+|------|-----------|-------|----------|
+| [login shows home screen](https://fixture.zebrunner.test/projects/FIX/automation-launches/9001/tests/101) | 50% | Element 'home_title' not found on the screen after 10 seconds | N/A |
+| [checkout completes](https://fixture.zebrunner.test/projects/FIX/automation-launches/9001/tests/102) | 50% | Timeout waiting for payment confirmation | N/A |
+| [profile saves](https://fixture.zebrunner.test/projects/FIX/automation-launches/9001/tests/103) | 50% | Assertion failed: expected 'Saved' but actual was 'Error' | N/A |
+
+---
+
+## 🔬 Pattern Analysis
+
+**Distinct failure categories identified:**
+
+---
+
+## 📈 Failure Breakdown by Category
+
+No error classifications detected.
+
+## 🔄 Similar Failure Groups
+
+**Detected 3 unique error pattern(s)**
+
+## 🎯 Recommendations by Priority
+
+No specific recommendations extracted from analysis.
+
+## ❓ Questions for Follow-up
+
+1. Should we investigate the **Unknown** issues first (affects 1 tests)?
+3. Should we analyze screenshots to see the actual UI state? (Use `includeScreenshotAnalysis: true`)
+4. Should we search for recent code changes that might have caused these failures?
+
+---
+
+## 📋 Individual Test Analysis
+
+### 1. [login shows home screen](https://fixture.zebrunner.test/projects/FIX/automation-launches/9001/tests/101)
+
+- **Test ID:** [101](https://fixture.zebrunner.test/projects/FIX/automation-launches/9001/tests/101)
+- **Status:** FAILED
+- **Suite/Test Class:** com.fixture.LoginTests
+- **Test Cases:** 📋 [FIX-1](https://fixture.zebrunner.test/projects/FIX/test-cases)
+- **Error Type:** Unknown
+- **Stability:** 50% 🟡
+- **Root Cause:** Unknown
+
+**Error Message (Short):**
+```
+Element 'home_title' not found on the screen after 10 seconds
+```
+
+**Error Logs:**
+1. **[ERROR]** 10:13:24 PM:
+```
+Element 'home_title' not found
+```
+
+
+
+### 2. [checkout completes](https://fixture.zebrunner.test/projects/FIX/automation-launches/9001/tests/102)
+
+- **Test ID:** [102](https://fixture.zebrunner.test/projects/FIX/automation-launches/9001/tests/102)
+- **Status:** FAILED
+- **Suite/Test Class:** com.fixture.CheckoutTests
+- **Error Type:** Unknown
+- **Stability:** 50% 🟡
+- **Root Cause:** Unknown
+
+**Error Message (Short):**
+```
+Timeout waiting for payment confirmation
+```
+
+**Error Logs:**
+1. **[ERROR]** 10:13:24 PM:
+```
+Element 'home_title' not found
+```
+
+
+
+### 3. [profile saves](https://fixture.zebrunner.test/projects/FIX/automation-launches/9001/tests/103)
+
+- **Test ID:** [103](https://fixture.zebrunner.test/projects/FIX/automation-launches/9001/tests/103)
+- **Status:** FAILED
+- **Suite/Test Class:** com.fixture.ProfileTests
+- **Error Type:** Unknown
+- **Stability:** 50% 🟡
+- **Root Cause:** Unknown
+
+**Error Message (Short):**
+```
+Assertion failed: expected 'Saved' but actual was 'Error'
+```
+
+**Error Logs:**
+1. **[ERROR]** 10:13:24 PM:
+```
+Element 'home_title' not found
+```
+
+
+

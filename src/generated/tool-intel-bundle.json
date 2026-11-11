@@ -1,7 +1,7 @@
 {
   "sourceHashes": {
-    "toolsJson": "adf5f60a1a8d5c39",
-    "catalog": "39e5e5b0d3734e71",
+    "toolsJson": "54ea06e1934e3ae7",
+    "catalog": "95ad69189042fb75",
     "benefits": "1c7370f3df9e2d38"
   },
   "tools": [
@@ -59,12 +59,41 @@
     },
     {
       "name": "adv_analyze_screenshot",
-      "description": "[Advanced Zebrunner MCP] Visual analysis of screenshots with OCR, UI element detection, and Claude Vision analysis.",
+      "description": "[Advanced Zebrunner MCP] Visual analysis of screenshots with OCR, UI element detection, and Claude Vision analysis. **v9.4.5:** refuses non-image artifacts (XML/text) with a pointer to [`adv_download_artifact`](#adv_download_artifact); optional `artifactUuid` input.",
       "category": "Video & Screenshot Analysis",
       "examples": [
         "\"Analyze screenshot [https://your-workspace.zebrunner.com/files/abc123](https://your-workspace.zebrunner.com/files/abc123) with OCR\"",
         "\"Analyze this screenshot and tell me what UI elements are visible\"",
         "\"Analyze screenshot /files/xyz789 and extract text with OCR\""
+      ]
+    },
+    {
+      "name": "adv_list_test_artifacts",
+      "description": "[Advanced Zebrunner MCP] List artifacts that automation attached to a launch and its tests (page sources, logcat, saved screenshots, reference links). Each item has `scope`, `testId`, `name`, `kind` (`file` with a `uuid`, or `reference` with a masked `url`). Read-only; no file is downloaded. Session video and session logs are not artifacts and are out of scope. Inputs: `projectKey`/`projectId`, `launchId`, optional `testId`, `kind`, `nameContains`, `includeLaunchLevel`, `includeMetadata` (adds content type and size with one bulk call), `limit`.",
+      "category": "Video & Screenshot Analysis",
+      "examples": [
+        "\"List the artifacts of launch 12345 in project DEMO\"",
+        "\"Which page source files are attached to test 67890 in launch 12345?\"",
+        "\"Show only file artifacts with 'page_source' in the name for launch 12345\""
+      ]
+    },
+    {
+      "name": "adv_get_file_metadata",
+      "description": "[Advanced Zebrunner MCP] Get name, type, content type, size in bytes and upload time for a Zebrunner file by uuid, without downloading it (Public API v1 `GET /files/{uuid}/metadata`). Use it before `adv_download_artifact` to check size and type. Accepts a bare uuid or `/files/<uuid>`.",
+      "category": "Video & Screenshot Analysis",
+      "examples": [
+        "\"Get metadata for file aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee\"",
+        "\"How big is the artifact /files/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee?\""
+      ]
+    },
+    {
+      "name": "adv_download_artifact",
+      "description": "[Advanced Zebrunner MCP] Read or save ONE artifact file exactly as attached (page source XML, logs, JSON, text, binaries) by `uuid` or by `launchId` + `name` (+ `testId`). No image decoding is performed. Text is returned inline by default (limit `maxBytes`, default 1 MiB, hard cap 10 MiB); `outputPath` saves to disk (up to 10 MiB, only inside the default `zebrunner-artifacts/` temp folder or folders in `ZEBRUNNER_ARTIFACT_DIRS`); larger files are refused with a clear message before any bytes are downloaded. `redact=true` masks email addresses and password-node text/value in text artifacts (**off by default** — page sources may contain personal data). Output reports status, size and content type only, never credentials. Saved files are created `0600` in private (`0700`) folders, never overwrite existing files or follow symlinks, and are deleted from the default temp folder after `ZEBRUNNER_ARTIFACT_TTL_MINUTES` (default 60). In HTTP mode nothing is saved (text is returned inline, `outputPath` is refused) unless `ZEBRUNNER_ALLOW_DISK_WRITES_HTTP=true`.",
+      "category": "Video & Screenshot Analysis",
+      "examples": [
+        "\"Download artifact aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee and show me the XML\"",
+        "\"Read failure_page_source_live.xml for test 67890 in launch 12345 with redaction on\"",
+        "\"Save artifact aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee to disk\""
       ]
     },
     {
@@ -89,7 +118,7 @@
     },
     {
       "name": "adv_analyze_test_execution_video",
-      "description": "[Advanced Zebrunner MCP] Download and analyze test execution video with Claude Vision. Extracts frames, compares with test case steps, and predicts if failure is bug or test issue.",
+      "description": "[Advanced Zebrunner MCP] Download and analyze test execution video with Claude Vision. Extracts frames, compares with test case steps, and predicts if failure is bug or test issue. **v9.4.5:** adds an \"Artifact evidence\" section (artifact list + page-source signals) and feeds crash/permission/locator signals into the prediction. Inputs: `includeArtifactEvidence` (default `true`), `includePageSource` (default `true`).",
       "category": "Video & Screenshot Analysis",
       "examples": [
         "\"Analyze video for test 5455325 from launch 120906\"",
@@ -99,10 +128,11 @@
     },
     {
       "name": "adv_analyze_test_failure",
-      "description": "[Advanced Zebrunner MCP] Deep forensic analysis of failed tests including logs, screenshots, error classification, similar failures, and optionally comparison with last passed execution.",
+      "description": "[Advanced Zebrunner MCP] Deep forensic analysis of failed tests including logs, screenshots, artifacts, error classification, similar failures, and optionally comparison with last passed execution. **v9.4.5:** lists the test's artifacts and (by default) reads the failure page source to add signals — crash/ANR dialog, permission dialog, soft keyboard, loading indicator, toast, locator present/missing — which refine the classification (for example Locator Issue → Timing Issue when the element is in the page source). Prints an explicit \"No artifacts attached\" line when there are none. Failures to fetch an artifact become a warning, never an error. Inputs: `includeArtifacts` (default `true`), `includePageSource` (default `true`), `redactPageSource` (default `false`).",
       "category": "Test Failure Analysis & Debugging",
       "examples": [
         "\"Analyze test failure 5451420 from launch 120806\"",
+        "\"Analyze test 67890 in launch 12345 and check the page source for a crash dialog\"",
         "\"Analyze test 5478492 and compare with the last time it passed\"",
         "\"Deep dive into why test 5455325 failed in launch 120906, include video and compare with last successful run\""
       ]
@@ -183,17 +213,18 @@
     },
     {
       "name": "adv_detailed_analyze_launch_failures",
-      "description": "[Advanced Zebrunner MCP] Analyze ALL failures in a launch with intelligent grouping, executive summary, timeline analysis, and pattern detection. Automatically filters tests without linked issues by default.",
+      "description": "[Advanced Zebrunner MCP] Analyze ALL failures in a launch with intelligent grouping, executive summary, timeline analysis, and pattern detection. Automatically filters tests without linked issues by default. **v9.4.5:** `includeArtifacts` (default `true`, no extra calls) lists each analyzed test's artifacts; `includePageSource` (default `false`) fetches each analyzed test's failure page source and adds signals per test and per similar-failure group (capped by `pageSourceMaxTests`, default 10, and env `ARTIFACT_EVIDENCE_MAX_FILES`); `redactPageSource` (default `false`). Jira format includes artifact links per ticket.",
       "category": "Test Failure Analysis & Debugging",
       "examples": [
         "\"Analyze all failures in launch 120806\"",
+        "\"Analyze all failures in launch 12345 and read the page sources for the first 5 tests\"",
         "\"Show me what failed in launch 120906 with executive summary and patterns\"",
         "\"Generate Jira tickets for all failures in launch 120814 in jira format\""
       ]
     },
     {
       "name": "adv_download_test_screenshot",
-      "description": "[Advanced Zebrunner MCP] Download protected screenshots from Zebrunner with authentication.",
+      "description": "[Advanced Zebrunner MCP] Download protected screenshots from Zebrunner with authentication. **v9.4.5:** non-image files that share the `/files/<uuid>` shape (for example `failure_page_source_*.xml`) are delivered through the artifact download path instead of failing with an image-decoding error; use [`adv_download_artifact`](#adv_download_artifact) for those.",
       "category": "Video & Screenshot Analysis",
       "examples": [
         "\"Download screenshot from [https://your-workspace.zebrunner.com/files/abc123](https://your-workspace.zebrunner.com/files/abc123)\"",
@@ -203,7 +234,7 @@
     },
     {
       "name": "adv_find_flaky_tests",
-      "description": "[Advanced Zebrunner MCP] Find flaky tests across launches using a 3-phase approach: cross-launch flip-flop analysis for automated tests, manual test case scan via TCM execution history, and optional dual-perspective enrichment correlating both data sources.",
+      "description": "[Advanced Zebrunner MCP] Find flaky tests across launches using a 3-phase approach: cross-launch flip-flop analysis for automated tests, manual test case scan via TCM execution history, and optional dual-perspective enrichment correlating both data sources. **v9.4.5:** `include_artifacts: true` attaches the artifact summary of each flaky test's latest failure (default off, no downloads).",
       "category": "Launch Analysis & Reporting",
       "examples": [
         "\"Find flaky tests in the Android project over the last 14 days\"",
@@ -338,7 +369,7 @@
     },
     {
       "name": "adv_get_bug_failure_info",
-      "description": "[Advanced Zebrunner MCP] Get comprehensive failure information for a specific bug/hashcode, including high-level failure summary and detailed list of affected test runs. This tool combines data from multiple SQL widgets to provide complete failure analysis.",
+      "description": "[Advanced Zebrunner MCP] Get comprehensive failure information for a specific bug/hashcode, including high-level failure summary and detailed list of affected test runs. This tool combines data from multiple SQL widgets to provide complete failure analysis. **v9.4.5:** `include_artifacts: true` adds a compact artifact summary for up to 5 affected tests (one lookup each, default off).",
       "category": "Platform & Results Analysis",
       "examples": [
         "\"Get failure info for hashcode 1051677506 on dashboard 99\"",
@@ -392,7 +423,7 @@
     },
     {
       "name": "adv_get_launch_details",
-      "description": "[Advanced Zebrunner MCP] Get comprehensive information about a specific launch including test results, environment, build, and execution metadata. Set `includeJobParameters: true` to fetch CI job parameters from **Jenkins Build Now** (suite path, build, locale, test_run_rules, and full param schema). **Not available for Launch Launchers** — Jenkins integration only.",
+      "description": "[Advanced Zebrunner MCP] Get comprehensive information about a specific launch including test results, environment, build, and execution metadata. Set `includeJobParameters: true` to fetch CI job parameters from **Jenkins Build Now** (suite path, build, locale, test_run_rules, and full param schema). **Not available for Launch Launchers** — Jenkins integration only. **v9.4.5:** `compactArtifacts: true` adds a compact launch-level and per-test artifact summary (counts and names; use `adv_list_test_artifacts` for uuids).",
       "category": "Launch Analysis & Reporting",
       "examples": [
         "\"Get launch details for launch 120906\"",
@@ -412,7 +443,7 @@
     },
     {
       "name": "adv_get_launch_test_summary",
-      "description": "[Advanced Zebrunner MCP] Lightweight aggregated test results with statistics, most unstable tests, and tests with issues. Optimized for large launches.",
+      "description": "[Advanced Zebrunner MCP] Lightweight aggregated test results with statistics, most unstable tests, and tests with issues. Optimized for large launches. **v9.4.5:** `includeArtifacts: true` adds a compact per-test artifact summary (default off).",
       "category": "Launch Analysis & Reporting",
       "examples": [
         "\"Get test summary for launch 119783 with top 10 most unstable tests\"",
@@ -438,7 +469,7 @@
     },
     {
       "name": "adv_get_project_milestones",
-      "description": "[Advanced Zebrunner MCP] Get all milestones configured for a project.",
+      "description": "[Advanced Zebrunner MCP] Get all milestones configured for a project. Read-only: this server cannot create milestones or assign launches to them; use the official Zebrunner MCP (`create_milestone`, `assign_launches_to_milestone`).",
       "category": "Platform & Results Analysis",
       "examples": [
         "\"Get all milestones for project MCP\"",
@@ -834,20 +865,22 @@
     },
     "adv_analyze_test_failure": {
       "name": "adv_analyze_test_failure",
-      "description": "Deep forensic analysis of failed tests including logs, screenshots, error classification, similar failures, and optionally comparison with last passed execution.",
+      "description": "Deep forensic analysis of failed tests including logs, screenshots, artifacts, error classification, similar failures, and optionally comparison with last passed execution. **v9.4.5:** lists the test's artifacts and (by default) reads the failure page source to add signals — crash/ANR dialog, permission dialog, soft keyboard, loading indicator, toast, locator present/missing — which refine the classification (for example Locator Issue → Timing Issue when the element is in the page source). Prints an explicit \"No artifacts attached\" line when there are none. Failures to fetch an artifact become a warning, never an error. Inputs: `includeArtifacts` (default `true`), `includePageSource` (default `true`), `redactPageSource` (default `false`).",
       "category": "Test Failure Analysis & Debugging",
       "examples": [
         "\"Analyze test failure 5451420 from launch 120806\"",
+        "\"Analyze test 67890 in launch 12345 and check the page source for a crash dialog\"",
         "\"Analyze test 5478492 and compare with the last time it passed\"",
         "\"Deep dive into why test 5455325 failed in launch 120906, include video and compare with last successful run\""
       ]
     },
     "adv_detailed_analyze_launch_failures": {
       "name": "adv_detailed_analyze_launch_failures",
-      "description": "Analyze ALL failures in a launch with intelligent grouping, executive summary, timeline analysis, and pattern detection. Automatically filters tests without linked issues by default.",
+      "description": "Analyze ALL failures in a launch with intelligent grouping, executive summary, timeline analysis, and pattern detection. Automatically filters tests without linked issues by default. **v9.4.5:** `includeArtifacts` (default `true`, no extra calls) lists each analyzed test's artifacts; `includePageSource` (default `false`) fetches each analyzed test's failure page source and adds signals per test and per similar-failure group (capped by `pageSourceMaxTests`, default 10, and env `ARTIFACT_EVIDENCE_MAX_FILES`); `redactPageSource` (default `false`). Jira format includes artifact links per ticket.",
       "category": "Test Failure Analysis & Debugging",
       "examples": [
         "\"Analyze all failures in launch 120806\"",
+        "\"Analyze all failures in launch 12345 and read the page sources for the first 5 tests\"",
         "\"Show me what failed in launch 120906 with executive summary and patterns\"",
         "\"Generate Jira tickets for all failures in launch 120814 in jira format\""
       ]
@@ -867,7 +900,7 @@
     },
     "adv_get_launch_details": {
       "name": "adv_get_launch_details",
-      "description": "Get comprehensive information about a specific launch including test results, environment, build, and execution metadata. Set `includeJobParameters: true` to fetch CI job parameters from **Jenkins Build Now** (suite path, build, locale, test_run_rules, and full param schema). **Not available for Launch Launchers** — Jenkins integration only.",
+      "description": "Get comprehensive information about a specific launch including test results, environment, build, and execution metadata. Set `includeJobParameters: true` to fetch CI job parameters from **Jenkins Build Now** (suite path, build, locale, test_run_rules, and full param schema). **Not available for Launch Launchers** — Jenkins integration only. **v9.4.5:** `compactArtifacts: true` adds a compact launch-level and per-test artifact summary (counts and names; use `adv_list_test_artifacts` for uuids).",
       "category": "Launch Analysis & Reporting",
       "examples": [
         "\"Get launch details for launch 120906\"",
@@ -887,7 +920,7 @@
     },
     "adv_get_launch_test_summary": {
       "name": "adv_get_launch_test_summary",
-      "description": "Lightweight aggregated test results with statistics, most unstable tests, and tests with issues. Optimized for large launches.",
+      "description": "Lightweight aggregated test results with statistics, most unstable tests, and tests with issues. Optimized for large launches. **v9.4.5:** `includeArtifacts: true` adds a compact per-test artifact summary (default off).",
       "category": "Launch Analysis & Reporting",
       "examples": [
         "\"Get test summary for launch 119783 with top 10 most unstable tests\"",
@@ -953,7 +986,7 @@
     },
     "adv_find_flaky_tests": {
       "name": "adv_find_flaky_tests",
-      "description": "Find flaky tests across launches using a 3-phase approach: cross-launch flip-flop analysis for automated tests, manual test case scan via TCM execution history, and optional dual-perspective enrichment correlating both data sources.",
+      "description": "Find flaky tests across launches using a 3-phase approach: cross-launch flip-flop analysis for automated tests, manual test case scan via TCM execution history, and optional dual-perspective enrichment correlating both data sources. **v9.4.5:** `include_artifacts: true` attaches the artifact summary of each flaky test's latest failure (default off, no downloads).",
       "category": "Launch Analysis & Reporting",
       "examples": [
         "\"Find flaky tests in the Android project over the last 14 days\"",
@@ -964,7 +997,7 @@
     },
     "adv_analyze_test_execution_video": {
       "name": "adv_analyze_test_execution_video",
-      "description": "Download and analyze test execution video with Claude Vision. Extracts frames, compares with test case steps, and predicts if failure is bug or test issue.",
+      "description": "Download and analyze test execution video with Claude Vision. Extracts frames, compares with test case steps, and predicts if failure is bug or test issue. **v9.4.5:** adds an \"Artifact evidence\" section (artifact list + page-source signals) and feeds crash/permission/locator signals into the prediction. Inputs: `includeArtifactEvidence` (default `true`), `includePageSource` (default `true`).",
       "category": "Video & Screenshot Analysis",
       "examples": [
         "\"Analyze video for test 5455325 from launch 120906\"",
@@ -974,7 +1007,7 @@
     },
     "adv_download_test_screenshot": {
       "name": "adv_download_test_screenshot",
-      "description": "Download protected screenshots from Zebrunner with authentication.",
+      "description": "Download protected screenshots from Zebrunner with authentication. **v9.4.5:** non-image files that share the `/files/<uuid>` shape (for example `failure_page_source_*.xml`) are delivered through the artifact download path instead of failing with an image-decoding error; use [`adv_download_artifact`](#adv_download_artifact) for those.",
       "category": "Video & Screenshot Analysis",
       "examples": [
         "\"Download screenshot from [https://your-workspace.zebrunner.com/files/abc123](https://your-workspace.zebrunner.com/files/abc123)\"",
@@ -984,12 +1017,41 @@
     },
     "adv_analyze_screenshot": {
       "name": "adv_analyze_screenshot",
-      "description": "Visual analysis of screenshots with OCR, UI element detection, and Claude Vision analysis.",
+      "description": "Visual analysis of screenshots with OCR, UI element detection, and Claude Vision analysis. **v9.4.5:** refuses non-image artifacts (XML/text) with a pointer to [`adv_download_artifact`](#adv_download_artifact); optional `artifactUuid` input.",
       "category": "Video & Screenshot Analysis",
       "examples": [
         "\"Analyze screenshot [https://your-workspace.zebrunner.com/files/abc123](https://your-workspace.zebrunner.com/files/abc123) with OCR\"",
         "\"Analyze this screenshot and tell me what UI elements are visible\"",
         "\"Analyze screenshot /files/xyz789 and extract text with OCR\""
+      ]
+    },
+    "adv_list_test_artifacts": {
+      "name": "adv_list_test_artifacts",
+      "description": "List artifacts that automation attached to a launch and its tests (page sources, logcat, saved screenshots, reference links). Each item has `scope`, `testId`, `name`, `kind` (`file` with a `uuid`, or `reference` with a masked `url`). Read-only; no file is downloaded. Session video and session logs are not artifacts and are out of scope. Inputs: `projectKey`/`projectId`, `launchId`, optional `testId`, `kind`, `nameContains`, `includeLaunchLevel`, `includeMetadata` (adds content type and size with one bulk call), `limit`.",
+      "category": "Video & Screenshot Analysis",
+      "examples": [
+        "\"List the artifacts of launch 12345 in project DEMO\"",
+        "\"Which page source files are attached to test 67890 in launch 12345?\"",
+        "\"Show only file artifacts with 'page_source' in the name for launch 12345\""
+      ]
+    },
+    "adv_get_file_metadata": {
+      "name": "adv_get_file_metadata",
+      "description": "Get name, type, content type, size in bytes and upload time for a Zebrunner file by uuid, without downloading it (Public API v1 `GET /files/{uuid}/metadata`). Use it before `adv_download_artifact` to check size and type. Accepts a bare uuid or `/files/<uuid>`.",
+      "category": "Video & Screenshot Analysis",
+      "examples": [
+        "\"Get metadata for file aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee\"",
+        "\"How big is the artifact /files/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee?\""
+      ]
+    },
+    "adv_download_artifact": {
+      "name": "adv_download_artifact",
+      "description": "Read or save ONE artifact file exactly as attached (page source XML, logs, JSON, text, binaries) by `uuid` or by `launchId` + `name` (+ `testId`). No image decoding is performed. Text is returned inline by default (limit `maxBytes`, default 1 MiB, hard cap 10 MiB); `outputPath` saves to disk (up to 10 MiB, only inside the default `zebrunner-artifacts/` temp folder or folders in `ZEBRUNNER_ARTIFACT_DIRS`); larger files are refused with a clear message before any bytes are downloaded. `redact=true` masks email addresses and password-node text/value in text artifacts (**off by default** — page sources may contain personal data). Output reports status, size and content type only, never credentials. Saved files are created `0600` in private (`0700`) folders, never overwrite existing files or follow symlinks, and are deleted from the default temp folder after `ZEBRUNNER_ARTIFACT_TTL_MINUTES` (default 60). In HTTP mode nothing is saved (text is returned inline, `outputPath` is refused) unless `ZEBRUNNER_ALLOW_DISK_WRITES_HTTP=true`.",
+      "category": "Video & Screenshot Analysis",
+      "examples": [
+        "\"Download artifact aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee and show me the XML\"",
+        "\"Read failure_page_source_live.xml for test 67890 in launch 12345 with redaction on\"",
+        "\"Save artifact aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee to disk\""
       ]
     },
     "adv_batch_get_test_cases": {
@@ -1473,7 +1535,7 @@
     },
     "adv_get_bug_failure_info": {
       "name": "adv_get_bug_failure_info",
-      "description": "Get comprehensive failure information for a specific bug/hashcode, including high-level failure summary and detailed list of affected test runs. This tool combines data from multiple SQL widgets to provide complete failure analysis.",
+      "description": "Get comprehensive failure information for a specific bug/hashcode, including high-level failure summary and detailed list of affected test runs. This tool combines data from multiple SQL widgets to provide complete failure analysis. **v9.4.5:** `include_artifacts: true` adds a compact artifact summary for up to 5 affected tests (one lookup each, default off).",
       "category": "Platform & Results Analysis",
       "examples": [
         "\"Get failure info for hashcode 1051677506 on dashboard 99\"",
@@ -1556,7 +1618,7 @@
     },
     "adv_get_project_milestones": {
       "name": "adv_get_project_milestones",
-      "description": "Get all milestones configured for a project.",
+      "description": "Get all milestones configured for a project. Read-only: this server cannot create milestones or assign launches to them; use the official Zebrunner MCP (`create_milestone`, `assign_launches_to_milestone`).",
       "category": "Platform & Results Analysis",
       "examples": [
         "\"Get all milestones for project MCP\"",

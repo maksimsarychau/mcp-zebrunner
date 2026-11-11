@@ -13,7 +13,7 @@ Copy this file into your app repo as `.cursor/skills/zebrunner-test-impact/SKILL
 
 ## Setup
 
-- Connect the **Zebrunner MCP** server (`zbr-mfp`, `mcp-zebrunner`, etc.). Reconnect via `/mcp` if tools drop from the session.
+- Connect the **Zebrunner MCP** server (`zbr-mcp`, `mcp-zebrunner`, etc.). Reconnect via `/mcp` if tools drop from the session.
 - For PR workflows, use **GitHub MCP** and/or **`gh`** when available — neither is required if the user pastes PR metadata.
 - MCP tool arguments use **snake_case** (e.g. `project_key`, `change_summary`).
 

@@ -1,4 +1,5 @@
 import { Prediction, FailureAnalysis, TestCaseComparison, FrameAnalysis } from './types.js';
+import type { PageSourceSignals } from '../artifact-evidence.js';
 
 /**
  * PredictionEngine class
@@ -14,7 +15,8 @@ export class PredictionEngine {
     failureAnalysis: FailureAnalysis,
     testCaseComparison: TestCaseComparison | null,
     frames: FrameAnalysis[],
-    logs: string
+    logs: string,
+    pageSourceSignals?: PageSourceSignals
   ): Prediction {
     if (this.debug) {
       console.error('[PredictionEngine] Analyzing evidence to predict issue type');
@@ -123,6 +125,29 @@ export class PredictionEngine {
             testScore += 15;
           }
         }
+      }
+    }
+
+    // Page-source evidence from the failure artifact (v9.4.5)
+    if (pageSourceSignals) {
+      if (pageSourceSignals.crashDialog || pageSourceSignals.anrDialog) {
+        evidenceForBug.push('Page source shows an app crash/ANR dialog');
+        bugScore += 25;
+      }
+      if (pageSourceSignals.permissionDialog) {
+        evidenceForTestUpdate.push('A system permission dialog blocks the UI in the page source');
+        testScore += 15;
+      }
+      if (pageSourceSignals.locator?.found.length) {
+        evidenceForTestUpdate.push(`Locator '${pageSourceSignals.locator.found[0]}' is present in the page source (timing/visibility, not a missing element)`);
+        testScore += 10;
+      } else if (pageSourceSignals.locator?.missing.length) {
+        evidenceForBug.push(`Locator '${pageSourceSignals.locator.missing[0]}' is absent from the page source (element not rendered)`);
+        bugScore += 10;
+      }
+      if (pageSourceSignals.emptyState) {
+        evidenceForBug.push('Page source shows an empty state where content was expected');
+        bugScore += 10;
       }
     }
 

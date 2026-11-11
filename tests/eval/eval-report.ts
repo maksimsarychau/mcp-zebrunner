@@ -81,7 +81,10 @@ const GEMINI_PRICING: Record<string, { inputPer1M: number; outputPer1M: number }
   "gemini-1.5-pro": { inputPer1M: 1.25, outputPer1M: 5.0 },
 };
 
+// lookupPricing() takes the FIRST key contained in the model name, so more specific keys must come
+// before their prefixes ("claude-sonnet-5-5" before "claude-sonnet-5").
 const ANTHROPIC_PRICING: Record<string, { inputPer1M: number; outputPer1M: number }> = {
+  "claude-sonnet-5-5":  { inputPer1M: 2,    outputPer1M: 10 },
   "claude-sonnet-5":  { inputPer1M: 2,    outputPer1M: 10 },
   "claude-sonnet-4-6":  { inputPer1M: 3,    outputPer1M: 15 },
   "claude-sonnet-4-5":  { inputPer1M: 3,    outputPer1M: 15 },

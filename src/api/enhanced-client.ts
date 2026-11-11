@@ -28,9 +28,18 @@ import {
   ZebrunnerTestSuiteSchema,
   ZebrunnerTestExecutionItemSchema,
   ZebrunnerTestRunSchema,
-  ZebrunnerTestResultResponseSchema
+  ZebrunnerTestResultResponseSchema,
+  FileMetadataResourceSchema,
+  type FileMetadata
 } from "../types/core.js";
 import { sanitizeRqlString } from "../utils/security.js";
+import { ArtifactTooLargeError, isValidUuid } from "../utils/artifacts.js";
+
+const MAX_FILE_METADATA_CACHE_ENTRIES = 500;
+
+/** Wrong or deleted file uuids (404) and auth failures are not transient: do not retry them. */
+const isFileLookupFatal = (error: unknown): boolean =>
+  error instanceof ZebrunnerAuthError || error instanceof ZebrunnerNotFoundError;
 
 /**
  * Enhanced Zebrunner API Client with improved error handling
@@ -53,6 +62,7 @@ export class EnhancedZebrunnerClient {
   private suitesCache: Map<string, { suites: ZebrunnerTestSuite[], timestamp: number }> = new Map();
   private automationStatesCache: Map<string, { states: { id: number; name: string }[], timestamp: number }> = new Map();
   private prioritiesCache: Map<string, { priorities: { id: number; name: string }[], timestamp: number }> = new Map();
+  private fileMetadataCache: Map<string, { metadata: FileMetadata; timestamp: number }> = new Map();
   private endpointHealth: Map<string, boolean> = new Map();
   private lastHealthCheck: Date | null = null;
   private externalAutomationStatesResolver?: AutomationStatesResolver;
@@ -314,13 +324,14 @@ export class EnhancedZebrunnerClient {
 
   private async retryRequest<T>(
     requestFn: () => Promise<T>,
-    attempts: number = this.config.retryAttempts || 3
+    attempts: number = this.config.retryAttempts || 3,
+    isFatal: (error: unknown) => boolean = (error) => error instanceof ZebrunnerAuthError,
   ): Promise<T> {
     for (let i = 0; i < attempts; i++) {
       try {
         return await requestFn();
       } catch (error) {
-        if (i === attempts - 1 || error instanceof ZebrunnerAuthError) {
+        if (i === attempts - 1 || isFatal(error)) {
           throw error;
         }
         
@@ -359,7 +370,7 @@ export class EnhancedZebrunnerClient {
     try {
       // Try a minimal request to test-suites endpoint which should work with valid auth
       const response = await this.http.get('/test-suites', {
-        params: { projectKey, size: 1 }, // Use configured project
+        params: { projectKey, maxPageSize: 1 }, // Use configured project (API param is maxPageSize, not size)
         timeout: this.config.timeout || 60000
       });
       
@@ -498,9 +509,9 @@ export class EnhancedZebrunnerClient {
   }
 
   /**
-   * Finds a single test suite by ID using the List Test Suites endpoint + cache.
-   * The Public API v1 has no GET /test-suites/{id} — this method fetches all suites
-   * for the project and filters locally.
+   * Gets a single test suite by ID via GET /test-suites/{id} (Public API v1).
+   * Falls back to the List Test Suites endpoint + cache when the direct call fails
+   * for a reason other than authentication, so older workspaces keep working.
    */
   async getTestSuite(projectKey: string, suiteId: number): Promise<ZebrunnerTestSuite> {
     if (!projectKey) {
@@ -508,6 +519,17 @@ export class EnhancedZebrunnerClient {
     }
     if (!suiteId || suiteId <= 0) {
       throw new ZebrunnerApiError('Valid suite ID is required');
+    }
+
+    try {
+      const response = await this.http.get(`/test-suites/${suiteId}`, { params: { projectKey } });
+      const data = response.data?.data || response.data;
+      return ZebrunnerTestSuiteSchema.parse(data);
+    } catch (error) {
+      if (error instanceof ZebrunnerAuthError) throw error;
+      if (this.config.debug) {
+        console.error(`[API] Direct GET /test-suites/${suiteId} failed, falling back to list+cache`);
+      }
     }
 
     const allSuites = await this.getAllSuitesWithCache(projectKey);
@@ -518,6 +540,154 @@ export class EnhancedZebrunnerClient {
     }
 
     return suite;
+  }
+
+  // ───────────────────────── Files (Public API v1) ─────────────────────────
+
+  /**
+   * GET /files/{uuid}/metadata — name, type, size and content type without downloading bytes.
+   * Results are cached in-process (file metadata is immutable once uploaded).
+   */
+  async getFileMetadata(uuid: string): Promise<FileMetadata> {
+    if (!isValidUuid(uuid)) {
+      throw new ZebrunnerApiError(`Invalid file uuid: '${uuid}'`);
+    }
+    const key = uuid.toLowerCase();
+    const hit = this.touchFileMetadata(key);
+    if (hit) return hit;
+
+    return this.retryRequest(async () => {
+      const response = await this.http.get(`/files/${key}/metadata`);
+      const data = response.data?.data || response.data;
+      const metadata = FileMetadataResourceSchema.parse(data);
+      this.fileMetadataCache.set(key, { metadata, timestamp: Date.now() });
+      this.evictFileMetadataCache();
+      return metadata;
+    }, undefined, isFileLookupFatal);
+  }
+
+  /**
+   * GET /files/-/metadata?uuid=...&uuid=... — up to 100 uuids per request (chunked automatically).
+   * Unknown uuids are silently dropped by the API; callers should treat missing entries as "not found".
+   */
+  async getBulkFileMetadata(uuids: string[]): Promise<FileMetadata[]> {
+    const unique = Array.from(new Set(uuids.filter(isValidUuid).map((u) => u.toLowerCase())));
+    const result: FileMetadata[] = [];
+    const missing: string[] = [];
+
+    for (const u of unique) {
+      const hit = this.touchFileMetadata(u);
+      if (hit) {
+        result.push(hit);
+      } else {
+        missing.push(u);
+      }
+    }
+
+    for (let i = 0; i < missing.length; i += 100) {
+      const chunk = missing.slice(i, i + 100);
+      const query = chunk.map((u) => `uuid=${encodeURIComponent(u)}`).join("&");
+      const items = await this.retryRequest(async () => {
+        const response = await this.http.get(`/files/-/metadata?${query}`);
+        const body = response.data;
+        const list: unknown[] = Array.isArray(body?.items) ? body.items : Array.isArray(body?.data?.items) ? body.data.items : [];
+        return list.map((item) => FileMetadataResourceSchema.parse(item));
+      }, undefined, isFileLookupFatal);
+      for (const metadata of items) {
+        this.fileMetadataCache.set(metadata.uuid.toLowerCase(), { metadata, timestamp: Date.now() });
+        result.push(metadata);
+      }
+      this.evictFileMetadataCache();
+    }
+    return result;
+  }
+
+  /**
+   * GET /files/{uuid} — raw bytes. Enforces `maxBytes` BEFORE downloading (using metadata size)
+   * and again at the transport level. Never logs or returns credentials.
+   */
+  async downloadFileContent(
+    uuid: string,
+    options: { maxBytes: number; purpose?: "return" | "save" }
+  ): Promise<{ buffer: Buffer; metadata: FileMetadata | null; contentType: string | undefined; fileName: string | undefined }> {
+    if (!isValidUuid(uuid)) {
+      throw new ZebrunnerApiError(`Invalid file uuid: '${uuid}'`);
+    }
+    const key = uuid.toLowerCase();
+    const purpose = options.purpose ?? "return";
+
+    // Metadata first: gives size for the pre-check, content type and original name.
+    let metadata: FileMetadata | null = null;
+    try {
+      metadata = await this.getFileMetadata(key);
+    } catch (error) {
+      if (error instanceof ZebrunnerAuthError || error instanceof ZebrunnerNotFoundError) throw error;
+      // Metadata is a nicety; the transport-level limit below still applies.
+    }
+    if (metadata?.sizeInBytes != null && metadata.sizeInBytes > options.maxBytes) {
+      throw new ArtifactTooLargeError(metadata.sizeInBytes, options.maxBytes, purpose);
+    }
+
+    const outcome = await this.retryRequest(async () => {
+      try {
+        return {
+          tooLarge: false as const,
+          response: await this.http.get(`/files/${key}`, {
+            responseType: "arraybuffer",
+            maxContentLength: options.maxBytes,
+            maxBodyLength: options.maxBytes,
+            headers: { Accept: "*/*" },
+            transformResponse: [(data) => data],
+          }),
+        };
+      } catch (error) {
+        // Transport-level limit hit: do not retry, report as "too large".
+        if (error instanceof Error && /maxContentLength/i.test(error.message)) {
+          return { tooLarge: true as const, response: undefined };
+        }
+        throw error;
+      }
+    }, undefined, isFileLookupFatal);
+    if (outcome.tooLarge || !outcome.response) {
+      throw new ArtifactTooLargeError(options.maxBytes + 1, options.maxBytes, purpose);
+    }
+    const response = outcome.response;
+
+    const buffer = Buffer.from(response.data as ArrayBuffer);
+    if (buffer.length > options.maxBytes) {
+      throw new ArtifactTooLargeError(buffer.length, options.maxBytes, purpose);
+    }
+
+    const headerType = response.headers?.["content-type"];
+    const disposition = String(response.headers?.["content-disposition"] ?? "");
+    const nameMatch = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition);
+    return {
+      buffer,
+      metadata,
+      contentType: metadata?.contentType ?? (typeof headerType === "string" ? headerType.split(";")[0].trim() : undefined),
+      fileName: metadata?.name ?? (nameMatch ? decodeURIComponent(nameMatch[1]) : undefined),
+    };
+  }
+
+  /**
+   * Cache hit: move the entry to the most-recently-used position. Map keeps insertion order,
+   * so delete + re-insert makes evictFileMetadataCache() drop the least recently used entry.
+   */
+  private touchFileMetadata(key: string): FileMetadata | undefined {
+    const cached = this.fileMetadataCache.get(key);
+    if (!cached) return undefined;
+    this.fileMetadataCache.delete(key);
+    cached.timestamp = Date.now();
+    this.fileMetadataCache.set(key, cached);
+    return cached.metadata;
+  }
+
+  private evictFileMetadataCache(): void {
+    while (this.fileMetadataCache.size > MAX_FILE_METADATA_CACHE_ENTRIES) {
+      const oldest = this.fileMetadataCache.keys().next().value;
+      if (oldest === undefined) break;
+      this.fileMetadataCache.delete(oldest);
+    }
   }
 
   async getTestCaseById(

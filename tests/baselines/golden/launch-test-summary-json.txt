@@ -1,0 +1,175 @@
+{
+  "launchId": 9001,
+  "projectId": 42,
+  "projectKey": "FIX",
+  "launchName": "Fixture Regression",
+  "launchUrl": "https://fixture.zebrunner.test/projects/FIX/automation-launches/9001",
+  "launchStatus": "FAILED",
+  "launchBuild": "app-1.2.3.apk",
+  "launchEnvironment": "stage",
+  "launchPlatform": "android",
+  "launchStartedAt": 1700000000000,
+  "launchEndedAt": 1700001800000,
+  "summary": {
+    "totalTests": 4,
+    "filteredTests": 4,
+    "byStatus": {
+      "FAILED": 3,
+      "PASSED": 1
+    },
+    "byStabilityRange": {
+      "critical_0-20": 0,
+      "low_21-40": 0,
+      "medium_41-60": 3,
+      "good_61-80": 0,
+      "excellent_81-100": 1
+    },
+    "byTestClass": {
+      "com.fixture.LoginTests": {
+        "count": 2,
+        "avgStability": 75,
+        "failedCount": 1
+      },
+      "com.fixture.CheckoutTests": {
+        "count": 1,
+        "avgStability": 50,
+        "failedCount": 1
+      },
+      "com.fixture.ProfileTests": {
+        "count": 1,
+        "avgStability": 50,
+        "failedCount": 1
+      }
+    },
+    "testsWithIssues": 0,
+    "testsWithKnownIssues": 0,
+    "totalIssueReferences": 0,
+    "totalDurationSeconds": 240,
+    "avgDurationSeconds": 60,
+    "maxDurationSeconds": 60,
+    "minDurationSeconds": 60,
+    "avgStability": 63,
+    "minStability": 50,
+    "maxStability": 100,
+    "totalTestCasesCovered": 1,
+    "testsWithZeroTestCases": 3,
+    "testsWithOneTestCase": 1,
+    "testsWithMultipleTestCases": 0
+  },
+  "top20MostUnstableTests": [
+    {
+      "id": 101,
+      "name": "login shows home screen",
+      "stability": 50,
+      "status": "FAILED",
+      "testClass": "com.fixture.LoginTests",
+      "knownIssue": false,
+      "durationSeconds": 60,
+      "issueReferences": [],
+      "testUrl": "https://fixture.zebrunner.test/projects/FIX/automation-launches/9001/tests/101"
+    },
+    {
+      "id": 102,
+      "name": "checkout completes",
+      "stability": 50,
+      "status": "FAILED",
+      "testClass": "com.fixture.CheckoutTests",
+      "knownIssue": false,
+      "durationSeconds": 60,
+      "issueReferences": [],
+      "testUrl": "https://fixture.zebrunner.test/projects/FIX/automation-launches/9001/tests/102"
+    },
+    {
+      "id": 103,
+      "name": "profile saves",
+      "stability": 50,
+      "status": "FAILED",
+      "testClass": "com.fixture.ProfileTests",
+      "knownIssue": false,
+      "durationSeconds": 60,
+      "issueReferences": [],
+      "testUrl": "https://fixture.zebrunner.test/projects/FIX/automation-launches/9001/tests/103"
+    },
+    {
+      "id": 104,
+      "name": "logout works",
+      "stability": 100,
+      "status": "PASSED",
+      "testClass": "com.fixture.LoginTests",
+      "knownIssue": false,
+      "durationSeconds": 60,
+      "issueReferences": [],
+      "testUrl": "https://fixture.zebrunner.test/projects/FIX/automation-launches/9001/tests/104"
+    }
+  ],
+  "testsWithIssues": [],
+  "tests": [
+    {
+      "id": 101,
+      "name": "login shows home screen",
+      "status": "FAILED",
+      "durationSeconds": 60,
+      "startTime": 1700000001000,
+      "finishTime": 1700000061000,
+      "issueReferences": [],
+      "knownIssue": false,
+      "testClass": "com.fixture.LoginTests",
+      "stability": 50,
+      "testCasesLinkedCount": 1,
+      "testCaseKeys": [
+        "FIX-1"
+      ],
+      "testUrl": "https://fixture.zebrunner.test/projects/FIX/automation-launches/9001/tests/101"
+    },
+    {
+      "id": 102,
+      "name": "checkout completes",
+      "status": "FAILED",
+      "durationSeconds": 60,
+      "startTime": 1700000001000,
+      "finishTime": 1700000061000,
+      "issueReferences": [],
+      "knownIssue": false,
+      "testClass": "com.fixture.CheckoutTests",
+      "stability": 50,
+      "testCasesLinkedCount": 0,
+      "testCaseKeys": [],
+      "testUrl": "https://fixture.zebrunner.test/projects/FIX/automation-launches/9001/tests/102"
+    },
+    {
+      "id": 103,
+      "name": "profile saves",
+      "status": "FAILED",
+      "durationSeconds": 60,
+      "startTime": 1700000001000,
+      "finishTime": 1700000061000,
+      "issueReferences": [],
+      "knownIssue": false,
+      "testClass": "com.fixture.ProfileTests",
+      "stability": 50,
+      "testCasesLinkedCount": 0,
+      "testCaseKeys": [],
+      "testUrl": "https://fixture.zebrunner.test/projects/FIX/automation-launches/9001/tests/103"
+    },
+    {
+      "id": 104,
+      "name": "logout works",
+      "status": "PASSED",
+      "durationSeconds": 60,
+      "startTime": 1700000001000,
+      "finishTime": 1700000061000,
+      "issueReferences": [],
+      "knownIssue": false,
+      "testClass": "com.fixture.LoginTests",
+      "stability": 100,
+      "testCasesLinkedCount": 0,
+      "testCaseKeys": [],
+      "testUrl": "https://fixture.zebrunner.test/projects/FIX/automation-launches/9001/tests/104"
+    }
+  ],
+  "testCount": {
+    "returned": 4,
+    "total": 4,
+    "allTests": 4
+  }
+}

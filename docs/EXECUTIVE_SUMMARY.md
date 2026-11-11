@@ -107,9 +107,10 @@ MCP Zebrunner provides a natural‑language interface for test management. Inste
 - ⚠️ **MCP Registry** — publication in progress
 
 ### Scale
-- **76** `adv_*` tools in [`tools.json`](../tools.json) (**70** inline smoke-regression registrations + **6** handler-module tools)  
+- **79** `adv_*` tools in [`tools.json`](../tools.json) (**73** inline smoke-regression registrations + **6** handler-module tools)  
 - **22** MCP prompts (e.g. `/pass-rate`, `/jira-automation-plan`) and **14** resources  
 - **Multiple integrations** — Claude Desktop, Cursor, ChatGPT Desktop, IntelliJ IDEA, Docker  
+- **Artifact-aware failure analysis** (v9.4.5) — page sources, logs and links attached by automation are readable and used in root-cause analysis  
 - **Rules engine** for quality validation  
 - **Multiple output formats** — JSON, Markdown, Jira‑ready
 
@@ -194,4 +195,4 @@ Planned enhancements:
 
 ---
 
-*Last Updated: v9.1.0 - July 2026*
+*Last Updated: v9.4.5 - November 2026*

@@ -1,5 +1,43 @@
 # Change Logs
 
+## v9.4.5 — Artifact tools and artifact-aware analysis
+
+### Added
+
+- **`adv_list_test_artifacts`** — read-only list of launch-level and test-level artifacts (`kind: file` with `uuid`, `kind: reference` with a masked link). Data comes from the Reporting API `artifacts` fields already present on launches and tests, so no extra calls are needed; `includeMetadata` adds content type and size with one bulk call.
+- **`adv_get_file_metadata`** — `GET /files/{uuid}/metadata` (Public API v1) without downloading bytes; results cached in-process (files are immutable).
+- **`adv_download_artifact`** — `GET /files/{uuid}` by `uuid` or by `launchId` + `name` (+ `testId`). Text is returned inline by default (limit 1 MiB, cap 10 MiB); `outputPath` saves up to 10 MiB to the default `zebrunner-artifacts/` temp folder or folders in `ZEBRUNNER_ARTIFACT_DIRS`; larger files are refused before any bytes are downloaded. Optional `redact` (emails and password-node values) is **off by default**. Credentials are never logged or returned; the API version path is defined in one place (`/api/public/v1`).
+- **Artifact-aware failure analysis** (`src/utils/artifact-evidence.ts`):
+  - `adv_analyze_test_failure` lists artifacts, reads the failure page source and adds signals (crash/ANR dialog, permission dialog, keyboard, loading indicator, toast, locator present/missing). Signals refine the classification (for example Locator Issue → Timing Issue when the locator is in the page source), appear in the Jira format, and are compared with the last passed run in `compareWithLastPassed`. New inputs: `redactPageSource`. Defaults: `includeArtifacts: true`, `includePageSource: true`.
+  - `adv_detailed_analyze_launch_failures` gains `includeArtifacts` (default `true`), `includePageSource` (default `false`), `pageSourceMaxTests` (default 10) and `redactPageSource`; signals are shown per test and per similar-failure group; page sources share one per-call download budget (`ARTIFACT_EVIDENCE_MAX_FILES`).
+  - `adv_analyze_test_execution_video` gains an "Artifact evidence" section (`includeArtifactEvidence`, `includePageSource`, both default `true`) and feeds crash/permission/locator signals into the bug-vs-test-issue prediction.
+- **Opt-in artifact summaries** (default off, no downloads): `compactArtifacts` on `adv_get_launch_details`, `includeArtifacts` on `adv_get_launch_test_summary`, `include_artifacts` on `adv_find_flaky_tests` and `adv_get_bug_failure_info`. A steering hint points to `includePageSource` after launch analysis.
+- **Self-check safety net** — `npm run self-check` (offline) and `npm run self-check:live`: tool-contract compatibility against the 9.4.4 baseline, golden-output tests for analysis tools, parser-contract and failure-isolation tests, version-consistency and doc-count tests, secret-leak test, verify-rename and smoke. Wired into `npm run release`.
+
+### Fixed
+
+- **`adv_download_test_screenshot`** no longer fails on non-image files such as `failure_page_source_*.xml`; non-image text is returned inline; binary content is saved to the default artifact folder (or to `outputPath` when given). **`adv_analyze_screenshot`** refuses non-image artifacts with a pointer to `adv_download_artifact` and accepts an optional `artifactUuid`.
+- Public API gap fixes found by comparing `api-docs_261111.json` with the implementation: `AZURE_DEVOPS` accepted as issue type in test run results; `ZebrunnerApiClient.getTestCaseById` unwraps `{ data }`; `getTestSuite` uses `GET /test-suites/{id}` directly (falls back to the cached list); `testConnection` uses `maxPageSize` (the real query parameter).
+
+### Security
+
+- **Artifact storage hardening** (`src/utils/secure-temp.ts`): saved artifacts and screenshots are written as new `0600` files in private `0700` folders; a symlinked or foreign-owned default folder is refused; existing files and symlinks are never overwritten or followed. Files in the default temp folders (`zebrunner-artifacts/`, `mcp-zebrunner/screenshots/`) are deleted after `ZEBRUNNER_ARTIFACT_TTL_MINUTES` (default 60, `0` disables); folders in `ZEBRUNNER_ARTIFACT_DIRS` are never cleaned. Default file names get a short uuid prefix.
+- **HTTP mode writes nothing to disk** by default (files would land on the shared server host): text is returned inline and `outputPath` is refused unless `ZEBRUNNER_ALLOW_DISK_WRITES_HTTP=true`.
+- **`adv_download_test_screenshot`**: a non-image fallback (e.g. page-source XML) is now returned inline instead of being saved; `outputPath` is checked against the allow-list and actually written (previously it was reported but not written).
+- Video download and frame extraction folders are unchanged.
+
+### Changed
+
+- Milestones stay read-only (`adv_get_project_milestones`); creating milestones and assigning launches is documented as official-MCP-only in `docs/API_COVERAGE.md` and the `zebrunner://mcp-routing` resource.
+- With artifact flags off (or tests without artifacts), analysis output is byte-for-byte the 9.4.4 output (golden tests). With defaults, the detailed single-test format adds one explicit "No artifacts attached to this test." line when a test has none.
+
+### Notes
+
+- Inventory: **79** `adv_*` tools in `tools.json` (**73** inline registrations + **6** handler-module tools); **22** MCP prompts; **15** MCP resources.
+- Out of scope: session artifacts (video and session logs), runtime self-check at server startup.
+- Package version **9.4.5** (`package.json`, `package-lock.json`, `server.json`, MCP catalogs).
+
+---
 ## v9.4.4 — Test run metadata agent UX
 
 ### Changed

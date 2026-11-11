@@ -3,6 +3,7 @@ import { strict as assert } from "node:assert";
 import {
   AnthropicEvalClient,
   OpenAiEvalClient,
+  anthropicSupportsForcedToolChoice,
   anthropicSupportsTemperature,
   type EvalLlmChatOptions,
 } from "../eval/eval-llm-client.js";
@@ -131,5 +132,72 @@ describe("eval LLM SDK request compatibility", () => {
     assert.equal(anthropicSupportsTemperature("claude-sonnet-4-6"), true);
     assert.equal(anthropicSupportsTemperature("claude-sonnet-5"), false);
     assert.equal(anthropicSupportsTemperature("claude-opus-5-20260201"), false);
+    assert.equal(anthropicSupportsTemperature("claude-sonnet-5-5"), false);
+  });
+
+  describe("claude-sonnet-5-5 (rejects forced tool_choice)", () => {
+    const anthropicOk = (model: string) =>
+      new Response(JSON.stringify({
+        id: "msg-test",
+        type: "message",
+        role: "assistant",
+        model,
+        content: [{ type: "tool_use", id: "tu_1", name: "score_output", input: { relevance: 5 } }],
+        stop_reason: "tool_use",
+        stop_sequence: null,
+        usage: { input_tokens: 4, output_tokens: 2 },
+      }), { status: 200, headers: { "content-type": "application/json" } });
+
+    it("anthropicSupportsForcedToolChoice is false only for Sonnet 5.5", () => {
+      assert.equal(anthropicSupportsForcedToolChoice("claude-sonnet-5-5"), false);
+      assert.equal(anthropicSupportsForcedToolChoice("claude-sonnet-5-5-20261101"), false);
+      assert.equal(anthropicSupportsForcedToolChoice("claude-sonnet-5"), true);
+      assert.equal(anthropicSupportsForcedToolChoice("claude-sonnet-4-6"), true);
+      assert.equal(anthropicSupportsForcedToolChoice("claude-opus-5"), true);
+    });
+
+    it("sends tool_choice auto + an instruction instead of forcing the judge tool", async () => {
+      let body: Record<string, any> = {};
+      const fetchImpl: typeof fetch = async (input, init) => {
+        body = await requestBody(input, init);
+        return anthropicOk("claude-sonnet-5-5");
+      };
+      const client = new AnthropicEvalClient("test-key", fetchImpl);
+      const response = await client.chatWithTools({
+        ...options,
+        model: "claude-sonnet-5-5",
+        toolChoice: { name: "score_output" },
+      });
+
+      assert.deepEqual(body.tool_choice, { type: "auto" });
+      assert.ok(String(body.messages[0].content).includes('calling the "score_output" tool'));
+      assert.equal("temperature" in body, false);
+      assert.deepEqual(response.toolCalls, [{ name: "score_output", input: { relevance: 5 } }]);
+    });
+
+    it("still forces the tool for models that support it", async () => {
+      let body: Record<string, any> = {};
+      const fetchImpl: typeof fetch = async (input, init) => {
+        body = await requestBody(input, init);
+        return anthropicOk("claude-sonnet-4-6");
+      };
+      const client = new AnthropicEvalClient("test-key", fetchImpl);
+      await client.chatWithTools({ ...options, model: "claude-sonnet-4-6", toolChoice: { name: "score_output" } });
+
+      assert.deepEqual(body.tool_choice, { type: "tool", name: "score_output" });
+      assert.ok(!String(body.messages[0].content).includes("exactly once"), "prompt untouched when forcing works");
+    });
+
+    it("leaves auto tool choice untouched on Sonnet 5.5", async () => {
+      let body: Record<string, any> = {};
+      const fetchImpl: typeof fetch = async (input, init) => {
+        body = await requestBody(input, init);
+        return anthropicOk("claude-sonnet-5-5");
+      };
+      const client = new AnthropicEvalClient("test-key", fetchImpl);
+      await client.chatWithTools({ ...options, model: "claude-sonnet-5-5", toolChoice: "auto" });
+      assert.deepEqual(body.tool_choice, { type: "auto" });
+      assert.equal(body.messages[0].content, options.userMessage);
+    });
   });
 });

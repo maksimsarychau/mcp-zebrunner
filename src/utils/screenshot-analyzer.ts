@@ -3,6 +3,7 @@ import type { Worker } from 'tesseract.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { ensureSecureDir, getArtifactTtlMs, sweepExpired, writeSecureFile } from './secure-temp.js';
 
 /**
  * Screenshot analysis utilities
@@ -318,54 +319,37 @@ export async function saveScreenshotToTemp(
   buffer: Buffer,
   filename: string
 ): Promise<string> {
-  const tempDir = process.env.SCREENSHOT_DOWNLOAD_DIR || path.join(os.tmpdir(), 'mcp-zebrunner', 'screenshots');
+  const tempDir = ensureScreenshotDir();
 
-  if (!fs.existsSync(tempDir)) {
-    fs.mkdirSync(tempDir, { recursive: true });
-  }
-
-  const safeName = path.basename(filename).replace(/[^a-zA-Z0-9_.-]/g, '_');
+  const safeName = path.basename(filename).replace(/[^a-zA-Z0-9_.-]/g, '_').replace(/^\.+/, '') || 'screenshot';
   const filepath = path.join(tempDir, safeName);
   const resolved = path.resolve(filepath);
   if (!resolved.startsWith(path.resolve(tempDir) + path.sep)) {
     throw new Error('Security: screenshot path escapes temp directory');
   }
 
-  await fs.promises.writeFile(filepath, buffer);
-  return filepath;
+  return writeSecureFile(filepath, buffer);
+}
+
+/** Screenshot cache folder: SCREENSHOT_DOWNLOAD_DIR or <tmp>/mcp-zebrunner/screenshots. */
+export function getScreenshotDir(): string {
+  return process.env.SCREENSHOT_DOWNLOAD_DIR || path.join(os.tmpdir(), 'mcp-zebrunner', 'screenshots');
+}
+
+/** Create and verify the screenshot folder (0700, owned by us, no symlinks). */
+export function ensureScreenshotDir(): string {
+  if (process.env.SCREENSHOT_DOWNLOAD_DIR) {
+    return ensureSecureDir(process.env.SCREENSHOT_DOWNLOAD_DIR);
+  }
+  return ensureSecureDir(getScreenshotDir(), { root: os.tmpdir(), strict: true });
 }
 
 /**
  * Cleanup old screenshots from temp directory
  */
-export function cleanupOldScreenshots(maxAgeMs: number = 3600000): number {
-  const tempDir = process.env.SCREENSHOT_DOWNLOAD_DIR || path.join(os.tmpdir(), 'mcp-zebrunner', 'screenshots');
-  
-  if (!fs.existsSync(tempDir)) {
-    return 0;
-  }
-  
-  let deletedCount = 0;
-  const now = Date.now();
-  
-  try {
-    const files = fs.readdirSync(tempDir);
-    
-    for (const file of files) {
-      const filepath = path.join(tempDir, file);
-      const stats = fs.statSync(filepath);
-      const age = now - stats.mtimeMs;
-      
-      if (age > maxAgeMs) {
-        fs.unlinkSync(filepath);
-        deletedCount++;
-      }
-    }
-  } catch (error) {
-    console.warn('Failed to cleanup old screenshots:', error);
-  }
-  
-  return deletedCount;
+export function cleanupOldScreenshots(maxAgeMs: number = getArtifactTtlMs()): number {
+  if (maxAgeMs <= 0) return 0;
+  return sweepExpired(getScreenshotDir(), maxAgeMs);
 }
 
 /**
@@ -400,7 +384,7 @@ export function detectImageFormat(buffer: Buffer): 'png' | 'jpeg' | 'jpg' | 'web
  * Get total size of screenshot cache directory
  */
 export function getCacheSize(): { totalSize: number; fileCount: number } {
-  const tempDir = process.env.SCREENSHOT_DOWNLOAD_DIR || path.join(os.tmpdir(), 'mcp-zebrunner', 'screenshots');
+  const tempDir = getScreenshotDir();
   
   if (!fs.existsSync(tempDir)) {
     return { totalSize: 0, fileCount: 0 };
@@ -414,7 +398,8 @@ export function getCacheSize(): { totalSize: number; fileCount: number } {
   for (const file of files) {
     try {
       const filePath = path.join(tempDir, file);
-      const stats = fs.statSync(filePath);
+      const stats = fs.lstatSync(filePath);
+      if (!stats.isFile()) continue;
       totalSize += stats.size;
       fileCount++;
     } catch (error) {
@@ -429,31 +414,12 @@ export function getCacheSize(): { totalSize: number; fileCount: number } {
  * Clear all screenshots from cache
  */
 export function clearAllScreenshots(): number {
-  const tempDir = process.env.SCREENSHOT_DOWNLOAD_DIR || path.join(os.tmpdir(), 'mcp-zebrunner', 'screenshots');
-  
-  if (!fs.existsSync(tempDir)) {
-    return 0;
-  }
-
-  let cleared = 0;
-  const files = fs.readdirSync(tempDir);
-  
-  for (const file of files) {
-    try {
-      const filePath = path.join(tempDir, file);
-      fs.unlinkSync(filePath);
-      cleared++;
-    } catch (error) {
-      console.error(`Failed to delete file ${file}:`, error);
-    }
-  }
-
-  return cleared;
+  return sweepExpired(getScreenshotDir(), 0);
 }
 
-// Auto cleanup on module load (removes screenshots older than 1 hour)
+// Auto cleanup on module load (ZEBRUNNER_ARTIFACT_TTL_MINUTES, default 60)
 try {
-  const cleaned = cleanupOldScreenshots(3600000); // 1 hour
+  const cleaned = cleanupOldScreenshots();
   if (cleaned > 0) {
     console.error(`[Screenshot Cleanup] Removed ${cleaned} old screenshot(s)`);
   }

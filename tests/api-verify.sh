@@ -12,6 +12,8 @@
 # Auto-discovers projects via Reporting API and runs tests against all starred projects.
 #
 # Coverage: 31 unique endpoint patterns across Public API, Reporting API, and Widget SQL.
+# v9.4.5: direct GET /test-suites/{id}, /files/{uuid}/metadata, /files/{uuid} (download),
+#         /files/-/metadata (bulk), artifacts field on launch/test responses.
 #
 # Usage: ./tests/api-verify.sh [--verbose] [--widget-catalog-audit] [--pagination-audit]
 #
@@ -23,6 +25,7 @@
 #   ZEBRUNNER_VERIFY_TEST_RUN_PROJECT=<key> — with VERIFY_TEST_RUN_ID: P7c environment/schema probe
 #   ZEBRUNNER_VERIFY_TEST_RUN_ID=<id>       — GET specific test run (UI has Environment set)
 #   ZEBRUNNER_VERIFY_BUILD_SUBSTRING=<text> — P10b: informational search in Build/Platform options (never fails the run)
+#   ZEBRUNNER_VERIFY_FILE_UUID=<uuid>     — v9.4.5: /files/{uuid}/metadata, /files/{uuid} download, /files/-/metadata bulk
 #
 set -euo pipefail
 
@@ -559,7 +562,7 @@ tcm_widget_post() {
 }
 
 # Raw widget API with systemFieldDataType MANUAL_ONLY returns HTTP 500 on custom-layout tenants
-# where "Manual Only" is a CUSTOM field (MFPAND). MCP tool resolves to customFieldId instead.
+# where "Manual Only" is a CUSTOM field (PROJAND). MCP tool resolves to customFieldId instead.
 tcm_widget_post_system_manual_only() {
   local label="$1"
   local manual_field_type="${2:-}"
@@ -576,7 +579,7 @@ tcm_widget_post_system_manual_only() {
   fi
 }
 
-# Case Status is CUSTOM on MFP projects — use customFieldId from fields-layout (MCP resolves the same way).
+# Case Status is CUSTOM on PROJ projects — use customFieldId from fields-layout (MCP resolves the same way).
 tcm_widget_post_case_status() {
   local label="$1"
   local case_status_id="${2:-}"
@@ -914,6 +917,23 @@ except: print(0)
     check_status "P1b: GET /test-suites page 2 via pageToken"
   else
     log_skip "P1b: Suite pageToken pagination (only 1 page)"
+  fi
+
+  # v9.4.5 — Direct GET /test-suites/{id} (was list+filter only before the fix)
+  if [[ -n "$SUITE_ID" ]]; then
+    do_public_get "/test-suites/$SUITE_ID?projectKey=$TEST_PROJECT"
+    check_status "P1c: GET /test-suites/$SUITE_ID (direct by ID)"
+    if [[ "$_STATUS" == "200" ]]; then
+      local SUITE_BY_ID
+      SUITE_BY_ID=$(json_data_field "$_BODY" "id")
+      if [[ "$SUITE_BY_ID" == "$SUITE_ID" ]]; then
+        log_pass "P1c: direct suite GET returns matching id=$SUITE_ID"
+      else
+        log_fail "P1c: direct suite GET id mismatch" "expected=$SUITE_ID got=$SUITE_BY_ID"
+      fi
+    fi
+  else
+    log_skip "P1c: GET /test-suites/{id} (no SUITE_ID)"
   fi
 
   # --- Public API: test cases ---
@@ -1595,6 +1615,23 @@ print('yes' if 'items' in d or 'results' in d or isinstance(d, list) else 'no')
     R6B_TYPES=$(json_data_types "$R6_BODY" \
       "passed passedManually failed failedAsKnown skipped blocked inProgress aborted")
     check_field_types "R6b: launch detailed statuses" "int float" "$R6B_TYPES"
+
+    # v9.4.5 — artifacts field on launch (source for adv_list_test_artifacts launch-level)
+    local R6_ARTIFACTS
+    R6_ARTIFACTS=$(echo "$R6_BODY" | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    obj = d.get('data', d)
+    a = obj.get('artifacts', None)
+    print('present' if a is not None else 'absent')
+except: print('unparsable')
+" 2>/dev/null || echo "unparsable")
+    if [[ "$R6_ARTIFACTS" == "present" ]]; then
+      log_pass "R6c: launch has artifacts field (v9.4.5 source)"
+    else
+      log_skip "R6c: launch artifacts field (not reported by this launch)"
+    fi
   else
     log_skip "R6: GET single launch (no LAUNCH_ID)"
   fi
@@ -1626,6 +1663,23 @@ print('yes' if 'items' in d or 'results' in d or isinstance(d, list) else 'no')
     R8_COUNT=$(json_items_count "$R8_BODY")
     if [[ "$R8_COUNT" -gt 0 ]]; then
       log_pass "Got $R8_COUNT test(s) in launch $LAUNCH_ID"
+
+      # v9.4.5 — artifacts field on test items (source for adv_list_test_artifacts test-level)
+      local R8_ARTIFACTS
+      R8_ARTIFACTS=$(echo "$R8_BODY" | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    items = d.get('items', d.get('data',{}).get('items',[]))
+    has = any('artifacts' in t for t in items) if isinstance(items, list) else False
+    print('present' if has else 'absent')
+except: print('unparsable')
+" 2>/dev/null || echo "unparsable")
+      if [[ "$R8_ARTIFACTS" == "present" ]]; then
+        log_pass "R8b: test items have artifacts field (v9.4.5 source)"
+      else
+        log_skip "R8b: test items artifacts field (no artifacts on these tests)"
+      fi
     else
       log_skip "No tests in launch $LAUNCH_ID (may be expected)"
     fi
@@ -1648,6 +1702,23 @@ print('yes' if 'items' in d or 'results' in d or isinstance(d, list) else 'no')
       log_pass "Test $LAUNCH_TEST_ID status: $R9_STATUS"
     else
       log_fail "Test $LAUNCH_TEST_ID has no status" "$(echo "$_BODY" | head -c 200)"
+    fi
+
+    # v9.4.5 — artifacts field on single test (source for adv_list_test_artifacts / analyze)
+    local R9_ARTIFACTS
+    R9_ARTIFACTS=$(echo "$_BODY" | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    obj = d.get('data', d)
+    a = obj.get('artifacts', None)
+    print('present' if a is not None else 'absent')
+except: print('unparsable')
+" 2>/dev/null || echo "unparsable")
+    if [[ "$R9_ARTIFACTS" == "present" ]]; then
+      log_pass "R9b: single test has artifacts field (v9.4.5 source)"
+    else
+      log_skip "R9b: single test artifacts field (not reported by this test)"
     fi
   else
     log_skip "R9: Single launch test (no LAUNCH_ID or TEST_ID)"
@@ -1892,6 +1963,75 @@ print('yes' if 'items' in d or 'results' in d or isinstance(d, list) else 'no')
 for PROJECT_KEY in $STARRED_PROJECTS; do
   run_project_tests "$PROJECT_KEY"
 done
+
+# =====================================================================
+# v9.4.5 — Public API v1 /files probes (optional; read-only, never prints content)
+#   ZEBRUNNER_VERIFY_FILE_UUID=<uuid>  e.g. a failure_page_source_*.xml artifact uuid
+# =====================================================================
+
+if [[ -n "${ZEBRUNNER_VERIFY_FILE_UUID:-}" ]]; then
+  log_section "Files API (v1) — /files/{uuid}/metadata"
+  do_public_get "/files/${ZEBRUNNER_VERIFY_FILE_UUID}/metadata"
+  check_status "FILES-METADATA" 200
+  if [[ "$_STATUS" == "200" ]]; then
+    for _field in name contentType sizeInBytes; do
+      if echo "$_BODY" | python3 -c "import sys,json; d=json.load(sys.stdin); d=d.get('data',d); sys.exit(0 if '$_field' in d else 1)" 2>/dev/null; then
+        log_pass "FILES-METADATA: field '$_field' present"
+      else
+        log_fail "FILES-METADATA: field '$_field' missing"
+      fi
+    done
+    # Extract size for the download probe
+    FILES_SIZE=$(echo "$_BODY" | python3 -c "import sys,json; d=json.load(sys.stdin); d=d.get('data',d); print(d.get('sizeInBytes',d.get('size','')))" 2>/dev/null || echo "")
+    FILES_CT=$(echo "$_BODY" | python3 -c "import sys,json; d=json.load(sys.stdin); d=d.get('data',d); print(d.get('contentType',''))" 2>/dev/null || echo "")
+  fi
+
+  # v9.4.5 — GET /files/{uuid} (raw bytes; never prints content, only headers/size)
+  log_section "Files API (v1) — /files/{uuid} (download)"
+  _RAW=$(curl -sS -w "\n%{http_code}\n%{content_type}\n%{size_download}" \
+    -H "Authorization: Basic $BASIC_AUTH" \
+    -H "Accept: */*" \
+    -o /dev/null \
+    "${PUBLIC_BASE}/files/${ZEBRUNNER_VERIFY_FILE_UUID}" 2>&1)
+  _STATUS=$(echo "$_RAW" | tail -3 | head -1)
+  _CT=$(echo "$_RAW" | tail -2 | head -1)
+  _DL_SIZE=$(echo "$_RAW" | tail -1)
+  if [[ "$_STATUS" == "200" ]]; then
+    log_pass "FILES-DOWNLOAD (HTTP $_STATUS, ${_DL_SIZE} bytes, content-type: ${_CT})"
+    if [[ -n "$FILES_SIZE" && "$_DL_SIZE" != "$FILES_SIZE" ]]; then
+      log_fail "FILES-DOWNLOAD: size mismatch" "metadata=$FILES_SIZE downloaded=$_DL_SIZE"
+    fi
+    if [[ -n "$FILES_CT" && "$_CT" != "$FILES_CT"* ]]; then
+      log_fail "FILES-DOWNLOAD: content-type mismatch" "metadata=$FILES_CT downloaded=$_CT"
+    fi
+  else
+    log_fail "FILES-DOWNLOAD" "Expected HTTP 200, got $_STATUS"
+  fi
+
+  # v9.4.5 — GET /files/-/metadata?uuid=... (bulk metadata endpoint)
+  log_section "Files API (v1) — /files/-/metadata (bulk)"
+  do_public_get "/files/-/metadata?uuid=${ZEBRUNNER_VERIFY_FILE_UUID}"
+  check_status "FILES-BULK-METADATA" 200
+  if [[ "$_STATUS" == "200" ]]; then
+    BULK_COUNT=$(echo "$_BODY" | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    items = d.get('items', d.get('data',{}).get('items',[]))
+    print(len(items))
+except: print(0)
+" 2>/dev/null || echo "0")
+    if [[ "$BULK_COUNT" -ge 1 ]]; then
+      log_pass "FILES-BULK-METADATA: returned $BULK_COUNT item(s)"
+    else
+      log_fail "FILES-BULK-METADATA: no items returned"
+    fi
+  fi
+else
+  log_skip "FILES-METADATA (set ZEBRUNNER_VERIFY_FILE_UUID)"
+  log_skip "FILES-DOWNLOAD (set ZEBRUNNER_VERIFY_FILE_UUID)"
+  log_skip "FILES-BULK-METADATA (set ZEBRUNNER_VERIFY_FILE_UUID)"
+fi
 
 # =====================================================================
 # Summary

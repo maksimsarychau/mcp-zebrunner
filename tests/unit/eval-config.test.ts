@@ -150,7 +150,7 @@ describe("eval-config", () => {
     const { getEvalConfig, getEvalConfigWarnings } = await import("../eval/eval-config.js");
     const config = getEvalConfig();
     assert.equal(config.apiKey, "sk-ant-test");
-    assert.equal(config.model, "claude-sonnet-5");
+    assert.equal(config.model, "claude-sonnet-5-5");
     assert.equal(config.baseUrl, undefined);
     assert.ok(getEvalConfigWarnings(config).length >= 2);
   });
@@ -159,6 +159,20 @@ describe("eval-config", () => {
     const { isLikelyOllamaModelName } = await import("../eval/eval-config.js");
     assert.equal(isLikelyOllamaModelName("qwen3.5:2b"), true);
     assert.equal(isLikelyOllamaModelName("claude-sonnet-4-6"), false);
+    assert.equal(isLikelyOllamaModelName("claude-sonnet-5-5"), false);
+  });
+
+  it("anthropic keeps an explicit claude-sonnet-5-5 model and uses it for the judge", async () => {
+    process.env.EVAL_PROVIDER = "anthropic";
+    process.env.ANTHROPIC_API_KEY = "sk-ant-test";
+    process.env.EVAL_MODEL = "claude-sonnet-5-5";
+    delete process.env.EVAL_BASE_URL;
+    delete process.env.EVAL_JUDGE_MODEL;
+
+    const { getEvalConfig } = await import("../eval/eval-config.js");
+    const config = getEvalConfig();
+    assert.equal(config.model, "claude-sonnet-5-5");
+    assert.equal(config.judgeModel, "claude-sonnet-5-5");
   });
 
   it("cloud suite + local provider + cloud model fails fast", async () => {

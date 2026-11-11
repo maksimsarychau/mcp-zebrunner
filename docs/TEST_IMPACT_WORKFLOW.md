@@ -4,7 +4,7 @@ Guide for developers using **`adv_analyze_test_impact`**, **`/test-impact`**, an
 
 ## Quick start
 
-1. Connect Zebrunner MCP (`zbr-mfp` / `mcp-zebrunner`).
+1. Connect Zebrunner MCP (`zbr-mcp` / `mcp-zebrunner`).
 2. Inspect changes **locally** (git diff or `gh pr view`).
 3. Call **`adv_analyze_test_impact`** once with compact change metadata — or invoke **`/test-impact`**.
 

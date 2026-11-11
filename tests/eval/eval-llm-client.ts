@@ -23,6 +23,15 @@ export function anthropicSupportsTemperature(model: string): boolean {
   return !/(?:sonnet|opus)-5(?:$|[-.])/i.test(model);
 }
 
+/**
+ * Claude Sonnet 5.5 (`claude-sonnet-5-5`) rejects `tool_choice` of type "tool" or "any" with a 400
+ * (https://platform.claude.com/docs/en/models/sonnet-5-5/migration-guide). Callers that need a
+ * specific tool (the eval judge) send `auto` and ask for the tool in the prompt instead.
+ */
+export function anthropicSupportsForcedToolChoice(model: string): boolean {
+  return !/sonnet-5-5(?:$|[-.])/i.test(model);
+}
+
 export interface EvalLlmChatOptions {
   model: string;
   system?: string;
@@ -57,10 +66,16 @@ export class AnthropicEvalClient implements EvalLlmClient {
   }
 
   async chatWithTools(opts: EvalLlmChatOptions): Promise<EvalLlmResponse> {
-    const toolChoice =
-      opts.toolChoice === "auto"
-        ? { type: "auto" as const }
-        : { type: "tool" as const, name: opts.toolChoice.name };
+    // Models that reject forced tool use get `auto` plus an explicit instruction in the prompt.
+    const forcedName = opts.toolChoice === "auto" ? undefined : opts.toolChoice.name;
+    const useForced = forcedName !== undefined && anthropicSupportsForcedToolChoice(opts.model);
+    const toolChoice = useForced
+      ? { type: "tool" as const, name: forcedName as string }
+      : { type: "auto" as const };
+    const userMessage =
+      forcedName !== undefined && !useForced
+        ? `${opts.userMessage}\n\nRespond by calling the "${forcedName}" tool exactly once.`
+        : opts.userMessage;
 
     const response = await this.client.messages.create({
       model: opts.model,
@@ -69,7 +84,7 @@ export class AnthropicEvalClient implements EvalLlmClient {
       system: opts.system,
       tools: opts.tools as Anthropic.Tool[],
       tool_choice: toolChoice,
-      messages: [{ role: "user", content: opts.userMessage }],
+      messages: [{ role: "user", content: userMessage }],
     });
 
     return normalizeAnthropicResponse(response);

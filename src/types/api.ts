@@ -130,6 +130,8 @@ export const GetLauncherDetailsInputSchema = z.object({
     .describe("Jenkins Build Now job parameters only — not available for Launch Launchers"),
   includeDetailedStatuses: z.boolean().default(false)
     .describe("Include source-aware manual-pass and known-issue counters without changing existing totals"),
+  compactArtifacts: z.boolean().default(false)
+    .describe("Add a compact artifact summary (launch + per-test counts and names). Use adv_list_test_artifacts for uuids/links"),
   format: z.enum(['dto', 'json', 'string']).default('json')
 });
 
@@ -142,6 +144,8 @@ export const AnalyzeTestFailureInputSchema = z.object({
   includeLogs: z.boolean().default(true),
   includeArtifacts: z.boolean().default(true),
   includePageSource: z.boolean().default(true),
+  redactPageSource: z.boolean().default(false)
+    .describe("Mask emails and password-node values in text derived from the page source (default: false)"),
   includeVideo: z.boolean().default(false),
   analyzeSimilarFailures: z.boolean().default(true),
   format: z.enum(['detailed', 'summary']).default('detailed')
@@ -283,6 +287,12 @@ export const AnalyzeTestExecutionVideoInputSchema = z.object({
     .describe("Analyze test stability and flakiness (last 30 runs)"),
   includeLogCorrelation: z.boolean().default(true)
     .describe("Correlate frames with log timestamps"),
+
+  // Artifact evidence (v9.4.5)
+  includeArtifactEvidence: z.boolean().default(true)
+    .describe("List test artifacts (page source, logs, links) in an 'Artifact evidence' section"),
+  includePageSource: z.boolean().default(true)
+    .describe("Fetch the failure page source and add its signals (crash/permission dialog, keyboard, loading, toast, locator) to the analysis"),
 
   // Output Format
   format: z.enum(['detailed', 'summary', 'jira']).default('detailed')

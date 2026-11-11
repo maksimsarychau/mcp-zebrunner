@@ -6,7 +6,9 @@ A **Model Context Protocol (MCP)** server that brings advanced analytics, report
 
 > Tool naming: every tool on this server is registered under the canonical `adv_<name>` form (e.g. `adv_create_test_case`, `adv_list_test_runs`) so it never collides with the official Zebrunner MCP. The legacy names are kept as **deprecated aliases** so prompts/scripts that called the old names continue to work for now; aliases will be removed in the next major release. 
 
-> 🆕 **v9.4.4** — Test-run metadata agent UX: post-mutation steering hints (discover env/config before update; import does not set badges); dual-MCP routing resource for environments vs Build/Platform; richer tool-intel for **`adv_manage_test_run`**. Builds on v9.4.3 env contract — see [change-logs.md](change-logs.md#v944--test-run-metadata-agent-ux).
+> 🆕 **v9.4.5** — **Artifacts you can actually read:** new read-only tools **`adv_list_test_artifacts`**, **`adv_get_file_metadata`**, **`adv_download_artifact`** (page source XML, logs, links attached by automation). Failure analysis (**`adv_analyze_test_failure`**, **`adv_detailed_analyze_launch_failures`**, **`adv_analyze_test_execution_video`**) now lists artifacts and reads the failure page source (crash/permission dialog, keyboard, locator present or missing) to refine the classification. `adv_download_test_screenshot` no longer fails on XML. Plus API gap fixes and a new `npm run self-check` regression safety net. See [change-logs.md](change-logs.md#v945--artifact-tools-and-artifact-aware-analysis).
+>
+> **v9.4.4** — Test-run metadata agent UX: post-mutation steering hints (discover env/config before update; import does not set badges); dual-MCP routing resource for environments vs Build/Platform; richer tool-intel for **`adv_manage_test_run`**. Builds on v9.4.3 env contract — see [change-logs.md](change-logs.md#v944--test-run-metadata-agent-ux).
 >
 > **v9.4.3** — **`adv_prepare_jira_automation_plan`** + **`/jira-automation-plan`** prompt: Zebrunner suite → structured Jira plan; **`adv_manage_test_run`** Public API `environment` as `{ name }` / `{ id }`. See [change-logs.md](change-logs.md#v943--jira-automation-plan-tool), [TEST_PROMPTS.md §20](docs/TEST_PROMPTS.md#20-jira-automation-plan-v943).
 >
@@ -646,7 +648,7 @@ Inside chat, ask `adv_about_mcp_tools` with `mode: "routing"` or open the
 
 ## 🛠️ Available Tools
 
-Once connected, you can use these tools through natural language in your AI assistant. This section highlights all **76** `adv_*` tools (see [`tools.json`](tools.json)) organized by category. For the complete catalog with natural-language examples for every tool, see **[TOOLS_CATALOG.md](TOOLS_CATALOG.md)**.
+Once connected, you can use these tools through natural language in your AI assistant. This section highlights all **79** `adv_*` tools (see [`tools.json`](tools.json)) organized by category. For the complete catalog with natural-language examples for every tool, see **[TOOLS_CATALOG.md](TOOLS_CATALOG.md)**.
 
 **Dashboard widgets:** All **22** Zebrunner dashboard templates have MCP coverage (v9.2.5). See **[docs/TEST_PROMPTS.md](docs/TEST_PROMPTS.md) §18** for example prompts and `npm run test:api` verification.
 
@@ -948,6 +950,21 @@ Use the `/test-impact` MCP prompt (optional `pr_url`) for guided workflow. See [
 | `adv_analyze_screenshot`       | Visual analysis with OCR, UI detection, and Claude Vision         | `"Analyze screenshot https://your-workspace.zebrunner.com/files/abc123 with OCR and detailed analysis"` | **QA Engineers, SDETs, Developers**    |
 
 
+#### **Artifacts (page sources, logs, links)** 🆕 *v9.4.5*
+
+Read-only access to the files automation attaches to launches and tests (Public API v1 `/files`). The analysis tools (`adv_analyze_test_failure`, `adv_detailed_analyze_launch_failures`, `adv_analyze_test_execution_video`) use these artifacts automatically.
+
+| Tool                       | Description                                                                                              | Example Usage                                                             | Best For                               |
+| -------------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | -------------------------------------- |
+| `adv_list_test_artifacts`  | List artifacts of a launch/test with name, kind (`file`/`reference`) and uuid; no downloads                | `"List artifacts of launch 12345 in project DEMO"`                     | **QA Engineers, Automation Engineers** |
+| `adv_get_file_metadata`    | Name, content type and size of a file by uuid without downloading it                                     | `"Get metadata for file aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"`            | **Automation Engineers, Developers**   |
+| `adv_download_artifact`    | Read (inline, default 1 MiB) or save (up to 10 MiB) one artifact; optional `redact` (off by default)     | `"Download the failure page source for test 67890 in launch 12345"`    | **QA Engineers, SDETs, Developers**    |
+
+Storage: analysis tools read artifacts in memory and never save them. Downloads return text inline; only binaries or an explicit `outputPath` are saved. Saved folders are private (`0700`), files are `0600`, existing files and symlinks are never overwritten, and files in the default temp folders are deleted after `ZEBRUNNER_ARTIFACT_TTL_MINUTES` (default 60). In HTTP mode nothing is written to the server's disk unless `ZEBRUNNER_ALLOW_DISK_WRITES_HTTP=true`.
+
+Safety: tools are read-only; the API version path comes from one place (`/api/public/v1`); saved files only go to the default temp folder `zebrunner-artifacts/` or folders listed in `ZEBRUNNER_ARTIFACT_DIRS`; files over 10 MiB (or over `maxBytes` for inline return) are refused before download; credentials are never logged or returned. Redaction masks emails and password-node values only when `redact: true` is set (page sources can contain personal data when returned in full).
+
+
 > 📸 **Enhanced!** Screenshot analysis now integrated directly into `adv_analyze_test_failure` and `analyze_launch_failures` - no need to call separately! See [Screenshot Analysis Guide](docs/archive/SCREENSHOT_ANALYSIS.md) for details.
 
 
@@ -961,7 +978,7 @@ Use the `/test-impact` MCP prompt (optional `pr_url`) for guided workflow. See [
 | `adv_get_top_bugs`                   | Most frequent defects                                                                        | `"Show me top 10 bugs from last week"`                                   | **Managers, Developers**     |
 | `adv_get_bug_review`                 | Detailed bug review with failure analysis, priority breakdown, and automatic detail fetching | `"Get bug review with full failure details for top 10 bugs"`             | **Managers, QA, Developers** |
 | `adv_get_bug_failure_info`           | Comprehensive failure info by hashcode (alternative to auto-fetch)                           | `"Get failure info for hashcode 1051677506"`                             | **Developers, SDETs**        |
-| `adv_get_project_milestones`         | Available milestones                                                                         | `"Get all milestones for project MCP"`                                   | **Managers, PMs**            |
+| `adv_get_project_milestones`         | Available milestones (read-only; create milestones with the official MCP `create_milestone`) | `"Get all milestones for project MCP"`                                   | **Managers, PMs**            |
 
 
 **Period behavior for reporting widgets:** `period` is passed to Zebrunner widgets **as-is** (for example `Today`, `Month`, `Last 30 Days`). If a selected widget does not support a specific period label, the API will return an error.
@@ -1539,6 +1556,12 @@ DEBUG=false                        # Enable detailed logging (default: false)
 DEFAULT_PAGE_SIZE=100             # Default items per page (optional)
 MAX_PAGE_SIZE=100                 # Maximum items per page (optional)
 
+# Optional - Artifacts (v9.4.5)
+ZEBRUNNER_ARTIFACT_DIRS=          # Extra absolute folders allowed for adv_download_artifact outputPath (path-delimiter or comma separated); default is the temp folder zebrunner-artifacts/
+ARTIFACT_EVIDENCE_MAX_FILES=10    # Max page sources fetched per analysis call (cost control for includePageSource)
+ZEBRUNNER_ARTIFACT_TTL_MINUTES=60 # Delete saved artifacts/screenshots in the default temp folders after N minutes (0 disables)
+ZEBRUNNER_ALLOW_DISK_WRITES_HTTP=false # HTTP mode only: allow saving files on the server host (off by default)
+
 # Optional - Intelligent Rules System
 ENABLE_RULES_ENGINE=true          # Enable intelligent rules (auto-detected if rules file exists)
 MCP_RULES_FILE=custom-rules.md    # Custom technical rules file (optional)
@@ -1784,6 +1807,15 @@ npm run test:integration    # API integration tests
 npm run test:e2e           # End-to-end tests
 ```
 
+### Run the regression self-check (v9.4.5)
+
+```bash
+npm run self-check         # Offline: lint, build, unit tests (tool contracts, golden outputs, version/doc counts, secrets), verify-rename, smoke
+npm run self-check:live    # Same plus live checks (needs ZEBRUNNER_* env): api-verify, pagination audit
+```
+
+The self-check compares the current tool contracts with the 9.4.4 baseline (`tests/baselines/tool-contracts-9.4.4.json`): nothing may be removed, renamed, made required or have a default changed, and only the three artifact tools may be added.
+
 [⬆️ Back to top](#-table-of-contents)
 
 ## 🔍 Troubleshooting
@@ -1989,7 +2021,7 @@ Leverage intelligent validation:
 
 ### 📖 Tool References
 
-- **[TOOLS_CATALOG.md](TOOLS_CATALOG.md)** - Complete catalog of all **76** `adv_*` tools with natural language examples
+- **[TOOLS_CATALOG.md](TOOLS_CATALOG.md)** - Complete catalog of all **79** `adv_*` tools with natural language examples
 - **[docs/TEST_PROMPTS.md](docs/TEST_PROMPTS.md)** - Test prompts per tool; **§18** covers all **22 dashboard widgets** (MCP + API verify)
 - **[docs/archive/TCM_TAM_WIDGET_BACKLOG.md](docs/archive/TCM_TAM_WIDGET_BACKLOG.md)** - Archived widget template ↔ MCP matrix (live: TEST_PROMPTS §18)
 - **[docs/RESOURCES_AND_PROMPTS.md](docs/RESOURCES_AND_PROMPTS.md)** - MCP Resources & Prompts — full usage guide, reference tables, and contributor guide

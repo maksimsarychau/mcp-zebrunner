@@ -2,6 +2,8 @@
 
 Complete reference of all available tools with natural language usage examples.
 
+> **v9.4.5:** Artifacts become readable — new read-only tools [`adv_list_test_artifacts`](#adv_list_test_artifacts), [`adv_get_file_metadata`](#adv_get_file_metadata), [`adv_download_artifact`](#adv_download_artifact) (Public API v1 `/files`). Failure analysis ([`adv_analyze_test_failure`](#adv_analyze_test_failure), [`adv_detailed_analyze_launch_failures`](#adv_detailed_analyze_launch_failures), [`adv_analyze_test_execution_video`](#adv_analyze_test_execution_video)) now lists artifacts and reads the failure page source (crash/permission dialog, keyboard, locator present/missing). `adv_download_test_screenshot` no longer fails on XML. Opt-in artifact summaries on launch/flaky/bug tools. See [change-logs.md](change-logs.md#v945--artifact-tools-and-artifact-aware-analysis).
+
 > **v9.4.4:** Agent UX for test-run metadata — steering hints after manage/import mutations; richer [`adv_manage_test_run`](#adv_manage_test_run) catalog + dual-MCP routing for environments vs Build/Platform; import documented as **not** setting run env/config; mutation tools no longer labeled `(Beta)`. See [change-logs.md](change-logs.md#v944--test-run-metadata-agent-ux).
 
 > **v9.4.3:** [`adv_prepare_jira_automation_plan`](#adv_prepare_jira_automation_plan) + **`/jira-automation-plan`** — Zebrunner suite URL → structured Jira automation intake plan (read-only; Jira via Atlassian MCP). Configure `jiraAutomationPlan` in `zebrunner-config.json`. See [TEST_PROMPTS.md §1 / §15 / §20](docs/TEST_PROMPTS.md#20-jira-automation-plan-v943) and [change-logs.md](change-logs.md#v943--jira-automation-plan-tool).
@@ -108,21 +110,23 @@ All tools marked with chart support accept these two parameters:
 
 ### `adv_analyze_test_failure`
 
-**Description:** Deep forensic analysis of failed tests including logs, screenshots, error classification, similar failures, and optionally comparison with last passed execution.
+**Description:** Deep forensic analysis of failed tests including logs, screenshots, artifacts, error classification, similar failures, and optionally comparison with last passed execution. **v9.4.5:** lists the test's artifacts and (by default) reads the failure page source to add signals — crash/ANR dialog, permission dialog, soft keyboard, loading indicator, toast, locator present/missing — which refine the classification (for example Locator Issue → Timing Issue when the element is in the page source). Prints an explicit "No artifacts attached" line when there are none. Failures to fetch an artifact become a warning, never an error. Inputs: `includeArtifacts` (default `true`), `includePageSource` (default `true`), `redactPageSource` (default `false`).
 
 **Example Prompts:**
 
 - "Analyze test failure 5451420 from launch 120806"
+- "Analyze test 67890 in launch 12345 and check the page source for a crash dialog"
 - "Analyze test 5478492 and compare with the last time it passed"
 - "Deep dive into why test 5455325 failed in launch 120906, include video and compare with last successful run"
 
 ### `adv_detailed_analyze_launch_failures`
 
-**Description:** Analyze ALL failures in a launch with intelligent grouping, executive summary, timeline analysis, and pattern detection. Automatically filters tests without linked issues by default.
+**Description:** Analyze ALL failures in a launch with intelligent grouping, executive summary, timeline analysis, and pattern detection. Automatically filters tests without linked issues by default. **v9.4.5:** `includeArtifacts` (default `true`, no extra calls) lists each analyzed test's artifacts; `includePageSource` (default `false`) fetches each analyzed test's failure page source and adds signals per test and per similar-failure group (capped by `pageSourceMaxTests`, default 10, and env `ARTIFACT_EVIDENCE_MAX_FILES`); `redactPageSource` (default `false`). Jira format includes artifact links per ticket.
 
 **Example Prompts:**
 
 - "Analyze all failures in launch 120806"
+- "Analyze all failures in launch 12345 and read the page sources for the first 5 tests"
 - "Show me what failed in launch 120906 with executive summary and patterns"
 - "Generate Jira tickets for all failures in launch 120814 in jira format"
 
@@ -156,7 +160,7 @@ All tools marked with chart support accept these two parameters:
 
 ### `adv_get_launch_details`
 
-**Description:** Get comprehensive information about a specific launch including test results, environment, build, and execution metadata. Set `includeJobParameters: true` to fetch CI job parameters from **Jenkins Build Now** (suite path, build, locale, test_run_rules, and full param schema). **Not available for Launch Launchers** — Jenkins integration only.
+**Description:** Get comprehensive information about a specific launch including test results, environment, build, and execution metadata. Set `includeJobParameters: true` to fetch CI job parameters from **Jenkins Build Now** (suite path, build, locale, test_run_rules, and full param schema). **Not available for Launch Launchers** — Jenkins integration only. **v9.4.5:** `compactArtifacts: true` adds a compact launch-level and per-test artifact summary (counts and names; use `adv_list_test_artifacts` for uuids).
 
 **Example Prompts:**
 
@@ -176,7 +180,7 @@ All tools marked with chart support accept these two parameters:
 
 ### `adv_get_launch_test_summary`
 
-**Description:** Lightweight aggregated test results with statistics, most unstable tests, and tests with issues. Optimized for large launches.
+**Description:** Lightweight aggregated test results with statistics, most unstable tests, and tests with issues. Optimized for large launches. **v9.4.5:** `includeArtifacts: true` adds a compact per-test artifact summary (default off).
 
 **Detailed statuses:** Set `includeDetailedStatuses: true` to add source-labeled launch buckets and a per-test `manualAndKnownIssue` block with `passedManually`, `knownIssue`, overlap, and the deduplicated `eitherCondition`. Existing totals are unchanged.
 
@@ -441,7 +445,7 @@ Weekly stability report for project MCP using:
 
 ### `adv_find_flaky_tests`
 
-**Description:** Find flaky tests across launches using a 3-phase approach: cross-launch flip-flop analysis for automated tests, manual test case scan via TCM execution history, and optional dual-perspective enrichment correlating both data sources.
+**Description:** Find flaky tests across launches using a 3-phase approach: cross-launch flip-flop analysis for automated tests, manual test case scan via TCM execution history, and optional dual-perspective enrichment correlating both data sources. **v9.4.5:** `include_artifacts: true` attaches the artifact summary of each flaky test's latest failure (default off, no downloads).
 
 **Parameters:**
 
@@ -474,7 +478,7 @@ Weekly stability report for project MCP using:
 
 ### `adv_analyze_test_execution_video`
 
-**Description:** Download and analyze test execution video with Claude Vision. Extracts frames, compares with test case steps, and predicts if failure is bug or test issue.
+**Description:** Download and analyze test execution video with Claude Vision. Extracts frames, compares with test case steps, and predicts if failure is bug or test issue. **v9.4.5:** adds an "Artifact evidence" section (artifact list + page-source signals) and feeds crash/permission/locator signals into the prediction. Inputs: `includeArtifactEvidence` (default `true`), `includePageSource` (default `true`).
 
 **Example Prompts:**
 
@@ -484,7 +488,7 @@ Weekly stability report for project MCP using:
 
 ### `adv_download_test_screenshot`
 
-**Description:** Download protected screenshots from Zebrunner with authentication.
+**Description:** Download protected screenshots from Zebrunner with authentication. **v9.4.5:** non-image files that share the `/files/<uuid>` shape (for example `failure_page_source_*.xml`) are delivered through the artifact download path instead of failing with an image-decoding error; use [`adv_download_artifact`](#adv_download_artifact) for those.
 
 **Example Prompts:**
 
@@ -494,13 +498,42 @@ Weekly stability report for project MCP using:
 
 ### `adv_analyze_screenshot`
 
-**Description:** Visual analysis of screenshots with OCR, UI element detection, and Claude Vision analysis.
+**Description:** Visual analysis of screenshots with OCR, UI element detection, and Claude Vision analysis. **v9.4.5:** refuses non-image artifacts (XML/text) with a pointer to [`adv_download_artifact`](#adv_download_artifact); optional `artifactUuid` input.
 
 **Example Prompts:**
 
 - "Analyze screenshot [https://your-workspace.zebrunner.com/files/abc123](https://your-workspace.zebrunner.com/files/abc123) with OCR"
 - "Analyze this screenshot and tell me what UI elements are visible"
 - "Analyze screenshot /files/xyz789 and extract text with OCR"
+
+### `adv_list_test_artifacts`
+
+**Description:** List artifacts that automation attached to a launch and its tests (page sources, logcat, saved screenshots, reference links). Each item has `scope`, `testId`, `name`, `kind` (`file` with a `uuid`, or `reference` with a masked `url`). Read-only; no file is downloaded. Session video and session logs are not artifacts and are out of scope. Inputs: `projectKey`/`projectId`, `launchId`, optional `testId`, `kind`, `nameContains`, `includeLaunchLevel`, `includeMetadata` (adds content type and size with one bulk call), `limit`.
+
+**Example Prompts:**
+
+- "List the artifacts of launch 12345 in project DEMO"
+- "Which page source files are attached to test 67890 in launch 12345?"
+- "Show only file artifacts with 'page_source' in the name for launch 12345"
+
+### `adv_get_file_metadata`
+
+**Description:** Get name, type, content type, size in bytes and upload time for a Zebrunner file by uuid, without downloading it (Public API v1 `GET /files/{uuid}/metadata`). Use it before `adv_download_artifact` to check size and type. Accepts a bare uuid or `/files/<uuid>`.
+
+**Example Prompts:**
+
+- "Get metadata for file aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+- "How big is the artifact /files/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee?"
+
+### `adv_download_artifact`
+
+**Description:** Read or save ONE artifact file exactly as attached (page source XML, logs, JSON, text, binaries) by `uuid` or by `launchId` + `name` (+ `testId`). No image decoding is performed. Text is returned inline by default (limit `maxBytes`, default 1 MiB, hard cap 10 MiB); `outputPath` saves to disk (up to 10 MiB, only inside the default `zebrunner-artifacts/` temp folder or folders in `ZEBRUNNER_ARTIFACT_DIRS`); larger files are refused with a clear message before any bytes are downloaded. `redact=true` masks email addresses and password-node text/value in text artifacts (**off by default** — page sources may contain personal data). Output reports status, size and content type only, never credentials. Saved files are created `0600` in private (`0700`) folders, never overwrite existing files or follow symlinks, and are deleted from the default temp folder after `ZEBRUNNER_ARTIFACT_TTL_MINUTES` (default 60). In HTTP mode nothing is saved (text is returned inline, `outputPath` is refused) unless `ZEBRUNNER_ALLOW_DISK_WRITES_HTTP=true`.
+
+**Example Prompts:**
+
+- "Download artifact aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee and show me the XML"
+- "Read failure_page_source_live.xml for test 67890 in launch 12345 with redaction on"
+- "Save artifact aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee to disk"
 
 ---
 
@@ -1364,7 +1397,7 @@ Omitting `view` preserves pre-v9.2.4 behavior (template 8 pie, `period` default 
 
 ### `adv_get_bug_failure_info`
 
-**Description:** Get comprehensive failure information for a specific bug/hashcode, including high-level failure summary and detailed list of affected test runs. This tool combines data from multiple SQL widgets to provide complete failure analysis.
+**Description:** Get comprehensive failure information for a specific bug/hashcode, including high-level failure summary and detailed list of affected test runs. This tool combines data from multiple SQL widgets to provide complete failure analysis. **v9.4.5:** `include_artifacts: true` adds a compact artifact summary for up to 5 affected tests (one lookup each, default off).
 
 **Key Features:**
 
@@ -1517,7 +1550,7 @@ Omitting `view` preserves pre-v9.2.4 behavior (template 8 pie, `period` default 
 
 ### `adv_get_project_milestones`
 
-**Description:** Get all milestones configured for a project.
+**Description:** Get all milestones configured for a project. Read-only: this server cannot create milestones or assign launches to them; use the official Zebrunner MCP (`create_milestone`, `assign_launches_to_milestone`).
 
 **Example Prompts:**
 
@@ -1760,6 +1793,6 @@ For large datasets, you can specify filters and limits:
 
 ---
 
-**Last Updated:** v9.4.4 — September 2026 (catalog covers **76** `adv_*` tools in `tools.json`)
+**Last Updated:** v9.4.5 — November 2026 (catalog covers **79** `adv_*` tools in `tools.json`)
 
 For the latest features and updates, see [change-logs.md](change-logs.md).

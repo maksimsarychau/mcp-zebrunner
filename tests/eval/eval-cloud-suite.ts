@@ -122,6 +122,16 @@ const CLOUD_EVAL_PROMPT_IDS = [
   "get_launch_test_summary.stats",
   "analyze_test_failure.forensic",
 
+  // v9.4.5 artifacts — redact/page-source flag nuance and "do not hijack existing intents" negatives
+  "artifacts.download.redact",
+  "artifacts.list.by_name",
+  "artifacts.analyze_failure.redact",
+  "artifacts.analyze_failure.skip_page_source",
+  "artifacts.launch_failures.page_source",
+  "artifacts.neg.screenshot_still_routes",
+  "artifacts.neg.metadata_not_download",
+  "artifacts.neg.launch_failures_still_routes",
+
   // TCM hierarchy / root-suite routing
   "list_test_suites.hierarchy",
   "get_suite_hierarchy.full_tree",

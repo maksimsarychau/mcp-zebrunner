@@ -6,6 +6,8 @@ Large Zebrunner exports (thousands of test cases with steps, preconditions, and 
 
 > **Defaults unchanged:** `format=json`, `detail=full`, `max_results=5000`, suite-smart `get_all=true`, reports `inline=true`. Enable compact/summary explicitly in prompts or via env flags below.
 
+> **v9.4.5 note (artifacts):** `adv_download_artifact` returns text inline up to **1 MiB** by default (hard cap 10 MiB); use `adv_get_file_metadata` first for large files and `outputPath` to save instead of returning content. Analysis tools list artifacts at no extra cost; `includePageSource` downloads at most `pageSourceMaxTests` (default 10, env `ARTIFACT_EVIDENCE_MAX_FILES`) page sources per call, each capped at 1 MiB and reduced to a few signal lines. Artifact summaries on launch/flaky/bug tools (`compactArtifacts`, `includeArtifacts`, `include_artifacts`) are opt-in and default off.
+
 ---
 
 ## Recommended workflow

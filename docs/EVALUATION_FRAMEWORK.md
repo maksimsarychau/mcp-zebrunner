@@ -2,7 +2,7 @@
 
 **Author:** Maksim Sarychau  
 **Version:** 1.1  
-**Last Updated:** v9.4.4 — September 2026
+**Last Updated:** v9.4.5 — November 2026
 
 ---
 
@@ -27,7 +27,7 @@
 
 ## 1. Executive Summary
 
-The Advanced Zebrunner MCP Server exposes **76** registered `adv_*` tools (see [`tools.json`](../tools.json): **70** inline server registrations in the smoke-regression suite + **6** handler-module tools) to AI assistants (Claude, Cursor, ChatGPT). When a user asks "Show me the latest test failures," the AI must:
+The Advanced Zebrunner MCP Server exposes **79** registered `adv_*` tools (see [`tools.json`](../tools.json): **73** inline server registrations in the smoke-regression suite + **6** handler-module tools) to AI assistants (Claude, Cursor, ChatGPT). When a user asks "Show me the latest test failures," the AI must:
 
 1. **Pick the right tool** from those options (e.g., `adv_detailed_analyze_launch_failures`)
 2. **Provide the right arguments** (e.g., `project: "MY_PROJECT"`, `launch_id: 12345`)
@@ -44,8 +44,8 @@ The Evaluation Framework automatically tests all three of these steps using a re
 | Argument Correctness | 98.4% |
 | Output Quality (Judge) | 4.73 / 5.0 |
 | Prompts in catalog | **204** (`default` ~45 + `cloud` ~156) |
-| Default suite (local Ollama) | ~40 prompts, relaxed aggregate (80% tool / 70% arg) |
-| Cloud suite (release gate) | ~149 prompts, strict per-prompt (90% tool / 85% arg) |
+| Default suite (local Ollama) | ~80 prompts, relaxed aggregate (80% tool / 70% arg) |
+| Cloud suite (release gate) | ~175 prompts, strict per-prompt (90% tool / 85% arg) |
 | Duration (cloud full L3) | ~8–9 minutes |
 | Estimated Cost (cloud full L3) | ~$23 per run |
 
@@ -55,7 +55,7 @@ The Evaluation Framework automatically tests all three of these steps using a re
 
 ### The Problem
 
-The Advanced Zebrunner MCP Server has **76** `adv_*` tools with overlapping capabilities. For example:
+The Advanced Zebrunner MCP Server has **79** `adv_*` tools with overlapping capabilities. For example:
 
 - `adv_list_test_suites` vs `adv_get_tcm_test_suites_by_project` — both list suites
 - `adv_get_test_cases_advanced` vs `adv_get_test_cases_by_suite_smart` — both retrieve test cases by suite
@@ -108,7 +108,7 @@ The framework uses a **layered evaluation** approach. Each layer tests a differe
 **Question answered:** "Given a user prompt, does the LLM select the correct tool?"
 
 **How it works:**
-1. Send a natural-language prompt to the LLM along with all **76** tool definitions from `tools/list`
+1. Send a natural-language prompt to the LLM along with all **79** tool definitions from `tools/list`
 2. Claude responds with a tool_use block naming which tool it wants to call
 3. Compare the selected tool against the expected tool(s)
 
@@ -404,13 +404,13 @@ The framework uses **real Zebrunner project data** — not hardcoded values. At 
 
 ### Prompt catalog (v9.2.8)
 
-The full catalog lives in `tests/eval/eval-prompts.ts` (**212 prompts**). Counts shift slightly as prompts are added; suite sizes are fixed in `tests/eval/eval-cloud-suite.ts`.
+The full catalog lives in `tests/eval/eval-prompts.ts` (**255 prompts**). Counts shift slightly as prompts are added; suite sizes are fixed in `tests/eval/eval-cloud-suite.ts`.
 
 | Suite | Prompts | When to run | Thresholds |
 |-------|---------|-------------|------------|
-| **`default`** | ~45 | `npm run test:eval` with local Ollama | Relaxed aggregate: 80% tool / 70% arg |
-| **`cloud`** | ~149 | `npm run test:eval:cloud` (sets `EVAL_PROVIDER=anthropic`) | Strict per-prompt: 90% tool / 85% arg |
-| **`all`** | ~204 | `EVAL_SUITE=all npm run test:eval` | Legacy full catalog |
+| **`default`** | ~80 | `npm run test:eval` with local Ollama | Relaxed aggregate: 80% tool / 70% arg |
+| **`cloud`** | ~175 | `npm run test:eval:cloud` (sets `EVAL_PROVIDER=anthropic`) | Strict per-prompt: 90% tool / 85% arg |
+| **`all`** | ~255 | `EVAL_SUITE=all npm run test:eval` | Legacy full catalog |
 
 Categories include TCM, launch, analysis (widgets/hubs/flaky), chart, field_filter, report, resource, mutation, e2e_metric, and negatives (refusal, tool confusion, invalid data).
 
@@ -429,9 +429,25 @@ Four eval prompts verify LLM routing for opt-in compact/summary/batch reads (uni
 
 `detail` / `format` arg checks may be soft misses on small local models — these four prompts live in the **cloud suite** (see below); run `npm run test:eval:cloud` with Claude before release.
 
+### Artifact prompts (v9.4.5)
+
+Eleven Layer-1 prompts in `tests/eval/eval-artifact-tools.ts` check routing and arguments for the artifact tools and the artifact-related options of the analysis tools. They use fixed sample ids (project `DEMO`, launch `123456`, test `654321`) instead of discovery placeholders, so they run on any workspace and are never skipped at Layer 1.
+
+| Prompt ID | Suite | What it checks |
+|-----------|-------|----------------|
+| `artifacts.list` / `artifacts.metadata` / `artifacts.download` | default | `adv_list_test_artifacts`, `adv_get_file_metadata`, `adv_download_artifact` with `launchId` / `uuid` |
+| `artifacts.list.by_name` | cloud | Launch-wide listing for "page source files only" |
+| `artifacts.download.redact` | cloud | `adv_download_artifact` with `redact: true` |
+| `artifacts.analyze_failure.redact` | cloud | `adv_analyze_test_failure` with `redactPageSource: true` |
+| `artifacts.analyze_failure.skip_page_source` | cloud | `adv_analyze_test_failure` with `includePageSource: false` |
+| `artifacts.launch_failures.page_source` | cloud | `adv_detailed_analyze_launch_failures` with `includePageSource: true` |
+| `artifacts.neg.*` (3) | cloud | Screenshot, metadata-only and launch-failure requests do not get hijacked by the artifact tools |
+
+Latest run (Claude, `EVAL_LAYER=1 EVAL_FILTER=artifacts.`): 11/11 executed, tool selection 100%, arguments 100%, negatives 3/3. The harness now treats a tool-confusion prompt that is skipped for missing context as skipped, not failed.
+
 ### Cloud tricky suite (`EVAL_SUITE=cloud`)
 
-**~149 prompts** that need a capable model are listed in `tests/eval/eval-cloud-suite.ts`. Default `npm run test:eval` uses `EVAL_SUITE=default` and **skips** them so local Ollama runs exit cleanly on **80% tool / 70% arg** aggregate thresholds.
+**~175 prompts** that need a capable model are listed in `tests/eval/eval-cloud-suite.ts`. Default `npm run test:eval` uses `EVAL_SUITE=default` and **skips** them so local Ollama runs exit cleanly on **80% tool / 70% arg** aggregate thresholds.
 
 | Group | Why tricky |
 |-------|------------|
@@ -456,7 +472,7 @@ npm run test:eval:cloud
 # Layers 1+2 only (faster, no L3 judge)
 npm run test:eval:cloud:l2
 
-# Local Ollama smoke on default suite only (~40 prompts)
+# Local Ollama smoke on default suite only (~80 prompts)
 EVAL_PROVIDER=local EVAL_MODEL=qwen3.5:2b npm run test:eval
 
 # Targeted re-run
@@ -623,7 +639,7 @@ Each LLM call sends the following to Claude:
 | Component | Approximate Tokens | Notes |
 |-----------|--------------------|-------|
 | System prompt | ~50 | Fixed "You are a QA assistant..." |
-| Tool definitions (76 tools) | ~14,000–17,000 | Each tool: name + description + JSON schema |
+| Tool definitions (79 tools) | ~14,000–17,000 | Each tool: name + description + JSON schema |
 | User prompt | ~30–100 | The populated eval prompt |
 | **Total input per call** | **~14,000** | |
 | **Output per call** | **~200–500** | tool_use block with name + args |
@@ -701,12 +717,25 @@ cost = (84 × 14,000 × $0.000003) + (8 × 17,000 × $0.000003)
    npm run build
    ```
 
+### Default Anthropic model
+
+With `EVAL_PROVIDER=anthropic` the default model (and judge) is **`claude-sonnet-5-5`** (Claude Sonnet 5.5, API ID has no date suffix; see the [models overview](https://platform.claude.com/docs/en/models/overview)). It is defined in `tests/eval/eval-config.ts` (`DEFAULT_MODELS`), priced in `tests/eval/eval-report.ts` ($2 / $10 per MTok) and can be overridden with `EVAL_MODEL` / `EVAL_JUDGE_MODEL`.
+
+Sonnet 5.5 rejects a few request settings with HTTP 400, and the eval client already avoids them:
+
+| Setting | Handling in `tests/eval/eval-llm-client.ts` |
+|---------|----------------------------------------------|
+| `temperature` (sampling parameters) | Omitted for Sonnet/Opus 5+ (`anthropicSupportsTemperature`) |
+| Forced `tool_choice` (`tool` / `any`) | The Layer 3 judge sends `auto` plus "call the `score_output` tool" in the prompt (`anthropicSupportsForcedToolChoice`) |
+
+Latest numbers in the "Key Numbers" table above were recorded on Claude Sonnet 5 and have not been re-baselined on 5.5.
+
 ### Environment Variables
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `EVAL_PROVIDER` | No | auto-detect | `anthropic`, `openai`, `gemini`, or `local` (Ollama/LM Studio) |
-| `EVAL_MODEL` | No | provider default | Model name (e.g. `claude-sonnet-5`, `qwen3.5:2b`, `gpt-4o-mini`) |
+| `EVAL_MODEL` | No | provider default | Model name (e.g. `claude-sonnet-5-5`, `qwen3.5:2b`, `gpt-4o-mini`) |
 | `EVAL_JUDGE_MODEL` | No | Same as `EVAL_MODEL` | Model for Layer 3 LLM judge |
 | `EVAL_BASE_URL` | For `local` override | `http://localhost:11434/v1` when `local` | OpenAI-compatible base URL |
 | `EVAL_API_KEY` | Provider-dependent | provider keys / `ollama` | Unified API key override |
@@ -737,7 +766,7 @@ EVAL_LAYER=1
 # Claude (release gating / targeted re-runs)
 # EVAL_PROVIDER=anthropic
 # ANTHROPIC_API_KEY=sk-ant-api03-YOUR_KEY_HERE
-# EVAL_MODEL=claude-sonnet-5
+# EVAL_MODEL=claude-sonnet-5-5
 # EVAL_STRICT=true
 # EVAL_FILTER=field_filter.custom_field_exact,report.pass_rate
 ```
@@ -771,7 +800,7 @@ npm run test:eval:l2
 # Run all layers explicitly
 npm run test:eval:l3
 
-# Cloud tricky suite only (~149 prompts) — npm run test:eval:cloud sets EVAL_PROVIDER=anthropic
+# Cloud tricky suite only (~175 prompts) — npm run test:eval:cloud sets EVAL_PROVIDER=anthropic
 npm run test:eval:cloud
 npm run test:eval:cloud:l2
 ```
@@ -786,7 +815,7 @@ npm run test:eval:cloud:l2
    ├── Fetch first test case → <project_key>-1
    └── (L3 only) Fetch launches, milestones, automation states
 3. Start the MCP server (dist/server.js via stdio)
-4. Load **76** tool schemas from the running server (`tools/list`)
+4. Load **79** tool schemas from the running server (`tools/list`)
 5. For each prompt:
    ├── Populate template variables ({{project_key}} → <discovered_value>)
    ├── Send to LLM API with all registered tool definitions

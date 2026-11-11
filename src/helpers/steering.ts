@@ -15,7 +15,8 @@ export type SteeringTool =
   | "manage_test_run_add_cases"
   | "import_launch_results"
   | "rerun_launch_failures"
-  | "start_launch";
+  | "start_launch"
+  | "analyze_launch_failures_artifacts";
 
 export interface SteeringContext {
   /** Primary entity ID (suite ID, test case key, run ID, etc.) */
@@ -108,6 +109,13 @@ export function steeringHint(tool: SteeringTool, ctx: SteeringContext): string {
         `  - List launches: adv_get_all_launches_for_project\n` +
         `  - On failures: adv_rerun_launch_failures with launch_id: ${ctx.id}\n` +
         `  - Non-en_US builds: check zebrunner-config.json localeTestRunRules if NOT_TAGS exclusions apply`
+      );
+
+    case "analyze_launch_failures_artifacts":
+      return (
+        `\n\nTip: Next steps:\n` +
+        `  - Page-source signals (crash/permission dialog, keyboard, locator): rerun with includePageSource: true (max pageSourceMaxTests per call)\n` +
+        `  - Artifacts of one test: adv_list_test_artifacts with launchId: ${ctx.id}; read a file with adv_download_artifact`
       );
 
     default:

@@ -340,7 +340,8 @@ export class ZebrunnerApiClient {
         params: { projectKey }
       });
       
-      return ZebrunnerTestCaseSchema.parse(response.data);
+      // Public API v1 wraps single resources as { data: {...} }; tolerate both shapes.
+      return ZebrunnerTestCaseSchema.parse(response.data?.data || response.data);
     });
   }
 
